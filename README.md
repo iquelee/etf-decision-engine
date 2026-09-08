@@ -31,5 +31,20 @@
 
 ## 部署
 
+**一键部署（推荐）**：
+
+```bash
+bash scripts/deploy.sh --pull        # git pull + 前端 + 后端全量部署
+bash scripts/deploy.sh --backend-only # 只部署后端云函数
+bash scripts/deploy.sh --frontend-only # 只部署前端
+```
+
+流程：`scripts/prepare-deploy.py` 从线上函数 zip 快照（`_gen2-online-baseline/`）恢复 node_modules + config.json，再用仓库最新源码覆盖，生成 `dist-functions/` + `cloudbaserc.json`；随后 `tcb fn deploy --force` 逐个部署 + `tcb hosting deploy`。
+
+- 首次部署会解压 node_modules（约 6 分钟），之后 node_modules 已缓存，秒级。
+- 仓库不存 node_modules / config.json / cloudbaserc.json（安全），由 prepare-deploy.py 动态生成。
+
+**手动部署**：
+
 - 云函数：`tcb fn deploy <fn> --dir dist-functions/<fn> --force -e <envId>`
 - 前端：`cd web && npm run build && tcb hosting deploy web/dist -e <envId>`
