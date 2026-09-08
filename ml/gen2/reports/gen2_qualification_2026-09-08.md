@@ -1,71 +1,87 @@
-# Gen-2 资格判定报告 — 冻结规则 OOS 复核（§31 Case C 结论）
+# Gen-2 资格判定报告 — WP9.2 Permission-Conditioned OOS（v2，2026-09-08 晚）
 
-日期：2026-09-08。状态：WP9.0 数据规范化 + WP9.1 冻结规则 OOS 复核完成；按任务书 §31 判定 Gen-2 Rule V2 **保持 Shadow**，Production 相关 Gate 全部 BLOCKED。
+**v2 修正**：初版（同日晚，§31 Case C 直接收口）把「raw OOS IC 不稳」当作全链不合格判据。WP9.2 审查指出关键口径缺口——**冻结后的 Gen-2 决策链是 Permission-conditioned 的**（RISK_OFF → Selection Permission = DISABLED，系统本就「不使用」该 alpha），raw OOS 把被禁用的 RISK_OFF 日混进总 IC。本版在冻结规则上重切片回答：**2022 的失败是「不该选的时候选错了（已被 Permission 隔离）」还是「该选的时候也选错了」？**
 
-## 一、本报告回答的问题
+日期：2026-09-08。状态：WP9.0 数据规范化 + WP9.1 raw OOS 复核 + WP9.2 permission-conditioned 归因全部完成。
 
-任务书 §20「规则被冻结后才评价」+ §31「OOS Selection Alpha 仍不稳定 → Gen-2 保持 Shadow」。2026-09-07 的 OOS 在 **parity 修复前** 跑（F09 替换门等尚未移植冻结），本报告在 **当前冻结规则**（monorepo `ml/`，含 P0-04/P0-05/Parity 全部修复 + GEN2_RULE_V2_BUNDLE）上重跑复核。
+## 一、WP9.0 / WP9.1（同初版，复核成立）
 
-## 二、WP9.0 数据规范化（前置）
+- WP9.0：31 规范化日线 csv 收入 monorepo `deliverables/etf_daily_ml_pool/` + `DATASET_MANIFEST_V1.json` + `scripts/verify-gen2-dataset.py`（31/31 一致）。
+- WP9.1：冻结规则 raw Walk-Forward OOS = 0.0312 / 52.9% / 2022 −0.1344（与 parity 前逐位一致 → parity 修复未改 alpha 信号链）。
 
-- 根因：研究日线数据 52 个 csv（31 代码 × 双编码乱码文件名）在 monorepo **外**（gen2-dev/deliverables），gen2.yaml `daily_dir` 指向仓库内不存在目录 → 仓库不可复现。
-- 修复：逐代码比对确认双文件**字节级一致**（仅文件名乱码）→ 去重为 31 个规范文件 `deliverables/etf_daily_ml_pool/{code}_qfq.csv`（monorepo 内，gitignored 不入库）。universe_v1（30 eligible + 510300 benchmark）31 代码全覆盖，0 缺失。
-- 代码零改动；`load_daily_bars` glob `{code}_*.csv` 命中规范名。
+## 二、WP9.2 Permission-Conditioned OOS（冻结规则，OOS 日切片）
 
-## 三、WP9.1 冻结规则 Walk-Forward OOS 复核（§20）
+运行：`PYTHONPATH=ml python -m gen2.evaluation.permission_oos`
+口径：score=alpha_score_v2、label=y_rank_vs_market_20d、OOS 日=fold test 段（2021-2026）；regime/perm 用 `gen2.portfolio.regime` / `selection_permission` 单一契约（无新阈值）；market_score 由 benchmark MA20/MA60 当日合成，无未来泄漏。
 
-运行：`PYTHONPATH=ml python -m gen2.evaluation.walk_forward`（expanding train ≥3 年 + 单年 test，train 末尾 purge20 + embargo5，alpha_score_v2 vs market label，日历 = rankings 日期）。
+| 切片 | n_days | Rank IC | IC>0 | TB spread | top_excess | bottom_excess |
+|---|---|---|---|---|---|---|
+| oos_raw（全 OOS） | 1376 | +0.0271 | 0.529 | +0.0061 | +0.0092 | +0.0031 |
+| **oos_actionable（perm≠DISABLED）** | **740** | **+0.1001** | **0.622** | +0.0062 | +0.0158 | −0.0034 |
+| oos_promotion_candidate_days | 1226 | +0.0491 | 0.556 | +0.0035 | +0.0083 | −0.0012 |
+| oos_RISK_ON | 572 | +0.1026 | 0.637 | +0.0076 | +0.0182 | −0.0030 |
+| oos_RANGE | 168 | +0.0911 | 0.570 | +0.0014 | +0.0075 | −0.0047 |
+| oos_RISK_OFF | 636 | **−0.0595** | 0.418 | +0.0061 | +0.0014 | +0.0107 |
+| oos_2021 | 243 | +0.0397 | 0.564 | +0.0149 | +0.0181 | +0.0117 |
+| **oos_2022** | **242** | **−0.1344** | 0.335 | +0.0017 | −0.0063 | +0.0097 |
+| oos_2023 | 242 | +0.0706 | 0.583 | +0.0039 | +0.0111 | −0.0033 |
+| oos_2024 | 242 | +0.0500 | 0.545 | −0.0022 | −0.0036 | −0.0008 |
+| oos_2025 | 243 | +0.0732 | 0.613 | +0.0115 | +0.0234 | −0.0005 |
+| oos_2026 | 164 | +0.0882 | 0.535 | +0.0077 | +0.0146 | +0.0008 |
 
-| fold | test_year | n_days | rank_ic | ic_pos | top_bottom_spread |
-|---|---|---|---|---|---|
-| 1 | 2021 | 243 | +0.0397 | 0.564 | +0.0064 |
-| 2 | 2022 | 242 | **−0.1344** | 0.335 | **−0.0160** |
-| 3 | 2023 | 242 | +0.0706 | 0.583 | +0.0145 |
-| 4 | 2024 | 242 | +0.0500 | 0.545 | −0.0029 |
-| 5 | 2025 | 243 | +0.0732 | 0.613 | +0.0239 |
-| 6 | 2026 | 164 | +0.0882 | 0.535 | +0.0138 |
-| **汇总** | | | **+0.03121** | **0.529** | **+0.00662** |
+## 三、2022 失败归因（核心诊断）
 
-与 2026-09-07（parity 前）数值逐位一致（0.0312 / 52.9% / 2022 −0.1344）→ **parity 修复未改变 alpha 信号链，结论在冻结规则上复核成立**。
+| 2022 切片 | n_days（占年比重） | Rank IC | IC>0 |
+|---|---|---|---|
+| 2022 × RISK_ON | 58 / 242（24%） | **+0.0678** | 0.621 |
+| 2022 × RANGE | 22 / 242（9%） | −0.0647 | 0.364 |
+| 2022 × RISK_OFF | 162 / 242（67%） | **−0.2163** | 0.228 |
 
-## 四、Gate 判定
+**判定 = 假设 A（regime 驱动，Permission 层设计正确）为主**：
+1. 2022 的灾难 67% 天数在 RISK_OFF，其 IC −0.216 是全年 −0.134 的主要来源；
+2. **2022 里「本该进攻」的 RISK_ON 日 IC = +0.068（62.1% 为正）** —— 该选的时候选对了；
+3. RANGE 22 天 −0.065 为负但样本太小（9%），不足以单独坐实假设 B；
+4. 跨年一致：RISK_ON/RANGE 各年基本为正（2023 RISK_ON +0.039、2024 +0.071、2025 +0.148、2026 +0.229）；RISK_OFF 各年多数为负（2024 −0.001、2025 −0.198、2026 −0.116；2021 +0.013 / 2023 +0.086 例外 → 「RISK_OFF 恒反选」不成立，DISABLED 是合理保守而非完美隔离）。
 
-| Gate | 判据（任务书 §21/§30） | 结果 |
+## 四、Gate 判定（v2 修正）
+
+| Gate | 初版（v1） | v2（WP9.2 修正） |
 |---|---|---|
-| Python/Node Parity | 360 行逐字段 0 mismatch | ✅ PASS |
-| CI + Immutable + No-Future-Leakage | npm test 22/22 | ✅ PASS |
-| OOS Rank IC > 0（#6） | mean +0.031 | ✅ 形式通过（但弱） |
-| OOS Top-Bottom Spread > 0（#7） | mean +0.0066 | ✅ 形式通过（但弱） |
-| 无灾难性单年 Selection 失效或已 regime 隔离（#8） | 2022 IC **−0.1344**、IC>0 仅 33.5% | ❌ **FAIL**（未 regime 隔离） |
-| **OOS Selection Alpha 稳定（§31 Case C 判据）** | IC>0 52.9%≈抛硬币 + 1 个灾难年 | ❌ **FAIL / UNSTABLE** |
-| Selection Alpha Gate / Economic Gate / Production Advisory Gate | 依赖上表 | ❌ **BLOCKED** |
-| Production Effective Gate | — | ⛔ **BLOCKED** |
+| Python/Node Parity + CI + Immutable + No-Leakage | ✅ | ✅（另加 Stage C 真 SHA / Stage F build / Node16，见 Test-And-CI-Gates v2） |
+| Raw OOS Selection Alpha（全日） | ❌ UNSTABLE | ❌ 仍不达标（0.027/52.9%）——**但该口径混入 DISABLED 态，非系统真实用法** |
+| **Actionable Selection Alpha（perm≠DISABLED）** | 未评估 | ✅ **CONDITIONAL PASS：+0.100 / 62.2%**（740 日，无未来泄漏） |
+| Permission 层有效性 | 未评估 | ✅ RISK_OFF 日 IC −0.059（系统禁用态）反向/无效 → 隔离设计被数据支持 |
+| 灾难性单年（2022） | ❌ FAIL | ✅ **2022×RISK_ON +0.068 为正**；灾难集中于被 DISABLED 隔离的 RISK_OFF 日 |
+| Production Advisory / Effective | ⛔ BLOCKED | ⛔ **仍 BLOCKED**（Actionable alpha 合格 ≠ 经济净增量合格，须 Economic Replay 证明） |
 
-## 五、结论（§31 情况 C）
+## 五、结论（修正初版 Case C 收口）
 
 ```
-OOS Selection Alpha 仍不稳定（2022 灾难年 −0.134 + hit-rate 52.9%）
+Actionable Selection Alpha = CONDITIONAL PASS（+0.10，仅系统实际会用的日子）
+RISK_OFF 负 IC 集中在 DISABLED 态 → Permission 层正确隔离
         ↓
-Gen-2 Rule V2 保持 Shadow（不进入 Production Advisory）
+下一步 = Permission-conditioned Integrated Economic Replay
+   （Gen-2 选池只在 ACTIVE/REDUCED 日生效 + Gen-1 择时 + V3.6.1 Safety + 成本，
+    归因拆 Selection/Timing/Safety/Cost，回答「合格 alpha 是否转化为净经济增量」）
         ↓
-不投入 V3.6.1 + Gen-1 历史重放 harness 的 Economic Gate（前提不成立，ROI 为负）
-        ↓
-下一步研究路径 = Gen-2.1：Cluster Leadership / Fundamental Factors / Qlib / ML
+若经济净增量达标 → 升级 Integrated Shadow 观察权重 / 提 Production Advisory 候选
+若经济净增量不达标（§31 Case B）→ 再启动 Gen-2.1 Cluster Leadership + Consolidation Quality Gate
 ```
 
-**不能因为已经开发很多代码（P0-01~WP7 全部完成、21/21→22/22 门禁全绿）就强行进入生产。** 工程基建（common 单一真相源、统一测试、parity、冻结 bundle、Integrated Shadow 引擎）全部就绪且可复用，但策略层面的 Selection Alpha 资格不达标，Gen-2 维持观察。
+修正说明：初版直接进入 §31 Case C（保持 Shadow + 转 Gen-2.1 研究）**过早**——它把「raw IC 被 DISABLED 态稀释」误读为「alpha 本身失效」。WP9.2 证明真实系统的可用选池 alpha（+0.100/62%）与 2022 该选时（+0.068）均为正，资格判定从 UNSTABLE 修正为 **CONDITIONAL PASS，等待 Economic Replay 验证净价值**。**Production 红线不变：Gen-2 仍不进 Production Advisory / 不写 decision_result。**
 
-## 六、已就绪资产（供 Gen-2.1 复用）
+## 六、工程加固（同批次交付，P0-A~D）
 
-- 源码真相：`src/common` canonical + build parity；`GEN2_RULE_V2_BUNDLE` 冻结（sha256 在 runtime_status）。
-- 测试门禁：`npm test` 22/22（Node/Python/Immutable/Parity/Secret）。
-- Integrated Shadow 引擎 `runIntegratedShadowEod`：Gen2 选池 + Gen1 择时 + V3.6.1 安全的集成反事实框架（Selection/Timing/Safety 三层归因结构已就位，Gen-2.1 只需替换信号源）。
-- 数据：规范化 31 代码日线池（monorepo `deliverables/etf_daily_ml_pool/`）。
-- OOS 复核基线：上述 fold 表。
+- P0-A：`scripts/verify-immutable.js` 真 SHA 锁（GEN1/V361/GEN2_RULE_V2 lock 8 项），替换 `git diff` 假锁；负向测试通过。
+- P0-B：Build Common Parity（Stage F）进 `npm test`（11 函数 dist parity）。
+- P0-C：CI matrix 补 Node 16（对齐 CloudBase Nodejs16.13）。
+- P0-D：`DATASET_MANIFEST_V1.json` + `scripts/verify-gen2-dataset.py`（数据身份可核验）。
 
 ## 七、复现命令
 
 ```bash
-# WP9.1 冻结规则 OOS 复核
-PYTHONPATH=ml <gen2 venv python> -m gen2.evaluation.walk_forward
+npm test                                   # 18/18（Stage A-F）
+PYTHONPATH=ml python -m gen2.evaluation.walk_forward      # WP9.1 raw OOS
+PYTHONPATH=ml python -m gen2.evaluation.permission_oos    # WP9.2 regime 归因
+python scripts/verify-gen2-dataset.py                     # 数据集身份核验（31/31）
 ```
