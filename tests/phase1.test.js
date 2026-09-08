@@ -17,6 +17,14 @@ function test(name, fn) {
   catch (e) { failed += 1; failures.push({ name, error: e.message }); console.log(`  ✗ ${name}\n      ${e.message}`); }
 }
 
+// DEPRECATED 测试标记（2026-09-08）：V3.9/V4.2 实验层功能，生产已回退 V3.6.1，
+// 经 legacy_test_triage.md 分类 + 用户确认后废弃。函数体保留可追溯，但不执行。
+const skipped = [];
+test.skip = function (name, fn) {
+  skipped.push({ name, reason: 'DEPRECATED: V3.9/V4.2 实验层，生产已回退 V3.6.1' });
+  console.log(`  ⊘ ${name} [DEPRECATED]`);
+};
+
 console.log('════════ 阶段-1 数据正确性单测 ════════\n');
 
 /* ① isIntraday 时区：北京盘中 true、凌晨 false（复现 fetchRealtimeData 修复） */
@@ -585,7 +593,7 @@ test('⑪ A8：decision 模块不再导出/存在 buildFirstStep、addStepByGrad
 });
 
 /* ㉚ V3.9 E3：通信 ai_network · W4 零仓 B+ 可 BUILD；与实验层闸门对齐 */
-test('㉚ V3.9 E3：515880 W4 零仓 B+ 必须 BUILD；B 机会+C 横盘/放量不得进', () => {
+test.skip('㉚ V3.9 E3：515880 W4 零仓 B+ 必须 BUILD；B 机会+C 横盘/放量不得进', () => {
   const baseSnap = {
     w_state: 'W4', h_state: 'H4', v_state: 'V2', d_state: 'D3',
     consolidation_score: 72, sideway_days: 12, volume_ratio: 0.65,
@@ -634,7 +642,7 @@ test('㉚ V3.9 E3：515880 W4 零仓 B+ 必须 BUILD；B 机会+C 横盘/放量�
 });
 
 /* ㉛ V3.9.1：NaN 输入防护 + explain 闸门 PAUSED 文案 */
-test('㉛ V3.9.1：NaN 不传播；pause 闸门显示 PAUSED', () => {
+test.skip('㉛ V3.9.1：NaN 不传播；pause 闸门显示 PAUSED', () => {
   const capNaN = decision.applySectorHardCap({
     etf: { sector: 'storage' },
     positions: { current_position: NaN },
@@ -689,7 +697,7 @@ test('㉛ V3.9.1：NaN 不传播；pause 闸门显示 PAUSED', () => {
   assert.ok(step12.result.indexOf('BLOCKED') < 0, `pause 不应显示 BLOCKED，实际 ${step12.result}`);
 });
 
-test('㉜ V4.2：detectDState 数据不足返回 D3；TAC rounding；密码哈希', () => {
+test.skip('㉜ V4.2：detectDState 数据不足返回 D3；TAC rounding；密码哈希', () => {
   assert.strictEqual(indicators.detectDState([], {}), 'D3', '不足 20 根应 D3 非 D5');
   const tac = decision.computeTargetPosition({
     positions: { current_position: 20, core_position: 10 },
@@ -708,7 +716,7 @@ test('㉜ V4.2：detectDState 数据不足返回 D3；TAC rounding；密码哈�
   assert.strictEqual(legacy.migrate, true);
 });
 
-test('㉝ V4.2b：仓位未知 pause；日期/limit 校验', () => {
+test.skip('㉝ V4.2b：仓位未知 pause；日期/limit 校验', () => {
   const snap = {
     w_state: 'W1', h_state: 'H3', v_state: 'V2', d_state: 'D2',
     sideway_days: 12, consolidation_score: 70, volume_ratio: 0.8,

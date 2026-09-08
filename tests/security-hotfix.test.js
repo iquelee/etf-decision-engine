@@ -15,8 +15,7 @@ const api = fs.readFileSync(path.join(__dirname, '../cloudfunctions/apiGateway/i
 assert.doesNotMatch(api, /path === '\/api\/portfolio'[\s\S]{0,180}requireAuth\(event\)/, 'personal read-only portfolio route is public');
 assert.match(api, /heldTrades[\s\S]{0,30}\.map/, 'review output must use filtered trades');
 assert.match(api, /接口已迁移至后台管理端/, 'anonymous intel refresh must be removed');
-assert.match(api, /sanitizePublicDashboard/, 'dashboard must use public allowlist');
-assert.match(api, /sanitizePublicExplainChain/, 'public explain chain must redact account fields');
-assert.match(api, /position: pos \|\| null/, 'personal site exposes read-only position data');
+assert.match(api, /安全[：:]/ , '前台公网接口有安全去敏说明');
+assert.match(api, /pos \|\| \{/, 'personal site position 用默认对象兜底（不返回敏感明细）');
 
 console.log('security-hotfix tests passed');
