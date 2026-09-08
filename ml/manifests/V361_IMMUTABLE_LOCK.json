@@ -1,0 +1,7 @@
+{
+  "engine_version": "v3.6.1",
+  "decision_v3_sha256": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+  "decision_sha256": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+  "sealed_at": "2026-09-08",
+  "rule": "V3.6.1 生产决策核心（decision-v3.js / decision.js）不可修改；任何挑战须升版（V3.6.2+），不得静默改旧版。"
+}

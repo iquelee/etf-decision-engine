@@ -69,26 +69,16 @@ function stageB() {
   report('B', 'unittest discover ml/gen2/tests', ok, ok ? undefined : tail);
 }
 
-/* ---------- Stage C: Immutable Checks ---------- */
+/* ---------- Stage C: Immutable Checks（真 SHA 锁，P0-A） ---------- */
 function stageC() {
-  console.log('\n== Stage C: Immutable Checks（Gen-1 frozen + V3.6.1）==');
-  const gen1Dir = path.join(REPO, 'cloudfunctions', 'runGen1ShadowEod');
-
-  // 1) Gen-1 frozen model_id 不可变
-  const manifest = JSON.parse(fs.readFileSync(path.join(gen1Dir, 'frozen-manifest.json'), 'utf8'));
-  report('C', 'Gen-1 model_id = HVT-A-ET-20260830', manifest.model_id === 'HVT-A-ET-20260830', manifest.model_id);
-
-  // 2) frozen 文件相对 git HEAD 无未提交改动（immutable 保护）
-  for (const f of ['frozen-model.json', 'frozen-manifest.json', 'frozen-node-inference.js']) {
-    const r = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', `cloudfunctions/runGen1ShadowEod/${f}`], { cwd: REPO });
-    report('C', `frozen/${f} 无改动`, r.status === 0);
-  }
-
-  // 3) V3.6.1 决策核心（decision-v3.js / decision.js）无未提交改动
-  for (const f of ['src/common/utils/decision-v3.js', 'src/common/utils/decision.js']) {
-    const r = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', f], { cwd: REPO });
-    report('C', `${f} 无改动`, r.status === 0);
-  }
+  console.log('\n== Stage C: Immutable Checks（Gen-1 frozen + V3.6.1 + GEN2 bundle）==');
+  // P0-A：不再用 `git diff --quiet HEAD`（CI 干净 checkout 恒 PASS 的假锁）。
+  // 改为实际文件 SHA256 vs lock 文件 expected（GEN1/V361/GEN2_RULE_V2 lock）。
+  const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-immutable.js')], { cwd: REPO, encoding: 'utf8' });
+  const ok = r.status === 0;
+  const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
+  lines.forEach((l) => console.log('  ' + l));
+  report('C', 'Immutable SHA lock（8 项：Gen-1 frozen×3 + model_id + V3.6.1×2 + GEN2 bundle×2）', ok);
 }
 
 /* ---------- Stage D: Cross-language Parity ---------- */
@@ -118,10 +108,19 @@ function stageE() {
   report('E', 'scan-secrets', ok, ok ? undefined : (r.stdout + r.stderr).slice(-160));
 }
 
+/* ---------- Stage F: Build Common Parity（P0-B，进 CI 的正式 Gate） ---------- */
+function stageF() {
+  console.log('\n== Stage F: Build Common Parity（src/common → dist-functions 构建 + SHA 校验）==');
+  const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'build-cloudfunctions.js')], { cwd: REPO, encoding: 'utf8' });
+  const ok = r.status === 0;
+  const tail = (r.stdout + r.stderr).split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 200);
+  report('F', 'build-cloudfunctions（11 函数 common SHA parity）', ok, ok ? undefined : tail);
+}
+
 /* ---------- 主流程 ---------- */
 const only = process.argv.find((a) => a.startsWith('--stage='));
-const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE };
-const order = ['A', 'B', 'C', 'D', 'E'];
+const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE, F: stageF };
+const order = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 for (const s of order) {
   if (only && only !== `--stage=${s}`) continue;

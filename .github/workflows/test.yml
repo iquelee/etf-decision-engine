@@ -12,14 +12,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # P0-C：Node 16 对齐 CloudBase 生产 runtime（Nodejs16.13），Node 22 面向未来兼容
+        node-version: ['16', '22']
         python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node 22
+      - name: Setup Node ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
 
       - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -29,22 +31,18 @@ jobs:
       - name: Install Python deps (numpy/pandas)
         run: pip install numpy pandas
 
-      # 6 道门禁：
-      #   Gate 1  Node 单元测试（Stage A）
-      #   Gate 2  Python 单元测试（Stage B）
-      #   Gate 3  Immutable 冻结检查（Stage C）
-      #   Gate 4  Cross-language Parity（Stage D）
-      #   Gate 5  Secret scan（Stage E）
-      #   Gate 6  GEN2_RULE_V2_BUNDLE 冻结（见下）
+      # 门禁（P0-B：npm test 现已含 Stage F = build-cloudfunctions.js 的 Build Common Parity）：
+      #   Stage A  Node 单元测试
+      #   Stage B  Python 单元测试
+      #   Stage C  Immutable 真 SHA 锁（Gen-1 frozen / V3.6.1 / GEN2 bundle，P0-A 替代 git-diff 假锁）
+      #   Stage D  Cross-language Parity
+      #   Stage E  Secret scan
+      #   Stage F  Build Common Parity（src/common → 11 云函数 + SHA 校验）
       - name: Run full test gates (npm test)
         env:
           TCB_PYTHON: python
         run: node scripts/test-all.js
 
-      - name: Gate 6 — GEN2_RULE_V2_BUNDLE frozen
-        run: |
-          if ! git diff --quiet HEAD -- ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json; then
-            echo "::error::GEN2_RULE_V2_BUNDLE.json 被改动（rule-v2 单一真相源，禁止随提交漂移）"
-            exit 1
-          fi
-          echo "GEN2_RULE_V2_BUNDLE.json frozen (sha256=$(sha256sum ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json | cut -d' ' -f1))"
+      # Gate 6（显式，与 Stage C 同源）：Immutable 真 SHA 锁，任一 frozen 对象被改 → FAIL
+      - name: Gate 6 — Immutable SHA (Gen-1 / V3.6.1 / GEN2 bundle)
+        run: node scripts/verify-immutable.js

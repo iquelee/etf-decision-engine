@@ -1,0 +1,7 @@
+{
+  "engine_id": "gen2-rule-v2",
+  "bundle_version": "gen2-rule-v2.0",
+  "bundle_sha256": "1df81e33dfc1271bedca427a33f45b8be9ce0c76409d9a26e7f4e7aab5b2aebd",
+  "sealed_at": "2026-09-08",
+  "rule": "GEN2_RULE_V2_BUNDLE 为 Rule V2 单一真相源，禁止静默修改；升级须新 bundle_version + 新 lock（Rule V2.1 另立）。"
+}
