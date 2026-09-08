@@ -16,7 +16,14 @@
     "   dailyPipeline-0800 触发 materializeIndicators 后，函数内部链式调用 runDecisionEngine，",
     "   已覆盖「物化→决策」全链，故 runDecisionEngine 无需独立 timer（避免重复触发）。",
     "   - intelFetch-30min → fetchFundamentalNews（北京时间 08:00–22:00 每 30 分钟，含 22:00）",
-    "   - intelExtract-30min → extractFundamental（抓取后 +5 分钟，同窗口）"
+    "   - intelExtract-30min → extractFundamental（抓取后 +5 分钟，同窗口）",
+    "5.【Gen-1 / Gen-2 / Integrated Shadow 调度链（只读反事实，不写生产）】：",
+    "   dailyPipeline-0800（materializeIndicators 链式调 runDecisionEngine 产出 V3.6.1 基线）",
+    "     → shadowGen1-0830（runGen1ShadowEod 择时信号）",
+    "     → shadowGen2-0845（runGen2ShadowEod 选池）",
+    "     → shadowIntegrated-0910（runIntegratedShadowEod 集成反事实，内置依赖门兜底）",
+    "   timer 时间不保证顺序；runIntegratedShadowEod 内置 dependency gate（V361/GEN1/GEN2_NOT_READY +",
+    "   TRADE_DATE_MISMATCH），三者任一未 ready 则写 failed run，不产出 completed 快照。"
   ],
   "version": "2.0",
   "envId": "{{envId}}",
@@ -57,6 +64,36 @@
     },
     {
       "name": "runDecisionEngine",
+      "timeout": 120,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "runGen1ShadowEod",
+      "timeout": 300,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "runGen2ShadowEod",
+      "timeout": 300,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "runIntegratedShadowEod",
       "timeout": 120,
       "runtime": "Nodejs16.13",
       "handler": "index.main",
@@ -140,6 +177,24 @@
       "functionName": "materializeIndicators",
       "type": "timer",
       "config": "0 0 8 * * 1-5 *"
+    },
+    {
+      "name": "shadowGen1-0830",
+      "functionName": "runGen1ShadowEod",
+      "type": "timer",
+      "config": "0 30 8 * * 1-5 *"
+    },
+    {
+      "name": "shadowGen2-0845",
+      "functionName": "runGen2ShadowEod",
+      "type": "timer",
+      "config": "0 45 8 * * 1-5 *"
+    },
+    {
+      "name": "shadowIntegrated-0910",
+      "functionName": "runIntegratedShadowEod",
+      "type": "timer",
+      "config": "0 10 9 * * 1-5 *"
     },
     {
       "name": "newsFetch-1630",
