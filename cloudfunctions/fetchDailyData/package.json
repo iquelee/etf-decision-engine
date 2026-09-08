@@ -1,0 +1,10 @@
+{
+  "name": "fetchDailyData",
+  "version": "2.0.0",
+  "description": "收盘后抓日线 OHLCV/折溢价 + FRED 宏观",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

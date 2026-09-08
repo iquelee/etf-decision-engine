@@ -1,0 +1,17 @@
+{
+  "name": "etf-decision-scripts",
+  "version": "2.0.0",
+  "private": true,
+  "description": "一次性/运维脚本：建集合 + 初始化种子数据",
+  "scripts": {
+    "init:collections": "node init-collections.js",
+    "seed": "node seed-data.js"
+  },
+  "dependencies": {
+    "@cloudbase/manager-node": "^5.8.1",
+    "@cloudbase/node-sdk": "^2.9.0"
+  },
+  "devDependencies": {
+    "@cloudbase/cli": "^2.4.0"
+  }
+}

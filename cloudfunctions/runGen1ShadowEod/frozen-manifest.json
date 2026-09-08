@@ -1,0 +1,6 @@
+{
+  "model_id": "HVT-A-ET-20260830",
+  "features_core": ["ma20_slope", "px_ma20", "px_ma60", "price_position", "volume_ratio", "sideway_days", "sideway_range", "consolidation_score", "atr20", "change_5d", "bias_20d", "breakout", "ret_5d", "ret_20d", "rs_20d"],
+  "features_cat": ["w_state", "d_state", "h_state", "v_state", "sector"],
+  "thresholds": {"signal_p": 0.65, "abstain_low": 0.35, "abstain_high": 0.65}
+}

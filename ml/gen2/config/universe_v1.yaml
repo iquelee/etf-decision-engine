@@ -1,0 +1,21 @@
+{
+  "universe_version": "universe_v1_draft",
+  "status": "DRAFT_WAITING_USER_CONFIRMATION",
+  "target_size": "25-35",
+  "source_of_truth": "universe/etf_master.csv",
+  "dev_runtime_universe": "dev_universe_v0",
+  "point_in_time": {
+    "listing_date_required": true,
+    "min_history_days": 120,
+    "no_survivorship_backfill": true
+  },
+  "roles": {
+    "core_eligible_default": true,
+    "research_only_allowed": true,
+    "hedge_can_be_core": "PENDING_USER_CONFIRMATION"
+  },
+  "notes": [
+    "Current runtime uses dev_universe_v0 (15 ETFs) for engineering only.",
+    "Formal 25-35 ETF list must be approved by the user before economic conclusions."
+  ]
+}

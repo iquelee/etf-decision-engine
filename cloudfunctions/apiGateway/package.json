@@ -1,0 +1,10 @@
+{
+  "name": "apiGateway",
+  "version": "2.0.0",
+  "description": "前台只读聚合路由",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

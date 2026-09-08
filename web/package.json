@@ -1,0 +1,20 @@
+{
+  "name": "etf-decision-web",
+  "version": "2.0.0",
+  "private": true,
+  "description": "ETF 智能仓位决策系统 V2.0 前端（Vue3 + Vite + ECharts）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2",
+    "echarts": "^5.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.11"
+  }
+}

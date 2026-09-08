@@ -1,0 +1,8 @@
+{
+  "model_id": "HVT-A-ET-20260830",
+  "model_sha256": "4c0e65378817eb4760f07cb776fd83fd1c6eb9ab57ec01d78d2ae3d8d36cc218",
+  "freeze_manifest_sha256": "bc3870db673b8164d8c24fd85024682035228fa9edd19773988e10e42ddf12d1",
+  "bundle_sha256": "80ab0581ef53ec7d692c42073f34734534506b4e1519a70a20cb2c1e10c32087",
+  "sealed_at": "2026-08-30",
+  "rule": "Gen-2 must not modify these hashes. Challenge via new model_id only."
+}

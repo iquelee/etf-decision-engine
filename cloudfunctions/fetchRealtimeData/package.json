@@ -1,0 +1,10 @@
+{
+  "name": "fetchRealtimeData",
+  "version": "2.0.0",
+  "description": "盘中 5 分钟取腾讯行情，更新当日 etf_daily.realtime",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

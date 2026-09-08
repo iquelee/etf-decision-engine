@@ -1,0 +1,32 @@
+{
+  "universe_version": "dev_universe_v0",
+  "created_at": "2026-09-05",
+  "status": "ENGINEERING_ONLY_NOT_FOR_FINAL_ECONOMIC_CONCLUSION",
+  "source": "ml/universe-train-pool.json + deliverables/etf_daily_ml_pool",
+  "benchmark_code": "510300",
+  "incumbent_main5": ["513310", "159582", "515880", "159570", "518880"],
+  "eligible_codes": [
+    "513310",
+    "159582",
+    "515880",
+    "159570",
+    "518880",
+    "588000",
+    "588080",
+    "512480",
+    "159995",
+    "512760",
+    "515050",
+    "159819",
+    "159915",
+    "159992"
+  ],
+  "excluded_from_core_competition": ["510300"],
+  "production_write": false,
+  "auto_execution": false,
+  "notes": [
+    "518880 是 Main5 incumbent，同时是 Gen-1 OUT_OF_DOMAIN 防御资产。",
+    "510300 仅作为 benchmark，不参与 ranking/Core 竞争。",
+    "正式 universe_v1 需用户确认 25-35 只 ETF。"
+  ]
+}

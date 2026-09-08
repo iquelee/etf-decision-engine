@@ -1,0 +1,38 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist-functions/
+build/
+outputs/
+backtest-out/
+
+# 密钥与配置（含真实密钥，严禁提交）
+**/config.json
+cloudbaserc.json
+.env
+.env.local
+.env.production
+.env.development
+
+# 数据（行情/训练数据，大文件）
+deliverables/
+live-bars/
+datasets/
+*_daily.csv
+*.parquet
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv-*/
+
+# 压缩包/快照
+*.zip
+*.tar.gz
+
+# 系统
+.DS_Store
+Thumbs.db

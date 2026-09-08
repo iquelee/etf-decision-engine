@@ -1,0 +1,25 @@
+{
+  "feature_version": "feature_v1",
+  "normalization": "same_day_cross_sectional_rank_pct",
+  "winsorize": {
+    "enabled": false,
+    "note": "v1 uses robust cross-sectional ranks to avoid fitting global scaler"
+  },
+  "groups": {
+    "trend": ["px_ma20", "px_ma60", "ma20_slope_5d", "ma60_slope_10d"],
+    "relative_strength": ["rs20_vs_benchmark", "rs60_vs_benchmark", "rs20_percentile_universe", "rs_accel_5d"],
+    "momentum": ["ret_5d", "ret_20d", "ret_60d", "momentum_accel_5_20"],
+    "consolidation": ["sideway_days", "sideway_range", "volume_ratio_5_20", "volume_compression_slope"],
+    "breakout": ["breakout_distance", "recent_breakout_flag"],
+    "volatility": ["atr20_pct", "realized_vol20", "volatility_compression", "max_drawdown_20d"],
+    "liquidity": ["avg_amount_20d", "avg_amount_60d", "liquidity_percentile"],
+    "portfolio": ["corr_to_portfolio_60d", "corr_to_cluster_60d", "diversification_score"],
+    "regime": ["market_score", "breadth_proxy", "risk_state"]
+  },
+  "min_history_days": 120,
+  "causality": {
+    "feature_date": "t",
+    "max_allowed_input_date": "t",
+    "cross_sectional_normalization_scope": "same_date_eligible_universe_only"
+  }
+}

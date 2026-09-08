@@ -1,0 +1,129 @@
+ETF 决策引擎源码快照
+版本：V3.6.1（正式切流：原线上 shadow 升为生产，代替 V3.8）
+日期：2026-08-29
+窗口：粘性基线口径仍按历史 V4.3 文档；本包生产路径为 trend_stage V3.6.1。
+
+=== 切流（2026-08-29）===
+Production = V3.6.1（trend_stage_enabled=true）
+V3.8 = shadow_targets.v38_baseline 对照，不再驱动 final_action / final_target
+config_version = 2026-08-29-v361-cutover
+6.2/6.3 Grace 仍关；V3.7 Entry 暂缓。
+脚本：scripts/promote-v361-cutover.js
+
+=== 对外口径（三行，禁止只报第一行）===
+  ① 粘性引擎 126.46% | 等权 122.66%（+3.80pp）| MaxDD 14.73% | Sharpe 2.25
+     含 book>100% 101 天；隐杠杆贡献约 +4.93pp
+  ② 去杠杆 121.53% vs 等权 122.66%（约 −1.1pp）——相对等权未赢
+  ③ 长 OOS 147 日 −8.79pp；WF 四折平均 gap −5.33pp（跑赢 1/4）
+     OOS 主因=上涨日暴露不足（非隐杠杆）；选股层净贡献为正
+     ~~60 日 OOS~~ 已作废（CSV 截断偏差）
+
+定位：防守+选股，不是牛市满仓捕获器。详见 回测报告/V4.3-对外口径与定位-2026-08-25.md
+
+S2 冷启动 2025-03~06：7.14% vs V3.8 6.66%（+0.48pp）；主窗 E3 路径 0 贡献。
+
+本包是生产源码目录，不是 dist-functions。
+改 cloudfunctions/，不要改 dist-functions/。
+volume_ratio_mild / tech_sector_max 后台已冻结（FROZEN_PARAM_KEYS，仅 2 key）。
+chase / 空仓 W3 / P3 / 步长 / 残仓 / E3 等不在冻结清单——改行为须走代码审查+回测。
+126.46% 口径：F3 + range + 无溢价 + 粘性仓位%；现金列仍夹成 ≥0。
+合计仓 / 日均暴露 / 去杠杆累计 / 隐杠杆贡献见回测 book 字段（不改决策）。
+生产总资产：持股市值 + 现金（cash_balance 随买卖变）。成交后全票按活分母重算%。
+市值重标对照（不进决策）：126.62%（+0.16pp）。
+现金约束 `--cash-cap` 已否决（123.30%，−3.16pp），不进 decision.js。
+`--frp` 为 F/Regime/溢价代理对照（110.44%），默认关闭。
+
+V4.1（只评不调）：三票 2023-04~2024-11 13.05% vs 34.07%；两票 2022 −6.22% vs −9.42%。
+不得与 126.46% 混比（mix_forbidden）。
+
+发布：只许 node scripts/pack-source.js <tag>
+包内不含 deploy*.js、scripts/backtest-out/ 与真实 envId/密钥。
+
+--- 纪律（2026-08-25）---
+进攻旋钮冻结（不改 W/E3/步长/残仓/chase/空仓W3/P3）。
+精力：OOS 系统性跑输归因。隐杠杆假设已否决为主因；主因=上涨日暴露不足。
+见 回测报告/V4.3-OOS跑输归因-隐杠杆假设-2026-08-25.md · scripts/diag-oos-underperform.js
+
+--- 归因（2026-08-25）---
+OOS 跑输主因=仓位不足（四折合计 gap −21.3pp = 仓位 −29.2pp + 选择 +7.8pp）。
+隐杠杆假设已否决为主因。924 窗口 book 钉死 66.3%。禁止放松闸门修 OOS。
+见 回测报告/V4.3-WF仓位vs选择归因-2026-08-25.md · scripts/attrib-wf-exposure.js
+
+--- 涨日闸门诊断（2026-08-25）---
+OOS涨日（等权≥1%）资格暂停率约71–78%；Top闸：chase > structure > trend > cooldown/volume。
+allow分解：暂停75% · 已在目标17% · 真加仓意图仅6% · 仍减仓2%。禁止据此放松闸门。
+见 回测报告/V4.3-涨日闸门命中-2026-08-25.md · V4.3-涨日allow分解-2026-08-25.md
+
+--- 对外口径固化（2026-08-25）---
+三行口径+防守定位已写入 回测报告/V4.3-对外口径与定位-2026-08-25.md。
+
+--- V4.3c（2026-08-29）工程增量 ---
+信息流：intelFetch-30min / intelExtract-30min，北京时间 08:00–22:00 每 30 分钟（含 22:00；解析 +5 分）。
+前台：浅色精修（底色/hero/状态彩条）；基本面手机指标卡 + fund/intel 加载拆分；响应式批次（table-wrap、hover、安全区）。
+不改 decision.js 进攻旋钮；126.46% 基线不变。
+
+--- 研发冻结（2026-08-29 · 以线上为 Production Baseline）---
+Production Baseline = 线上 tradingview-etf-d0fa42yy57cbc11b（ENGINE_VERSION V3.9）。
+Research Candidate = scripts/lib/shadow/v36|v38（shadow，不升默认）。
+不做 day3_min_hits=3；暂缓 V3.7 Entry 加速；518880 不改主引擎。
+本仓无 S5→S4/Grace；落地质量用 W1/W2→W4 代理：scripts/diag-w-landing-quality.js（只评不调）。
+名称碰撞：本仓 V3.6=残仓重建 ≠ 简报 V3.6.1/6.3 Recovery。
+
+--- V4.0 Phase 0（2026-08-29）---
+定位：V3.6.1 Core + ML Challenger Layer（不推倒；ML 只修机会捕获缺陷）。
+Phase 0 闸门：scripts/ml/audit-stage-regime-causal.js → 回测报告/V4.0-Phase0-因果审计-*.md
+宪章：ml/README.md · Challenger：ml/CHALLENGER_PROTOCOL.md · 熔断：ml/CIRCUIT_BREAKER.md
+Phase 0 未 PASS/WARN 处理完成前禁止 Qlib 开训。
+
+--- V4.0 Phase1 数据集（2026-08-29）---
+训练池 deliverables/etf_daily_ml_pool/（15）；导出 early_transition_s2 GATE PASS（S2=1901,Y5+=190,Y10+=356）。
+脚本：refill-ml-train-pool*.py/js · export-early-transition-dataset.js
+下一闸：Qlib Walk-Forward + 校准；仍禁 Random Split / Vibe 直上线。
+
+--- V4.0 Phase1.5 + Challenger（2026-08-29）---
+样本质量 WARN（Y5 独立簇51 / Y10 簇55）；Challenger CONDITIONAL_SHADOW。
+HistGBM Walk-Forward+校准；线上 V3.6.1 未改；Fast Path 未上线。
+报告：回测报告/V4.0-Phase1.5-样本质量审计-*.md · V4.0-Challenger-EarlyTransition-*.md
+
+--- V4.0 Phase2–3（2026-08-29）---
+Phase2 反事实：Oracle +3.35pp / ML +1.60pp / Capture 47.7% / ΔMDD≈0 → Economic PASS；Production BLOCKED。
+Phase3 Alpha：HVT 数据集（1376 S2；HVT=137=72.5% of Y5）；3-fold WF；RS20 进重要性前五；黄金负对照干净。
+裁决 RESEARCH_CONTINUE；不改 V3.6.1；不上线 Fast Path。
+见 ml/phase3_alpha_optimization.md · 回测报告/V4.0-Phase3-Alpha-Experiments-*.md
+
+--- V4.0 Phase3.5 HVT Refinement（2026-08-30）---
+风险调整三级 HVT；Group-Aware WF；Y5 窗口冻结。
+Oracle +3.81pp / ML +2.95pp / Capture **77.4%** / ΔMDD≈0 → **SHADOW_CANDIDATE**。
+Production 仍 BLOCKED；V3.6.1 冻结。见 ml/phase3_5_hvt_refinement.md · 回测报告/V4.0-Phase35-HVT-Refinement-*.md
+
+--- V4.0 Shadow 观察部署（2026-08-30）---
+阶段：**冻结—观察—证据积累**（Fast Path NOT CONNECTED）。
+章程：ml/FREEZE_CHARTER.md · 正式状态：ml/shadow/FORMAL_STATE.md
+线上验收：accept-ml-shadow-noop.js → PASS（Target/Action 零变化；ml_effective=false）
+不可变锁：python3 scripts/ml/assert-gen1-immutable.py
+生产闸门：ml_shadow_observe=true · ml_fast_path_enabled=false
+日终：bash scripts/ops/run-shadow-eod.sh
+看板：Incremental / Timing / Precision / FalseCost / Calibration + CER_live + Half-Life
+Gen-2 隔离：ml/gen2/（可挑战 Gen-1，不可修改 Gen-1）
+**停止改 Gen-1 / V3.6.1 / 阈值；由真实 OOS 决定能否 Canary。**
+Production 仓位仍仅 V3.6.1。
+线上 noop 验收 PASS（2026-08-30）：ml_shadow.enabled=true / effective=false；Target/Action 零变化。
+正式状态：ml/shadow/FORMAL_STATE.md —— 停止改 Gen-1，进入真实 OOS 积累。
+
+
+--- V4.3（2026-08-25）验证波 ---
+Walk-forward 4 折（2024-07-15~2026-08-24）：平均 gap −5.33pp，跑赢等权 1/4 折；见 回测报告/V4.3-walk-forward-2026-08-25.md。
+工具：walk-forward-engine.js · check-csv-coverage.js · refill-csv-eastmoney.py。
+前台：Dashboard 合计仓>100% 隐杠杆黄条。
+
+--- V4.2（2026-08-24）工程波 ---
+安全：密码 scrypt；runDecisionEngine 白名单；intel/refresh 迁入 admin；trade 只信 _id；错误脱敏。
+引擎：NaN 守卫；DState 不足→D3；rounding；E3 常量化；state_hits 拆分；single_etf_max 上限。
+续：S-7 参数校验；未知仓位 pause；cooldown 自然日 warn；triggerFetch 失败落 fetch_log。
+验收：phase1 33/33。
+
+--- V3.9.1（2026-08-24）---
+P0 NaN 守卫 + explain PAUSED。
+
+--- V3.9（2026-08-24）---
+E3：ai_network W4 零仓 + 机会分 A/B → 首仓。

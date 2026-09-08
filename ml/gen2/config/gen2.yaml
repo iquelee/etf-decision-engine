@@ -1,0 +1,65 @@
+{
+  "version": "gen2-research-v1",
+  "mode": "research",
+  "horizon_days": 20,
+  "purge_days": 20,
+  "embargo_days": 5,
+  "universe": {
+    "version": "universe_v1",
+    "min_history_days": 120,
+    "master_file": "universe/etf_master.csv",
+    "definition_file": "universe/universe_v1.json"
+  },
+  "data": {
+    "daily_dir": "deliverables/etf_daily_ml_pool",
+    "source": "local_csv_qfq",
+    "adj_policy": "adj_close_equals_close_for_qfq_v1",
+    "benchmark_code": "510300"
+  },
+  "ranking": {
+    "engine_id": "gen2-rule-v1",
+    "top_quantile": 0.2,
+    "feature_version": "feature_v1",
+    "label_version": "label_v1_excess_rank_20d"
+  },
+  "portfolio": {
+    "max_core_count": 5,
+    "max_core_per_cluster": 2,
+    "promotion_persistence_days": 5,
+    "demotion_persistence_days": 5,
+    "min_replacement_edge": 8.0,
+    "max_single_weight": 0.25,
+    "max_cluster_weight": 0.40,
+    "max_tech_weight": 0.65,
+    "tech_clusters": ["tech_hardware", "software_ai"],
+    "initial_role_for_incumbent": "CORE",
+    "top_quantile": 0.2,
+    "defense": {
+      "enabled": true,
+      "risk_off_exposure_scale": 0.50,
+      "risk_off_hedge_weight": 0.15,
+      "hedge_code": "518880",
+      "regime_field": "ma60",
+      "ma60_risk_off": -0.02,
+      "vol_target_enabled": true,
+      "vol_target_annualized": 0.17
+    }
+  },
+  "evaluation": {
+    "include_cost_sensitivity_bps": [0, 5, 10, 20],
+    "benchmark_fixed_main5": true,
+    "benchmark_main5_equal_weight": true,
+    "benchmark_universe_equal_weight": true,
+    "benchmark_rule_leadership": true
+  },
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "write_cloudbase": false,
+    "auto_execution": false
+  },
+  "notes": [
+    "All values are research baselines, not production thresholds.",
+    "Formal universe_v1 requires user confirmation."
+  ]
+}

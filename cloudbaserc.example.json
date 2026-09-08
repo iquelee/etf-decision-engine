@@ -1,0 +1,169 @@
+{
+  "_comment": [
+    "【部署说明】",
+    "1. envId 为占位符 {{envId}}，部署前替换为实际 CloudBase 环境 ID。",
+    "2. functionRoot=./cloudfunctions；但云函数源码用 require('../common/...') 引用共享模块，",
+    "   部署前必须先执行 `node scripts/prepare-functions.js` 生成 dist-functions/（把 common 内联进各函数），",
+    "   再用 `tcb fn deploy <fn> --dir dist-functions/<fn>` 逐个部署，否则云端报 Cannot find module。",
+    "3.【HTTP 访问】apiGateway/adminGateway 需在 CloudBase 控制台手动开启「HTTP 访问服务」",
+    "   （或配置 API 网关触发器），开启后得到网关 URL，填入 web/.env 的 VITE_API_BASE / VITE_ADMIN_BASE。",
+    "   本文件不配置 HTTP 触发器（HTTP 访问须在控制台手动开启，CLI 不自动创建）。",
+    "4.【定时触发器】下方 4 个 timer 与架构文档/技术方案完全一致：",
+    "   - dailyFetch-1530 → fetchDailyData（收盘首抓）",
+    "   - dailyFetch-2200 → fetchDailyData（补抓兜底）",
+    "   - realtime-5min  → fetchRealtimeData（盘中行情）",
+    "   - dailyPipeline-0800 → materializeIndicators（8:00 兜底：物化→决策全链）",
+    "   dailyPipeline-0800 触发 materializeIndicators 后，函数内部链式调用 runDecisionEngine，",
+    "   已覆盖「物化→决策」全链，故 runDecisionEngine 无需独立 timer（避免重复触发）。",
+    "   - intelFetch-30min → fetchFundamentalNews（北京时间 08:00–22:00 每 30 分钟，含 22:00）",
+    "   - intelExtract-30min → extractFundamental（抓取后 +5 分钟，同窗口）"
+  ],
+  "version": "2.0",
+  "envId": "{{envId}}",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "fetchDailyData",
+      "timeout": 120,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "FRED_API_KEY": "{{FRED_API_KEY}}",
+        "TUSHARE_TOKEN": "",
+        "AKSHARE_PROXY": "",
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "fetchRealtimeData",
+      "timeout": 60,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "materializeIndicators",
+      "timeout": 120,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "runDecisionEngine",
+      "timeout": 120,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "apiGateway",
+      "timeout": 30,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "adminGateway",
+      "timeout": 60,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod"
+      }
+    },
+    {
+      "name": "fetchFundamentalNews",
+      "timeout": 180,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod",
+        "OPENDART_API_KEY": "{{OPENDART_API_KEY}}"
+      },
+      "triggers": [
+        { "name": "newsFetch-1630", "type": "timer", "config": "0 30 16 * * 1-5 *" },
+        { "name": "intelFetch-30min", "type": "timer", "config": "0 0,30 8-22 * * * *" }
+      ]
+    },
+    {
+      "name": "extractFundamental",
+      "timeout": 180,
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "DECISION_ENV": "prod",
+        "DEEPSEEK_API_KEY": "{{DEEPSEEK_API_KEY}}"
+      },
+      "triggers": [
+        { "name": "newsExtract-1640", "type": "timer", "config": "0 40 16 * * 1-5 *" },
+        { "name": "intelExtract-30min", "type": "timer", "config": "0 5,35 8-22 * * * *" }
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "name": "dailyFetch-1530",
+      "functionName": "fetchDailyData",
+      "type": "timer",
+      "config": "0 30 15 * * 1-5 *"
+    },
+    {
+      "name": "dailyFetch-2200",
+      "functionName": "fetchDailyData",
+      "type": "timer",
+      "config": "0 0 22 * * 1-5 *"
+    },
+    {
+      "name": "realtime-5min",
+      "functionName": "fetchRealtimeData",
+      "type": "timer",
+      "config": "0 */5 9-15 * * 1-5 *"
+    },
+    {
+      "name": "dailyPipeline-0800",
+      "functionName": "materializeIndicators",
+      "type": "timer",
+      "config": "0 0 8 * * 1-5 *"
+    },
+    {
+      "name": "newsFetch-1630",
+      "functionName": "fetchFundamentalNews",
+      "type": "timer",
+      "config": "0 30 16 * * 1-5 *"
+    },
+    {
+      "name": "newsExtract-1640",
+      "functionName": "extractFundamental",
+      "type": "timer",
+      "config": "0 40 16 * * 1-5 *"
+    },
+    {
+      "name": "intelFetch-30min",
+      "functionName": "fetchFundamentalNews",
+      "type": "timer",
+      "config": "0 0,30 8-22 * * * *"
+    },
+    {
+      "name": "intelExtract-30min",
+      "functionName": "extractFundamental",
+      "type": "timer",
+      "config": "0 5,35 8-22 * * * *"
+    }
+  ]
+}

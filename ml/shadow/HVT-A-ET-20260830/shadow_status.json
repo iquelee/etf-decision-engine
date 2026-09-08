@@ -1,0 +1,31 @@
+{
+  "model_id": "HVT-A-ET-20260830",
+  "bundle_id": "shadow-bundle-v1",
+  "asof": "2026-08-14",
+  "engine": "V3.6.1",
+  "engine_state": "FROZEN",
+  "ml_state": "FROZEN",
+  "shadow": "ACTIVE",
+  "fast_path": "NOT_CONNECTED",
+  "production": "BLOCKED",
+  "breaker_level": "OK",
+  "status": "SHADOW_ACTIVE",
+  "fastpath_permission": true,
+  "degrade_reason": "awaiting_first_oos_day",
+  "roll30_incr_pnl": null,
+  "roll60_incr_pnl": null,
+  "false_fp_rate": null,
+  "brier": null,
+  "train_end": "2026-08-24",
+  "versions": {
+    "engine_version": "v3.6.1",
+    "ml_model_id": "HVT-A-ET-20260830",
+    "feature_version": "hvt-core-v1",
+    "label_version": "hvta-v1",
+    "calibration_version": "cal-isotonic-cv3-v1",
+    "threshold_version": "shadow-threshold-v1",
+    "shadow_ledger_schema": "signal-ledger-v2",
+    "circuit_breaker_version": "cb-tiered-v1"
+  },
+  "updated_at": "2026-08-30T06:36:10+00:00"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "adminGateway",
+  "version": "2.0.0",
+  "description": "后台读写路由",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

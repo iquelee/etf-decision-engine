@@ -1,0 +1,56 @@
+{
+  "sealed_at": "2026-08-29T23:14:00.430Z",
+  "pass": true,
+  "checks": {
+    "calls_ok": true,
+    "production_engine_v361": true,
+    "ml_effective_false": true,
+    "ml_fast_path_off": true,
+    "targets_actions_identical": true,
+    "model_id": "HVT-A-ET-20260830"
+  },
+  "ml_shadow": {
+    "enabled": true,
+    "effective": false,
+    "observe": true,
+    "fast_path_enabled": false,
+    "model_id": "HVT-A-ET-20260830",
+    "bundle_id": "shadow-bundle-v1",
+    "gen1_frozen": true,
+    "engine_version": "v3.6.1",
+    "note": "ML observing only — no authority to change production decisions"
+  },
+  "fingerprint": [
+    {
+      "code": "159570",
+      "action": "WAIT",
+      "final_target": 18,
+      "suggested_position": 0
+    },
+    {
+      "code": "159582",
+      "action": "HOLD",
+      "final_target": 12,
+      "suggested_position": 8.4
+    },
+    {
+      "code": "513310",
+      "action": "HOLD",
+      "final_target": 4.5,
+      "suggested_position": 8.8
+    },
+    {
+      "code": "515880",
+      "action": "BUILD",
+      "final_target": 5,
+      "suggested_position": 5
+    },
+    {
+      "code": "518880",
+      "action": "BUILD",
+      "final_target": 20,
+      "suggested_position": 12
+    }
+  ],
+  "note": "Shadow metadata must never change V3.6.1 Target/Action"
+}

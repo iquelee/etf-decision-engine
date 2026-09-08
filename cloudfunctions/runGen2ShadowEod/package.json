@@ -1,0 +1,9 @@
+{
+  "name": "runGen2ShadowEod",
+  "version": "0.1.0",
+  "description": "Gen-2 Cross-ETF Leadership / Rotation Shadow 观测器（只读，不改生产仓位）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0"
+  }
+}

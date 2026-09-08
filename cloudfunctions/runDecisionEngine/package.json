@@ -1,0 +1,10 @@
+{
+  "name": "runDecisionEngine",
+  "version": "2.0.0",
+  "description": "决策引擎：评分 + 状态机 + 硬规则 → 落库",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

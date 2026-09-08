@@ -1,0 +1,50 @@
+{
+  "bundle_id": "shadow-bundle-v1",
+  "sealed_at": "2026-08-30",
+  "immutable": true,
+  "status": {
+    "engine": "V3.6.1",
+    "engine_role": "Production Baseline",
+    "engine_state": "FROZEN",
+    "ml_model_id": "HVT-A-ET-20260830",
+    "ml_role": "ML Challenger Gen-1",
+    "ml_state": "FROZEN",
+    "shadow": "ACTIVE",
+    "fast_path": "NOT_CONNECTED",
+    "production": "BLOCKED"
+  },
+  "versions": {
+    "engine_version": "v3.6.1",
+    "ml_model_id": "HVT-A-ET-20260830",
+    "feature_version": "hvt-core-v1",
+    "label_version": "hvta-v1",
+    "calibration_version": "cal-isotonic-cv3-v1",
+    "threshold_version": "shadow-threshold-v1",
+    "shadow_ledger_schema": "signal-ledger-v2",
+    "circuit_breaker_version": "cb-tiered-v1"
+  },
+  "artifacts": {
+    "engine_manifest": "ml/manifests/ENGINE_V361_v1.json",
+    "model_dir": "ml/models/HVT-A-ET-20260830/",
+    "model_freeze_manifest": "ml/models/HVT-A-ET-20260830/freeze_manifest.json",
+    "shadow_protocol": "ml/shadow/SHADOW_PROTOCOL.md",
+    "shadow_dir": "ml/shadow/HVT-A-ET-20260830/",
+    "gen1_pointer": "ml/gen1/README.md",
+    "gen2_root": "ml/gen2/"
+  },
+  "milestone_research": {
+    "capture_efficiency": 0.774,
+    "oracle_delta_pp": 3.81,
+    "ml_delta_pp": 2.95,
+    "incr_maxdd": 0.0,
+    "note": "Research CF peak used logistic|y_hvta|lead; Gen-1 freeze is ExtraTrees|core (WF best). Do not mix in Shadow."
+  },
+  "discipline": [
+    "no_retrain_gen1_on_shadow",
+    "no_feature_change_gen1",
+    "no_threshold_tune_gen1",
+    "no_v361_param_change",
+    "gen2_must_not_contaminate_shadow",
+    "production_blocked_until_canary_gate"
+  ]
+}

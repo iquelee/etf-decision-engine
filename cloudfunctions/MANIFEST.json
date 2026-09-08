@@ -1,0 +1,42 @@
+[
+  {
+    "functionName": "runGen2ShadowEod",
+    "files": 48
+  },
+  {
+    "functionName": "runGen1ShadowEod",
+    "files": 54
+  },
+  {
+    "functionName": "runDecisionEngine",
+    "files": 48
+  },
+  {
+    "functionName": "adminGateway",
+    "files": 49
+  },
+  {
+    "functionName": "apiGateway",
+    "files": 48
+  },
+  {
+    "functionName": "extractFundamental",
+    "files": 24
+  },
+  {
+    "functionName": "fetchDailyData",
+    "files": 12
+  },
+  {
+    "functionName": "fetchFundamentalNews",
+    "files": 24
+  },
+  {
+    "functionName": "fetchRealtimeData",
+    "files": 12
+  },
+  {
+    "functionName": "materializeIndicators",
+    "files": 12
+  }
+]

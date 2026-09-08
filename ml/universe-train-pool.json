@@ -1,0 +1,28 @@
+{
+  "version": "2026-08-29",
+  "purpose": "V4.0 Phase1 Early Transition 训练池（同类机制：科技/成长/半导体/通信/创新）",
+  "rules": [
+    "禁止仅用 Main5 / 单票开训",
+    "黄金 518880 仅负对照，不进 S2→S4 训练标签池",
+    "510300 仅作相对强度基准，不进事件标签"
+  ],
+  "benchmark": { "code": "510300", "name": "沪深300ETF", "role": "benchmark" },
+  "holdout_negative": [
+    { "code": "518880", "name": "黄金ETF", "sector": "gold", "role": "negative_control" }
+  ],
+  "train_pool": [
+    { "code": "515880", "name": "通信ETF", "sector": "ai_network", "role": "train", "main5": true },
+    { "code": "159582", "name": "半导体设备ETF", "sector": "semi_equip", "role": "train", "main5": true },
+    { "code": "513310", "name": "中韩半导体ETF", "sector": "storage", "role": "train", "main5": true },
+    { "code": "159570", "name": "港股通创新药ETF", "sector": "biotech", "role": "train", "main5": true },
+    { "code": "588000", "name": "科创50ETF", "sector": "growth_broad", "role": "train" },
+    { "code": "588080", "name": "科创板50ETF", "sector": "growth_broad", "role": "train" },
+    { "code": "512480", "name": "半导体ETF", "sector": "semi", "role": "train" },
+    { "code": "159995", "name": "芯片ETF", "sector": "semi", "role": "train" },
+    { "code": "512760", "name": "芯片产业ETF", "sector": "semi", "role": "train" },
+    { "code": "515050", "name": "5G通信ETF", "sector": "comms", "role": "train" },
+    { "code": "159819", "name": "人工智能ETF", "sector": "ai", "role": "train" },
+    { "code": "159915", "name": "创业板ETF", "sector": "growth_broad", "role": "train" },
+    { "code": "159992", "name": "创新药ETF", "sector": "biotech", "role": "train" }
+  ]
+}

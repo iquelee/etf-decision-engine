@@ -1,0 +1,21 @@
+{
+  "manifest_id": "ENGINE_V361_v1",
+  "engine_version": "v3.6.1",
+  "sealed_at": "2026-08-30",
+  "immutable": true,
+  "role": "Production Baseline",
+  "state": "FROZEN",
+  "scope": {
+    "stage_logic": "FROZEN",
+    "target_curve": "FROZEN",
+    "risk": "FROZEN",
+    "portfolio_cap": "FROZEN",
+    "fast_path_permission": "RULE_ONLY_NO_ML"
+  },
+  "notes": [
+    "Shadow must not change any V3.6.1 parameter for ML convenience.",
+    "ML may only propose counterfactual Fast Path Stage unlock in the ledger.",
+    "Live execution remains pure V3.6.1 until Canary + Production gates pass."
+  ],
+  "referenced_by": "ml/manifests/SHADOW_BUNDLE_v1.json"
+}

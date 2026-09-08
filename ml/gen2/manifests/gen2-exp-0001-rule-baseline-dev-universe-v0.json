@@ -1,0 +1,20 @@
+{
+  "experiment_id": "gen2-exp-0001-rule-baseline-dev-universe-v0",
+  "created_at": "2026-09-05T04:18:33.636774+00:00",
+  "git_commit": null,
+  "universe_version": "dev_universe_v0",
+  "data_version": "daily-qfq-v1",
+  "feature_version": "feature_v1",
+  "label_version": "label_v1_excess_rank_20d",
+  "rotation_version": "rotation_v1_research_baseline",
+  "model": "rule_leadership_v1",
+  "train_end": null,
+  "test_range": "2045 rows / see daily outputs",
+  "config_sha256": "48bdc46d828e8d610662f0672c0d8caad00aa446de699773ac47c8dc91567dc4",
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "auto_execution": false,
+    "write_cloudbase": false
+  }
+}

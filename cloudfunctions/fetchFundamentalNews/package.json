@@ -1,0 +1,10 @@
+{
+  "name": "fetchFundamentalNews",
+  "version": "2.0.0",
+  "description": "收盘后搜集 ETF 赛道基本面新闻/公告（巨潮资讯），关键词初判方向落库 news_feed",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

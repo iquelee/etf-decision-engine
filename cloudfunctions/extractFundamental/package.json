@@ -1,0 +1,10 @@
+{
+  "name": "extractFundamental",
+  "version": "2.0.0",
+  "description": "用 DeepSeek 从 news_feed 新闻提取基本面指标与方向，写 fundamental_series",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0",
+    "axios": "^1.7.2"
+  }
+}

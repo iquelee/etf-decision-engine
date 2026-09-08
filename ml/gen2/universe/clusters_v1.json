@@ -1,0 +1,66 @@
+{
+  "cluster_version": "clusters_v1_static_research",
+  "created_at": "2026-09-05",
+  "clusters": {
+    "tech_hardware": {
+      "description": "半导体、芯片、通信硬件等高相关科技硬件 beta",
+      "max_core_count": 2,
+      "codes": ["513310", "159582", "515880", "512480", "159995", "512760", "515050"]
+    },
+    "software_ai": {
+      "description": "AI 软件、机器人、软件应用与算力应用暴露",
+      "max_core_count": 2,
+      "codes": ["159819", "159770", "159852"]
+    },
+    "growth_broad": {
+      "description": "科创/创业板等宽基成长 beta",
+      "max_core_count": 2,
+      "codes": ["588000", "588080", "159915"]
+    },
+    "healthcare": {
+      "description": "创新药、医药与医疗成长",
+      "max_core_count": 2,
+      "codes": ["159570", "159992", "512010"]
+    },
+    "consumer": {
+      "description": "酒、消费与传媒等可选消费",
+      "max_core_count": 2,
+      "codes": ["512690", "159928"]
+    },
+    "financial": {
+      "description": "银行、券商等金融 beta",
+      "max_core_count": 2,
+      "codes": ["512800", "512000"]
+    },
+    "defensive_dividend": {
+      "description": "红利等高股息防御资产",
+      "max_core_count": 2,
+      "codes": ["510880"]
+    },
+    "cyclical_resources": {
+      "description": "军工、新能源车、光伏、有色、煤炭等周期/工业 beta",
+      "max_core_count": 2,
+      "codes": ["512660", "515030", "515790", "512400", "515220"]
+    },
+    "overseas_equity": {
+      "description": "恒生科技、纳斯达克、标普500 等海外权益",
+      "max_core_count": 2,
+      "codes": ["513180", "159941", "513500"]
+    },
+    "gold_commodity": {
+      "description": "黄金及商品防御资产",
+      "max_core_count": 1,
+      "codes": ["518880"]
+    },
+    "broad_beta": {
+      "description": "沪深300等基准宽基；仅研究对照",
+      "max_core_count": 0,
+      "codes": ["510300"]
+    }
+  },
+  "dynamic_validation": {
+    "rolling_windows_days": [60, 120],
+    "report_cluster_concentration": true,
+    "auto_clustering": false
+  }
+}

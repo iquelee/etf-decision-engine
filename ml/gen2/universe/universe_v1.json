@@ -1,0 +1,44 @@
+{
+  "universe_version": "universe_v1",
+  "created_at": "2026-09-05",
+  "status": "CONFIRMED",
+  "target_size": 30,
+  "benchmark_code": "510300",
+  "incumbent_main5": ["513310", "159582", "515880", "159570", "518880"],
+  "eligible_codes": [
+    "513310", "159582", "515880", "159570", "518880",
+    "588000", "588080", "512480", "159995", "512760", "515050", "159819", "159915", "159992",
+    "159770", "159852", "512010", "512690", "159928", "510880", "512800", "512000",
+    "512660", "515030", "515790", "512400", "515220", "513180", "159941", "513500"
+  ],
+  "excluded_from_core_competition": ["510300"],
+  "candidate_count": 30,
+  "candidate_map": {
+    "159770": {"name": "机器人ETF", "sector": "software_ai", "cluster": "software_ai", "asset_class": "equity"},
+    "159852": {"name": "软件ETF", "sector": "software_ai", "cluster": "software_ai", "asset_class": "equity"},
+    "512010": {"name": "医药ETF", "sector": "healthcare", "cluster": "healthcare", "asset_class": "equity"},
+    "512690": {"name": "酒ETF", "sector": "consumer", "cluster": "consumer", "asset_class": "equity"},
+    "159928": {"name": "消费ETF", "sector": "consumer", "cluster": "consumer", "asset_class": "equity"},
+    "510880": {"name": "红利ETF", "sector": "defensive_dividend", "cluster": "defensive_dividend", "asset_class": "equity"},
+    "512800": {"name": "银行ETF", "sector": "financial", "cluster": "financial", "asset_class": "equity"},
+    "512000": {"name": "券商ETF", "sector": "financial", "cluster": "financial", "asset_class": "equity"},
+    "512660": {"name": "军工ETF", "sector": "cyclical_resources", "cluster": "cyclical_resources", "asset_class": "equity"},
+    "515030": {"name": "新能源车ETF", "sector": "cyclical_resources", "cluster": "cyclical_resources", "asset_class": "equity"},
+    "515790": {"name": "光伏ETF", "sector": "cyclical_resources", "cluster": "cyclical_resources", "asset_class": "equity"},
+    "512400": {"name": "有色金属ETF", "sector": "cyclical_resources", "cluster": "cyclical_resources", "asset_class": "equity"},
+    "515220": {"name": "煤炭ETF", "sector": "cyclical_resources", "cluster": "cyclical_resources", "asset_class": "equity"},
+    "513180": {"name": "恒生科技ETF", "sector": "overseas_equity", "cluster": "overseas_equity", "asset_class": "equity"},
+    "159941": {"name": "纳指ETF", "sector": "overseas_equity", "cluster": "overseas_equity", "asset_class": "equity"},
+    "513500": {"name": "标普500ETF", "sector": "overseas_equity", "cluster": "overseas_equity", "asset_class": "equity"}
+  },
+  "roles": {
+    "core_eligible_default": true,
+    "hedge_can_be_core": false,
+    "hedge_code": "518880",
+    "defensive_dividend_can_be_core": true,
+    "overseas_can_be_core": true
+  },
+  "data_note": "16 只新增 ETF 由腾讯 fqkline 抓取；其中 10 只老 ETF（医药/酒/消费/红利/银行/券商/有色/煤炭/纳指/标普）仅 640 根约 2.5 年历史，长历史待东财源补。",
+  "production_write": false,
+  "auto_execution": false
+}

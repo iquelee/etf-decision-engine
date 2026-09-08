@@ -1,0 +1,10 @@
+{
+  "name": "runGen1ShadowEod",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CloudBase Gen-1 frozen EOD advisory runner",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0"
+  }
+}

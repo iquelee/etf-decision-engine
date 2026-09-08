@@ -1,0 +1,28 @@
+{
+  "rotation_version": "rotation_v1_research_baseline",
+  "max_core_count": 5,
+  "max_core_per_cluster": 2,
+  "promotion_persistence_days": 5,
+  "demotion_persistence_days": 5,
+  "min_replacement_edge": 8.0,
+  "role_rank_thresholds": {
+    "core": 0.8,
+    "satellite": 0.6,
+    "challenger": 0.7,
+    "hedge_min_score": 45.0
+  },
+  "penalties": {
+    "correlation_penalty": 2.0,
+    "turnover_penalty": 2.0,
+    "crowding_penalty": 1.0
+  },
+  "costs": {
+    "default_bps": 10,
+    "sensitivity_bps": [0, 5, 10, 20]
+  },
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "auto_execution": false
+  }
+}

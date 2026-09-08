@@ -1,0 +1,10 @@
+{
+  "n_signals": 73,
+  "n_ready": 15,
+  "class_counts": {
+    "C": 13,
+    "A": 2
+  },
+  "mean_mae_on_fast": -0.011032708276480452,
+  "mean_mfe_on_fast": 0.14238723636505402
+}
