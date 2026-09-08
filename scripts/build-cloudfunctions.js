@@ -22,12 +22,12 @@ const SRC_COMMON = path.join(REPO, 'src', 'common');
 const CF_DIR = path.join(REPO, 'cloudfunctions');
 const DIST = path.join(REPO, 'dist-functions');
 
-// 线上 10 个函数（与 MCP listFunctions / prepare-deploy.py 一致）
+// 线上 10 个函数（与 MCP listFunctions / prepare-deploy.py 一致）+ runIntegratedShadowEod（WP7）
 const FUNCTIONS = [
   'runGen2ShadowEod', 'runGen1ShadowEod', 'runDecisionEngine',
   'adminGateway', 'apiGateway', 'extractFundamental',
   'fetchDailyData', 'fetchFundamentalNews', 'fetchRealtimeData',
-  'materializeIndicators',
+  'materializeIndicators', 'runIntegratedShadowEod',
 ];
 
 // 不复制到 dist 的顶层条目（common 由 src/common 统一供给；MANIFEST 是 build 产物）

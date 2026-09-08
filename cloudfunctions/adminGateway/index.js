@@ -139,6 +139,30 @@ async function getGen2SelectionShadow(query) {
   return { run, rankings: rows, selection };
 }
 
+/** Integrated Shadow 只读观察（WP7 消费端）。
+ *  消费者先选「最新 completed 运行」，再按其 run_id 读取 integrated_shadow_result，
+ *  禁止按每只 ETF 最新日期拼接。结果含四层（Gen-2 选池 / Gen-1 择时 / V3.6.1 基线 / 集成反事实建议），
+ *  production_write 恒 false，final_target 明确不产出（反事实建议用 safety_clamped_target 表达）。 */
+async function getIntegratedShadow(query) {
+  const tradeDate = query.date || query.trade_date || null;
+  let runRows;
+  if (tradeDate) {
+    runRows = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RUN, { status: 'completed', run_date: tradeDate }, {
+      orderBy: [{ field: 'created_at', direction: 'desc' }], limit: 1
+    }).catch(() => []);
+  } else {
+    runRows = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RUN, { status: 'completed' }, {
+      orderBy: [{ field: 'created_at', direction: 'desc' }], limit: 1
+    }).catch(() => []);
+  }
+  const run = runRows[0] || null;
+  if (!run) return { run: null, results: [] };
+  const results = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RESULT, { run_id: run.run_id }, {
+    orderBy: [{ field: 'gen2_rank', direction: 'asc' }]
+  }).catch(() => []);
+  return { run, results: results || [] };
+}
+
 /* ---------- 登录鉴权 ---------- */
 
 const genToken = () => crypto.randomBytes(24).toString('hex');
@@ -973,6 +997,8 @@ exports.main = async (event = {}, context = {}) => {
     if (path === '/api/admin/gen1/health') return ok(await getGen1Health());
     // GET /api/admin/gen2/shadow（只读 Selection Shadow 观察）
     if (path === '/api/admin/gen2/shadow') return ok(await getGen2SelectionShadow(query));
+    // GET /api/admin/integrated-shadow（只读 Integrated Shadow 反事实观察，WP7）
+    if (path === '/api/admin/integrated-shadow') return ok(await getIntegratedShadow(query));
     // POST /api/admin/portfolio/snapshot
     if (path === '/api/admin/portfolio/snapshot') return savePortfolioSnapshot(body);
     // GET/POST /api/admin/trade

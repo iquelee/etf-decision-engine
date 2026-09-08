@@ -33,6 +33,10 @@ const COLLECTIONS = {
   GEN2_SHADOW: 'gen2_shadow',
   /** Gen-2 研究日线（qfq 前复权，独立于生产 etf_daily，供 Gen-2 Shadow 对齐 Python 研究版口径） */
   GEN2_DAILY: 'gen2_daily',
+  /** Integrated Shadow 组合运行元数据（run_id → 依赖门/状态/计数；只读反事实，不写生产） */
+  INTEGRATED_SHADOW_RUN: 'integrated_shadow_run',
+  /** Integrated Shadow 每只 ETF 结果（run_id + code 唯一；四层权限模型 + explain chain） */
+  INTEGRATED_SHADOW_RESULT: 'integrated_shadow_result',
   TRADE_LOG: 'trade_log',
   PARAM_CONFIG: 'param_config',
   FETCH_LOG: 'fetch_log',

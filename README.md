@@ -7,15 +7,17 @@
 ```
 生产决策链：runDecisionEngine（V3.6.1 主决策，Safety Core）
   ├─ Gen-1：runGen1ShadowEod（ML 影子，frozen，仅 advisory）
-  └─ Gen-2：runGen2ShadowEod（选池影子，只读观察，不写生产仓位）
+  ├─ Gen-2：runGen2ShadowEod（选池影子，只读观察，不写生产仓位）
+  └─ Integrated：runIntegratedShadowEod（Gen-2 选池 + Gen-1 择时 + V3.6.1 安全 → 反事实建议，只写 integrated_shadow_*）
 ```
 
-- **cloudfunctions/** — 线上 10 个云函数（含 Gen-1/Gen-2 影子引擎）
+- **cloudfunctions/** — 线上 11 个云函数（含 Gen-1/Gen-2/Integrated 三个影子引擎）
 - **web/** — 前端（Vue3 + Vite），V3.6.1 + Gen-1 状态页 + Gen-2 选池观察页
 - **ml/** — Gen-2 Python 研究代码（选池/回测/OOS）
-- **scripts/** — 部署/回测/诊断脚本
-- **tests/** — Node + Python 测试
-- **docs/** — 主链冻结契约、接口契约
+- **src/common/** — 单一源码真相源（49 文件 canonical，构建时注入各函数）
+- **scripts/** — 部署/构建/回测/诊断脚本（build-cloudfunctions.js 源构建 + SHA256 parity）
+- **tests/** — Node + Python 测试（统一入口 scripts/test-all.js，5 阶段门禁）
+- **docs/** — 主链冻结契约、Selection/Integrated Shadow 接口契约、Engine Authority Matrix、Test & CI Gates
 
 ## 版本真相源
 
@@ -28,6 +30,14 @@
 - `config.json` / `cloudbaserc.json` / `.env*` 含真实密钥与 envId，**严禁提交**（已 .gitignore）
 - 只保留 `cloudbaserc.example.json` 与 `*.config.example.json` 模板
 - 提交前须全文扫描 `sk-` / `FRED_API_KEY` / `DEEPSEEK_API_KEY` / `OPENDART_API_KEY` 等密钥模式，0 命中
+
+## 测试门禁
+
+```bash
+npm test   # 5 阶段：Node 单测 / Python 单测 / Immutable / Parity / Secret scan
+```
+
+任何阶段失败 → 整体退出非零。CI（`.github/workflows/test.yml`）在 push/PR 上跑同套门禁 + GEN2_RULE_V2_BUNDLE 冻结校验。详见 `docs/Test-And-CI-Gates.md`。
 
 ## 部署
 

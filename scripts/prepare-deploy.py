@@ -15,12 +15,12 @@ import os, sys, json, zipfile, shutil, argparse
 
 ENV_ID = "tradingview-etf-d0fa42yy57cbc11b"
 
-# 线上 10 个函数（与 MCP listFunctions 一致）
+# 线上函数（与 MCP listFunctions 一致）+ 新增 runIntegratedShadowEod（Integrated Shadow，只读反事实）
 FUNCTIONS = [
     "runGen2ShadowEod", "runGen1ShadowEod", "runDecisionEngine",
     "adminGateway", "apiGateway", "extractFundamental",
     "fetchDailyData", "fetchFundamentalNews", "fetchRealtimeData",
-    "materializeIndicators",
+    "materializeIndicators", "runIntegratedShadowEod",
 ]
 
 # 线上 zip 里无顶层 config.json 的函数，用此默认配置补全（与线上 MCP getFunctionDetail 一致）
@@ -40,6 +40,17 @@ DEFAULT_CONFIGS = {
         "envVariables": {},
         "triggers": [],  # timer 触发器已在云端（工作日 22:20），部署代码不动它
     },
+    "runIntegratedShadowEod": {
+        "permissions": {"openapi": []},
+        "timeout": 120,
+        "envVariables": {},
+        "triggers": [],  # timer 触发器（shadowIntegrated-0910）在云端，部署代码不动它
+    },
+}
+
+# 无线上 zip 快照的新函数：node_modules 从指定兄弟函数复用（同为 @cloudbase/node-sdk 依赖）
+NO_BASELINE_DEPS_FROM = {
+    "runIntegratedShadowEod": "runGen2ShadowEod",
 }
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -64,8 +75,22 @@ def main():
 
         zip_path = os.path.join(args.baseline, fn + ".zip")
         if not os.path.exists(zip_path):
-            print(f"[跳过] {fn}: 缺少 {zip_path}")
-            continue
+            # 新函数无线上 zip：写默认 config.json + 复用兄弟函数 node_modules（同 SDK 依赖）
+            if fn in DEFAULT_CONFIGS:
+                with open(os.path.join(out, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump(DEFAULT_CONFIGS[fn], f, ensure_ascii=False, indent=2)
+            dep_from = NO_BASELINE_DEPS_FROM.get(fn)
+            if dep_from:
+                src_nm = os.path.join(dist, dep_from, "node_modules")
+                dst_nm = os.path.join(out, "node_modules")
+                if os.path.isdir(src_nm) and os.listdir(src_nm) and not (os.path.isdir(dst_nm) and os.listdir(dst_nm)):
+                    shutil.copytree(src_nm, dst_nm)
+                    print(f"[复用依赖] {fn} ← {dep_from}/node_modules")
+                elif os.path.isdir(dst_nm) and os.listdir(dst_nm):
+                    pass  # 已缓存
+                else:
+                    print(f"[警告] {fn}: 无 zip 且 {dep_from} node_modules 未缓存，需先部署 {dep_from}")
+            # 继续走 config.json 读取 + cloudbaserc 追加（不 continue）
 
         # 1) 从 zip 恢复 node_modules + config.json（线上权威）
         #    node_modules 缓存：已存在且非空则跳过解压（避免每次部署解压 6 分钟）；

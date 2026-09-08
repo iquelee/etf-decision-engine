@@ -1,0 +1,9 @@
+{
+  "name": "runIntegratedShadowEod",
+  "version": "0.1.0",
+  "description": "Integrated Shadow 集成反事实引擎（Gen-2 选池 + Gen-1 择时 + V3.6.1 安全，只读，不改生产）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.9.0"
+  }
+}
