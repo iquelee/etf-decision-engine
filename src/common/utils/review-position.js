@@ -36,9 +36,9 @@ function pushSnap(events, code, date, snapshot) {
  * @param {string} date YYYY-MM-DD
  * @param {Array<object>} snapshots portfolio_snapshot[]
  * @param {Array<object>} trades trade_log[]
- * @returns {number|null}
+ * @returns {{position:number, position_date:string, source:string, exact:boolean}|null}
  */
-function actualHeldPosition(code, date, snapshots, trades) {
+function actualHeldPositionDetail(code, date, snapshots, trades) {
   if (!code || !date) return null;
   const events = [];
   (snapshots || []).forEach((s) => pushSnap(events, code, date, s));
@@ -53,10 +53,19 @@ function actualHeldPosition(code, date, snapshots, trades) {
     });
   });
   if (!events.length) return null;
+  const detail = (event) => {
+    if (!event) return null;
+    return {
+      position: event.pos,
+      position_date: event.date,
+      source: event.kind === 'trade' ? 'TRADE_LOG' : 'PORTFOLIO_SNAPSHOT',
+      exact: !!event.exact
+    };
+  };
   const exactSnap = events.find((e) => e.kind === 'snap' && e.exact);
-  if (exactSnap) return exactSnap.pos;
+  if (exactSnap) return detail(exactSnap);
   const exactTrade = events.find((e) => e.kind === 'trade' && e.exact);
-  if (exactTrade) return exactTrade.pos;
+  if (exactTrade) return detail(exactTrade);
   const rank = { snap: 3, trade: 2 };
   const past = events.filter((e) => e.kind !== 'snap-next');
   const future = events.filter((e) => e.kind === 'snap-next');
@@ -70,10 +79,15 @@ function actualHeldPosition(code, date, snapshots, trades) {
   if (p && f) {
     const pd = daysBetween(p.date, date);
     const fd = daysBetween(date, f.date);
-    if (pd != null && fd != null && fd < pd) return f.pos;
-    return p.pos;
+    if (pd != null && fd != null && fd < pd) return detail(f);
+    return detail(p);
   }
-  return p ? p.pos : (f ? f.pos : null);
+  return p ? detail(p) : detail(f);
 }
 
-module.exports = { actualHeldPosition, daysBetween };
+function actualHeldPosition(code, date, snapshots, trades) {
+  const detail = actualHeldPositionDetail(code, date, snapshots, trades);
+  return detail ? detail.position : null;
+}
+
+module.exports = { actualHeldPosition, actualHeldPositionDetail, daysBetween };

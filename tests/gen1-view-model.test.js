@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { buildGen1ViewModel, STATUS } = require('../cloudfunctions/common/utils/gen1-view-model');
+const { buildGen1ViewModel, STATUS } = require('../src/common/utils/gen1-view-model');
 
 const baseDecision = { final_action: 'HOLD', final_target: 0, suggested_position: 8.8, risk_flag: 'NORMAL' };
 const basePosition = { current_position: 8.8 };

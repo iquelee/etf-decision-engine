@@ -1,8 +1,8 @@
 'use strict';
 
 const assert = require('assert');
-const { getCategoryCoverage, capabilityForApi } = require('../cloudfunctions/common/utils/gen1-capability');
-const { buildEtfMlShadow } = require('../cloudfunctions/common/utils/ml-shadow');
+const { getCategoryCoverage, capabilityForApi } = require('../src/common/utils/gen1-capability');
+const { buildEtfMlShadow } = require('../src/common/utils/ml-shadow');
 
 const gold = getCategoryCoverage('gold');
 assert.deepStrictEqual(

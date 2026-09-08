@@ -1,10 +1,10 @@
 'use strict';
 
 const assert = require('assert');
-const { DEFAULT_PARAMS } = require('../cloudfunctions/common/constants');
-const createV3 = require('../cloudfunctions/common/utils/decision-v3');
-const { mergeShadowOutputs } = require('../cloudfunctions/common/utils/v3-shadow');
-const { gen1RulePermission } = require('../cloudfunctions/common/utils/gen1-rule-permission');
+const { DEFAULT_PARAMS } = require('../src/common/constants');
+const createV3 = require('../src/common/utils/decision-v3');
+const { mergeShadowOutputs } = require('../src/common/utils/v3-shadow');
+const { gen1RulePermission } = require('../src/common/utils/gen1-rule-permission');
 
 assert.strictEqual(DEFAULT_PARAMS.ml_shadow_observe, true);
 assert.strictEqual(DEFAULT_PARAMS.ml_advisory_enabled, true);

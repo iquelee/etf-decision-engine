@@ -4,11 +4,11 @@
  */
 'use strict';
 const assert = require('assert');
-const fund = require('../cloudfunctions/common/utils/fundamental.js');
-const { parseHoldingRow } = require('../cloudfunctions/common/utils/holdings-parse.js');
-const ox = require('../cloudfunctions/common/utils/overseas-filings.js');
-const bio = require('../cloudfunctions/common/utils/biotech-intel.js');
-const { FINANCIAL_CONDUCTION_MAP, SEC_FINANCIAL_TICKERS } = require('../cloudfunctions/common/constants.js');
+const fund = require('../src/common/utils/fundamental.js');
+const { parseHoldingRow } = require('../src/common/utils/holdings-parse.js');
+const ox = require('../src/common/utils/overseas-filings.js');
+const bio = require('../src/common/utils/biotech-intel.js');
+const { FINANCIAL_CONDUCTION_MAP, SEC_FINANCIAL_TICKERS } = require('../src/common/constants.js');
 
 let passed = 0, failed = 0;
 function test(name, fn) {

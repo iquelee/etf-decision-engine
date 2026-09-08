@@ -15,8 +15,10 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+require('./helpers/mock-cloudbase'); // mock @cloudbase/node-sdk（intel-refresh 间接依赖）
 
-const ROOT = path.resolve(__dirname, '..', 'functions', 'adminGateway');
+const ROOT = path.resolve(__dirname, '..', 'cloudfunctions', 'adminGateway');
+const SRC_COMMON = path.resolve(__dirname, '..', 'src', 'common');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
 
 // 构造内存 DB：仅实现 query/upsert，返回预置数据
@@ -41,6 +43,7 @@ function load(collectionData) {
     if (p === './common/utils/db') return db;
     if (p === 'crypto') return require('crypto');
     if (p === '@cloudbase/node-sdk') return { init: () => ({ database: () => ({ collection: () => ({}) }) }), SYMBOL_CURRENT_ENV: 'test' };
+    if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
     return require(path.join(ROOT, p));
   }, Date, console, crypto: require('crypto') };
   vm.runInNewContext(SOURCE + '\nexports.audit = { getGen2SelectionShadow };', box);

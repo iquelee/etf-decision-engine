@@ -15,7 +15,7 @@ assert.strictEqual(isSecretRel('cloudfunctions/fetchDailyData/config.example.jso
 assert.strictEqual(isSecretRel('cloudbaserc.example.json'), false);
 assert.strictEqual(isSecretRel('web/.env'), true);
 assert.strictEqual(isSecretRel('web/.env.example'), false);
-assert.strictEqual(isSecretRel('cloudfunctions/common/utils/decision.js'), false);
+assert.strictEqual(isSecretRel('src/common/utils/decision.js'), false);
 
 const clean = looksLikeSecretAssignment('{"FRED_API_KEY":"{{FRED_API_KEY}}","DEEPSEEK_API_KEY":"{{DEEPSEEK_API_KEY}}","OPENDART_API_KEY":"{{OPENDART_API_KEY}}"}');
 assert.strictEqual(clean.length, 0, '占位符不应报警');

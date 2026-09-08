@@ -5,10 +5,10 @@
  */
 'use strict';
 const assert = require('assert');
-const decision = require('../cloudfunctions/common/utils/decision.js');
-const indicators = require('../cloudfunctions/common/utils/indicators.js');
-const { replayAverageCost } = require('../cloudfunctions/common/utils/pnl.js');
-const { isIntraday, isOfficialDailyBar, clampConfidence } = require('../cloudfunctions/common/utils/fetch-guard.js');
+const decision = require('../src/common/utils/decision.js');
+const indicators = require('../src/common/utils/indicators.js');
+const { replayAverageCost } = require('../src/common/utils/pnl.js');
+const { isIntraday, isOfficialDailyBar, clampConfidence } = require('../src/common/utils/fetch-guard.js');
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -369,7 +369,7 @@ test('⑲ 无有效横盘 breakout=false；有横盘才认窗口高点', () => {
 
 /* ⑳ 成交乱序时平均成本仍按日期正序 */
 test('⑳ 成交乱序仍按日期回放平均成本', () => {
-  const { replayAverageCost, unrealizedPnl } = require('../cloudfunctions/common/utils/pnl.js');
+  const { replayAverageCost, unrealizedPnl } = require('../src/common/utils/pnl.js');
   const h = replayAverageCost([
     { code: '518880', action: 'sell', shares: 100, price: 5, trade_date: '2026-02-01' },
     { code: '518880', action: 'buy', shares: 200, price: 4, trade_date: '2026-01-10' },
@@ -382,10 +382,10 @@ test('⑳ 成交乱序仍按日期回放平均成本', () => {
 
 /* ㉑ 冻结 key 与成交更新白名单 */
 test('㉑ 冻结 mild/赛道顶；成交 update 丢掉非白名单字段', () => {
-  const { FROZEN_PARAM_KEYS, pickTradeUpdate, ENGINE_VERSION } = require('../cloudfunctions/common/constants.js');
+  const { FROZEN_PARAM_KEYS, pickTradeUpdate, ENGINE_VERSION } = require('../src/common/constants.js');
   assert.ok(FROZEN_PARAM_KEYS.indexOf('volume_ratio_mild') >= 0);
   assert.ok(FROZEN_PARAM_KEYS.indexOf('tech_sector_max') >= 0);
-  assert.strictEqual(ENGINE_VERSION, 'V3.9');
+  assert.strictEqual(ENGINE_VERSION, 'V3.6.1');
   const picked = pickTradeUpdate({
     trade_date: '2026-08-22', shares: 10, _id: 'x', _op: 'update', extra: 1, password: 'no'
   });
@@ -409,7 +409,7 @@ test('㉒ 去杠杆日收益只缩超配那天', () => {
 
 /* ㉓ 实盘活分母：现金粘住，市值涨则总资产涨；仓位%用活分母 */
 test('㉓ 活分母=市值+现金；首次无现金字段时总资产仍等于旧录入', () => {
-  const live = require('../cloudfunctions/common/utils/live-asset.js');
+  const live = require('../src/common/utils/live-asset.js');
   assert.strictEqual(live.cashDeltaFromTrade({ action: 'buy', amount: 5000 }), -5000);
   assert.strictEqual(live.cashDeltaFromTrade({ action: 'sell', shares: 100, price: 10 }), 1000);
   assert.strictEqual(live.snapshotHoldingsMv({ holdings_mv: 40000 }), 40000);
@@ -507,7 +507,7 @@ test('㉗ 票池子集：等权 1/n、缺席仓位 0、日期交集', () => {
 
 /* ㉘ 复盘时间轴：当天实际持仓，不是目标仓 */
 test('㉘ 复盘持仓：同日快照优先，成交补洞，隔日快照限 3 天', () => {
-  const { actualHeldPosition, actualHeldPositionDetail } = require('../cloudfunctions/common/utils/review-position.js');
+  const { actualHeldPosition, actualHeldPositionDetail } = require('../src/common/utils/review-position.js');
   const snaps = [
     { snapshot_date: '2026-08-21', positions: [{ code: '513310', position: 9.1 }, { code: '518880', position: 0 }] },
     { snapshot_date: '2026-08-23', positions: [{ code: '513310', position: 9.3 }] }
@@ -533,7 +533,7 @@ test('㉘ 复盘持仓：同日快照优先，成交补洞，隔日快照限 3 �
 
 /* ㉙ 复盘统计：一笔成交只关联一次，等待日操作属于自主调整 */
 test('㉙ 复盘统计：T+1 减仓算执行，HOLD 日买入标记自主调整', () => {
-  const { computeReviewStats } = require('../cloudfunctions/common/utils/review-stats.js');
+  const { computeReviewStats } = require('../src/common/utils/review-stats.js');
   const decisions = [
     { _id: 'r1', code: '518880', decision_date: '2026-08-18', final_action: 'STRATEGIC_REDUCE' },
     { _id: 'w1', code: '518880', decision_date: '2026-08-19', final_action: 'WAIT' },
@@ -559,7 +559,7 @@ test('㉙ 复盘统计：T+1 减仓算执行，HOLD 日买入标记自主调整'
 });
 
 test('㉚ 复盘统计：同一笔成交不得重复记到连续 HOLD 决策', () => {
-  const { computeReviewStats } = require('../cloudfunctions/common/utils/review-stats.js');
+  const { computeReviewStats } = require('../src/common/utils/review-stats.js');
   const decisions = [
     { _id: 'h1', code: '513310', decision_date: '2026-08-31', final_action: 'HOLD' },
     { _id: 'h2', code: '513310', decision_date: '2026-09-01', final_action: 'HOLD' },
@@ -579,7 +579,7 @@ test('㉚ 复盘统计：同一笔成交不得重复记到连续 HOLD 决策', (
 test('⑪ A8：decision 模块不再导出/存在 buildFirstStep、addStepByGrade', () => {
   assert.strictEqual(decision.buildFirstStep, undefined);
   assert.strictEqual(decision.addStepByGrade, undefined);
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../cloudfunctions/common/utils/decision.js'), 'utf8');
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../src/common/utils/decision.js'), 'utf8');
   assert.ok(!/\bfunction buildFirstStep\b/.test(src), 'buildFirstStep 函数体仍在');
   assert.ok(!/\bfunction addStepByGrade\b/.test(src), 'addStepByGrade 函数体仍在');
 });
@@ -698,7 +698,7 @@ test('㉜ V4.2：detectDState 数据不足返回 D3；TAC rounding；密码哈�
   }, 'TACTICAL_REDUCE');
   assert.strictEqual(tac, 17.5, `TAC 25% 交易仓应 17.5，实际 ${tac}`);
 
-  const { hashPassword, verifyPassword } = require('../cloudfunctions/common/utils/admin-auth.js');
+  const { hashPassword, verifyPassword } = require('../src/common/utils/admin-auth.js');
   const hashed = hashPassword('test-secret');
   assert.ok(hashed.startsWith('$scrypt$'));
   assert.strictEqual(verifyPassword('test-secret', hashed).ok, true);
@@ -726,7 +726,7 @@ test('㉝ V4.2b：仓位未知 pause；日期/limit 校验', () => {
   assert.strictEqual(unknown.add_eligibility.position, 'pause');
   assert.notStrictEqual(unknown.final_action, 'BUILD', `未知仓位不得 BUILD，实际 ${unknown.final_action}`);
 
-  const { isDateStr, clampInt } = require('../cloudfunctions/common/utils/request-validate.js');
+  const { isDateStr, clampInt } = require('../src/common/utils/request-validate.js');
   assert.strictEqual(isDateStr('2026-08-24'), true);
   assert.strictEqual(isDateStr('2026-13-01'), false);
   assert.strictEqual(clampInt(999999, 1, 200, 60), 200);

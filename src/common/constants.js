@@ -29,6 +29,10 @@ const COLLECTIONS = {
   RUNTIME_STATUS: 'runtime_status',
   /** Gen-1 Shadow 日信号（EOD 推送；观察元数据，不改仓位） */
   ML_SHADOW_SIGNAL: 'ml_shadow_signal',
+  /** Gen-2 Shadow 日观测（ranking/roles/portfolio_candidates；只读，不改生产仓位） */
+  GEN2_SHADOW: 'gen2_shadow',
+  /** Gen-2 研究日线（qfq 前复权，独立于生产 etf_daily，供 Gen-2 Shadow 对齐 Python 研究版口径） */
+  GEN2_DAILY: 'gen2_daily',
   TRADE_LOG: 'trade_log',
   PARAM_CONFIG: 'param_config',
   FETCH_LOG: 'fetch_log',
@@ -196,9 +200,11 @@ const DEFAULT_PARAMS = {
   // V3.0 v1.1 灰度开关（P5）— 2026-08-29 切流：V3.6.1 正式，V3.8 对照
   trend_stage_enabled: true,  // true → final_target 走 V3.6.1（正式）
   v3_shadow_enabled: true,     // true → 并行输出 shadow_targets（v38 对照）
-  // V4.0 ML Gen-1 Shadow（2026-08-30）：只观察，不接线
+  // V4.0 Gen-1 Advisory Active：主机会判断；V3.6.1 仍是安全骨架/对照组
   ml_shadow_observe: true,
-  ml_fast_path_enabled: false, // 硬关：不得把 ML Fast Path 并入 final_target
+  ml_advisory_enabled: true, // 一键回退为 false
+  ml_fast_path_enabled: true, // 只影响人工建议，不接自动执行
+  ml_execution_enabled: false, // 永久边界：不接券商/自动下单
   ml_challenger_model_id: 'HVT-A-ET-20260830',
   ml_shadow_bundle_id: 'shadow-bundle-v1',
   ml_gen1_frozen: true,

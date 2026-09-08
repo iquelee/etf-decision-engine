@@ -1124,7 +1124,7 @@ function runDecisionV3(etf, snapshot, positions, params, extra) {
   const todayIdx = bars ? bars.length - 1 : null;
   const lastShockIdx = findShockIdxFromState(bars, extra.shockState);
 
-  const stageResolved = resolveTrendStage(snapshot, fundamental, stageState, {
+  let stageResolved = resolveTrendStage(snapshot, fundamental, stageState, {
     consolidationGrade,
     bars,
     currentPosition: currentPos,
@@ -1135,6 +1135,20 @@ function runDecisionV3(etf, snapshot, positions, params, extra) {
     v3_6_persistence: params.v3_6_persistence === true,
     params
   });
+  // Gen-1 Advisory Active：仅允许在无硬破位的 S2/S3 上提议 S4；
+  // 风险、基本面、组合上限仍由本函数后续硬规则继续约束。
+  const advisoryOverride = extra.advisoryStageOverride === 'S4'
+    && (stageResolved.primaryStage === 'S2' || stageResolved.primaryStage === 'S3')
+    && stageResolved.overlay !== 'broken';
+  if (advisoryOverride) {
+    stageResolved = {
+      ...stageResolved,
+      primaryStage: 'S4',
+      displayStage: stageResolved.overlay === 'normal' ? 'S4' : stageResolved.displayStage,
+      advisory_override: true,
+      advisory_base_stage: stageResolved.primaryStage
+    };
+  }
   const primaryStage = stageResolved.primaryStage || stageResolved.stage;
   const displayStage = stageResolved.displayStage || primaryStage;
   const trendStage = primaryStage;
@@ -1308,9 +1322,12 @@ function runDecisionV3(etf, snapshot, positions, params, extra) {
     trend_stage_overlay: stageResolved.overlay || 'normal',
     trend_quality_score: stageResolved.trendQualityScore,
     trend_stage_raw: stageResolved.rawStage,
+    advisory_stage_override: advisoryOverride,
+    advisory_base_stage: stageResolved.advisory_base_stage || null,
     trend_stage_label: stageResolved.label,
     trend_stage_state: {
-      stage: primaryStage,
+      // 持久化状态仍记录 V3.6.1 基线；Advisory S4 只作用于本次建议输出。
+      stage: stageResolved.advisory_base_stage || primaryStage,
       overlay: stageResolved.overlay || 'normal',
       displayStage,
       pendingStage: stageResolved.pendingStage || null,

@@ -50,7 +50,7 @@ function pct(v) {
 function permissionLabel(permission) {
   const p = String(permission || '').toUpperCase();
   if (p === 'PERMIT' || p === 'ALLOW' || p === 'PASS') return '允许';
-  if (p === 'BLOCK' || p === 'BLOCKED' || p === 'FORBID') return '规则阻止';
+  if (p === 'BLOCK' || p === 'BLOCKED' || p === 'FORBID') return '阻止';
   return p ? '待确认' : '暂无模型许可';
 }
 
@@ -78,7 +78,14 @@ function statusMeta(ml) {
   if (raw === STATUS.CANDIDATE) return { code: STATUS.CANDIDATE, label: '快速通道候选', message: '模型信号已达到候选条件，等待安全约束确认', tone: 'primary' };
   if (raw === STATUS.BLOCKED) return { code: STATUS.BLOCKED, label: '机会存在 · 风险规则阻止', message: '模型发现机会，但风险或组合约束尚未放行', tone: 'bad' };
   if (raw === STATUS.OBSERVED) return { code: STATUS.OBSERVED, label: '观察中', message: '趋势正在观察，尚未达到快速通道条件', tone: 'primary' };
-  if (raw === STATUS.DEGRADED) return { code: STATUS.DEGRADED, label: '模型状态异常', message: '模型信号不可用，请在后台检查运行状态', tone: 'bad' };
+  if (raw === STATUS.DEGRADED) {
+    return {
+      code: STATUS.DEGRADED,
+      label: 'EOD 信号降级',
+      message: ml.signal_status_reason || '该日 EOD 模型信号不可用，请检查任务运行记录。',
+      tone: 'warn'
+    };
+  }
   return { code: STATUS.NO_OPPORTUNITY, label: '暂无机会', message: '当前暂无趋势启动机会，继续等待', tone: 'muted' };
 }
 
@@ -126,9 +133,24 @@ function buildGen1ViewModel({ ml, decision, position } = {}) {
       signal_date: ml && ml.signal_date ? ml.signal_date : null,
       source_trade_date: ml && ml.source_trade_date ? ml.source_trade_date : null
     },
+    applicability: {
+      category: ml && ml.category ? ml.category : null,
+      domain_status: ml && ml.domain_status ? ml.domain_status : 'OUT_OF_DOMAIN',
+      label: ml && ml.domain_status_label ? ml.domain_status_label : '域外',
+      message: ml && ml.domain_status_message
+        ? ml.domain_status_message
+        : '缺少类别覆盖记录；概率仅供观察。',
+      observed_folds: ml && ml.category_coverage && ml.category_coverage.observed_folds != null
+        ? ml.category_coverage.observed_folds : null,
+      total_folds: ml && ml.category_coverage && ml.category_coverage.total_folds != null
+        ? ml.category_coverage.total_folds : null
+    },
+    capability: ml && ml.model_capability ? ml.model_capability : null,
     risk: {
       permission: ml && ml.permission ? String(ml.permission).toUpperCase() : null,
       permission_label: permissionLabel(ml && ml.permission),
+      permission_reason: ml && ml.rule_permission_reason ? ml.rule_permission_reason : null,
+      permission_source: ml && ml.rule_permission_source ? ml.rule_permission_source : null,
       risk_flag: decision && decision.risk_flag ? decision.risk_flag : null,
       binding_constraint: binding,
       binding_label: binding ? (CONSTRAINT_LABELS[binding] || binding) : '无额外限制'
@@ -143,6 +165,8 @@ function buildGen1ViewModel({ ml, decision, position } = {}) {
       bundle_id: ml && ml.bundle_id ? ml.bundle_id : null,
       raw_probability: ml && ml.probability != null ? ml.probability : null,
       calibrated_probability: ml && ml.calibrated_probability != null ? ml.calibrated_probability : null,
+      signal_status_reason: ml && ml.signal_status_reason ? ml.signal_status_reason : null,
+      signal_run_id: ml && ml.signal_run_id ? ml.signal_run_id : null,
       counterfactual_target_pct: ml && ml.counterfactual_target_pct != null ? ml.counterfactual_target_pct : null,
       v361_baseline: {
         stage: decision && (decision.v361_baseline_stage || decision.baseline_stage) || (ml && ml.baseline_stage) || null,

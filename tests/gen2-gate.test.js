@@ -13,7 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ROOT = path.resolve(__dirname, '..', 'functions', 'runGen2ShadowEod');
+const ROOT = path.resolve(__dirname, '..', 'cloudfunctions', 'runGen2ShadowEod');
+const SRC_COMMON = path.resolve(__dirname, '..', 'src', 'common');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
 
 function load(data, failRankingAt = 0) {
@@ -28,7 +29,11 @@ function load(data, failRankingAt = 0) {
       writes.push({ collection, doc, where });
     }
   };
-  const box = { exports: {}, require: (p) => (p === './common/utils/db' ? db : require(path.join(ROOT, p))), Date, console };
+  const box = { exports: {}, require: (p) => {
+    if (p === './common/utils/db') return db;
+    if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
+    return require(path.join(ROOT, p));
+  }, Date, console };
   vm.runInNewContext(SOURCE + '\nexports.audit = {UNIVERSE, buildDailyRoles, buildPortfolioCandidates, applyReplacementGate, assertFinalRoleConstraints};', box);
   return { entry: box.exports, writes };
 }

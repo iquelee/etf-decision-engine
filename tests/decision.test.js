@@ -6,7 +6,7 @@
  */
 'use strict';
 const assert = require('assert');
-const decision = require('../cloudfunctions/common/utils/decision.js');
+const decision = require('../src/common/utils/decision.js');
 
 let passed = 0;
 let failed = 0;
