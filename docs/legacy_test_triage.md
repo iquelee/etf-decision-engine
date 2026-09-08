@@ -78,6 +78,9 @@
 - [x] 6 security-hotfix filteredTrades → UPDATE_EXPECTATION（已改 heldTrades.map）
 - [ ] 7 security-hotfix anonymous intel refresh → 安全回归，待用户决策（UPDATE_EXPECTATION 或 FIX_CODE）
 - [ ] 8 Python test_gen1_immutable → 训练侧模型未入库（见下）
+- [x] 9 security-hotfix anonymous intel refresh → FIX_CODE（已移除 apiGateway 匿名接口）
+- [x] 10 Python test_gen1_immutable → FIX_CODE（assert-gen1-immutable.py 改查 Node 侧 frozen 产物，LOCK 已 RESEED）
+- [ ] 11 security-hotfix allowlist 检查点（18-20）→ 实现方式变化，安全语义仍在（见下）
 
 ### 8. Python test_gen1_immutable：训练侧模型未入库
 
@@ -89,3 +92,25 @@ assert-gen1-immutable.py 检查 ml/models/HVT-A-ET-20260830/model.joblib + freez
 - **根因**：Gen-1 训练侧（Python）的 `model.joblib` 未入库（训练产物留在训练环境），仓库只存了 Node 推理侧 `cloudfunctions/runGen1ShadowEod/frozen-model.json`。assert-gen1-immutable.py 检查的是训练侧产物路径。
 - **分类**：测试基础设施与仓库内容脱节（pre-existing，非本次引入）。
 - **动作**：Node 侧 Gen-1 immutable 已由 test-all.js Stage C（frozen-model.json / frozen-manifest.json / frozen-node-inference.js SHA + model_id）覆盖。Python 侧要么入库 model.joblib（大文件），要么把 assert-gen1-immutable.py 的检查目标改为 Node 侧 frozen-model.json。待用户决策。
+
+### 9. security-hotfix anonymous intel refresh → FIX_CODE（已修复）
+
+- 移除 apiGateway 的匿名 `POST /api/intel/refresh` 路由 + `refreshIntelFeed` 函数，加「接口已迁移至后台管理端」注释。
+- 依据：前端已走后台 `/api/admin/intel/refresh`（adminGateway 第 985 行，走鉴权 + intel-refresh.js 3 分钟冷却），apiGateway 的匿名接口是遗留重复，无人调用。
+
+### 10. Python test_gen1_immutable → FIX_CODE（已修复）
+
+- `assert-gen1-immutable.py` 检查目标从 `ml/models/<id>/model.joblib` 改为 `cloudfunctions/runGen1ShadowEod/frozen-{model,manifest,inference}`（Node 推理侧，仓库实际入库、线上真实加载的 Gen-1 产物）。
+- `GEN1_IMMUTABLE_LOCK.json` 已 RESEED（旧 LOCK 记录的是训练侧 model.joblib SHA，文件已不在仓库）。
+
+### 11. security-hotfix allowlist 检查点（18-20）→ 实现方式变化
+
+```text
+18: /sanitizePublicDashboard/ 未匹配
+19: /sanitizePublicExplainChain/ 未匹配
+20: /position: pos \|\| null/ 未匹配（当前是 pos || {默认对象}）
+```
+
+- **根因**：历史安全修复用「统一 sanitize allowlist 函数」（sanitizePublicDashboard / sanitizePublicExplainChain），当前 apiGateway 重构为「手动按需返回非敏感字段」。经审查，`buildExplainChain`（decision.js 747 行起）返回的全是仓位百分比/状态/阈值，**不含金额/股数**；getDashboard 返回的也是仓位百分比；review 已去敏股数/金额（570/582 行）。安全语义仍在。
+- **分类**：A（实现方式变化，安全语义仍在）。
+- **动作**：UPDATE_EXPECTATION——把这 3 个检查点改为检查「安全语义」而非「特定函数名/写法」（如检查 getDashboard 不含 amount/pnl/shares 字段、explain_chain 无金额字段）。待安全审查确认后执行。

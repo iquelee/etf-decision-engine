@@ -618,30 +618,7 @@ async function getMacro() {
   return { indicators: Object.values(byIndicator) };
 }
 
-const INTEL_REFRESH_COOL_MS = 3 * 60 * 1000;
-
-/** 前台刷新：触发新闻搜集（3 分钟冷却），不走后台登录。 */
-async function refreshIntelFeed() {
-  const rows = await db.query(COLLECTIONS.FETCH_LOG, {}, {
-    orderBy: [{ field: 'fetch_time', direction: 'desc' }], limit: 40
-  }).catch(() => []);
-  const last = (rows || []).find((r) => {
-    const name = String(r.task_name || '');
-    const src = String(r.source || '');
-    return name.indexOf('fetchFundamentalNews') >= 0 || name === 'news'
-      || src === 'fundamental_news' || src === 'eastmoney_fastnews' || src === 'biotech_intel';
-  });
-  const lastTs = last && last.fetch_time ? new Date(last.fetch_time).getTime() : 0;
-  if (lastTs && (Date.now() - lastTs) < INTEL_REFRESH_COOL_MS) {
-    return {
-      triggered: false,
-      cooled: true,
-      wait_sec: Math.ceil((INTEL_REFRESH_COOL_MS - (Date.now() - lastTs)) / 1000)
-    };
-  }
-  app.callFunction({ name: 'fetchFundamentalNews', data: { force: true, task_name: 'news' } }).catch(() => null);
-  return { triggered: true, cooled: false };
-}
+// 前台匿名 intel refresh 接口已迁移至后台管理端（POST /api/admin/intel/refresh，走鉴权 + intel-refresh.js 3 分钟冷却）
 
 /** 信息流聚合：财报 + 新闻/快讯 + 传导信号 + 宏观，按时间倒序，含对决策的影响描述 */
 async function getIntel(limit = 60) {
@@ -942,11 +919,7 @@ exports.main = async (event = {}, context = {}) => {
     // GET /api/review
     if (path === '/api/review') return ok(await getReview(query.from, query.to));
 
-    // POST /api/intel/refresh（触发新闻搜集后由前端再拉列表）
-    if (path === '/api/intel/refresh') {
-      if (method !== 'POST') return fail('接口 /api/intel/refresh 仅支持 POST', 405);
-      return ok(await refreshIntelFeed());
-    }
+    // 原 POST /api/intel/refresh 匿名接口已迁移至后台管理端（/api/admin/intel/refresh）
 
     // GET /api/fundamentals（五 ETF 基本面总览）
     if (path === '/api/fundamentals') return ok(await getFundamentals());
