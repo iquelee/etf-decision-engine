@@ -1024,6 +1024,27 @@ function applyDefense(candidates, features, benchmarkFeatures) {
 
 /* ---------------- 主流程 ---------------- */
 
+// 跨语言 Parity 测试入口：暴露纯决策函数（供 scripts/parity/run_node.js 调用），不改生产行为。
+exports._internal = {
+  UNIVERSE,
+  PORTFOLIO_CFG,
+  DEFENSE_CFG,
+  CORE_PCT,
+  CHALLENGER_PCT,
+  SATELLITE_PCT,
+  marketScore,
+  classifyRegime,
+  selectionMode,
+  promotionAllowed,
+  maxCoreCount,
+  computeLeadershipScore,
+  rankFeatures,
+  initialRoles,
+  buildDailyRoles,
+  buildPortfolioCandidates,
+  applyDefense
+};
+
 exports.main = async (event = {}, context = {}) => {
   const startedAt = Date.now();
   const runId = `gen2-eod-${Date.now()}`;

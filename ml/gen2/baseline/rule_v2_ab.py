@@ -68,6 +68,97 @@ def signal_ab_by_regime(features, rankings, labels_mkt) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _prev_role(prev_roles: dict, code) -> str:
+    return prev_roles.get(code, "RESERVE")
+
+
+def _prev_role_series(codes: pd.Series, prev_roles: dict) -> pd.Series:
+    return pd.Series([_prev_role(prev_roles, c) for c in codes], index=codes.index)
+
+
+def _replacement_edge(challenger_alpha: float, incumbent_alpha: float, min_edge: float = 8.0) -> float:
+    """F09：替换边际 = alpha 差 - correlation(2) - turnover(2) - crowding(1)，与 Node computeReplacementEdge 一致。"""
+    return (challenger_alpha - incumbent_alpha) - 2.0 - 2.0 - 1.0
+
+
+def _should_replace(challenger_alpha: float, incumbent_alpha: float, min_edge: float = 8.0) -> bool:
+    return _replacement_edge(challenger_alpha, incumbent_alpha, min_edge) >= min_edge
+
+
+def _assert_final_constraints(day: pd.DataFrame, prev_roles: dict, base_max_core: int, max_core_per_cluster: int) -> None:
+    """组合约束最终断言（F09，与 Node assertFinalRoleConstraints 一致）。
+
+    CORE 总数 ≤ base_max_core、每 cluster CORE 数 ≤ max_core_per_cluster；
+    异常时优先降级「非现任（晋升者）」中 alpha 最低者，绝不降级被恢复的现任 CORE。
+    """
+    def _pick_victim(idx_list):
+        for i in idx_list:
+            if _prev_role(prev_roles, day.loc[i, "code"]) != "CORE":
+                return i
+        return idx_list[0]
+
+    # cluster 数量约束
+    for _cl, arr in day[day["role"] == "CORE"].groupby("correlation_cluster", sort=False):
+        arr = arr.sort_values("alpha_score_v2", ascending=True)
+        idx_list = list(arr.index)
+        excess = len(idx_list) - max_core_per_cluster
+        while excess > 0:
+            victim = _pick_victim(idx_list)
+            day.loc[victim, "role"] = "CHALLENGER"
+            day.loc[victim, "reason_codes"] = str(day.loc[victim, "reason_codes"]) + "|FINAL_CLUSTER_CAP"
+            idx_list.remove(victim)
+            excess -= 1
+
+    # CORE 总数约束
+    remaining = day[day["role"] == "CORE"].sort_values("alpha_score_v2", ascending=True)
+    idx_list = list(remaining.index)
+    total_excess = len(idx_list) - base_max_core
+    while total_excess > 0:
+        victim = _pick_victim(idx_list)
+        day.loc[victim, "role"] = "CHALLENGER"
+        day.loc[victim, "reason_codes"] = str(day.loc[victim, "reason_codes"]) + "|FINAL_CORE_CAP"
+        idx_list.remove(victim)
+        total_excess -= 1
+
+
+def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: int, max_core_per_cluster: int) -> None:
+    """F09：自愿替换校验（与 Node applyReplacementGate 一致）。
+
+    被 cap 降级的「现任 CORE」（上一日 CORE 且 cap 前仍 CORE、cap 后非 CORE）需有
+    alpha 边际达标的同 cluster 新晋升者才接受替换；否则撤销（恢复现任、退回最弱晋升者）。
+    硬退出（NO_CORE）已在前置状态机降为非 CORE，不经过此校验。
+    """
+    prev_s = _prev_role_series(day["code"], prev_roles)
+    cap_demoted = day[(prev_s == "CORE") & (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")]
+    if cap_demoted.empty:
+        _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
+        return
+
+    promoted_indices = list(day[(prev_s != "CORE") & (day["role"] == "CORE")].index)
+    for dem_idx in cap_demoted.sort_values("alpha_score_v2", ascending=False).index:
+        if not promoted_indices:
+            break
+        dem_alpha = day.loc[dem_idx, "alpha_score_v2"]
+        dem_cluster = day.loc[dem_idx, "correlation_cluster"]
+        same_cluster_idx = [i for i in promoted_indices if day.loc[i, "correlation_cluster"] == dem_cluster]
+        replacer_indices = same_cluster_idx if same_cluster_idx else promoted_indices
+
+        has_replacer = any(_should_replace(day.loc[i, "alpha_score_v2"], dem_alpha) for i in replacer_indices)
+        if has_replacer:
+            day.loc[dem_idx, "reason_codes"] = str(day.loc[dem_idx, "reason_codes"]) + "|REPLACEMENT_ACCEPTED"
+            continue
+
+        # 边际不足 → 撤销替换：恢复现任，退回同 cluster 最弱晋升者
+        day.loc[dem_idx, "role"] = "CORE"
+        day.loc[dem_idx, "reason_codes"] = str(day.loc[dem_idx, "reason_codes"]) + "|REPLACEMENT_REVOKED"
+        weakest_idx = min(replacer_indices, key=lambda i: day.loc[i, "alpha_score_v2"])
+        day.loc[weakest_idx, "role"] = "CHALLENGER"
+        day.loc[weakest_idx, "reason_codes"] = str(day.loc[weakest_idx, "reason_codes"]) + "|REPLACEMENT_BLOCKED"
+        promoted_indices.remove(weakest_idx)
+
+    _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
+
+
 def build_v2_roles(features, rankings, config) -> pd.DataFrame:
     """V2 完整角色状态机：alpha 排名 + persistence 滞后 + Selection Permission + NO_CORE + cluster cap。"""
     from gen2.data.loader import load_universe_records
@@ -94,7 +185,9 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
 
     # persistence：连续 above_core / below_satellite 天数
     rk = rk.sort_values(["code", "trade_date"])
-    rk["above_core_days"] = _consecutive_by_code(rk["alpha_pct"] >= core_pct, rk["code"])
+    # P0-Parity：above_core 累计「完整准入条件」（alpha 前 20% 且过趋势闸门），与 Node 端一致。
+    # 跌破 MA60 不累计晋升天数（虽最终仍被 NO_CORE 硬门槛拦截，但 persistence_days 须一致）。
+    rk["above_core_days"] = _consecutive_by_code((rk["alpha_pct"] >= core_pct) & rk["trend_gate"], rk["code"])
     rk["below_satellite_days"] = _consecutive_by_code(rk["alpha_pct"] < satellite_pct, rk["code"])
 
     # 初始角色
@@ -162,8 +255,10 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
 
         # cluster cap（同时受 permission 的 max_core 限制）。
         # F03 修复：显式传 V2 的 alpha 排序，禁止读旧 leadership_score。
-        day["role_after_cap"] = _cap_core_roles(day, max_core, max_core_per_cluster, priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
-        day["role"] = day["role_after_cap"]
+        day["role_before_cap"] = day["role"]
+        day["role"] = _cap_core_roles(day, max_core, max_core_per_cluster, priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
+        # F09：自愿替换校验 + 组合约束最终断言（与 Node applyReplacementGate/assertFinalRoleConstraints 一致）
+        _apply_replacement_gate(day, current_roles, base_max_core, max_core_per_cluster)
 
         for row in day.itertuples():
             current_roles[row.code] = row.role

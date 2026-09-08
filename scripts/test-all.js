@@ -19,9 +19,9 @@ const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..');
 
-// Python 解释器：优先 venv（含 numpy/pandas），可被 TCB_PYTHON 覆盖
-const PYTHON = process.env.TCB_PYTHON
-  || 'C:/Users/iquel/.workbuddy/binaries/python/envs/default/Scripts/python.exe';
+// Python 解释器：优先 TCB_PYTHON，其次本地 venv（含 numpy/pandas），CI 上回退 python3
+const _WIN_PY = 'C:/Users/iquel/.workbuddy/binaries/python/envs/default/Scripts/python.exe';
+const PYTHON = process.env.TCB_PYTHON || (fs.existsSync(_WIN_PY) ? _WIN_PY : 'python3');
 const NODE = process.execPath;
 
 const results = [];
@@ -94,12 +94,20 @@ function stageC() {
 /* ---------- Stage D: Cross-language Parity ---------- */
 function stageD() {
   console.log('\n== Stage D: Cross-language Parity（Python ↔ Node）==');
-  const fixtures = path.join(REPO, 'fixtures', 'gen2');
-  if (!fs.existsSync(fixtures)) {
-    console.log('  [PENDING] fixtures/gen2 尚未建立（P0-04 之后接入），跳过');
+  const fixture = path.join(REPO, 'fixtures', 'gen2', 'parity_fixture.json');
+  if (!fs.existsSync(fixture)) {
+    console.log('  [PENDING] fixtures/gen2/parity_fixture.json 未生成，跳过');
     return;
   }
-  console.log('  [PENDING] parity 测试待 P0-04 统一状态机后接入');
+  const env = { ...process.env, PYTHONPATH: path.join(REPO, 'ml') };
+  const r = spawnSync(PYTHON, [
+    path.join(REPO, 'scripts', 'parity', 'compare.py'),
+    '--node', NODE, '--python', PYTHON, '--fixture', fixture,
+  ], { cwd: REPO, env, encoding: 'utf8' });
+  const ok = r.status === 0;
+  console.log(r.stdout.trim());
+  if (!ok && r.stderr) console.log(r.stderr.trim());
+  report('D', 'parity（360 行 role/rank 精确 + score/weight 容差）', ok);
 }
 
 /* ---------- Stage E: Secret scan ---------- */

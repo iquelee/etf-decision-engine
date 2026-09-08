@@ -43,8 +43,11 @@ def add_component_scores(df: pd.DataFrame) -> pd.DataFrame:
     out["_mdd_s"] = pct("max_drawdown_20d")  # less negative is better
     out["volatility_quality_score"] = out[["_atr_s", "_vol_s", "_mdd_s"]].mean(axis=1)
 
-    out["liquidity_score"] = out["liquidity_percentile"] * 100.0
-    out["diversification_score_v1"] = out["diversification_score"].fillna(50.0)
+    # P0-Parity：与 Node 端 computeLeadershipScore 对齐——流动性与分散度改为「读原始字段 + 横截面百分位」，
+    # 不再依赖 feature 层预计算的 liquidity_percentile / diversification_score（消除字段漂移）。
+    out["_diversification_raw"] = 1.0 - out["corr_to_portfolio_60d"].clip(lower=0, upper=1)
+    out["liquidity_score"] = pct("avg_amount_20d")
+    out["diversification_score_v1"] = pct("_diversification_raw").fillna(50.0)
     out["risk_penalty"] = (100.0 - out["volatility_quality_score"]).clip(0, 100) * 0.10
     out["crowding_penalty"] = out["corr_to_cluster_60d"].clip(lower=0, upper=1).fillna(0.5) * 5.0
     return out
