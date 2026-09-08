@@ -63,7 +63,10 @@ fi
 
 # ===== 后端 =====
 if [ "$DO_BACKEND" == "1" ]; then
-  echo "=== 准备云函数（dist-functions + cloudbaserc.json）==="
+  echo "=== 构建云函数源码 bundle（index.js + canonical common）==="
+  "$NODE" scripts/build-cloudfunctions.js
+
+  echo "=== 准备云函数（恢复 node_modules + config.json，生成 cloudbaserc.json）==="
   "$PY" scripts/prepare-deploy.py
 
   echo "=== 部署云函数 ==="

@@ -3,10 +3,10 @@
 从仓库源码 + 线上 zip 快照，准备 CloudBase 可部署的 dist-functions/ 与 cloudbaserc.json。
 
 原理：
-  - 仓库 cloudfunctions/ 只存源码（node_modules / config.json 因安全被 .gitignore 排除）。
-  - 本脚本从 BASELINE_DIR（线上函数 zip 快照）恢复每个函数的 node_modules + config.json，
-    再用仓库最新源码覆盖 index.js / common 等，得到可部署目录。
-  - 生成 cloudbaserc.json（runtime 统一 Nodejs16.13，与线上一致）。
+  - 源码 bundle（index.js + canonical common）由 scripts/build-cloudfunctions.js 生成。
+  - 本脚本从 BASELINE_DIR（线上函数 zip 快照）恢复每个函数的 node_modules + config.json
+    （依赖因安全被 .gitignore 排除，仓库不存），再生成 cloudbaserc.json。
+  - 部署编排见 scripts/deploy.sh：先 build-cloudfunctions.js 后本脚本。
 
 用法：
   python scripts/prepare-deploy.py [--baseline <zip快照目录>]
@@ -85,20 +85,7 @@ def main():
                 with z.open(name) as f, open(target, "wb") as g:
                     shutil.copyfileobj(f, g)
 
-        # 2) 用仓库最新源码覆盖（排除 node_modules / MANIFEST.json）
-        src = os.path.join(REPO, "cloudfunctions", fn)
-        for root, dirs, files in os.walk(src):
-            dirs[:] = [d for d in dirs if d != "node_modules"]
-            for f in files:
-                if f == "MANIFEST.json":
-                    continue
-                s = os.path.join(root, f)
-                rel = os.path.relpath(s, src)
-                t = os.path.join(out, rel)
-                os.makedirs(os.path.dirname(t), exist_ok=True)
-                shutil.copy2(s, t)
-
-        # 3) 读 config.json 的 timeout（供 cloudbaserc.json）；缺失则写默认配置
+        # 2) 读 config.json 的 timeout（供 cloudbaserc.json）；缺失则写默认配置
         cfg_path = os.path.join(out, "config.json")
         if not os.path.exists(cfg_path) and fn in DEFAULT_CONFIGS:
             with open(cfg_path, "w", encoding="utf-8") as f:

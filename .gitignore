@@ -7,6 +7,7 @@ dist-functions/
 build/
 outputs/
 backtest-out/
+src/common/MANIFEST.json
 
 # 密钥与配置（含真实密钥，严禁提交）
 **/config.json
