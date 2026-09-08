@@ -27,19 +27,22 @@ def selection_mode(market_score) -> str:
     return REDUCED  # RANGE
 
 
-def max_core_count(market_score, base: int = DEFAULT_MAX_CORE) -> int:
+def max_core_count(market_score, base: int = DEFAULT_MAX_CORE):
     """按 Selection Permission 返回当日允许的最大 CORE 数。
 
     - ACTIVE   → base（默认 5）
     - REDUCED  → 3（降档）
-    - DISABLED → 0（NO_CORE，进攻性 Ranking 关闭）
+    - DISABLED → None（仅禁新晋升，不清现任 CORE，与 Node 端 maxCoreCount 对齐）
+
+    None 语义：全局 CORE 数量上限不生效（不做强制减仓），仅保留 cluster cap。
+    现任 CORE 的去留仍由 demotion 滞后 / NO_CORE 硬门槛决定。
     """
     mode = selection_mode(market_score)
     if mode == ACTIVE:
         return base
     if mode == REDUCED:
         return REDUCED_MAX_CORE
-    return 0
+    return None  # DISABLED：仅禁晋升，不清现任
 
 
 def selection_allowed(market_score) -> bool:

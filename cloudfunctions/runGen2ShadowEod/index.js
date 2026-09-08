@@ -17,10 +17,24 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const db = require('./common/utils/db');
 const { COLLECTIONS } = require('./common/constants');
 
-const ENGINE_ID = 'gen2-rule-v2';
+// Gen-2 Rule V2 单一真相源：优先从 bundle 读（build 时由 build-cloudfunctions.js 复制到本目录），
+// 缺失（本地直跑 / 未 build）则 fallback 硬编码（与 ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json 一致）。
+let _bundle = null;
+let _bundle_sha256 = null;
+try {
+  const _raw = fs.readFileSync(path.join(__dirname, 'GEN2_RULE_V2_BUNDLE.json'), 'utf8');
+  _bundle = JSON.parse(_raw);
+  _bundle_sha256 = crypto.createHash('sha256').update(_raw).digest('hex');
+} catch (e) { /* bundle 缺失，用硬编码 fallback */ }
+
+const ENGINE_ID = (_bundle && _bundle.engine_id) || 'gen2-rule-v2';
+const BUNDLE_VERSION = (_bundle && _bundle.bundle_version) || 'gen2-rule-v2.0';
 
 // Gen-2 universe_v1（30 只候选 + benchmark 510300）。
 // 研究选池（selection_universe）≠ 生产（production_enabled，仅 Main5）。
@@ -105,40 +119,51 @@ const LEADERSHIP_WEIGHTS = {
   breakout: 0.05, volatility: 0.05, liquidity: 0.05, diversification: 0.05
 };
 
+// Gen-2 Rule V2 配置：单一真相源 GEN2_RULE_V2_BUNDLE（缺失时 fallback 硬编码，值与 bundle 一致）
+const _sel = (_bundle && _bundle.selection) || {};
+const _pf = (_bundle && _bundle.portfolio) || {};
+const _def = (_bundle && _bundle.defense) || {};
+const _reg = (_bundle && _bundle.regime) || {};
+const _alpha = (_bundle && _bundle.alpha) || {};
+
 // AlphaScore-v2 权重（与 ml/gen2/baseline/alpha_score.py ALPHA_WEIGHTS_V2 一致）
 // F02：V2 用「找赢家(Alpha)」与「控风险(Utility)」分离，Alpha = Trend + RS + Breakout 等权。
-const ALPHA_WEIGHTS_V2 = { trend: 1 / 3, rs: 1 / 3, breakout: 1 / 3 };
+const ALPHA_WEIGHTS_V2 = {
+  trend: _alpha.trend != null ? _alpha.trend : 1 / 3,
+  rs: _alpha.rs != null ? _alpha.rs : 1 / 3,
+  breakout: _alpha.breakout != null ? _alpha.breakout : 1 / 3
+};
 
 // 角色状态机参数（与 config/gen2.yaml portfolio 一致）
 const PORTFOLIO_CFG = {
-  promotion_persistence_days: 5,
-  demotion_persistence_days: 5,
-  max_core_count: 5,
-  max_core_per_cluster: 2,
-  top_quantile: 0.2,
-  min_replacement_edge: 8.0,
-  max_single_weight: 0.25,
-  max_cluster_weight: 0.40,
-  max_tech_weight: 0.65,
-  tech_clusters: ['tech_hardware', 'software_ai']
+  promotion_persistence_days: _sel.promotion_persistence_days != null ? _sel.promotion_persistence_days : 5,
+  demotion_persistence_days: _sel.demotion_persistence_days != null ? _sel.demotion_persistence_days : 5,
+  max_core_count: _sel.max_core_count != null ? _sel.max_core_count : 5,
+  max_core_per_cluster: _sel.max_core_per_cluster != null ? _sel.max_core_per_cluster : 2,
+  top_quantile: _sel.top_quantile != null ? _sel.top_quantile : 0.2,
+  min_replacement_edge: _sel.min_replacement_edge != null ? _sel.min_replacement_edge : 8.0,
+  max_single_weight: _pf.max_single_weight != null ? _pf.max_single_weight : 0.25,
+  max_cluster_weight: _pf.max_cluster_weight != null ? _pf.max_cluster_weight : 0.40,
+  max_tech_weight: _pf.max_tech_weight != null ? _pf.max_tech_weight : 0.65,
+  tech_clusters: _pf.tech_clusters || ['tech_hardware', 'software_ai']
 };
 
 // 防守参数（与 portfolio/defense_gate.py DEFAULT_DEFENSE 一致）
 // F02：regime 统一用 market_score 55/45 契约（与 ml/gen2/portfolio/regime.py 一致），替代 MA60<-2% 硬编码。
 const DEFENSE_CFG = {
   enabled: true,
-  risk_off_exposure_scale: 0.50,
-  risk_off_hedge_weight: 0.15,
-  hedge_code: '518880',
-  market_score_risk_on_ge: 55,
-  market_score_risk_off_le: 45,
-  vol_target_enabled: true,
-  vol_target_annualized: 0.17
+  risk_off_exposure_scale: _def.risk_off_exposure_scale != null ? _def.risk_off_exposure_scale : 0.50,
+  risk_off_hedge_weight: _def.risk_off_hedge_weight != null ? _def.risk_off_hedge_weight : 0.15,
+  hedge_code: _def.hedge_code || '518880',
+  market_score_risk_on_ge: _reg.risk_on_ge != null ? _reg.risk_on_ge : 55,
+  market_score_risk_off_le: _reg.risk_off_le != null ? _reg.risk_off_le : 45,
+  vol_target_enabled: _def.vol_target_enabled != null ? _def.vol_target_enabled : true,
+  vol_target_annualized: _def.vol_target_annualized != null ? _def.vol_target_annualized : 0.17
 };
 
-const CORE_PCT = 0.80;
-const CHALLENGER_PCT = 0.70;
-const SATELLITE_PCT = 0.60;
+const CORE_PCT = _sel.core_pct != null ? _sel.core_pct : 0.80;
+const CHALLENGER_PCT = _sel.challenger_pct != null ? _sel.challenger_pct : 0.70;
+const SATELLITE_PCT = _sel.satellite_pct != null ? _sel.satellite_pct : 0.60;
 
 /* ---------------- 统一 Regime 契约（与 ml/gen2/portfolio/regime.py 一致） ---------------- */
 
@@ -1150,6 +1175,8 @@ exports.main = async (event = {}, context = {}) => {
       as_of_trade_date: asOf,
       mode,
       engine_id: ENGINE_ID,
+      bundle_version: BUNDLE_VERSION,
+      bundle_sha256: _bundle_sha256,
       universe_version: UNIVERSE.version,
       universe_target_size: UNIVERSE.target_size,
       loaded_count: loadedCount,
@@ -1228,6 +1255,8 @@ exports.main = async (event = {}, context = {}) => {
       as_of_trade_date: asOf,
       mode,
       engine_id: ENGINE_ID,
+      bundle_version: BUNDLE_VERSION,
+      bundle_sha256: _bundle_sha256,
       universe_version: UNIVERSE.version,
       loaded_count: loadedCount,
       eligible_count: codes.length,

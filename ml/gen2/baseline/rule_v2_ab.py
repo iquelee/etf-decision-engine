@@ -132,18 +132,19 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
 
             if rec and rec.strategic_role_hint == "hedge":
                 role = "HEDGE"
-            elif mode == DISABLED:
-                # Selection Permission DISABLED（RISK_OFF）：进攻性 Ranking 关闭，非 hedge 全部 RESERVE
-                role = "RESERVE"
-                reasons.append("PERMISSION_DISABLED")
             elif current == "CORE" and role in {"RESERVE", "CHALLENGER", "SATELLITE"}:
+                # §6.1：现任 CORE 去留由 demotion 滞后决定，不受 DISABLED 清仓
                 if int(row.below_satellite_days) < demotion_days:
                     role = "CORE"
                     reasons.append("DEMOTION_HYSTERESIS")
                 else:
                     reasons.append("DEMOTION_CONFIRMED")
             elif current != "CORE" and role == "CORE":
-                if int(row.above_core_days) < promotion_days:
+                # §6.1：新晋升受 Selection Permission 控制，DISABLED 禁晋升但不清现任
+                if mode == DISABLED:
+                    role = "CHALLENGER"
+                    reasons.append("PROMOTION_BLOCKED_BY_PERMISSION")
+                elif int(row.above_core_days) < promotion_days:
                     role = "CHALLENGER"
                     reasons.append("PROMOTION_HYSTERESIS")
                 else:

@@ -30,6 +30,9 @@ function load(data, failRankingAt = 0) {
     }
   };
   const box = { exports: {}, require: (p) => {
+    if (p === 'fs') return require('fs');
+    if (p === 'path') return require('path');
+    if (p === 'crypto') return require('crypto');
     if (p === './common/utils/db') return db;
     if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
     return require(path.join(ROOT, p));

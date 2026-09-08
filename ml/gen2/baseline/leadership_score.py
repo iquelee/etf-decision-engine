@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-ENGINE_ID = "gen2-rule-v1"
+ENGINE_ID = "gen2-rule-v2"
 
 
 def _pct(s: pd.Series, ascending: bool = True) -> pd.Series:

@@ -49,7 +49,7 @@ class RankResult:
     engine_id: str
     universe_version: str = "dev_universe_v0"
     feature_version: str = "feature_v1"
-    model_id: str = "gen2-rule-v1"
+    model_id: str = "gen2-rule-v2"
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
 

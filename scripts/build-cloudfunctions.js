@@ -33,6 +33,11 @@ const FUNCTIONS = [
 // 不复制到 dist 的顶层条目（common 由 src/common 统一供给；MANIFEST 是 build 产物）
 const SKIP_TOP = new Set(['common', 'MANIFEST.json', 'node_modules']);
 
+// 额外复制到 dist 的文件（相对 REPO）。Gen-2 Rule V2 bundle 是 Node/Python 共用单一真相源。
+const EXTRA_FILES = {
+  runGen2ShadowEod: ['ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json'],
+};
+
 function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
@@ -87,6 +92,11 @@ function main() {
 
     // 2) canonical common（覆盖式，不整目录删除避免安全守卫）
     copyDir(SRC_COMMON, path.join(out, 'common'));
+
+    // 2.5) 额外文件（如 Gen-2 Rule V2 bundle，Node 运行时读取）
+    for (const rel of EXTRA_FILES[fn] || []) {
+      copyFile(path.join(REPO, rel), path.join(out, path.basename(rel)));
+    }
 
     // 3) manifest：记录 common 各文件 SHA
     const fnFiles = {};

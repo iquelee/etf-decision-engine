@@ -1,0 +1,57 @@
+{
+  "engine_id": "gen2-rule-v2",
+  "bundle_version": "gen2-rule-v2.0",
+  "universe_version": "universe_v1",
+  "benchmark_code": "510300",
+
+  "alpha": {
+    "trend": 0.3333333333,
+    "rs": 0.3333333333,
+    "breakout": 0.3333333333
+  },
+
+  "regime": {
+    "risk_on_ge": 55,
+    "risk_off_le": 45
+  },
+
+  "selection": {
+    "core_pct": 0.80,
+    "challenger_pct": 0.70,
+    "satellite_pct": 0.60,
+    "top_quantile": 0.2,
+    "promotion_persistence_days": 5,
+    "demotion_persistence_days": 5,
+    "max_core_count": 5,
+    "max_core_per_cluster": 2,
+    "min_replacement_edge": 8.0
+  },
+
+  "portfolio": {
+    "max_single_weight": 0.25,
+    "max_cluster_weight": 0.40,
+    "max_tech_weight": 0.65,
+    "tech_clusters": ["tech_hardware", "software_ai"]
+  },
+
+  "defense": {
+    "risk_off_exposure_scale": 0.50,
+    "risk_off_hedge_weight": 0.15,
+    "hedge_code": "518880",
+    "vol_target_enabled": true,
+    "vol_target_annualized": 0.17
+  },
+
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "auto_execution": false
+  },
+
+  "notes": [
+    "Gen-2 Rule V2 唯一权威配置（Python 回测 + Node runGen2ShadowEod 共用）。",
+    "regime 契约 = market_score 55/45（RISK_ON>=55 / RISK_OFF<=45 / 其余 RANGE），替代旧 MA60<-2% 硬编码。",
+    "engine_id = gen2-rule-v2（旧 gen2-rule-v1 已废弃）。",
+    "禁止在 Node 硬编码 PORTFOLIO_CFG/DEFENSE_CFG 作为独立真相。"
+  ]
+}

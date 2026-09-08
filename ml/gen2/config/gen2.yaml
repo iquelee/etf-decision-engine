@@ -17,7 +17,7 @@
     "benchmark_code": "510300"
   },
   "ranking": {
-    "engine_id": "gen2-rule-v1",
+    "engine_id": "gen2-rule-v2",
     "top_quantile": 0.2,
     "feature_version": "feature_v1",
     "label_version": "label_v1_excess_rank_20d"
@@ -39,8 +39,6 @@
       "risk_off_exposure_scale": 0.50,
       "risk_off_hedge_weight": 0.15,
       "hedge_code": "518880",
-      "regime_field": "ma60",
-      "ma60_risk_off": -0.02,
       "vol_target_enabled": true,
       "vol_target_annualized": 0.17
     }

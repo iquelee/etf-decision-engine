@@ -52,7 +52,7 @@ def _cap_core_roles(day: pd.DataFrame, max_core_count: int, max_core_per_cluster
     cluster_counts: dict[str, int] = {}
     for row in core.itertuples():
         cluster = row.correlation_cluster
-        if len(keep) >= max_core_count:
+        if max_core_count is not None and len(keep) >= max_core_count:
             continue
         if cluster_counts.get(cluster, 0) >= max_core_per_cluster:
             continue

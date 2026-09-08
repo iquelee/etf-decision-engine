@@ -10,8 +10,7 @@ DEFAULT_DEFENSE = {
     "risk_off_exposure_scale": 0.50,
     "risk_off_hedge_weight": 0.15,
     "hedge_code": "518880",
-    "regime_field": "ma60",
-    "ma60_risk_off": -0.02,
+    "regime_field": "market_score",  # 统一契约：market_score 55/45（旧 ma60 已废弃）
     "vol_target_enabled": True,
     "vol_target_annualized": 0.17,
 }
@@ -26,7 +25,7 @@ def _benchmark_series(features: pd.DataFrame) -> pd.DataFrame:
 
 def _build_defense_signal(features: pd.DataFrame, dcfg: dict) -> pd.DataFrame:
     """Per-date defense signal: core_scale (multiplier) and hedge_weight (absolute)."""
-    if dcfg.get("regime_field") != "ma60":
+    if dcfg.get("regime_field") != "market_score":
         # legacy risk_state path (used by unit tests); no vol targeting.
         regime = features[["trade_date", "risk_state"]].drop_duplicates("trade_date").set_index("trade_date")["risk_state"]
         off_scale = float(dcfg["risk_off_exposure_scale"])
