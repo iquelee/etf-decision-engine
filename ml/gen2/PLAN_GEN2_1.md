@@ -1,7 +1,7 @@
-# Gen-2.1 立项方案 v0.2 — Hierarchical Cluster Leadership + Consolidation Quality Gate
+# Gen-2.1 立项方案 v0.3 — Hierarchical Cluster Leadership + Consolidation Quality Gate
 
-日期：2026-09-09。状态：**PR #5 第一轮审批 = REQUEST CHANGES，本版已按 4 项硬修改 + 2 项小修改修订，待第二轮审批。审批通过前不写任何策略代码。**
-版本历史：v0.1（首发）→ v0.2（协议锁严：研究三层协议 / M0-DRAFT 时序 / Replacement 硬门化 / Gate 量化 / 删 M0 捆绑审批 / 测试表述去数字）。
+日期：2026-09-09。状态：**PR #5 第二轮审批 = 剩 1 阻断项（时间非重叠边界），本版补齐，待第三轮审批。审批通过前不写任何策略代码。**
+版本历史：v0.1（首发）→ v0.2（协议锁严：三层协议 / M0-DRAFT / Replacement 硬门 / Gate 量化）→ v0.3（**三层协议补时间非重叠边界 + 2 条 PIT/版本纪律**）。
 
 ## 0. 为什么是 Gen-2.1（立项依据，不变）
 
@@ -45,6 +45,26 @@ Frozen Historical Walk-Forward Evaluation（参数冻结后只评价，不再改
 - 2021–2026 历史已被 V2 / WP9 / 资格判定**多次观察**，**不得宣称**为「完全未触碰的最终 OOS」；
 - 历史阶段结论一律命名为 **Frozen Historical Walk-Forward / Post-freeze Evaluation（Pseudo-OOS）**；
 - **真正最终 OOS 由未来 Live Integrated Shadow 积累提供**（与 V2 相同纪律：线上 Shadow 独立事件积累后才谈生产资格）。
+
+### 2.1 时间非重叠边界（硬性，以 signal/trade_date 归属为准）
+
+三层必须落在**互不重叠的时间段**（信号日口径；数据池 last_date=2026-09-04）：
+
+```text
+Development（结构/参数设计）      signal 日 ≤ 2023-12-31
+Validation（阈值/结构选择）       2024-01-01 ≤ signal 日 ≤ 2024-12-31
+Freeze Point                       M3 结束（生成 v2.1.0 BUNDLE+LOCK）
+Frozen Historical Evaluation      2025-01-01 ≤ signal 日 ≤ 2026-09-04
+```
+
+- **选择与评价永不共享同一批 signal 日**：阈值、top_cluster_count、硬门常数、probation/min-hold 等一切选择只消费 Validation 段（2024）或其之前；Frozen 段（2025 起）只用于对冻结 v2.1.0 的评价，禁止任何「看到 Frozen 结果再回头改 DRAFT」。
+- 前瞻收益（未来 20/40D）允许自然跨段（如 2024-12 信号的 label 落入 2025-01），但**样本归属以 signal 日为准**，不构成跨段复用。
+- 事件/经济指标若因窗口尾部缺 label（如 2026-07 后事件缺 40D 前瞻），按数据可得性 dropna 处理并在报告标注，不得外推补数。
+
+### 2.2 PIT 与版本纪律（防倒灌）
+
+1. **PIT / min-history 自然进入**：2024 年后上市的 ETF（如 159582 等）按 listing_date + min_history_days(120) 规则自然进入样本；**不得为覆盖率倒灌未来数据或人为补齐上市前行情**。
+2. **版本迭代不重复消费 Frozen 段**：若 v2.1.0 在 M4/M5 FAIL 后开发 v2.1.1，**2025-01-01 起的 Frozen 段已被 v2.1.0 观察过，不得再作为 v2.1.1 的独立 Frozen Evaluation**。v2.1.1 的最终资格转向：后续 Live Shadow 独立积累，或事先保留且从未用于调参的时间段（如有，须在 v2.1.1 立项时明示并重新审批协议）。
 
 ## 3. M0 — V2 冻结归档 + V2.1 DRAFT 建立（硬修改 #2：锁时序）
 
