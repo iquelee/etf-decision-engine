@@ -58,10 +58,10 @@
     "breadth_min_pos": 0.5,
     "scoring": "cluster_score = 簇内 alpha 前50% 等权 mean(alpha_score_v2)；top_cluster 需 breadth_pass(px_ma60>0 占比>=breadth_min_pos) 显式 Gate；broad_beta 对照簇不参与 rank/leader（M1-r2 定稿，见 portfolio/cluster_leadership.py）",
     "m1_audit_note": "Development 段(signal≤2023-12-31)：7 业务簇入池（financial/consumer/defensive_dividend 2024 才入研究池，PIT 自然进入）；top_cluster 平均每日数与 tech_hardware leader 切换率以 r2 audit 输出为准；breadth/leaders/broad_beta 语义已按审批对齐",
-    "params_notes": "草案 top_cluster_count=4 / cluster_min_members=1 / leaders_per_cluster=2 / breadth_min_pos=0.5；Validation(2024) 校准；Freeze Point 冻结"
+    "params_notes": "M3 Freeze candidate: top_cluster_count=4 / cluster_min_members=1 / breadth_min_pos=0.5 为 validation-retained (M1 Development 草案沿用, 未经 2024 参数选择); leaders_per_cluster=2 为 design-fixed。Freeze Point 一次性冻结。"
   },
   "consolidation_gate": {
-    "enabled": true,
+    "enabled": false,
     "state": "RESEARCH_DRAFT",
     "min_quality": null,
     "m2_decision": "Standalone 20D Market-Excess Gate NOT SUPPORTED (2024 Validation: 所有 min_quality>0 均未优于 0 基线; 局部非严格单调); min_quality 不冻结 (NULL); Consolidation Score CARRY FORWARD to M3 Stateful Validation (审批 2026-09-09: A 采纳 / B 不采纳)",
@@ -96,7 +96,31 @@
       ]
     },
     "scoring": "consolidation_quality 0-100: sideway_days 分档(连续半开无空洞) + sideway_range 分档(小数单位 6%=0.06) + volume_ratio_5_20 + volume_compression_slope + volatility_compression; 权重固定 _W; px_ma60>0 硬前置 (M2-r2/r3 定稿, 见 portfolio/consolidation_gate.py)",
-    "params_notes": "M2 冻结结论: min_quality=NULL 不选; M3 预注册三臂 {OFF,>=40,>=60} 状态机联调 (真实 promotion/replacement 事件 + event-OOS + 经济 Gate)"
+    "params_notes": "M2 冻结结论: min_quality=NULL 不选; M3 预注册三臂 {OFF,>=40,>=60} 状态机联调 (真实 promotion/replacement 事件 + event-OOS + 经济 Gate)",
+    "m3_result": {
+      "validation_window": "2024 (stateful, M3-r2 修正后重跑)",
+      "finding": "三臂 (OFF/40/60) cost10: gate_off +0.7% / gate_40 -3.1% / gate_60 -1.3% vs Main5 +30.5%。Turnover 16.7→12.6→7.8, MDD 改善。**Replacement Payoff 双重读数 (gate_off 14 次替换)**: challenger vs incumbent 20D -1.81% (pos 27%) / 40D -2.62% (被换 incumbent 更强); challenger vs cluster 20D +0.82% / 40D -0.18% (challenger 仅略强簇均且不持久) → incumbent 显著强于簇均 (~+2.6%+), 替换门把强者现任换成平庸 challenger = 劣质换仓。gate_60 完全禁换 (accepted=0) 消除该损失但无正收益来源。",
+      "gate_decision": "按 M3 预注册纪律: Gate ON 未提升成本后收益; Replacement Payoff 为负 (换仓本身不创造价值) -> v2.1.0 允许 Consolidation Gate 关闭 (Gate OFF +0.7% 最优但远逊 Main5)。min_quality 不冻结。Freeze 前置走 B': 冻结 Gate-OFF v2.1.0; 2025+ 段为 contaminated/post-hoc (非 Frozen Evaluation), 最终资格转 Live Shadow。",
+      "m3_r2_fixes": {
+        "note": "历史变更日志 (r2 当时所做; r3 已进一步修正, 见下方 r3_notes; 以 params_status/replacement 段为当前真相)",
+        "items": [
+          "Gate#4 实际 weight_delta (1/当日CORE池) + design_fixed 常数全量入 DRAFT",
+          "one-to-one consume + 同簇强制 (REPLACEMENT_REVOKED_NO_CLUSTER)",
+          "pairing 输出 (replacement_pair=challenger|incumbent|cluster)",
+          "真实 Replacement Payoff 20/40D challenger-incumbent (purge 后窗口)"
+        ]
+      },
+      "m3_date": "2026-09-09",
+      "evaluation_status_2025plus": "contaminated/post-hoc (M3 早期查看全样本, Freeze 前; M4/M5 在 2025+ 不得宣称 Frozen Evaluation)",
+      "m3_r3_fixes": [
+        "weight_delta: 1/当日CORE池 -> projected_trade_weight (tentative 集经 25/40/65 cap)",
+        "补 vs_cluster payoff + vs Main5 block bootstrap 95% CI",
+        "pairing signal 严格限 2024 窗口 (purged_20d/40d 分列)",
+        "provenance: validation-retained/design-fixed 统一 (去 selected 滥标)",
+        "2025+ 降级 contaminated/post-hoc",
+        "Gate OFF 单一真相: consolidation_gate.enabled=false (v2.1.0 默认)"
+      ]
+    }
   },
   "turnover_aware_replacement": {
     "enabled": true,
@@ -108,10 +132,71 @@
       "edge_gt_cost_hurdle",
       "no_persistence_protection"
     ],
-    "expected_turnover_cost_formula": "weight_delta * cost_bps（计算值，非可调权重）",
-    "persistence_protection": "min-hold 条件：新任 CORE 在位满 N 交易日才可被替换（N 初值=demotion_persistence_days，Validation 校验）",
+    "expected_turnover_cost_formula": "cost = projected_weight_delta * cost_bps * 2 + cost_buffer_bps (两腿买卖 + 缓冲; 与代码 expected_turnover_cost 一致)",
+    "persistence_protection": "min-hold 条件: 新任 CORE 在位满 N 交易日才可被替换 (N=5, design-fixed, 同 demotion_persistence_days; 已定稿非待校验)",
     "probation_days": 20,
-    "params_notes": "M3 硬门化定稿；{min-hold 天数, cost 常数缓冲} 于 Validation 收敛后 Freeze"
+    "params_notes": "M3 硬门定稿 (M3-r3): min-hold_days=5 design-fixed; cost_buffer_bps=5 design-fixed (未做校准实验); 参数真相见 params_status 与 replacement 段",
+    "replacement": {
+      "min_hold_days": {
+        "value": 5,
+        "basis": "design-fixed (= demotion_persistence_days)"
+      },
+      "cost_bps": {
+        "value": 10.0,
+        "basis": "design-fixed (与回测 ledger cost 一致, 单边)"
+      },
+      "alpha_to_excess_bps": {
+        "value": 5.0,
+        "basis": "design-fixed (量纲桥: alpha 1分≈5bps/日; Validation 不动, 改须重走协议)"
+      },
+      "hold_days_for_breakeven": {
+        "value": 20,
+        "basis": "design-fixed (=future_20d 口径; 成本回本周期)"
+      },
+      "cost_buffer_bps": {
+        "value": 5.0,
+        "basis": "design-fixed (换手冲击/滑点缓冲, 未做 2024 校准实验; 改须重走协议)"
+      },
+      "weight_delta_rule": "projected_trade_weight: 替换后 tentative CORE 集(去incumbent加challenger) 经完整 cap(25/40/65) 算 challenger 目标权重 (M3-r3, portfolio/weights.py)",
+      "pairing_output": "replacement_pair=challenger|incumbent|cluster 落 roles (M3-r2)",
+      "one_to_one": "accepted 后立即从 promoted_indices consume; 1 challenger<->1 incumbent (M3-r2)",
+      "same_cluster_only": "无同簇 challenger -> REPLACEMENT_REVOKED_NO_CLUSTER, 禁跨簇 fallback (M3-r2)"
+    },
+    "params_status": {
+      "top_cluster_count": {
+        "value": 4,
+        "status": "validation-retained (M1 Development 草案保留, 未经 2024 参数选择)"
+      },
+      "cluster_min_members": {
+        "value": 1,
+        "status": "validation-retained (同上)"
+      },
+      "leaders_per_cluster": {
+        "value": 2,
+        "status": "design-fixed (簇内 leader<=2 结构)"
+      },
+      "breadth_min_pos": {
+        "value": 0.5,
+        "status": "validation-retained (M1 草案值, 未经 2024 参数选择)"
+      },
+      "min_hold_days": {
+        "value": 5,
+        "status": "design-fixed (=demotion_persistence_days)"
+      },
+      "cost_buffer_bps": {
+        "value": 5.0,
+        "status": "design-fixed (未做 2024 校准实验; 换手冲击/滑点缓冲, 改须重走协议)"
+      },
+      "consolidation_enabled": {
+        "value": false,
+        "status": "validation-selected (M3 2024 三臂: Gate ON 无成本后增量 -> v2.1.0 默认 OFF; consolidation_gate.enabled=false 为唯一真相)"
+      },
+      "min_quality": {
+        "value": null,
+        "status": "not-selected (M2: Standalone Gate NOT SUPPORTED; M3: ON 无增量)"
+      }
+    },
+    "m3_finding": "Replacement Payoff 20D -1.81% / 40D -2.62% (gate_off, 2024): 替换门批准错误换仓; 建议 M4/M5 复核或 v2.1.1 重新设计主动替换触发条件"
   },
   "protocol": {
     "max_forward_horizon": 40,
@@ -127,5 +212,9 @@
       "effective_signal_start",
       "effective_signal_end"
     ]
+  },
+  "freeze_point_status": {
+    "status": "M3-r3 待审批 (B' 需按 contaminated 语义修正后批准)",
+    "note": "M3 早期跑过并查看全样本(含 2025+)结果于 Freeze 前 → 2025+ 段已 contaminated, 不再是 untouched Frozen 段。若批准 Freeze Gate-OFF v2.1.0, 其后 M4/M5 在 2025+ 的结果降级为 contaminated/post-hoc historical diagnostics, 不得宣称 Frozen Evaluation; 真正资格由未来 Live Shadow 提供。恢复 untouched 评价地位须单独修改研究协议并经审批。"
   }
 }
