@@ -84,6 +84,24 @@ const g2Lock = addLock('ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', [
   });
 }
 
+// Root-of-trust（M0 审批修复，2026-09-09）：LOCK 文件自身 SHA 硬锚定在本 verifier 内。
+// 防止「frozen bundle + 其 LOCK 同一 commit 一起改」绕过冻结（lock 内写入新 expected → 旧逻辑仍 PASS）。
+// 校验顺序：① lock 文件 SHA == 本 ROOT_ANCHORS；② lock 内 expected == frozen 文件实际 SHA。
+// 合法升级（新版本 freeze / 重新封印）必须显式同步修改本数组（PR diff 醒目，等同显式审批动作）。
+const ROOT_ANCHORS = [
+  { lock: 'ml/manifests/GEN1_IMMUTABLE_LOCK.json', sha256: '138fe886a9f50440f717eaa0739d3144fd5e6418fc8d3d2ad03d1643320501c0' },
+  { lock: 'ml/manifests/V361_IMMUTABLE_LOCK.json', sha256: '1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd' },
+  { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: '3b419988f75857ac9b35cd45d18d73a59f091650554ecc095bf8be821d2177f9' },
+];
+for (const a of ROOT_ANCHORS) {
+  CHECKS.push({
+    name: `${a.lock} root-of-trust`,
+    expected: a.sha256,
+    actual: sha256File(a.lock),
+    lockRef: 'verify-immutable.js ROOT_ANCHORS',
+  });
+}
+
 let failed = 0;
 for (const c of CHECKS) {
   const ok = String(c.actual) === String(c.expected);
