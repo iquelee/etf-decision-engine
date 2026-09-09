@@ -14,7 +14,7 @@
     "echarts": "^5.5.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.4",
-    "vite": "^5.2.11"
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.2.2"
   }
 }
