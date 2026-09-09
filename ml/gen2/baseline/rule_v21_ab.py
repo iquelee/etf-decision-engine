@@ -202,16 +202,18 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
                                       priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
 
         # V21-DELTA-3：Turnover-aware Replacement 5 硬门（替代 V2 F09 的 min_edge>=8）
-        # M3-r2 语义（审批修正）：
+        # M3-r2 语义：
         #   a) 严格 1 challenger ↔ 1 incumbent —— accepted 后立即从 promoted_indices 消费；
         #   b) 同簇强制：无同簇 challenger → 不执行 replacement（禁跨簇 fallback）；
-        #   c) weight_delta = 1/当日 CORE 池上限（实际组合口径，非固定 0.25）；
+        #   c) **weight_delta = projected trade weight（M3-r3）**：替换后 tentative CORE 集
+        #      （去 incumbent、加 challenger）经完整 cap（25/40/65）算 challenger 实际目标权重，
+        #      非 1/N 近似；由 portfolio.weights.projected_trade_weight 计算；
         #   d) pairing 输出（challenger/incumbent/cluster）供 Replacement Payoff 重建。
+        from gen2.portfolio.weights import projected_trade_weight
+
         prev_s = day["code"].map(lambda c: current_roles.get(c, "RESERVE"))
         cap_demoted = day[(prev_s == "CORE") & (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")]
         promoted_indices = list(day[(prev_s != "CORE") & (day["role"] == "CORE")].index)
-        core_pool_size = max(1, int((day["role"] == "CORE").sum()))  # cap 后仍为 CORE 的数量（近似当日池）
-        weight_delta = 1.0 / float(core_pool_size)
         for dem_idx in cap_demoted.sort_values("alpha_score_v2", ascending=False).index:
             dem_code = day.loc[dem_idx, "code"]
             dem_alpha = float(day.loc[dem_idx, "alpha_score_v2"])
@@ -224,6 +226,11 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
                 continue
             replacer_idx = None
             for i in same_cluster:
+                # c) tentative CORE 集 = 当前 CORE（cap 后角色）+ 该 challenger − 该 incumbent
+                current_core_codes = set(day.loc[day["role"] == "CORE", "code"])
+                tentative = day[day["code"].isin((current_core_codes - {dem_code}) | {day.loc[i, "code"]})][
+                    ["trade_date", "code", "correlation_cluster"]]
+                proj_w = projected_trade_weight(tentative, pcfg, day.loc[i, "code"], dem_code)
                 allow, _ = replacement_gate(
                     challenger_alpha=float(day.loc[i, "alpha_score_v2"]),
                     incumbent_alpha=dem_alpha,
@@ -231,7 +238,7 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
                     challenger_quality=None if min_quality is None else float(day.loc[i, "quality"]),
                     min_quality=min_quality,
                     incumbent_tenure_days=int(tenure.get(dem_code, 0)),
-                    weight_delta=weight_delta,
+                    weight_delta=proj_w,
                     cfg=repl_cfg,
                 )
                 if allow:
@@ -283,37 +290,18 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
             })
 
     roles = pd.DataFrame(output)
-    # 权重构建（同 V2：25% 单只 / 40% 簇 / 65% 广义科技）
-    max_single_weight = float(pcfg.get("max_single_weight", 0.25))
-    max_cluster_weight = float(pcfg.get("max_cluster_weight", 0.40))
-    max_tech_weight = float(pcfg.get("max_tech_weight", 0.65))
-    tech_clusters = set(pcfg.get("tech_clusters", ["tech_hardware", "software_ai"]))
+    # 权重构建（M3-r3：复用 portfolio.weights.compute_core_weights 单一实现，
+    # 与 Replacement Gate 的 projected_trade_weight 同源，25% 单只/40% 簇/65% tech）
+    from gen2.portfolio.weights import compute_core_weights
+
     roles["relative_share"] = 0.0
     roles["target_weight"] = 0.0
-    core = roles[roles["role"] == "CORE"].copy()
+    core = roles[roles["role"] == "CORE"][
+        ["trade_date", "code", "correlation_cluster"]].copy()
     if not core.empty:
-        core["relative_share"] = core.groupby("trade_date")["code"].transform(lambda s: 1.0 / len(s))
-        core["target_weight"] = core["relative_share"].clip(upper=max_single_weight)
-        pieces = []
-        for (d, cl), g in core.groupby(["trade_date", "correlation_cluster"]):
-            total = g["target_weight"].sum()
-            if total > max_cluster_weight:
-                g = g.copy()
-                g["target_weight"] = g["target_weight"] * (max_cluster_weight / total)
-            pieces.append(g)
-        core = pd.concat(pieces, ignore_index=True)
-        tech_pieces = []
-        for d, g in core.groupby("trade_date"):
-            g = g.copy()
-            tech_total = float(g.loc[g["correlation_cluster"].isin(tech_clusters), "target_weight"].sum())
-            if tech_total > max_tech_weight:
-                k = max_tech_weight / tech_total
-                g.loc[g["correlation_cluster"].isin(tech_clusters), "target_weight"] *= k
-            tech_pieces.append(g)
-        core = pd.concat(tech_pieces, ignore_index=True)
+        w = compute_core_weights(core, pcfg)
         roles = roles.drop(columns=["relative_share", "target_weight"]).merge(
-            core[["trade_date", "code", "relative_share", "target_weight"]],
-            on=["trade_date", "code"], how="left")
+            w, on=["trade_date", "code"], how="left")
         roles["relative_share"] = roles["relative_share"].fillna(0.0)
         roles["target_weight"] = roles["target_weight"].fillna(0.0)
     return roles
@@ -385,10 +373,53 @@ def run_v21_arms(features, rankings, config, arms: list[tuple[str, float | None]
         roles.to_csv(f"{output_dir}/gen2_v21_m3_roles_{arm_id}.csv", index=False)
 
     rows = []
+    net_cache: dict[str, pd.Series] = {}  # (name, cost) -> 窗口内日净收益（索引 trade_date str）
     for name, w in weights_map.items():
         for cost_bps in [0.0, 10.0]:
             led = run_ledger(w, returns, cost_bps=cost_bps, calendar=eval_calendar)
-            rows.append(_econ_rows(led, name, cost_bps, eval_start, eval_end))
+            r = _econ_rows(led, name, cost_bps, eval_start, eval_end)
+            rows.append(r)
+            led_c = led.copy()
+            if eval_start or eval_end:
+                if hasattr(led_c["trade_date"].iloc[0], "strftime"):
+                    led_c["trade_date"] = led_c["trade_date"].astype(str)
+                if eval_start:
+                    led_c = led_c[led_c["trade_date"] >= eval_start]
+                if eval_end:
+                    led_c = led_c[led_c["trade_date"] <= eval_end]
+            net_cache[(name, cost_bps)] = led_c.set_index("trade_date")["net_return"]
+
+    # M3-r3：cost_net_increment bootstrap CI —— 各 arm vs main5_pit（cost 10）日超额 block bootstrap
+    def _block_bootstrap_ci(excess_daily: pd.Series, n_iter: int = 2000, block: int = 20) -> dict:
+        x = excess_daily.dropna().values
+        if len(x) < block * 2:
+            return {"mean": float("nan"), "ci_lo": float("nan"), "ci_hi": float("nan"), "n_days": int(len(x))}
+        rng = np.random.default_rng(42)
+        means = np.empty(n_iter)
+        n_blocks = int(np.ceil(len(x) / block))
+        for i in range(n_iter):
+            starts = rng.integers(0, len(x) - block + 1, size=n_blocks)
+            sample = np.concatenate([x[s:s + block] for s in starts])[:len(x)]
+            means[i] = sample.mean()
+        lo, hi = np.percentile(means, [2.5, 97.5])
+        return {"mean": float(x.mean()), "ci_lo": float(lo), "ci_hi": float(hi), "n_days": int(len(x))}
+
+    main_ref = net_cache.get(("main5_pit", 10.0))
+    if main_ref is not None:
+        boot_rows = []
+        for arm_id, _mq in arms:
+            s = net_cache.get((f"v21_{arm_id}", 10.0))
+            if s is None:
+                continue
+            excess = s.sub(main_ref, fill_value=0.0)
+            b = _block_bootstrap_ci(excess)
+            boot_rows.append({"arm": arm_id, "vs_main5_mean_daily": b["mean"],
+                              "ci_lo": b["ci_lo"], "ci_hi": b["ci_hi"], "n_days": b["n_days"]})
+        boot_df = pd.DataFrame(boot_rows)
+        boot_df.to_csv(f"{output_dir}/gen2_v21_m3_bootstrap.csv", index=False)
+        print("\n## cost_net_increment vs Main5 PIT（cost10，2024 窗口 block bootstrap CI）")
+        print(boot_df.to_string(index=False, float_format=lambda x: f"{x:.5f}"))
+
     df = pd.DataFrame(rows)
     df.to_csv(f"{output_dir}/gen2_v21_m3_arms_econ.csv", index=False)
     return df

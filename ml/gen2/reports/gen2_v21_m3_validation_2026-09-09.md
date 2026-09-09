@@ -1,80 +1,82 @@
-# Gen-2.1 M3 报告 v2（M3-r2）— Turnover-aware Replacement + Stateful 三臂 Validation（2026-09-09）
+# Gen-2.1 M3 报告 v3（M3-r3）— Turnover-aware Replacement + Stateful 三臂 Validation（2026-09-09）
 
-状态：M3 研究交付（Validation 2024 层）。**v2 = 按 M3 审批 REQUEST CHANGES 修复 4 阻断项后重跑**：
-①Gate #4 实际 weight_delta + 隐藏常数入 DRAFT；②replacement one-to-one + 同簇强制；③真实 Replacement Payoff（pairing 重建）；④Freeze 参数全部落定 basis。**修复后核心结论不变且证据更硬：三臂成本后仍跑输 Main5；Replacement Payoff 为负（替换门批准了错误换仓）→ Gate 允许关闭、min_quality 不冻结；Freeze 前置走 B′（冻结 Gate-OFF 配置 → M4 → M5）。**
+状态：M3 研究交付（Validation 2024 层）。**v3 = 按 M3-r2 复审修复 5 技术缺口 + 1 协议级问题后重跑**：
+①weight_delta → **projected trade weight**（真实 cap 后目标权重）；②**cluster Replacement Payoff + bootstrap CI** 补齐预注册指标；③**pairing 窗口确定性 bug** 修复；④**参数 provenance 统一**（去 selected/design-fixed 自相矛盾）；⑤**2025+ 降级 contaminated** 标注。
+**核心结论不变且证据链完整：三臂成本后仍跑输 Main5（bootstrap CI 上界 ≈0）；Replacement Payoff vs incumbent 为负、vs cluster 无优势 → 换仓不创造价值 → Gate 允许关闭、min_quality 不冻结；Freeze 走 B′ 但 2025+ M4/M5 降级为 post-hoc diagnostics。**
 
-## 〇、协议裁决记录
+## 〇、协议裁决记录（r3 修正）
 
-- **A（先 M4 再 Freeze）不合法**：与已批准 v0.4 固定顺序（M3 → Freeze Point → M4 → M5）冲突。
-- **B′（批准路线）**：Freeze Gate-OFF v2.1.0 → M4（Frozen Historical Event Evaluation）→ M5（Economic Replay）。2025+ Frozen 段此前未被任何调参触碰，可作为 v2.1.0 的评价段。
-- 若 M3 FAIL 判收：v2.1.0 冻结为 Gate-OFF 配置；**不偷看 2025+ 做调参**。
+- **A（先 M4 再 Freeze）不合法**：违反 v0.4 固定顺序（M3 → Freeze Point → M4 → M5）。
+- **B′**：Freeze Gate-OFF v2.1.0 → M4 → M5。**修正（r3）**：M3 早期查看过全样本（含 2025+）→ 2025+ **已 contaminated**，M4/M5 在其上的结果只能称 **contaminated/post-hoc historical diagnostics**，不得宣称 Frozen Evaluation；**真正资格由未来 Live Shadow 提供**。恢复 untouched 地位须单独修改研究协议并经审批。
+- 2024 Validation 内结论不受影响（那是 Freeze 前合法选择段）。
 
-## 一、M3-r2 修复明细（对应审批 4 BLOCK）
+## 一、M3-r3 修复明细（对应复审 BLOCK）
 
 | # | 阻断项 | 修复 |
 |---|---|---|
-| 1 | **Gate #4 不合格**（alpha→excess 映射 `alpha_to_excess_bps`/`hold_days_for_breakeven` 是隐藏参数；成本用固定 `max_single_weight=0.25` 而非实际 weight_delta；易退化 gate3） | 映射常数全量入 DRAFT `turnover_aware_replacement.replacement` 标注 **design-fixed**（改须重走协议）；成本 = **实际 weight_delta**（=1/当日 CORE 池上限，运行时按组合状态计算）× cost_bps × 2 + `cost_buffer_bps`；新单测 `test_gate4_uses_actual_weight_delta` 验证成本随实际口径变化 |
-| 2 | **一对多匹配 bug**（accepted 后未从 promoted_indices 消费 → 同一 challenger 可批准多次）+ 跨簇 fallback | 严格 **1 challenger ↔ 1 incumbent**：accepted 后立即 consume；**同簇强制**：无同簇 challenger → `REPLACEMENT_REVOKED_NO_CLUSTER`（禁跨簇）；新单测 `test_replacement_pair_is_one_to_one` / `test_no_cross_cluster_replacement` |
-| 3 | **Replacement Payoff 未测出**（记在 incumbent 行、无 pairing、口径错） | roles 输出 `replacement_pair="challenger\|incumbent\|cluster"`（落 challenger 行）；diagnostics 重建 challenger−incumbent 的 20/40D 收益差（close 归一化），purge=40D 后窗口，超窗计入 `purged_pairs`；若确 n=0 才可写"无法估值" |
-| 4 | **Freeze 参数未落定** | DRAFT `turnover_aware_replacement.params_status` 全量标注：top_cluster_count/min_members/breadth_min_pos/cost_buffer_bps/consolidation_enabled = **validation-selected**；leaders_per_cluster/min_hold_days/cost_bps/alpha_to_excess_bps/hold_days_for_breakeven = **design-fixed**；min_quality = not-selected |
+| 1 | **weight_delta ≠ 真实目标权重**（1/CORE 数未过 25/40/65 cap） | 权重构建抽纯函数 `portfolio/weights.py::compute_core_weights`（单一实现，状态机尾部与 Replacement 共用）；Replacement Gate 用 **`projected_trade_weight`** = 替换后 tentative CORE 集（去 incumbent 加 challenger）经完整 cap 的 challenger 实际目标权重；单测 8 项（含 2 CORE→cluster cap 0.20、5 CORE 异簇→0.25 语义） |
+| 2 | **预注册指标未兑现**（vs_cluster、bootstrap CI 缺） | diagnostics 补 `vs_cluster` 20/40D（challenger − 簇等权 close 收益）；经济 runner 补 `cost_net_increment vs Main5` **block bootstrap 95% CI**（block=20, n=2000, seed 42）落 `gen2_v21_m3_bootstrap.csv` |
+| 3 | **pairing 窗口 bug**（signal 只限 ≥start 未限 ≤end → 2025+ pairing 混入；pair_signal=45 vs accepted=14 异常根因） | `_replacement_payoff` signal 严格限定 `[window_start, window_end]`；purged 拆 `purged_20d / purged_40d` 分列；修复后 **pair_signal 45→14 = 与 accepted 对齐** |
+| 4 | **provenance 自相矛盾**（cost_buffer_bps design-fixed/validation-selected 双标；无 2024 比较证据的标 selected） | 统一：cost_buffer_bps = design-fixed（未做校准实验）；top_cluster_count/cluster_min_members/breadth_min_pos = **validation-retained**（M1 Development 草案保留，未经 2024 选择，非 selected）；consolidation_enabled = validation-selected（M3 真做了 2024 三臂对比）；公式字段同步 `cost = projected_weight_delta × cost_bps × 2 + cost_buffer_bps` |
+| 5（协议） | **2025+ 不是 untouched**（M3 早期查看全样本） | 全文档 + DRAFT `freeze_point_status` / `m3_result.evaluation_status_2025plus` 标注 contaminated/post-hoc；不恢复 untouched 宣称 |
 
-## 二、Validation 2024 三臂经济矩阵（M3-r2 重跑，stateful、全程推进、窗口统计）
+## 二、Validation 2024 三臂经济矩阵（M3-r3 重跑，stateful）
 
-口径：状态机自数据起点全程推进，账本窗口切 2024-01-01~2024-12-31（242 执行日）。V2.1 参数全部读 DRAFT。
-
-| strategy | cost_bps | n_days | cumulative | Sharpe | MDD | Turnover |
+| strategy | cost10 累计 | Sharpe | MDD | Turnover | vs Main5 日超额 mean | bootstrap 95% CI |
 |---|---:|---:|---:|---:|---:|---:|
-| main5_pit | 10 | 242 | **+0.3048** | 1.29 | −11.0% | 3.18 |
-| universe_ew | 10 | 242 | +0.1058 | 0.51 | −22.2% | 3.03 |
-| v21_gate_off | 10 | 242 | **+0.0070** | 0.12 | −11.7% | 16.73 |
-| v21_gate_40 | 10 | 242 | −0.0308 | −0.21 | −10.9% | 12.62 |
-| v21_gate_60 | 10 | 242 | −0.0132 | −0.22 | **−4.4%** | **7.76** |
+| main5_pit | +30.5% | 1.29 | −11.0% | 3.2 | — | — |
+| universe_ew | +10.6% | 0.51 | −22.2% | 3.0 | — | — |
+| **v21_gate_off** | **+0.7%** | 0.12 | −11.7% | 16.7 | **−0.00114/日** | **[−0.00280, −0.00001]** |
+| v21_gate_40 | −3.1% | −0.21 | −10.9% | 12.6 | −0.00131/日 | [−0.00322, −0.00009] |
+| v21_gate_60 | −1.3% | −0.22 | −4.4% | 7.8 | −0.00126/日 | [−0.00355, +0.00013] |
 
-对比 v1（未修）：gate_off −0.6% → **+0.7%**（5 硬门修复减少无效换仓的边际改善）；gate_40/gate_60 仍负。总体：**Gate ON 无成本后增量，Gate OFF 最优但仍远逊 Main5**。
+**bootstrap 读数**：gate_off/gate_40 的 CI 上界 ≤ −0.00001（显著为负）；gate_60 CI 含 0（换手极低、MDD 最优但收益无增量）。**成本后净增量 ≤ 0 成立。**
 
-## 三、事件诊断 + Replacement Payoff（M3-r2，2024 段，purge=40D）
+## 三、事件诊断 + Replacement Payoff（M3-r3，2024，purge=40D 分列）
 
-| arm | promos | repl_accepted | repl_revoked | cluster_block | consol_block | avg_hold(d) | pair_signal | pair_purged | payoff20_n | payoff20_mean | payoff20_pos | payoff40_n | payoff40_mean |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| gate_off | 56 | 14 | 111 | 159 | 0 | 14.3 | 45 | 71 | **11** | **−1.81%** | 27% | 8 | −2.62% |
-| gate_40 | 28 | 4 | 88 | 158 | 204 | 15.4 | 8 | 10 | 3 | −4.68% | 0% | 3 | −1.32% |
-| gate_60 | 12 | **0** | 0 | 192 | 390 | 11.3 | 0 | 0 | 0 | — | — | 0 | — |
+| arm | promos | repl_acc | repl_rev | pair_sig | purged20 | vs_inc20 n | vs_inc20 mean | vs_inc20 pos | vs_clu20 n | vs_clu20 mean | vs_inc40 mean | vs_clu40 mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| gate_off | 56 | 14 | 111 | **14** | 3 | 11 | **−1.81%** | 27% | 11 | **+0.82%** | −2.62% | −0.18% |
+| gate_40 | 28 | 4 | 88 | 4 | 1 | 3 | −4.68% | 0% | 3 | −0.04% | −1.32% | +0.71% |
+| gate_60 | 12 | 0 | 0 | 0 | 0 | 0 | — | — | 0 | — | — | — |
 
-**决定性发现（M3-r2 首次测出真实 Payoff）**：
-- **Replacement Payoff 为负**：gate_off 的 14 次成功替换，challenger 相对 incumbent 后 20D 平均 **−1.81%**（正占比仅 27%）、40D **−2.62%** → **被替换的现任反而更优，替换门批准了错误的换仓**（这正是 V2.1 跑输 Main5 的直接机制）。
-- 事件配对数 > accepted（45 vs 14）说明部分 pairing 的 REVOKED_NO_CLUSTER/REVOKED 也有记录——但 payoff 只统计 accepted（成功换仓）。
-- gate_40 修得更严（4 次替换）→ 20D −4.68% 更差（仅剩高 alpha 差的替换反而错得更离谱，n=3 样本小需谨慎）；gate_60 禁换 → 消除该损失但组合无正收益来源。
-- **avg_core_hold 14.3D（gate_off）**：min-hold 5D 未主导持有期，CORE 更替主要来自 cluster cap 挤压的被动换仓。
+**修复后读数（pair_signal 与 accepted 精确对齐）**：
+- **vs incumbent 为负**：gate_off 替换 20D −1.81%（pos 27%）、40D −2.62% → 被换现任更强。
+- **vs cluster 无优势**：gate_off 20D **+0.82%**（challenger 略强于簇平均）但 40D 回落 −0.18% → 换仓带来的相对簇增量小且不持久，被两腿成本（cost10）吞噬 → **净值为负**。
+- 机制定性：替换门选出的 challenger 仅"比差的现任略好"，相对簇等权无持续优势——**换仓本身不创造价值**（与 WP9.3A 全池 rotation cost 结论一致）。
 
 ## 四、Gate 判定（预注册纪律）
 
 | 预注册指标 | 结果（cost10，2024） | 判定 |
 |---|---|---|
-| 成本后净增量 > 0（vs Main5） | gate_off +0.7% vs Main5 +30.5% | ❌ FAIL |
-| Turnover 明显下降 | 16.7 → 12.6 → 7.8（gate_60 ↓54%） | ✅ PASS |
-| Replacement Payoff > 0 | **20D −1.81% / 40D −2.62%（负）** | ❌ FAIL |
-| 成本后收益提升 | Gate ON 更差（−3.1%/−1.3% vs OFF +0.7%） | ❌ FAIL |
+| 成本后净增量 > 0（vs Main5） | −0.00114/日 [−0.00280, −0.00001] | ❌ FAIL |
+| Turnover 明显下降 | 16.7→12.6→7.8（gate_60 ↓54%） | ✅ PASS |
+| Replacement Payoff（vs incumbent）> 0 | 20D −1.81% / 40D −2.62% | ❌ FAIL |
+| Replacement Payoff（vs cluster）> 0 | 20D +0.82% 但 40D −0.18%（不持久） | ⚠️ 边际/不通过 |
 | MDD 不恶化 | −11.7% → −4.4%（改善） | ✅ PASS |
 
 ```text
 Consolidation Gate 启用判定 = NOT SUPPORTED
 min_quality                    = NULL / NOT SELECTED
-v2.1.0 默认配置                = Gate OFF
-Freeze 路线                    = B′：冻结 Gate-OFF v2.1.0 → M4 → M5（2025+ 未触碰，评价有效）
+v2.1.0 默认配置                = Gate OFF（cluster 层 + 5 硬门保留）
+Freeze 路线                    = B′：Freeze Gate-OFF v2.1.0 → M4 → M5
+2025+ 评价地位                 = contaminated / post-hoc diagnostics（非 Frozen Evaluation）
+最终资格                       = 未来 Live Shadow
 ```
-
-**深层机制结论**：问题不在 Consolidation Gate（OFF 已最优），而在**替换/换仓本身不创造价值（Payoff 负）**。Cluster/consolidation 选出的 challenger 相对现任无正超额 —— 与 WP9.2「Promotion-Actionable alpha 正但在经济层被成本与错误换仓吞噬」一脉相承。这为 v2.1.1（若需）指明方向：要么改进 challenger 质量信号，要么大幅减少替换触发。
 
 ## 五、文件与验证
 
 | 文件 | 内容 |
 |---|---|
-| `portfolio/turnover_aware_replacement.py` | 5 硬门 + 实际 weight_delta 成本 + design-fixed 常数（r2） |
-| `baseline/rule_v21_ab.py` | V2.1 状态机（one-to-one/同簇强制/pairing 输出，r2；V2 零改动） |
-| `evaluation/v21_diagnostics.py` | 事件诊断 + 真实 pairing payoff（r2） |
-| `tests/` | 20 项单测（replacement 14 + rule_v21 6）全绿；npm test 18/18 |
-| DRAFT | `replacement` design-fixed 全量 + `params_status` 落定 + `m3_result` r2 |
+| `portfolio/weights.py`（新） | `compute_core_weights` / `projected_trade_weight` 单一权重实现（25/40/65 cap） |
+| `portfolio/turnover_aware_replacement.py` | 5 硬门（weight_delta 由 projected 提供） |
+| `baseline/rule_v21_ab.py` | 状态机（projected weight 接入 + bootstrap CI 输出；V2 零改动） |
+| `evaluation/v21_diagnostics.py` | vs_inc + vs_cluster payoff、窗口上限修复、purged 分列 |
+| `tests/` | weights 8 + replacement 14 + rule_v21 8 = **30 项**全绿 |
+| DRAFT | replacement/params_status/freeze_point_status/m3_result 全量 r3 同步 |
+
+npm test 18/18 全绿；V2 零改动；2025+ 未再触碰（本次仅 2024 窗口）。
 
 ## 六、口径记录（M3 报告强制字段）
 
-`max_forward_horizon=40`（协议）；2024 窗口事件级 payoff：signal 日 + 20/40D 不跨 2024-12-31（purge），gate_off purged_pairs=71 如实标注；`effective_signal_start=2024-01-01`、`effective_signal_end≈2024-11-05`（M2 报告已述）。pairing 明细落 `outputs/gen2_v21_m3_replacement_pairs.csv`。DRAFT 未含任何 immutable LOCK（Freeze Point 在用户批准 B′ 后触发）。
+`max_forward_horizon=40`；2024 窗口 `effective_signal_start=2024-01-01`、`effective_signal_end≈2024-11-05`（M2 报告）；pairing 明细 `outputs/gen2_v21_m3_replacement_pairs.csv`；bootstrap `outputs/gen2_v21_m3_bootstrap.csv`。DRAFT 未含 immutable LOCK（Freeze 待用户批准 B′）。

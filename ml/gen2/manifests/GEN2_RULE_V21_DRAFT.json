@@ -107,7 +107,8 @@
         "pairing 输出 (replacement_pair=challenger|incumbent|cluster)",
         "真实 Replacement Payoff 20/40D challenger-incumbent (purge 后窗口)"
       ],
-      "m3_date": "2026-09-09"
+      "m3_date": "2026-09-09",
+      "evaluation_status_2025plus": "contaminated/post-hoc (M3 早期查看全样本, Freeze 前; M4/M5 在 2025+ 不得宣称 Frozen Evaluation)"
     }
   },
   "turnover_aware_replacement": {
@@ -120,7 +121,7 @@
       "edge_gt_cost_hurdle",
       "no_persistence_protection"
     ],
-    "expected_turnover_cost_formula": "weight_delta * cost_bps（计算值，非可调权重）",
+    "expected_turnover_cost_formula": "cost = projected_weight_delta * cost_bps * 2 + cost_buffer_bps (两腿买卖 + 缓冲; 与代码 expected_turnover_cost 一致)",
     "persistence_protection": "min-hold 条件：新任 CORE 在位满 N 交易日才可被替换（N 初值=demotion_persistence_days，Validation 校验）",
     "probation_days": 20,
     "params_notes": "M3 硬门化定稿；{min-hold 天数, cost 常数缓冲} 于 Validation 收敛后 Freeze",
@@ -145,7 +146,7 @@
         "value": 5.0,
         "basis": "design-fixed (换手冲击/滑点缓冲; Validation 校准后冻结)"
       },
-      "weight_delta_rule": "实际值=1/当日CORE池上限 (运行时按组合状态计算, 非固定常数)",
+      "weight_delta_rule": "projected_trade_weight: 替换后 tentative CORE 集(去incumbent加challenger) 经完整 cap(25/40/65) 算 challenger 目标权重 (M3-r3, portfolio/weights.py)",
       "pairing_output": "replacement_pair=challenger|incumbent|cluster 落 roles (M3-r2)",
       "one_to_one": "accepted 后立即从 promoted_indices consume; 1 challenger<->1 incumbent (M3-r2)",
       "same_cluster_only": "无同簇 challenger -> REPLACEMENT_REVOKED_NO_CLUSTER, 禁跨簇 fallback (M3-r2)"
@@ -153,11 +154,11 @@
     "params_status": {
       "top_cluster_count": {
         "value": 4,
-        "status": "validation-selected (M1 Development 观察; Freeze Point 定稿)"
+        "status": "validation-retained (M1 Development 草案保留, 未经 2024 参数选择)"
       },
       "cluster_min_members": {
         "value": 1,
-        "status": "validation-selected (同上)"
+        "status": "validation-retained (同上)"
       },
       "leaders_per_cluster": {
         "value": 2,
@@ -165,7 +166,7 @@
       },
       "breadth_min_pos": {
         "value": 0.5,
-        "status": "validation-selected (草案; 同 M1)"
+        "status": "validation-retained (M1 草案值, 未经 2024 参数选择)"
       },
       "min_hold_days": {
         "value": 5,
@@ -173,7 +174,7 @@
       },
       "cost_buffer_bps": {
         "value": 5.0,
-        "status": "validation-selected (2024 Validation 校准, Freeze 前定)"
+        "status": "design-fixed (未做 2024 校准实验; 换手冲击/滑点缓冲, 改须重走协议)"
       },
       "consolidation_enabled": {
         "value": false,
@@ -201,5 +202,8 @@
       "effective_signal_end"
     ]
   },
-  "freeze_point_status": "M3 待审批: 参数已全部标注 basis; Freeze Point 在用户批准 B' 路线后触发 (生成 BUNDLE+LOCK)"
+  "freeze_point_status": {
+    "status": "M3-r3 待审批 (B' 需按 contaminated 语义修正后批准)",
+    "note": "M3 早期跑过并查看全样本(含 2025+)结果于 Freeze 前 → 2025+ 段已 contaminated, 不再是 untouched Frozen 段。若批准 Freeze Gate-OFF v2.1.0, 其后 M4/M5 在 2025+ 的结果降级为 contaminated/post-hoc historical diagnostics, 不得宣称 Frozen Evaluation; 真正资格由未来 Live Shadow 提供。恢复 untouched 评价地位须单独修改研究协议并经审批。"
+  }
 }

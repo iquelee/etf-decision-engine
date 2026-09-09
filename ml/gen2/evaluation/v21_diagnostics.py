@@ -68,42 +68,56 @@ def _core_hold_stats(roles: pd.DataFrame) -> dict:
 
 
 def _replacement_payoff(roles: pd.DataFrame, feats: pd.DataFrame,
-                        window_start="2024-01-01", window_end="2024-12-31") -> dict:
-    """真实 pairing payoff：challenger−incumbent 20/40D 收益差 + 明细落盘。
+                        window_start="2024-01-01", window_end="2024-12-31",
+                        cluster_members: dict | None = None) -> dict:
+    """真实 pairing payoff（M3-r3）：challenger−incumbent 与 challenger−cluster 的 20/40D 收益差。
 
-    口径：
-      - pair 记录在 challenger 行的 replacement_pair 列（signal 日 = 该行 trade_date）。
-      - 收益用 close 归一化净值：signal 日收 close0，horizon 后收 closeH → 累计收益。
-      - purge：signal 日 + h(20/40) 个交易日仍在窗口内才计（label 不触下一层）。
+    口径（修复确定性 bug）：
+      - pair 记录在 challenger 行（signal 日）；**严格限定 signal ∈ [window_start, window_end]**
+        （消除 2025+ pairing 混入）；
+      - 收益用 close 归一化净值：signal 收 close0，horizon 后收 closeH → 累计收益；
+      - purge：signal + h(20/40) 个交易日仍在窗口内才计（label 不触下一层）；
+        **purged_20d / purged_40d 分列统计**；
+      - vs cluster：challenger 所在簇等权（该 signal 日簇内全部代码的 close 等权收益）。
+    cluster_members: {cluster: [codes]}；缺省时从 feats 的 correlation_cluster 推断。
     """
     bars = feats[["trade_date", "code", "close"]].copy()
     bars["code"] = bars["code"].astype(str).str.zfill(6)
     bars["trade_date"] = bars["trade_date"].astype(str)
     cal = sorted(bars["trade_date"].unique())
 
-    pair_rows = roles[(roles["replacement_pair"].fillna("").astype(str) != "")
-                      & (roles["trade_date"] >= window_start)].copy()
+    pair_rows = roles[(roles["replacement_pair"].fillna("").astype(str) != "")].copy()
     pair_rows["trade_date"] = pair_rows["trade_date"].astype(str)
+    # **窗口上限修复**：signal 严格限定 [ws, we]
+    pair_rows = pair_rows[(pair_rows["trade_date"] >= window_start)
+                          & (pair_rows["trade_date"] <= window_end)]
 
-    # per-code close 面板 pivot（快速索引）
     close_pivot = bars.pivot_table(index="trade_date", columns="code", values="close", aggfunc="last")
 
+    # cluster → member codes（用于等权 benchmark；roles 带 correlation_cluster 覆盖全池）
+    if cluster_members is None:
+        cluster_members = (roles.dropna(subset=["correlation_cluster"])
+                           .groupby("correlation_cluster")["code"].apply(lambda s: sorted(set(s))).to_dict())
+
     detail = []
-    purged = 0
+    purged = {20: 0, 40: 0}
     for _, r in pair_rows.iterrows():
         sig = r["trade_date"]
         chal, inc, cl = str(r["replacement_pair"]).split("|")
         future_days = [d for d in cal if d > sig]
+        members = [c for c in cluster_members.get(cl, []) if c != chal]
         rec = {"signal_date": sig, "challenger": chal, "incumbent": inc, "cluster": cl}
         for h in (20, 40):
             if len(future_days) < h:
-                purged += 1
-                rec[f"ret_diff_{h}d"] = float("nan")
+                purged[h] += 1
+                rec[f"vs_inc_{h}d"] = float("nan")
+                rec[f"vs_cluster_{h}d"] = float("nan")
                 continue
             end_day = future_days[h - 1]
             if end_day > window_end:
-                purged += 1
-                rec[f"ret_diff_{h}d"] = float("nan")
+                purged[h] += 1
+                rec[f"vs_inc_{h}d"] = float("nan")
+                rec[f"vs_cluster_{h}d"] = float("nan")
                 continue
 
             def _ret(code):
@@ -117,25 +131,33 @@ def _replacement_payoff(roles: pd.DataFrame, feats: pd.DataFrame,
                     return float("nan")
                 return cH / c0 - 1.0 if c0 > 0 else float("nan")
 
-            rc, ri = _ret(chal), _ret(inc)
-            rec[f"ret_diff_{h}d"] = (rc - ri) if pd.notna(rc) and pd.notna(ri) else float("nan")
+            rc = _ret(chal)
+            ri = _ret(inc)
+            rec[f"vs_inc_{h}d"] = (rc - ri) if pd.notna(rc) and pd.notna(ri) else float("nan")
+            # cluster 等权（同日同窗；成员中缺价者跳过）
+            mrets = [_ret(c) for c in members]
+            mrets = [x for x in mrets if pd.notna(x)]
+            rcl = float(pd.Series(mrets).mean()) if mrets else float("nan")
+            rec[f"vs_cluster_{h}d"] = (rc - rcl) if pd.notna(rc) and pd.notna(rcl) else float("nan")
         detail.append(rec)
 
     df = pd.DataFrame(detail)
     df.to_csv(os.path.join(REPO_OUT, "gen2_v21_m3_replacement_pairs.csv"), index=False)
 
-    result = {"n_pairs_signal": int(len(pair_rows)), "purged_pairs": int(purged)}
+    result = {"n_pairs_signal": int(len(pair_rows)),
+              "purged_20d": purged[20], "purged_40d": purged[40]}
     for h in (20, 40):
-        col = f"ret_diff_{h}d"
-        if col in df and len(df[col].dropna()):
-            s = df[col].dropna()
-            result[f"payoff_{h}d_mean"] = float(s.mean())
-            result[f"payoff_{h}d_pos_ratio"] = float((s > 0).mean())
-            result[f"payoff_{h}d_n"] = int(len(s))
-        else:
-            result[f"payoff_{h}d_mean"] = float("nan")
-            result[f"payoff_{h}d_pos_ratio"] = float("nan")
-            result[f"payoff_{h}d_n"] = 0
+        for tag in ("vs_inc", "vs_cluster"):
+            col = f"{tag}_{h}d"
+            if col in df and len(df[col].dropna()):
+                s = df[col].dropna()
+                result[f"{tag}_{h}d_mean"] = float(s.mean())
+                result[f"{tag}_{h}d_pos"] = float((s > 0).mean())
+                result[f"{tag}_{h}d_n"] = int(len(s))
+            else:
+                result[f"{tag}_{h}d_mean"] = float("nan")
+                result[f"{tag}_{h}d_pos"] = float("nan")
+                result[f"{tag}_{h}d_n"] = 0
     return result
 
 
@@ -174,13 +196,20 @@ def main() -> None:
             "avg_core_hold_days": hold["avg_core_hold_days"],
             "core_segments": hold["core_segments"],
             "pair_signal_n": payoff["n_pairs_signal"],
-            "pair_purged": payoff["purged_pairs"],
-            "payoff_20d_n": payoff["payoff_20d_n"],
-            "payoff_20d_mean": payoff["payoff_20d_mean"],
-            "payoff_20d_pos": payoff["payoff_20d_pos_ratio"],
-            "payoff_40d_n": payoff["payoff_40d_n"],
-            "payoff_40d_mean": payoff["payoff_40d_mean"],
-            "payoff_40d_pos": payoff["payoff_40d_pos_ratio"],
+            "purged_20d": payoff["purged_20d"],
+            "purged_40d": payoff["purged_40d"],
+            "vs_inc_20d_n": payoff["vs_inc_20d_n"],
+            "vs_inc_20d_mean": payoff["vs_inc_20d_mean"],
+            "vs_inc_20d_pos": payoff["vs_inc_20d_pos"],
+            "vs_inc_40d_n": payoff["vs_inc_40d_n"],
+            "vs_inc_40d_mean": payoff["vs_inc_40d_mean"],
+            "vs_inc_40d_pos": payoff["vs_inc_40d_pos"],
+            "vs_cluster_20d_n": payoff["vs_cluster_20d_n"],
+            "vs_cluster_20d_mean": payoff["vs_cluster_20d_mean"],
+            "vs_cluster_20d_pos": payoff["vs_cluster_20d_pos"],
+            "vs_cluster_40d_n": payoff["vs_cluster_40d_n"],
+            "vs_cluster_40d_mean": payoff["vs_cluster_40d_mean"],
+            "vs_cluster_40d_pos": payoff["vs_cluster_40d_pos"],
         }
         report.append(row)
 
