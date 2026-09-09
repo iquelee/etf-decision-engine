@@ -1,0 +1,109 @@
+{
+  "engine_id": "gen2-rule-v2.1",
+  "bundle_version": "gen2-rule-v2.1.0",
+  "universe_version": "universe_v1",
+  "benchmark_code": "510300",
+  "based_on": "gen2-rule-v2.0",
+  "v2_bundle_sha256": "1df81e33dfc1271bedca427a33f45b8be9ce0c76409d9a26e7f4e7aab5b2aebd",
+  "state": "FROZEN",
+  "alpha": {
+    "trend": 0.3333333333,
+    "rs": 0.3333333333,
+    "breakout": 0.3333333333
+  },
+  "regime": {
+    "risk_on_ge": 55,
+    "risk_off_le": 45
+  },
+  "selection": {
+    "core_pct": 0.8,
+    "challenger_pct": 0.7,
+    "satellite_pct": 0.6,
+    "top_quantile": 0.2,
+    "promotion_persistence_days": 5,
+    "demotion_persistence_days": 5,
+    "max_core_count": 5,
+    "max_core_per_cluster": 2,
+    "min_replacement_edge": 8
+  },
+  "portfolio": {
+    "max_single_weight": 0.25,
+    "max_cluster_weight": 0.4,
+    "max_tech_weight": 0.65,
+    "tech_clusters": [
+      "tech_hardware",
+      "software_ai"
+    ]
+  },
+  "defense": {
+    "risk_off_exposure_scale": 0.5,
+    "risk_off_hedge_weight": 0.15,
+    "hedge_code": "518880",
+    "vol_target_enabled": true,
+    "vol_target_annualized": 0.17
+  },
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "auto_execution": false
+  },
+  "cluster_leadership": {
+    "enabled": true,
+    "top_cluster_count": 4,
+    "cluster_min_members": 1,
+    "leaders_per_cluster": 2,
+    "breadth_min_pos": 0.5,
+    "provenance": {
+      "top_cluster_count": "validation-retained (M1 草案, 未经 2024 选择)",
+      "cluster_min_members": "validation-retained (M1 草案)",
+      "breadth_min_pos": "validation-retained (M1 草案)",
+      "leaders_per_cluster": "design-fixed"
+    }
+  },
+  "consolidation_gate": {
+    "enabled": false,
+    "min_quality": null,
+    "state": "FROZEN_DISABLED",
+    "note": "Gate OFF: M3 2024 三臂无成本后增量; 评分模块保留但默认不启用"
+  },
+  "turnover_aware_replacement": {
+    "enabled": true,
+    "hard_gates": [
+      "cluster_qualified",
+      "consolidation_pass",
+      "leadership_superior",
+      "edge_gt_cost_hurdle",
+      "no_persistence_protection"
+    ],
+    "min_hold_days": 5,
+    "cost_bps": 10.0,
+    "alpha_to_excess_bps": 5.0,
+    "hold_days_for_breakeven": 20,
+    "cost_buffer_bps": 5.0,
+    "cost_formula": "projected_trade_weight * cost_bps * 2 + cost_buffer_bps (两腿买卖+缓冲)",
+    "weight_delta_rule": "projected_trade_weight (tentative CORE 集经 25/40/65 cap)",
+    "provenance": {
+      "min_hold_days": "design-fixed (= demotion_persistence_days)",
+      "cost_bps": "design-fixed (= ledger cost)",
+      "alpha_to_excess_bps": "design-fixed",
+      "hold_days_for_breakeven": "design-fixed",
+      "cost_buffer_bps": "design-fixed (未做校准实验)"
+    }
+  },
+  "protocol": {
+    "max_forward_horizon": 40,
+    "time_split": {
+      "development_end": "2023-12-31",
+      "validation": "2024",
+      "frozen_start": "2025-01-01",
+      "frozen_end": "2026-09-04"
+    },
+    "report_fields": [
+      "max_forward_horizon",
+      "purge_count",
+      "effective_signal_start",
+      "effective_signal_end"
+    ]
+  },
+  "notes": "GEN-2.1 v2.1.0 FROZEN (2026-09-09, M3 APPROVED)。Cluster Leadership (retained) + Turnover-aware Replacement 5 hard gates (design-fixed) 启用; Consolidation Gate 默认 OFF (M3 2024: Gate ON 无成本后增量)。2025+ 历史段为 contaminated/post-hoc (M3 早期查看全样本), 最终资格由 future Live Shadow 提供。本文件 SHA immutable (GEN2_RULE_V21_LOCK.json)。"
+}

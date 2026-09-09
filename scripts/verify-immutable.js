@@ -10,6 +10,7 @@
  *   - Gen-1 frozen：  ml/manifests/GEN1_IMMUTABLE_LOCK.json
  *   - V3.6.1 决策核心： ml/manifests/V361_IMMUTABLE_LOCK.json
  *   - GEN2 Rule V2：  ml/gen2/manifests/GEN2_RULE_V2_LOCK.json
+ *   - GEN2 Rule V2.1： ml/gen2/manifests/GEN2_RULE_V21_LOCK.json（Freeze Point 2026-09-09）
  *
  * 任意 mismatch → exit 1。升级冻结对象必须显式新 bundle/version/lock，不允许静默改旧。
  *
@@ -84,6 +85,19 @@ const g2Lock = addLock('ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', [
   });
 }
 
+// GEN2 Rule V2.1 bundle（Freeze Point 2026-09-09，M3 APPROVED → Gate-OFF v2.1.0）
+const g21Lock = addLock('ml/gen2/manifests/GEN2_RULE_V21_LOCK.json', [
+  ['bundle_sha256', 'ml/gen2/manifests/GEN2_RULE_V21_BUNDLE.json'],
+]);
+{
+  const bundle = JSON.parse(fs.readFileSync(path.join(REPO, 'ml/gen2/manifests/GEN2_RULE_V21_BUNDLE.json'), 'utf8'));
+  CHECKS.push({
+    name: `bundle_version == lock.bundle_version`,
+    expected: g21Lock.bundle_version,
+    actual: bundle.bundle_version,
+  });
+}
+
 // Root-of-trust（M0 审批修复，2026-09-09）：LOCK 文件自身 SHA 硬锚定在本 verifier 内。
 // 防止「frozen bundle + 其 LOCK 同一 commit 一起改」绕过冻结（lock 内写入新 expected → 旧逻辑仍 PASS）。
 // 校验顺序：① lock 文件 SHA == 本 ROOT_ANCHORS；② lock 内 expected == frozen 文件实际 SHA。
@@ -92,6 +106,7 @@ const ROOT_ANCHORS = [
   { lock: 'ml/manifests/GEN1_IMMUTABLE_LOCK.json', sha256: '138fe886a9f50440f717eaa0739d3144fd5e6418fc8d3d2ad03d1643320501c0' },
   { lock: 'ml/manifests/V361_IMMUTABLE_LOCK.json', sha256: '1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd' },
   { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: '3b419988f75857ac9b35cd45d18d73a59f091650554ecc095bf8be821d2177f9' },
+  { lock: 'ml/gen2/manifests/GEN2_RULE_V21_LOCK.json', sha256: 'ecff201d3b7c2e535fc728626648d45e7eca2d2cada8a51b3e413e40dff2aecc' },
 ];
 for (const a of ROOT_ANCHORS) {
   CHECKS.push({
