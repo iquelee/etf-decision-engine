@@ -64,8 +64,39 @@
     "enabled": true,
     "state": "RESEARCH_DRAFT",
     "min_quality": null,
-    "scoring": "consolidation_quality 0-100：横盘时间分档+区间收敛+缩量+波动压缩+px_ma60>0 前置（草案，M2 定稿）",
-    "params_notes": "M2 设计 + Validation(2024) 敏感度矩阵后定阈值；只作 promotion/replacement Gate，不进 alpha 权重"
+    "m2_decision": "Standalone 20D Market-Excess Gate NOT SUPPORTED (2024 Validation: 所有 min_quality>0 均未优于 0 基线; 局部非严格单调); min_quality 不冻结 (NULL); Consolidation Score CARRY FORWARD to M3 Stateful Validation (审批 2026-09-09: A 采纳 / B 不采纳)",
+    "weights_fixed": "权重固定 _W (days0.25/range0.25/vol_ratio0.2/slope0.15/vol_comp0.15), compute_consolidation_quality 不接受 weights override (无 shadow tuning path); 改权重须走 DRAFT+审批",
+    "m3_pre_registration": {
+      "arms": [
+        {
+          "id": "arm1_gate_off",
+          "min_quality": null,
+          "note": "对照: Gate 不生效"
+        },
+        {
+          "id": "arm2_gate_on_40",
+          "min_quality": 40,
+          "note": "低强度结构档位 (非历史择优)"
+        },
+        {
+          "id": "arm3_gate_on_60",
+          "min_quality": 60,
+          "note": "中强度结构档位 (非历史择优)"
+        }
+      ],
+      "discipline": "若 ON 相对 OFF 未明显降低 turnover / 未改善 Replacement Payoff / 未提升成本后收益, v2.1.0 允许 Consolidation Gate 关闭; 不得为保留理念强行选阈值",
+      "metrics": [
+        "turnover",
+        "promotion_replacement_counts",
+        "avg_hold_days",
+        "replacement_payoff_vs_incumbent",
+        "replacement_payoff_vs_cluster",
+        "transaction_cost",
+        "cost_net_increment_bootstrap_ci"
+      ]
+    },
+    "scoring": "consolidation_quality 0-100: sideway_days 分档(连续半开无空洞) + sideway_range 分档(小数单位 6%=0.06) + volume_ratio_5_20 + volume_compression_slope + volatility_compression; 权重固定 _W; px_ma60>0 硬前置 (M2-r2/r3 定稿, 见 portfolio/consolidation_gate.py)",
+    "params_notes": "M2 冻结结论: min_quality=NULL 不选; M3 预注册三臂 {OFF,>=40,>=60} 状态机联调 (真实 promotion/replacement 事件 + event-OOS + 经济 Gate)"
   },
   "turnover_aware_replacement": {
     "enabled": true,
