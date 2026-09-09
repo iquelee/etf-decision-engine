@@ -118,17 +118,20 @@ def run_permission_oos(features, rankings, labels, cfg: WalkForwardConfig | None
         return _summarize({d: v["rank_ic"] for d, v in ms.items()}, ex, rg)
 
     rows = []
-    # 全 OOS（raw / actionable / promotion-candidate）
+    # 全 OOS（raw / 晋升可用日 / 顶部五分之一+趋势合格日）
     rows.append({"slice": "oos_raw", **{k: v for k, v in _agg(lambda d: True).items() if k != "regime_mix"}})
-    rows.append({"slice": "oos_actionable(perm!=DISABLED)",
+    rows.append({"slice": "oos_promotion_actionable(perm!=DISABLED)",
                  **{k: v for k, v in _agg(lambda d: day_df[d]["perm"].iloc[0] != DISABLED).items() if k != "regime_mix"}})
-    rows.append({"slice": "oos_promotion_candidate_days",
+    # 口径说明：本切片 = alpha 前 20%（core_pct）且 px_ma60>0 的日子，仅验证「晋升候选信号所在日的 IC」。
+    # 它**不是**真实 Promotion Event（真事件须 current_role!=CORE & perm!=DISABLED & above_core_days>=5 &
+    # replacement edge & cluster cap，从 build_v2_roles 的 reason_codes 提取 → 归入 WP9.3A event attribution）。
+    rows.append({"slice": "oos_top_quintile_trend_eligible_days",
                  **{k: v for k, v in _agg(lambda d: d in promo_days).items() if k != "regime_mix"}})
     # regime（raw + actionable）
     for reg in (RISK_ON, RANGE, RISK_OFF):
         rows.append({"slice": f"oos_{reg}",
                      **{k: v for k, v in _agg(lambda d, r=reg: day_df[d]["regime"].iloc[0] == r).items() if k != "regime_mix"}})
-        rows.append({"slice": f"oos_{reg}_actionable",
+        rows.append({"slice": f"oos_{reg}_promotion_actionable",
                      **{k: v for k, v in _agg(lambda d, r=reg: day_df[d]["regime"].iloc[0] == r and day_df[d]["perm"].iloc[0] != DISABLED).items() if k != "regime_mix"}})
     # 逐年（raw）与 2021-2026 每 regime 分布
     for y in sorted(set(day_year.values())):
@@ -160,5 +163,5 @@ if __name__ == "__main__":
     # 关键诊断：2022 × regime
     print("\n## 2022 失败归因（A=RISK_OFF 主导 vs B=全 regime 失效）")
     for _, r in out.iterrows():
-        if r["slice"] in {"oos_2022", "oos_2022_RISK_ON", "oos_2022_RANGE", "oos_2022_RISK_OFF", "oos_RISK_OFF", "oos_RISK_ON", "oos_actionable(perm!=DISABLED)"}:
+        if r["slice"] in {"oos_2022", "oos_2022_RISK_ON", "oos_2022_RANGE", "oos_2022_RISK_OFF", "oos_RISK_OFF", "oos_RISK_ON", "oos_promotion_actionable(perm!=DISABLED)"}:
             print(f"  {r['slice']:<28} n_days={r['n_days']:<5} rank_ic={r['rank_ic']:+.4f}  ic_pos={r['ic_pos']:.3f}  tb={r['tb_spread']:+.5f}  top={r['top_excess']:+.5f}  bot={r['bottom_excess']:+.5f}")
