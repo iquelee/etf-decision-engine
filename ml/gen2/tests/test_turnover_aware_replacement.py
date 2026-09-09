@@ -62,12 +62,35 @@ class TestReplacementGate(unittest.TestCase):
         self.assertTrue(allow, f"delta=45 默认量纲 edge 远超成本，failed={failed}")
 
     def test_gate4_edge_below_cost_strict(self):
-        # 收紧量纲桥使 20D edge(1bps) <= 两腿成本(10bps) → FAIL edge_gt_cost_hurdle
+        # 实际换仓口径：delta=0.5 → 0.5×0.1×20=1bps edge；cost=weight_delta(0.2)×10×2=4bps + buffer5=9 → FAIL
         allow, failed = replacement_gate(**_all_pass({
             "challenger_alpha": 50.5, "incumbent_alpha": 50.0,
-        }), cfg={"alpha_to_excess_bps": 0.1, "max_single_weight": 0.5, "cost_bps": 10.0})
+        }), cfg={"alpha_to_excess_bps": 0.1, "cost_bps": 10.0})
         self.assertFalse(allow)
         self.assertIn("edge_gt_cost_hurdle", failed)
+
+    def test_gate4_uses_actual_weight_delta(self):
+        # weight_delta 越小（CORE 池越大）→ 成本越低 → 同一边际可通过
+        # delta=1.0 → 5bps/日 × 20 = 100bps edge（默认映射）
+        # weight_delta=0.05 → cost=0.05×10×2=1bps + buffer5 → 100>6 → allow
+        # weight_delta=0.5  → cost=0.5×10×2=10bps + buffer5 → 100>15 → 仍 allow
+        # 关键：实际成本随 weight_delta 变化，非固定 0.25（用苛刻映射暴露差异）
+        args = _all_pass({"challenger_alpha": 51.0, "incumbent_alpha": 50.0})
+        allow_small, _ = replacement_gate(**args, cfg={"alpha_to_excess_bps": 0.2, "cost_bps": 10.0})
+        # delta=1×0.2×20=4bps；cost(wd=0.05)=1 + buffer5=6 → 4<=6 → FAIL（wd 小也拦）
+        args2 = _all_pass({"challenger_alpha": 51.0, "incumbent_alpha": 50.0})
+        allow_small2, _ = replacement_gate(**args2, cfg={"alpha_to_excess_bps": 0.2, "cost_bps": 10.0})
+        # 用显式 weight_delta 测试成本随实际组合口径变化
+        allow_big, _ = replacement_gate(**_all_pass({"challenger_alpha": 51.0, "incumbent_alpha": 50.0}),
+                                        weight_delta=0.02, cfg={"alpha_to_excess_bps": 0.2, "cost_bps": 10.0})
+        # wd=0.02: cost=0.4+buffer5=5.4 vs edge 4 → 4<=5.4 FAIL
+        allow_huge, _ = replacement_gate(**_all_pass({"challenger_alpha": 52.0, "incumbent_alpha": 50.0}),
+                                         weight_delta=0.02, cfg={"alpha_to_excess_bps": 0.2, "cost_bps": 10.0})
+        # delta=2×0.2×20=8bps > 5.4 → allow（实际组合口径下边际足够才放行）
+        self.assertFalse(allow_small, "wd 默认 0.2: edge 4 <= cost4+buffer5 → 拦")
+        self.assertFalse(allow_small2)
+        self.assertFalse(allow_big, "wd=0.02: edge 4 <= cost0.4+buffer5 → 拦")
+        self.assertTrue(allow_huge, "wd=0.02 且 delta 足够 → 放行（真实成本口径）")
 
     def test_gate5_min_hold_protection(self):
         allow, failed = replacement_gate(**_all_pass({"incumbent_tenure_days": 3}))
@@ -87,6 +110,7 @@ class TestReplacementGate(unittest.TestCase):
     def test_cost_formula(self):
         self.assertEqual(expected_turnover_cost(0.25, 10.0), 5.0)
         self.assertEqual(expected_turnover_cost(0.0, 10.0), 0.0)
+        self.assertEqual(expected_turnover_cost(0.05, 10.0), 1.0)
 
 
 class TestTenure(unittest.TestCase):

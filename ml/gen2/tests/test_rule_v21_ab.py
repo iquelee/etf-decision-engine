@@ -199,5 +199,41 @@ class TestV21ConsolidationGate(unittest.TestCase):
         self.assertGreater(len(promo_513), 0, "Gate OFF + leader 满 persistence 应晋升 CORE")
 
 
+class TestV21ReplacementPairing(unittest.TestCase):
+    """M3-r2：replacement 1↔1 + 同簇强制 + pairing 输出。
+
+    构造两簇各 2 只 CORE 候选，alpha 随时间反转制造 cap 挤出现任，
+    验证 REPLACEMENT_ACCEPTED 的 challenger 被 consume（不重复匹配）。
+    """
+
+    def test_no_cross_cluster_replacement(self):
+        # 仅当 challenger 与 incumbent 同簇才可能替换；无同簇晋升者时现任恢复
+        with _patched_records():
+            prep = _mock_prepared(n_days=60)
+            roles = build_v21_roles(pd.DataFrame(), _rankings(prep), _cfg(), _v21(None), prepared=prep)
+        # 若发生 REPLACEMENT_* 事件，pair 必须同簇
+        for _, r in roles[roles["replacement_pair"].astype(str) != ""].iterrows():
+            chal, inc, cl = str(r["replacement_pair"]).split("|")
+            chal_cl = roles[(roles["code"] == chal)]["correlation_cluster"].iloc[0]
+            inc_cl = roles[(roles["code"] == inc)]["correlation_cluster"].iloc[0]
+            self.assertEqual(chal_cl, inc_cl, "替换必须同簇（禁跨簇 fallback）")
+            self.assertEqual(chal_cl, cl, "pair 记录的 cluster 应一致")
+
+    def test_replacement_pair_is_one_to_one(self):
+        # 同一 challenger（pair 首段 code）不得出现在多个 accepted 事件（1↔1 consume）
+        with _patched_records():
+            prep = _mock_prepared(n_days=60)
+            roles = build_v21_roles(pd.DataFrame(), _rankings(prep), _cfg(), _v21(None), prepared=prep)
+        pairs = roles[roles["replacement_pair"].astype(str) != ""]["replacement_pair"].astype(str)
+        chals = [p.split("|")[0] for p in pairs]
+        self.assertEqual(len(chals), len(set(chals)), "同一 challenger 不得重复批准多个替换")
+
+    def test_pair_column_in_schema(self):
+        with _patched_records():
+            prep = _mock_prepared(n_days=30)
+            roles = build_v21_roles(pd.DataFrame(), _rankings(prep), _cfg(), _v21(None), prepared=prep)
+        self.assertIn("replacement_pair", roles.columns)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

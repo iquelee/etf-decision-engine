@@ -197,42 +197,61 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
 
         # cluster cap（同 V2；F03：显式 V2.1 alpha 排序）
         day["role_before_cap"] = day["role"]
+        day["replacement_pair"] = ""  # M3-r2：替换 pairing（challenger|incumbent|cluster）供 Payoff 重建
         day["role"] = _cap_core_roles(day, max_core, max_core_per_cluster,
                                       priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
 
         # V21-DELTA-3：Turnover-aware Replacement 5 硬门（替代 V2 F09 的 min_edge>=8）
+        # M3-r2 语义（审批修正）：
+        #   a) 严格 1 challenger ↔ 1 incumbent —— accepted 后立即从 promoted_indices 消费；
+        #   b) 同簇强制：无同簇 challenger → 不执行 replacement（禁跨簇 fallback）；
+        #   c) weight_delta = 1/当日 CORE 池上限（实际组合口径，非固定 0.25）；
+        #   d) pairing 输出（challenger/incumbent/cluster）供 Replacement Payoff 重建。
         prev_s = day["code"].map(lambda c: current_roles.get(c, "RESERVE"))
         cap_demoted = day[(prev_s == "CORE") & (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")]
         promoted_indices = list(day[(prev_s != "CORE") & (day["role"] == "CORE")].index)
+        core_pool_size = max(1, int((day["role"] == "CORE").sum()))  # cap 后仍为 CORE 的数量（近似当日池）
+        weight_delta = 1.0 / float(core_pool_size)
         for dem_idx in cap_demoted.sort_values("alpha_score_v2", ascending=False).index:
-            if not promoted_indices:
-                break
             dem_code = day.loc[dem_idx, "code"]
             dem_alpha = float(day.loc[dem_idx, "alpha_score_v2"])
             dem_cluster = day.loc[dem_idx, "correlation_cluster"]
+            # b) 同簇强制：challenger 必须来自同一簇（簇内 leadership advantage 语义）
             same_cluster = [i for i in promoted_indices if day.loc[i, "correlation_cluster"] == dem_cluster]
+            if not same_cluster:
+                day.loc[dem_idx, "role"] = "CORE"
+                day.loc[dem_idx, "reason_codes"] = str(day.loc[dem_idx, "reason_codes"]) + "|REPLACEMENT_REVOKED_NO_CLUSTER"
+                continue
             replacer_idx = None
-            for i in (same_cluster if same_cluster else promoted_indices):
-                allow, failed = replacement_gate(
+            for i in same_cluster:
+                allow, _ = replacement_gate(
                     challenger_alpha=float(day.loc[i, "alpha_score_v2"]),
                     incumbent_alpha=dem_alpha,
                     challenger_cluster_top=bool(day.loc[i, "cluster_top"]),
                     challenger_quality=None if min_quality is None else float(day.loc[i, "quality"]),
                     min_quality=min_quality,
                     incumbent_tenure_days=int(tenure.get(dem_code, 0)),
+                    weight_delta=weight_delta,
                     cfg=repl_cfg,
                 )
                 if allow:
                     replacer_idx = i
                     break
             if replacer_idx is not None:
+                # a) 1↔1：accepted 后立即 consume 该 challenger，不得再匹配其它 incumbent
+                day.loc[dem_idx, "role"] = "CHALLENGER"
+                day.loc[replacer_idx, "role"] = "CORE"
                 day.loc[dem_idx, "reason_codes"] = str(day.loc[dem_idx, "reason_codes"]) + "|REPLACEMENT_ACCEPTED"
+                day.loc[replacer_idx, "reason_codes"] = str(day.loc[replacer_idx, "reason_codes"]) + "|REPLACEMENT_PROMOTED"
+                # d) pairing 记录（存 challenger 行，供 payoff 重建 challenger−incumbent）
+                pair = f"{day.loc[replacer_idx, 'code']}|{dem_code}|{dem_cluster}"
+                day.loc[replacer_idx, "replacement_pair"] = pair
+                promoted_indices.remove(replacer_idx)
                 continue
-            # 硬门不足 → 恢复现任，退回最弱晋升者（同 V2 F09 语义，判定条件换 V21）
+            # 硬门不足 → 恢复现任，退回最弱同簇晋升者
             day.loc[dem_idx, "role"] = "CORE"
             day.loc[dem_idx, "reason_codes"] = str(day.loc[dem_idx, "reason_codes"]) + "|REPLACEMENT_REVOKED"
-            candidates = same_cluster if same_cluster else promoted_indices
-            weakest_idx = min(candidates, key=lambda i: day.loc[i, "alpha_score_v2"])
+            weakest_idx = min(same_cluster, key=lambda i: day.loc[i, "alpha_score_v2"])
             day.loc[weakest_idx, "role"] = "CHALLENGER"
             day.loc[weakest_idx, "reason_codes"] = str(day.loc[weakest_idx, "reason_codes"]) + "|REPLACEMENT_BLOCKED"
             promoted_indices.remove(weakest_idx)
@@ -260,6 +279,7 @@ def build_v21_roles(features: pd.DataFrame, rankings: pd.DataFrame, config: dict
                 "perm_mode": row.perm_mode,
                 "trend_gate": bool(row.trend_gate),
                 "reason_codes": getattr(row, "reason_codes", ""),
+                "replacement_pair": getattr(row, "replacement_pair", ""),
             })
 
     roles = pd.DataFrame(output)
@@ -351,12 +371,7 @@ def run_v21_arms(features, rankings, config, arms: list[tuple[str, float | None]
         "universe_ew": bench["expanded_universe_equal_weight"],
     }
     # 共享预计算（alpha/quality/cluster flags 与 min_quality 无关，只算一次）
-    _draft = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                                         "ml", "gen2", "manifests", "GEN2_RULE_V21_DRAFT.json"),
-                            encoding="utf-8"))
-    _cl = _draft["cluster_leadership"]
-    _cl_cfg = {k: _cl[k] for k in ("top_cluster_count", "cluster_min_members",
-                                   "leaders_per_cluster", "breadth_min_pos")}
+    _cl_cfg = _load_v21_cfg_from_draft(min_quality=None)["cluster"]
     _prepared = _prepare_v21_inputs(features, rankings, _cl_cfg)
 
     for arm_id, mq in arms:
@@ -382,8 +397,7 @@ def run_v21_arms(features, rankings, config, arms: list[tuple[str, float | None]
 def _load_v21_cfg_from_draft(min_quality: float | None) -> dict:
     """从 GEN2_RULE_V21_DRAFT.json 读 V2.1 参数（单真相源，防 shadow config）。
 
-    min_hold_days 读取 DRAFT turnover_aware_replacement.persistence_protection 的
-    显式字段（若未写则取 DEFAULT_V21_REPLACEMENT 的 min_hold_days=5 兜底）。
+    DRAFT 参数结构支持两种：裸值（兼容旧）或 {value, basis} 包装（M3-r2 起）。
     """
     import json
     import os
@@ -392,13 +406,19 @@ def _load_v21_cfg_from_draft(min_quality: float | None) -> dict:
     d = json.load(open(os.path.abspath(p), encoding="utf-8"))
     cl = d["cluster_leadership"]
     tar = d["turnover_aware_replacement"]
+
+    def _val(x):
+        return x["value"] if isinstance(x, dict) and "value" in x else x
+
+    cl_keys = ("top_cluster_count", "cluster_min_members", "leaders_per_cluster", "breadth_min_pos")
     repl = tar.get("replacement", {}) or {}
-    min_hold = int(repl.get("min_hold_days", DEFAULT_V21_REPLACEMENT["min_hold_days"]))
+    repl_vals = {k: _val(v) for k, v in repl.items()
+                 if k in ("min_hold_days", "cost_bps", "alpha_to_excess_bps",
+                          "hold_days_for_breakeven", "cost_buffer_bps")}
     return {
         "min_quality": min_quality,
-        "cluster": {k: cl[k] for k in ("top_cluster_count", "cluster_min_members",
-                                       "leaders_per_cluster", "breadth_min_pos")},
-        "replacement": {"min_hold_days": min_hold},
+        "cluster": {k: _val(cl[k]) for k in cl_keys if k in cl},
+        "replacement": repl_vals,
     }
 
 

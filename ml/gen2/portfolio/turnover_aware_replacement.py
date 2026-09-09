@@ -6,41 +6,45 @@
 
     gate1 cluster_qualified        challenger 所在簇是当日 top_cluster
     gate2 consolidation_pass       challenger consolidation_quality >= min_quality（Gate OFF 时恒 True）
-    gate3 leadership_superior      challenger 当日 alpha 严格高于 incumbent（同一簇内才可比）
-    gate4 edge_gt_cost_hurdle      (challenger_alpha - incumbent_alpha) 折算的期望收益 > 交易成本
-    gate5 no_persistence_protection incumbent 不在 min-hold 保护期（新任 CORE 在位 < min_hold_days 不可替换）
+    gate3 leadership_superior      challenger 当日 alpha 严格高于 incumbent（同簇内才可比）
+    gate4 edge_gt_cost_hurdle      期望经济边际 > 本次实际换仓成本 + buffer
+    gate5 no_persistence_protection incumbent 不在 min-hold 保护期（在位 < min_hold_days 不可替换）
 
-  Expected Turnover Cost = weight_delta * cost_bps（计算值，非可调权重）——
-  weight_delta 为两标的单只权重上限差（0~max_single_weight），成本以 bps 计。
-  edge 折算：把 alpha 边际按 `alpha_to_excess_bps` 常数映射到期望日超额(bps)，再对比成本。
+  Gate #4 口径（M3-r2 审批修正，无隐藏参数）：
+    - 成本侧：本次换仓实际成本 = weight_delta × cost_bps × 2（两腿买卖）。
+      weight_delta = 1 / 当日 CORE 池上限（调用方按实际组合状态传入，非固定常数）。
+    - 收益侧：edge_bps = alpha_delta × alpha_to_excess_bps（Design-fixed 常数，见 DRAFT
+      `replacement.design_fixed`；alpha 1 分 ≈ 该 bps/日），回本周期 hold_days_for_breakeven。
+    - 判定：edge_bps × hold_days_for_breakeven > 实际成本 + cost_buffer_bps。
+    - 防退化：gate3 用**严格大于**且 gate4 独立用实际成本，二者不会自然合并。
 
-本模块纯函数、零 DB、零 IO。
+本模块纯函数、零 DB、零 IO。所有映射常数默认值仅兜底，运行时须从 DRAFT 显式传入。
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-# 默认硬门常数（草案；Validation 只收敛 min_hold_days 与 cost_buffer，不放开其它自由度）
+# 兜底默认（非真相源）：运行时参数从 DRAFT turnover_aware_replacement.replacement 读取。
 DEFAULT_V21_REPLACEMENT = {
-    "min_hold_days": 5,            # = demotion_persistence_days 初值（DRAFT persistence_protection）
-    "cost_bps": 10.0,              # 单边成本基准（与回测 cost_bps 一致）
-    "alpha_to_excess_bps": 5.0,    # alpha_score 1 分 ≈ 5 bps/日 期望超额（量纲桥，草案常数）
-    "hold_days_for_breakeven": 20,  # 成本回本周期（默认 20D，与 future_20d 口径一致）
-    "max_single_weight": 0.25,     # weight_delta 上界（与 V2 单只权重 cap 对齐）
+    "min_hold_days": 5,             # Design-fixed：= demotion_persistence_days 初值
+    "cost_bps": 10.0,               # Design-fixed：与回测 cost_bps 一致（单边）
+    "alpha_to_excess_bps": 5.0,     # Design-fixed：alpha 1 分 ≈ 5 bps/日 期望超额（量纲桥）
+    "hold_days_for_breakeven": 20,  # Design-fixed：成本回本周期（= future_20d 口径）
+    "cost_buffer_bps": 5.0,         # Design-fixed：成本缓冲（换手冲击/滑点），Validation 校准后冻结
 }
 
 
 def expected_turnover_cost(weight_delta: float, cost_bps: float) -> float:
-    """交易成本期望（bps）：换仓两腿成本 ≈ weight_delta(单腿) × cost_bps × 2(买卖) 的保守上界。
+    """本次换仓交易成本期望（bps）：两腿（卖出 incumbent + 买入 challenger）。
 
-    与 DRAFT 公式一致：weight_delta * cost_bps（计算值，非可调权重）。
+    weight_delta 由调用方按实际组合状态传入（= 1/当日 CORE 池上限），非固定常数。
     """
     return float(weight_delta) * float(cost_bps) * 2.0
 
 
 def alpha_edge_to_bps(alpha_delta: float, alpha_to_excess_bps: float = 5.0) -> float:
-    """把 alpha 边际换算为持有期内期望超额（bps）。"""
+    """把 alpha 边际换算为期望日超额（bps/日）。"""
     return float(alpha_delta) * float(alpha_to_excess_bps)
 
 
@@ -51,6 +55,7 @@ def replacement_gate(
     challenger_quality: float | None,
     min_quality: float | None,
     incumbent_tenure_days: int,
+    weight_delta: float = 0.20,
     cfg: dict | None = None,
 ) -> tuple[bool, list[str]]:
     """5 硬门同时满足才允许替换。返回 (allow, failed_gates)。
@@ -62,7 +67,9 @@ def replacement_gate(
     challenger_quality : 挑战者 consolidation_quality（M2 输出）；缺列传 None。
     min_quality : Gate 门槛；None 表示 Gate OFF（gate2 恒过）。
     incumbent_tenure_days : 现任 CORE 已连续在位交易日数（>=min_hold_days 才可替换）。
-    cfg : 覆盖常数（min_hold_days / cost_bps / alpha_to_excess_bps / hold_days_for_breakeven）。
+    weight_delta : 本次换仓实际权重差（= 1/当日 CORE 池上限；调用方传入，非固定常数）。
+    cfg : 覆盖常数（min_hold_days / cost_bps / alpha_to_excess_bps / hold_days_for_breakeven /
+          cost_buffer_bps）。默认仅兜底；运行时从 DRAFT replacement 段读取后传入。
     """
     c = {**DEFAULT_V21_REPLACEMENT, **(cfg or {})}
     failed: list[str] = []
@@ -80,15 +87,15 @@ def replacement_gate(
     if not (challenger_alpha > incumbent_alpha):
         failed.append("leadership_superior")
 
-    # gate4：edge > cost hurdle（期望超额回本周期内覆盖两腿成本）
-    #   注：仅当挑战者 alpha 不高于现任时 gate3 已失败，gate4 无需再算；
-    #   其余情形按两腿成本上界（max_single_weight × cost_bps × 2）判断。
+    # gate4：edge > actual cost + buffer（本次换仓经济边际是否值本次换仓成本）
+    #   收益侧映射常数来自 DRAFT design_fixed；成本侧 weight_delta 为实际值。
     if "leadership_superior" not in failed:
-        alpha_delta = max(0.0, challenger_alpha - incumbent_alpha)
-        edge_bps_per_day = alpha_edge_to_bps(alpha_delta, c["alpha_to_excess_bps"])
+        alpha_delta = challenger_alpha - incumbent_alpha  # >0（gate3 保证）
+        edge_bps_per_day = alpha_edge_to_bps(alpha_delta, float(c["alpha_to_excess_bps"]))
         edge_over_horizon = edge_bps_per_day * float(c["hold_days_for_breakeven"])
-        cost = expected_turnover_cost(float(c["max_single_weight"]), c["cost_bps"])
-        if edge_over_horizon <= cost:
+        cost = expected_turnover_cost(float(weight_delta), float(c["cost_bps"]))
+        hurdle = cost + float(c.get("cost_buffer_bps", 0.0))
+        if edge_over_horizon <= hurdle:
             failed.append("edge_gt_cost_hurdle")
 
     # gate5：no persistence protection（现任不在 min-hold 保护期）
@@ -110,11 +117,10 @@ def tenure_days_by_code(roles_by_day_core: pd.DataFrame) -> dict[str, int]:
     df = roles_by_day_core.sort_values("trade_date")
     for code, g in df.groupby("code"):
         dates = sorted(pd.to_datetime(g["trade_date"]).dt.date)
-        # 统计最近连续段长度（按交易日 1 步长近似；精确由调用方保证）
         n = 1
         for a, b in zip(dates, dates[1:]):
             delta = (b - a).days
-            if delta <= 4:  # 常规交易日间隔 <=3-4 天视为连续
+            if delta <= 4:
                 n += 1
             else:
                 n = 1
