@@ -53,7 +53,7 @@ bash scripts/deploy.sh --frontend-only # 只部署前端
 
 - 首次部署会解压 node_modules（约 6 分钟），之后 node_modules 已缓存，秒级。
 - 仓库不存 node_modules / config.json / cloudbaserc.json（安全），由 prepare-deploy.py 动态生成。
-
+ 
 **手动部署**：
 
 - 云函数：`tcb fn deploy <fn> --dir dist-functions/<fn> --force -e <envId>`
