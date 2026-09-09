@@ -23,11 +23,10 @@ LOCK = ROOT / "ml" / "manifests" / "GEN1_IMMUTABLE_LOCK.json"
 
 
 def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    """冻结内容 sha256（P0-A 修正 2026-09-09）：先做 \r\n→\n 归一化，
+    使 lock 基准与平台行尾无关（Windows worktree=CRLF / Linux CI=LF）。"""
+    raw = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def main() -> int:

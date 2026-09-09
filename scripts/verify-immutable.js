@@ -21,7 +21,18 @@ const path = require('path');
 const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..');
-const sha256 = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(REPO, f))).digest('hex');
+
+/**
+ * 冻结内容 sha256（P0-A 修正，2026-09-09）：
+ * hash 前做 \r\n→\n 归一化，使「lock 基准」与平台 checkout 行尾无关
+ * （Windows worktree 因 core.autocrlf=true 是 CRLF，Linux CI 是 LF）。
+ * 纯行尾差异不视为改动；真实内容差异仍必被抓。
+ */
+function sha256File(file) {
+  const buf = fs.readFileSync(path.join(REPO, file));
+  const normalized = buf.toString('utf8').replace(/\r\n/g, '\n');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 const GEN1 = 'cloudfunctions/runGen1ShadowEod/';
 const CHECKS = [];
@@ -32,7 +43,7 @@ function addLock(lockRel, entries) {
     CHECKS.push({
       name: `${file} vs ${path.basename(lockRel)}.${lockKey}`,
       expected: lock[lockKey],
-      actual: sha256(file),
+      actual: sha256File(file),
       lockRef: lockRel,
     });
   }

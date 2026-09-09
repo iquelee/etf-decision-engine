@@ -1,8 +1,10 @@
 {
   "model_id": "HVT-A-ET-20260830",
   "model_sha256": "d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712",
-  "freeze_manifest_sha256": "75ecafe891f80d0c31d51426d3ebfe637ec135fa2a29fe91e9572095b4f173d3",
-  "inference_sha256": "9afb99f9771588688077de918fab238b9b1aaa2969cbaa166c9b27bed468fd24",
+  "freeze_manifest_sha256": "30f5fe1c92e2e7be25e3c1b77f5c5dabd4ce3402ff6f4b712c2ae25cc2b0a5f0",
+  "inference_sha256": "8e741912a7883d38f016ed234d091e2799cf56e28c41bfff208b373ec8c5b819",
   "sealed_at": "2026-08-30",
-  "rule": "Gen-2 must not modify these hashes. Challenge via new model_id only."
+  "rule": "Gen-2 must not modify these hashes. Challenge via new model_id only.",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256) so Windows worktree == Linux CI",
+  "updated_at": "2026-09-09"
 }
