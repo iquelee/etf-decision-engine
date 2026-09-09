@@ -1,18 +1,25 @@
-# Gen-2.1 M2 Validation 报告 v2 — Consolidation Quality Gate 敏感度矩阵（2026-09-09）
+# Gen-2.1 M2 Validation 报告 v3 — Consolidation Quality Gate（2026-09-09）
 
-状态：M2 研究交付（Development + Validation 层）。**v2 = 按审批 REQUEST CHANGES 修复 3 个阻断项后重算**：
-①sideway_range 单位修正（build_features 真实口径为小数，6%=0.06）；②sideway_days 分档改连续半开区间消除整数空洞；③sensitivity 从 GEN2_RULE_V21_DRAFT.json 读 cluster 参数（消 shadow config）；另加 ④purge 口径拆分 purged_trade_dates / purged_candidate_rows。
+状态：M2 研究交付（Development + Validation 层）。**v3 = 按第二轮审批修订**：①报告措辞改准（非「单调恶化」，见 §五）；②冻结正式结论三行（§五.2）；③**M3 预注册三臂候选**（§六，写入 DRAFT `m3_pre_registration`）；④移除 `compute_consolidation_quality` 的 `weights` override（消除 shadow tuning path，§一）。v2 的两处确定性 bug 修复（sideway_range 单位 / sideway_days 空洞）仍有效，矩阵数据与 v2 相同。
 
-**修复后结论不变（干净证据）**：Consolidation「高分 → 20D 超额改善」假设在 2024 Validation 段仍**未获支持**（甚至反向），2023 描述段单调改善 → 跨窗口冲突成立。提交审批裁决方向（见 §五）。
+## 〇、冻结结论（M2 正式裁决输出）
+
+```text
+Standalone 20D Market-Excess Gate   = NOT SUPPORTED
+min_quality                          = NULL / NOT SELECTED（不冻结任何门槛）
+Consolidation Score                  = CARRY FORWARD TO M3 STATEFUL VALIDATION
+```
+
+方向（审批裁决）：A 采纳（Stateful validation 进 M3）、B 不采纳（不人为定 min_quality=40-50）。
 
 ## 一、实现（M2 交付物）
 
 - `ml/gen2/portfolio/consolidation_gate.py`：
-  - `compute_consolidation_quality()`：0-100 透明评分（分档映射，权重固定草案：sideway_days 0.25 / sideway_range 0.25 / volume_ratio_5_20 0.20 / volume_compression_slope 0.15 / volatility_compression 0.15）；**硬前置 px_ma60>0，否则 quality=0**。
+  - `compute_consolidation_quality()`：0-100 透明评分（分档映射；**权重固定于透明规则 `_W`，函数不接受 weights 覆盖 —— v3 移除 override，无 shadow tuning path**）；**硬前置 px_ma60>0，否则 quality=0**。
   - `gate_pass(quality, min_quality)`；`--sensitivity`：晋升候选 proxy = top_cluster 的 cluster_leader 且 alpha ≥ 当日 P90；fwd20 = 相对 510300 未来 20D 超额（labels_vs_market）；窗口按协议 purge（MAX_FORWARD_HORIZON=40，label 不触下一层）；**proxy 参数一律读 DRAFT（cluster_leadership 段），无硬编码 shadow config**。
 - 单测 **9 项**通过（含 2 个新增回归：`sideway_range_unit_is_decimal`、`sideway_days_no_integer_gap`）。
 
-## 二、v2 修复明细（对应审批 BLOCK 项）
+## 二、v2 修复明细（对应首轮审批 BLOCK 项，v3 保留）
 
 | # | 阻断项 | 修复 |
 |---|---|---|
@@ -21,7 +28,7 @@
 | 3 | sensitivity 硬编码 cluster 参数（shadow config 回归）| main 从 `GEN2_RULE_V21_DRAFT.json` 的 `cluster_leadership` 段读取 4 参数，缺失即 FATAL 拒绝运行 |
 | 4（建议） | purge 只报交易日数，混口径 | 拆分 `purged_trade_dates`（交易日）与 `purged_candidate_rows`（候选行，窗口内先限定再切分） |
 
-## 三、Validation(2024) 敏感度矩阵 v2（阈值选择用）
+## 三、Validation(2024) 敏感度矩阵（阈值选择用）
 
 口径：`max_forward_horizon=40  purged_trade_dates=40  purged_candidate_rows=114  effective_signal_start=2024-01-02  effective_signal_end=2024-11-05`；窗口内候选 479，有效评价 365。
 
@@ -35,7 +42,7 @@
 | 70 | 105 | 0.288 | −0.0181 | 0.495 | 0.505 |
 | 80 | 68 | 0.186 | −0.0320 | 0.485 | 0.515 |
 
-## 四、Development(2023) 描述对照 v2（非选择依据）
+## 四、Development(2023) 描述对照（非选择依据）
 
 口径：`purged_trade_dates=40  purged_candidate_rows=61  effective 2023-01-03 → 2023-11-03`；窗口内候选 305，有效评价 244。
 
@@ -49,25 +56,37 @@
 | 70 | 29 | 0.119 | +0.0384 | 0.690 | 0.310 |
 | 80 | 6 | 0.025 | +0.0435 | 0.667 | 0.333 |
 
-## 五、修复后核心结论（干净矩阵上仍成立）
+## 五、核心结论（措辞 v3 修正版）
 
-**Gate 方向跨窗口不一致，2024 Validation 段假设未获支持**（v2 数值下同样单调反向）：
-- 2023（描述）：quality ↑ → fwd20 均值单调改善（+0.007 → +0.044，mq 50-60 平台后略回落）→ 符合「横盘缩量=高质量晋升窗口」。
-- 2024（选择段）：quality ↑ → fwd20 单调恶化（0 门槛 −0.0068 → 80 门槛 −0.0320）；该段高分 leader 普遍 20D 跑输市场 —— consolidation 高分（横盘久）在 2024 风格下更像「涨后滞涨→回调」。
+### 五.1 准确描述（非「单调恶化」）
 
-> 注：v1 矩阵（被 bug 污染）与 v2（修复后）的方向结论一致 —— 说明两个确定性 bug 改变 quality 分布与通过集合，但**未制造**跨窗口冲突。当前冲突由数据本身呈现。
+2024 Validation（选择段）上：**所有 `min_quality > 0` 的 fwd20 均值均未优于 `min_quality=0` 的基线（−0.0068）** —— 整体不支持「quality 越高 → 未来 20D 跑赢市场越多」，但**局部关系并非严格单调**（40→60 段有起伏：−0.0196 → −0.0186 → −0.0156，60 是 >0 门槛中最高点，仍低于 0 基线）。2023（描述段）方向相反（quality↑ → fwd20 改善，+0.007 → +0.044），进一步说明该用法**跨窗口不稳定**。
 
-**协议三层切分的意义兑现**：若只看 2023 调 min_quality=60-70，2024 会系统性受损。不能据此硬选阈值，也不能悄悄换更"顺眼"的 metric（违反研究纪律）。
+### 五.2 冻结结论（正式）
 
-## 六、请审批裁决（方向决策，非我单方可定）
+```text
+Standalone 20D Market-Excess Gate   = NOT SUPPORTED（2024 Validation 拒绝「高分独立预测市场超额」用法）
+min_quality                          = NULL / NOT SELECTED
+Consolidation Score                  = CARRY FORWARD TO M3 STATEFUL VALIDATION
+```
 
-A. **换 Gate 定位**：Consolidation 不预测「未来 20D 超额」，而是「候选是否值得现在占用 promotion/replacement 名额」的少换/质量门 → 评估 metric 改为「通过者 20D 相对未通过者/簇内非候选的增量」或直接进 M3 状态机用真实 PROMOTION 事件做 event-OOS（M4 口径），M2 不单独定阈值。
-B. **保留 Gate 但降级为防御**：min_quality 取保守低值（如 40-50），主要拦「完全不整理即追」的极端情形，把经济判断交 M3/M5（成本效率目标）。
-C. **调整评分方向再评**：对 Consolidation 语义做修正（如只奖励「已充分整理后重启」而非「长时间横盘」）→ 属设计变更，重走 Validation。
-D. **M2 冻结 min_quality=60（基于 2023 的 Development/描述窗口）**：不推荐——违反三层协议。
+**M2 未证明 Consolidation 无价值** —— 它只证明：把高 `consolidation_quality` 当独立择时器（预测未来 20D 跑赢 510300）在 2024 Validation 不成立。Consolidation 作为「少换/换得值/持得住」质量门的价值，须在 M3 状态机内用真实 promotion/replacement 事件验证。
 
-**推荐 A + B 组合**：M2 阶段不单独给短期超额下结论；Gate 参数进入 M3 状态机联调（真实 promotion/replacement 事件），用 M4 event-OOS 与 M5 经济 Gate 判定价值——与 V2.1「成本效率」目标一致（Consolidation 的意义在持得住/换得值，不在 20D 择时）。
+## 六、M3 预注册（写入 DRAFT `consolidation_gate.m3_pre_registration`）
+
+在跑 M3 结果前预注册三臂候选（**低/中强度结构档位，非历史择优**）：
+
+```text
+Arm 1: Gate OFF（min_quality 不生效，仅作对照）
+Arm 2: Gate ON,  quality >= 40
+Arm 3: Gate ON,  quality >= 60
+```
+
+**判定纪律（预注册）**：若 ON 相对 OFF 未明显降低换手 / 未改善 Replacement Payoff / 未提升成本后收益，则 **v2.1.0 允许 Consolidation Gate 关闭** —— 不得为保留「横盘理念」强行选阈值。
+
+M3 对比指标：Turnover / Promotion+Replacement 次数 / Avg Hold Days / Replacement Payoff（vs incumbent、vs cluster）/ 交易成本 / 成本后净增量（bootstrap CI）。
 
 ## 七、口径记录（M2 报告强制字段）
 
-两窗口均记录 `max_forward_horizon / purged_trade_dates / purged_candidate_rows / effective_signal_start / effective_signal_end`（见上）。DRAFT `consolidation_gate.min_quality` 保持 null 待裁决。v1 被污染矩阵已废弃（本文件 §三/§四 为唯一有效版本）。
+两窗口均记录 `max_forward_horizon / purged_trade_dates / purged_candidate_rows / effective_signal_start / effective_signal_end`（见 §三/§四）。v1 被污染矩阵已废弃；v2/v3 矩阵数据相同（v3 仅措辞与治理修订）。
+

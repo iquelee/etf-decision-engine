@@ -37,7 +37,8 @@ _TIERS = {
     "volume_compression_slope": [(None, -0.05, 100.0), (-0.05, 0.0, 80.0), (0.0, 0.10, 50.0), (0.10, None, 20.0)],
     "volatility_compression": [(None, -0.10, 100.0), (-0.10, 0.0, 80.0), (0.0, 0.20, 50.0), (0.20, None, 20.0)],
 }
-# 组件权重（固定草案，合计 1.0）
+# 组件权重（固定于透明规则，非参数：M2 审批 2026-09-09 移除 weights override —— 权重不是搜索/调参对象，
+# 防 shadow tuning path。真要改权重须另走正式 DRAFT 字段 + 审批，不得经函数参数覆盖。）合计 1.0
 _W = {"sideway_days": 0.25, "sideway_range": 0.25, "volume_ratio_5_20": 0.20,
       "volume_compression_slope": 0.15, "volatility_compression": 0.15}
 
@@ -51,9 +52,11 @@ def _tier_score(value, tiers) -> float:
     return 0.0
 
 
-def compute_consolidation_quality(panel: pd.DataFrame, weights: dict | None = None) -> pd.DataFrame:
-    """per (trade_date, code) consolidation_quality 0-100；px_ma60<=0 硬前置 → 0。"""
-    w = {**_W, **(weights or {})}
+def compute_consolidation_quality(panel: pd.DataFrame) -> pd.DataFrame:
+    """per (trade_date, code) consolidation_quality 0-100；px_ma60<=0 硬前置 → 0。
+
+    权重固定 _W（透明规则），不接受外部覆盖 —— 无 shadow tuning path。
+    """
     cols = ["trade_date", "code", "px_ma60"] + list(_W.keys())
     df = panel[[c for c in cols if c in panel.columns]].copy()
     df["code"] = df["code"].astype(str).str.zfill(6)
@@ -61,7 +64,7 @@ def compute_consolidation_quality(panel: pd.DataFrame, weights: dict | None = No
     out["quality"] = 0.0
     for feat in _W:
         s = df[feat].apply(lambda v: _tier_score(v, _TIERS[feat]))
-        out["quality"] = out["quality"] + w[feat] * s
+        out["quality"] = out["quality"] + _W[feat] * s
     # 硬前置：px_ma60 缺失或 <=0 → 0（趋势未破坏是晋升窗口的前置条件）
     trend_ok = df["px_ma60"].notna() & (df["px_ma60"] > 0)
     out.loc[~trend_ok, "quality"] = 0.0
