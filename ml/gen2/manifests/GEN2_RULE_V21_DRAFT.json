@@ -52,10 +52,13 @@
   "cluster_leadership": {
     "enabled": true,
     "state": "RESEARCH_DRAFT",
-    "top_cluster_count": null,
-    "cluster_min_members": null,
-    "scoring": "cluster_score = 簇内 alpha 前50% 等权 mean(trend+rs+breakout) + 簇 px_ma60 广度（草案，M1 定稿）",
-    "params_notes": "M1 设计填充（Development 层，signal ≤2023-12-31）；Validation(2024) 校验；Freeze Point 冻结"
+    "top_cluster_count": 4,
+    "cluster_min_members": 1,
+    "leaders_per_cluster": 2,
+    "breadth_min_pos": 0.5,
+    "scoring": "cluster_score = 簇内 alpha 前50% 等权 mean(alpha_score_v2)；top_cluster 需 breadth_pass(px_ma60>0 占比>=breadth_min_pos) 显式 Gate；broad_beta 对照簇不参与 rank/leader（M1-r2 定稿，见 portfolio/cluster_leadership.py）",
+    "m1_audit_note": "Development 段(signal≤2023-12-31)：7 业务簇入池（financial/consumer/defensive_dividend 2024 才入研究池，PIT 自然进入）；top_cluster 平均每日数与 tech_hardware leader 切换率以 r2 audit 输出为准；breadth/leaders/broad_beta 语义已按审批对齐",
+    "params_notes": "草案 top_cluster_count=4 / cluster_min_members=1 / leaders_per_cluster=2 / breadth_min_pos=0.5；Validation(2024) 校准；Freeze Point 冻结"
   },
   "consolidation_gate": {
     "enabled": true,
