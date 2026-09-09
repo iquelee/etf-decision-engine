@@ -1,0 +1,97 @@
+{
+  "engine_id": "gen2-rule-v2.1",
+  "bundle_version": "gen2-rule-v2.1.0-draft",
+  "state": "RESEARCH_DRAFT",
+  "frozen": false,
+  "universe_version": "universe_v1",
+  "benchmark_code": "510300",
+  "based_on": "gen2-rule-v2.0",
+  "v2_bundle_sha256": "1df81e33dfc1271bedca427a33f45b8be9ce0c76409d9a26e7f4e7aab5b2aebd",
+  "note": "M0 建立(2026-09-09, protocol v0.4 APPROVED)。V2 字段为基线副本；cluster_leadership/consolidation_gate/turnover_aware_replacement 为 V2.1 骨架。M1-M3 只改本 DRAFT(Development/Validation 层)；Freeze Point(M3 末)才生成 FROZEN BUNDLE+LOCK。本文件不入 immutable lock，CI 不校验。",
+  "alpha": {
+    "trend": 0.3333333333,
+    "rs": 0.3333333333,
+    "breakout": 0.3333333333
+  },
+  "regime": {
+    "risk_on_ge": 55,
+    "risk_off_le": 45
+  },
+  "selection": {
+    "core_pct": 0.8,
+    "challenger_pct": 0.7,
+    "satellite_pct": 0.6,
+    "top_quantile": 0.2,
+    "promotion_persistence_days": 5,
+    "demotion_persistence_days": 5,
+    "max_core_count": 5,
+    "max_core_per_cluster": 2,
+    "min_replacement_edge": 8
+  },
+  "portfolio": {
+    "max_single_weight": 0.25,
+    "max_cluster_weight": 0.4,
+    "max_tech_weight": 0.65,
+    "tech_clusters": [
+      "tech_hardware",
+      "software_ai"
+    ]
+  },
+  "defense": {
+    "risk_off_exposure_scale": 0.5,
+    "risk_off_hedge_weight": 0.15,
+    "hedge_code": "518880",
+    "vol_target_enabled": true,
+    "vol_target_annualized": 0.17
+  },
+  "production": {
+    "write_decision_result": false,
+    "write_portfolio_position": false,
+    "auto_execution": false
+  },
+  "cluster_leadership": {
+    "enabled": true,
+    "state": "RESEARCH_DRAFT",
+    "top_cluster_count": null,
+    "cluster_min_members": null,
+    "scoring": "cluster_score = 簇内 alpha 前50% 等权 mean(trend+rs+breakout) + 簇 px_ma60 广度（草案，M1 定稿）",
+    "params_notes": "M1 设计填充（Development 层，signal ≤2023-12-31）；Validation(2024) 校验；Freeze Point 冻结"
+  },
+  "consolidation_gate": {
+    "enabled": true,
+    "state": "RESEARCH_DRAFT",
+    "min_quality": null,
+    "scoring": "consolidation_quality 0-100：横盘时间分档+区间收敛+缩量+波动压缩+px_ma60>0 前置（草案，M2 定稿）",
+    "params_notes": "M2 设计 + Validation(2024) 敏感度矩阵后定阈值；只作 promotion/replacement Gate，不进 alpha 权重"
+  },
+  "turnover_aware_replacement": {
+    "enabled": true,
+    "state": "RESEARCH_DRAFT",
+    "hard_gates": [
+      "cluster_qualified",
+      "consolidation_pass",
+      "leadership_superior",
+      "edge_gt_cost_hurdle",
+      "no_persistence_protection"
+    ],
+    "expected_turnover_cost_formula": "weight_delta * cost_bps（计算值，非可调权重）",
+    "persistence_protection": "min-hold 条件：新任 CORE 在位满 N 交易日才可被替换（N 初值=demotion_persistence_days，Validation 校验）",
+    "probation_days": 20,
+    "params_notes": "M3 硬门化定稿；{min-hold 天数, cost 常数缓冲} 于 Validation 收敛后 Freeze"
+  },
+  "protocol": {
+    "max_forward_horizon": 40,
+    "time_split": {
+      "development_end": "2023-12-31",
+      "validation": "2024",
+      "frozen_start": "2025-01-01",
+      "frozen_end": "2026-09-04"
+    },
+    "report_fields": [
+      "max_forward_horizon",
+      "purge_count",
+      "effective_signal_start",
+      "effective_signal_end"
+    ]
+  }
+}
