@@ -7,7 +7,7 @@
   "benchmark_code": "510300",
   "based_on": "gen2-rule-v2.0",
   "v2_bundle_sha256": "1df81e33dfc1271bedca427a33f45b8be9ce0c76409d9a26e7f4e7aab5b2aebd",
-  "note": "M0 建立(2026-09-09, protocol v0.4 APPROVED)。V2 字段为基线副本；cluster_leadership/consolidation_gate/turnover_aware_replacement 为 V2.1 骨架。M1-M3 只改本 DRAFT(Development/Validation 层)；Freeze Point(M3 末)才生成 FROZEN BUNDLE+LOCK。本文件不入 immutable lock，CI 不校验。",
+  "note": "M0 建立(2026-09-09, protocol v0.4 APPROVED)。alpha/regime/selection/portfolio/defense/production 为 V2 运行参数字段基线副本（V2 notes 系元数据，不随迁，本文件自持 note）。cluster_leadership/consolidation_gate/turnover_aware_replacement 为 V2.1 骨架。M1-M3 只改本 DRAFT(Development/Validation 层)；Freeze Point(M3 末)才生成 FROZEN BUNDLE+LOCK。本文件不入 immutable lock，CI 不校验。",
   "alpha": {
     "trend": 0.3333333333,
     "rs": 0.3333333333,
