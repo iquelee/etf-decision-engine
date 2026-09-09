@@ -41,9 +41,9 @@
 | gate_60 | 12 | 0 | 0 | 0 | 0 | 0 | — | — | 0 | — | — | — |
 
 **修复后读数（pair_signal 与 accepted 精确对齐）**：
-- **vs incumbent 为负**：gate_off 替换 20D −1.81%（pos 27%）、40D −2.62% → 被换现任更强。
-- **vs cluster 无优势**：gate_off 20D **+0.82%**（challenger 略强于簇平均）但 40D 回落 −0.18% → 换仓带来的相对簇增量小且不持久，被两腿成本（cost10）吞噬 → **净值为负**。
-- 机制定性：替换门选出的 challenger 仅"比差的现任略好"，相对簇等权无持续优势——**换仓本身不创造价值**（与 WP9.3A 全池 rotation cost 结论一致）。
+- **vs incumbent 为负**：gate_off 替换 20D −1.81%（pos 27%）、40D −2.62% → **被换掉的 incumbent 后 20/40D 跑赢 challenger**。
+- **vs cluster 为正但微弱且不持久**：gate_off 20D **+0.82%**、40D −0.18% → challenger 仅略强于 cluster 等权，且到 40D 该优势基本消失。
+- **机制定性（r3 修正）**：由上述两个事实可推出 **incumbent 显著强于 cluster 平均**（incumbent − cluster = (−incumbent 差距的镜像) ≈ (+1.81% + 0.82%) = +2.6%+）。即：**replacement 门把"比簇平均强得多的现任"换成了"只略强于簇平均的 challenger"——劣质换仓，强者被换走**。challenger 相对 incumbent 与相对 cluster 的双重读数共同证明替换本身不创造价值（与 WP9.3A 全池 rotation cost 结论一致）。
 
 ## 四、Gate 判定（预注册纪律）
 
