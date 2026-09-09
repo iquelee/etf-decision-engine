@@ -1,7 +1,7 @@
-# Gen-2.1 立项方案 v0.3 — Hierarchical Cluster Leadership + Consolidation Quality Gate
+# Gen-2.1 立项方案 v0.4 — Hierarchical Cluster Leadership + Consolidation Quality Gate
 
-日期：2026-09-09。状态：**PR #5 第二轮审批 = 剩 1 阻断项（时间非重叠边界），本版补齐，待第三轮审批。审批通过前不写任何策略代码。**
-版本历史：v0.1（首发）→ v0.2（协议锁严：三层协议 / M0-DRAFT / Replacement 硬门 / Gate 量化）→ v0.3（**三层协议补时间非重叠边界 + 2 条 PIT/版本纪律**）。
+日期：2026-09-09。状态：**PR #5 第三轮审批 = 剩 1 阻断项（Forward-label purge/embargo），本版补齐，待第四轮审批。审批通过前不写任何策略代码。**
+版本历史：v0.1（首发）→ v0.2（三层协议 / M0-DRAFT / Replacement 硬门 / Gate 量化）→ v0.3（时间非重叠边界 + PIT/版本纪律）→ v0.4（**Forward-label Purge/Embargo 硬规则 + 报告口径字段**）。
 
 ## 0. 为什么是 Gen-2.1（立项依据，不变）
 
@@ -57,9 +57,32 @@ Freeze Point                       M3 结束（生成 v2.1.0 BUNDLE+LOCK）
 Frozen Historical Evaluation      2025-01-01 ≤ signal 日 ≤ 2026-09-04
 ```
 
-- **选择与评价永不共享同一批 signal 日**：阈值、top_cluster_count、硬门常数、probation/min-hold 等一切选择只消费 Validation 段（2024）或其之前；Frozen 段（2025 起）只用于对冻结 v2.1.0 的评价，禁止任何「看到 Frozen 结果再回头改 DRAFT」。
-- 前瞻收益（未来 20/40D）允许自然跨段（如 2024-12 信号的 label 落入 2025-01），但**样本归属以 signal 日为准**，不构成跨段复用。
-- 事件/经济指标若因窗口尾部缺 label（如 2026-07 后事件缺 40D 前瞻），按数据可得性 dropna 处理并在报告标注，不得外推补数。
+- **选择与评价永不共享同一批 signal 日，且任何用于调参的 realized return 都不得来自后一层**：阈值、top_cluster_count、硬门常数、probation/min-hold 等一切选择只消费 Validation 段（2024）或其之前；Frozen 段（2025 起）只用于对冻结 v2.1.0 的评价，禁止任何「看到 Frozen 结果再回头改 DRAFT」。
+
+#### 2.1.1 Forward-label Purge / Embargo（硬规则，第三轮审批补充）
+
+**常量：`MAX_FORWARD_HORIZON = 40 trading days`**（label 最长前瞻；后续任何修改须在报告中说明并全链重算 purge）。
+
+- **任何前一层的 signal，只要其 forward label（未来 20/40D realized return）触及后一层的交易日历，即从前一层剔除（purge）**。关键不变量：**前一层用于调参的任何 realized return，都不能来自后一层。**
+- 因此各层有效窗口（effective_signal_start/end）由 purge 决定，而非仅自然日：
+
+```text
+Development   signal ≤ 2023-12-31；其 label 跨入 2024 的 signal → purge（天然 end ≈ 2023-10 中，由数据定）
+Validation    2024 全年；其 label 跨入 2025 的 signal → purge（天然 end ≈ 2024-10 中，由数据定）
+Freeze Point  M3 末（生成 v2.1.0 BUNDLE+LOCK）
+Frozen Eval   signal ≥ 2025-01-01；label 尾部超出数据池末（2026-09-04）的 signal 不进入需 label 的指标
+```
+
+- **所有 M2/M3（Validation 层）与 M4/M5（Frozen 层）报告必须额外记录以下 4 个口径字段**，防边界漂移：
+
+```text
+max_forward_horizon      = 40（trading days）
+purge_count              = 本层被剔除的 signal 数（label 触及下一层/池末）
+effective_signal_start   = purge 后实际首日
+effective_signal_end     = purge 后实际末日
+```
+
+- 事件/经济指标中因窗口尾部缺 label（如 2026-07 后事件缺 40D 前瞻）的 sample 一律 dropna 并计入 purge_count，不得外推补数。
 
 ### 2.2 PIT 与版本纪律（防倒灌）
 
