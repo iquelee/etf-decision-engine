@@ -96,7 +96,13 @@
       ]
     },
     "scoring": "consolidation_quality 0-100: sideway_days 分档(连续半开无空洞) + sideway_range 分档(小数单位 6%=0.06) + volume_ratio_5_20 + volume_compression_slope + volatility_compression; 权重固定 _W; px_ma60>0 硬前置 (M2-r2/r3 定稿, 见 portfolio/consolidation_gate.py)",
-    "params_notes": "M2 冻结结论: min_quality=NULL 不选; M3 预注册三臂 {OFF,>=40,>=60} 状态机联调 (真实 promotion/replacement 事件 + event-OOS + 经济 Gate)"
+    "params_notes": "M2 冻结结论: min_quality=NULL 不选; M3 预注册三臂 {OFF,>=40,>=60} 状态机联调 (真实 promotion/replacement 事件 + event-OOS + 经济 Gate)",
+    "m3_result": {
+      "validation_window": "2024 (stateful, 全程推进+窗口统计)",
+      "finding": "三臂 (OFF/40/60) 2024 段成本后均跑输 Main5 PIT (+30.5%): gate_off -0.6% / gate_40 -6.6% / gate_60 -1.3% (cost 10)。Turnover 随门槛下降 (17.5→14.0→7.8)，MDD 改善 (-12.3%→-11.5%→-4.4%)，但成本后净收益未转正。Consolidation Gate 在 2024 Validation 未把「少换」转化为「换得值」——gate_60 完全禁替换 (replacement_accepted=0) 但组合仍无正增量。",
+      "gate_decision": "按 M3 预注册纪律: Gate ON 未提升成本后收益 → v2.1.0 允许 Consolidation Gate 关闭 (Gate OFF 亦为 -0.6% vs Main5 无增量)。Consolidation Score 不作为 v2.1.0 默认启用项; 转 M4 event-OOS 复核或 v2.1.1 设计变更前不冻结 min_quality。",
+      "m3_date": "2026-09-09"
+    }
   },
   "turnover_aware_replacement": {
     "enabled": true,
@@ -111,7 +117,13 @@
     "expected_turnover_cost_formula": "weight_delta * cost_bps（计算值，非可调权重）",
     "persistence_protection": "min-hold 条件：新任 CORE 在位满 N 交易日才可被替换（N 初值=demotion_persistence_days，Validation 校验）",
     "probation_days": 20,
-    "params_notes": "M3 硬门化定稿；{min-hold 天数, cost 常数缓冲} 于 Validation 收敛后 Freeze"
+    "params_notes": "M3 硬门化定稿；{min-hold 天数, cost 常数缓冲} 于 Validation 收敛后 Freeze",
+    "replacement": {
+      "min_hold_days": 5,
+      "cost_bps": 10.0,
+      "max_single_weight": 0.25,
+      "note": "min_hold 初值=demotion_persistence_days=5; Validation 收敛后 Freeze"
+    }
   },
   "protocol": {
     "max_forward_horizon": 40,
