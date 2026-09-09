@@ -1,8 +1,8 @@
 {
   "engine_id": "gen2-rule-v2.1",
   "bundle_version": "gen2-rule-v2.1.0-draft",
-  "state": "RESEARCH_DRAFT",
-  "frozen": false,
+  "state": "SUPERSEDED_BY_V210_FROZEN",
+  "frozen": true,
   "universe_version": "universe_v1",
   "benchmark_code": "510300",
   "based_on": "gen2-rule-v2.0",
@@ -214,7 +214,9 @@
     ]
   },
   "freeze_point_status": {
-    "status": "M3-r3 待审批 (B' 需按 contaminated 语义修正后批准)",
-    "note": "M3 早期跑过并查看全样本(含 2025+)结果于 Freeze 前 → 2025+ 段已 contaminated, 不再是 untouched Frozen 段。若批准 Freeze Gate-OFF v2.1.0, 其后 M4/M5 在 2025+ 的结果降级为 contaminated/post-hoc historical diagnostics, 不得宣称 Frozen Evaluation; 真正资格由未来 Live Shadow 提供。恢复 untouched 评价地位须单独修改研究协议并经审批。"
+    "status": "FROZEN (2026-09-09, M3 APPROVED)",
+    "bundle": "GEN2_RULE_V21_BUNDLE.json (gen2-rule-v2.1.0, state=FROZEN)",
+    "lock": "GEN2_RULE_V21_LOCK.json (sha eb53441e...)",
+    "note": "本 DRAFT 归档为历史研究记录; 运行时真相源 = FROZEN BUNDLE (SHA immutable, verify-immutable 14/14 含 V21 root anchor)。v2.1.0 参数不再允许修改; 改 replacement/cluster/Gate 逻辑须起新 bundle_version。"
   }
 }

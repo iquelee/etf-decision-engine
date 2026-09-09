@@ -15,7 +15,7 @@ node scripts/test-all.js --stage A   # 只跑某阶段
 |---|---|---|
 | A | Node 单元测试 | `tests/*.test.js`（13 文件） |
 | B | Gen-2 Python 单测 | `PYTHONPATH=ml python -m unittest discover ml/gen2/tests`（30 项） |
-| C | **Immutable 真 SHA 锁**（P0-A） | `scripts/verify-immutable.js`：实际文件 sha256 == lock expected（Gen-1 frozen×3+model_id / V3.6.1 decision×2 / GEN2 bundle×2，共 8 项） |
+| C | **Immutable 真 SHA 锁**（P0-A） | `scripts/verify-immutable.js`：实际文件 sha256 == lock expected（Gen-1 frozen×3+model_id / V3.6.1 decision×2 / GEN2 Rule V2 bundle×2 / GEN2 Rule V2.1 bundle×2 + 4 root-of-trust，共 14 项） |
 | D | Cross-language Parity | fixtures/gen2 30 只×12 日，Python↔Node 逐字段比对（360 行） |
 | E | Secret scan | 全文扫描 sk-/FRED/DEEPSEEK/OPENDART 密钥模式 |
 | F | **Build Common Parity**（P0-B） | `npm run build`：src/common → 11 云函数 dist + 同名文件跨函数 SHA 一致 |
@@ -31,6 +31,7 @@ v2 改为实际文件 SHA256 vs lock 文件 expected：
 | `ml/manifests/GEN1_IMMUTABLE_LOCK.json` | frozen-model/manifest/inference + model_id | 新 model_id 挑战，不得改旧 |
 | `ml/manifests/V361_IMMUTABLE_LOCK.json`（新） | decision-v3.js / decision.js | 升版 V3.6.2+，不得静默改旧 |
 | `ml/gen2/manifests/GEN2_RULE_V2_LOCK.json`（新） | GEN2_RULE_V2_BUNDLE.json + bundle_version | 新 bundle/version/lock（Rule V2.1 另立） |
+| `ml/gen2/manifests/GEN2_RULE_V21_LOCK.json`（Freeze Point 2026-09-09） | GEN2_RULE_V21_BUNDLE.json（gen2-rule-v2.1.0, Gate-OFF）+ bundle_version | v2.1.0 冻结；改逻辑须起新 bundle_version |
 
 负向测试已验证：篡改 decision.js 任一字符 → Stage C FAIL（7/8），还原即绿。
 
@@ -66,4 +67,4 @@ matrix:
 
 ## 当前状态
 
-`npm test` 18/18 全绿（A 13/13、B 30 项、C 8 项锁、D 360 行、E、F build parity）。已知缺口（记入 parity-contract.md）：reason_codes 文案两端差异不比对；null liquidity 传播差异（有效 ETF 无 null）。
+`npm test` 18/18 全绿（A 13/13、B 单测自动发现、C 14 项锁含 V2.1 root-of-trust、D 360 行、E、F build parity）。已知缺口（记入 parity-contract.md）：reason_codes 文案两端差异不比对；null liquidity 传播差异（有效 ETF 无 null）。
