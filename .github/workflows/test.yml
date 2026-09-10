@@ -34,10 +34,11 @@ jobs:
       # 门禁（P0-B：npm test 现已含 Stage F = build-cloudfunctions.js 的 Build Common Parity）：
       #   Stage A  Node 单元测试
       #   Stage B  Python 单元测试
-      #   Stage C  Immutable 真 SHA 锁（Gen-1 frozen / V3.6.1 / GEN2 bundle，P0-A 替代 git-diff 假锁）
-      #   Stage D  Cross-language Parity
+      #   Stage C  Immutable 真 SHA 锁 + Gen-1 Feature Pipeline Lock（P0-A / G1-B）
+      #   Stage D  Cross-language Parity（Gen-2）
       #   Stage E  Secret scan
       #   Stage F  Build Common Parity（src/common → 11 云函数 + SHA 校验）
+      #   Stage G  Gen-1 Production Gates G1-A~H（Frozen/Pipeline/Parity/Permission/Domain/Circuit/Execution/No-op）
       - name: Run full test gates (npm test)
         env:
           TCB_PYTHON: python
@@ -46,3 +47,7 @@ jobs:
       # Gate 6（显式，与 Stage C 同源）：Immutable 真 SHA 锁，任一 frozen 对象被改 → FAIL
       - name: Gate 6 — Immutable SHA (Gen-1 / V3.6.1 / GEN2 bundle)
         run: node scripts/verify-immutable.js
+
+      # WP-G1 显式命名门禁：G1-A ~ G1-H（Frozen / Pipeline / Golden Parity / Permission / Domain / Circuit / Execution / No-op）
+      - name: Gate G1-A~H — Gen-1 Production Gates
+        run: node scripts/gen1-production-gates.js

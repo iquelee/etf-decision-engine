@@ -124,10 +124,20 @@ function stageF() {
   report('F', 'build-cloudfunctions（11 函数 common SHA parity）', ok, ok ? undefined : tail);
 }
 
+/* ---------- Stage G: Gen-1 Production Gates（WP-G1 / G1-11） ---------- */
+function stageG() {
+  console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-H）==');
+  const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'gen1-production-gates.js')], { cwd: REPO, encoding: 'utf8' });
+  const ok = r.status === 0;
+  const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
+  lines.forEach((l) => console.log('  ' + l));
+  report('G', 'Gen-1 Production Gates G1-A~H（Frozen/Pipeline/Parity/Permission/Domain/Circuit/Execution/No-op）', ok);
+}
+
 /* ---------- 主流程 ---------- */
 const only = process.argv.find((a) => a.startsWith('--stage='));
-const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE, F: stageF };
-const order = ['A', 'B', 'C', 'D', 'E', 'F'];
+const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE, F: stageF, G: stageG };
+const order = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 for (const s of order) {
   if (only && only !== `--stage=${s}`) continue;
