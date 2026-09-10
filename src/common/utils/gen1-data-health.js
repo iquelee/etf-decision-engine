@@ -20,6 +20,8 @@
  */
 'use strict';
 
+const { GEN1_BENCHMARK_CODE } = require('../constants');
+
 const STATUS = Object.freeze({ DATA_OK: 'DATA_OK', DATA_DEGRADED: 'DATA_DEGRADED', DATA_BLOCKED: 'DATA_BLOCKED' });
 const REASON = Object.freeze({
   STATISTICAL_MISSING: 'STATISTICAL_MISSING',
@@ -86,7 +88,7 @@ function evaluateDataHealth(input) {
   const aligned = !!(benchDate && mainDate && benchDate === mainDate);
   if (!benchDate) {
     return result(STATUS.DATA_BLOCKED, REASON.BENCHMARK_MISSING,
-      '基准 510300 缺失，rs_20d 无法计算', { benchmark_aligned: false });
+      `基准 ${GEN1_BENCHMARK_CODE} 缺失，rs_20d 无法计算`, { benchmark_aligned: false });
   }
   if (mainDate && benchDate !== mainDate) {
     return result(STATUS.DATA_BLOCKED, REASON.BENCHMARK_MISSING,

@@ -8,38 +8,117 @@
 
 ---
 
+# ✅ 上线阻塞项已修复（2026-09-10 / WP-G1-DATA-01，方案 B+）
+
+## 现象（修复前实测）
+
+第 2 步之前的 30 秒数据检查结果：
+
+| 标的 | 最新 official EOD | 备注 |
+|---|---|---|
+| 513310 / 515880 / 159582 / 159570 / 518880 | **2026-09-09** | 一致 ✓（513310 另有 2026-09-10 行，但 `source='realtime'`，被 `officialBars()` 过滤） |
+| **510300（基准）** | **2026-09-04** | `source='research_import'`，**落后 3 个交易日**（缺 09-07/08/09） ✗ |
+
+后果链（代码级，无容差）：
+
+```text
+benchmarkLatestDate(2026-09-04) !== mainDate(2026-09-09)
+  → gen1-data-health 规则2 → DATA_BLOCKED / BENCHMARK_MISSING
+  → runGen1ShadowEod: worstData='BLOCKED'
+  → computeHealthStatus({ dataHealth: 'BLOCKED' }) → ML_OFF
+  → 首次 bootstrap 就把 latch 写成 ML_OFF（manual_review_required=true、allow_advisory=false）
+  → 第 5 步验收表中 latched_health=OK 不可能成立；且命中 STOP 清单
+```
+
+## 根因（结构性）
+
+- `fetchDailyData` 抓取范围 = `db.getEtfList()` = `etf_basic` 的 **5 只 ETF**；**510300 不在其中** → 生产每日任务**永不更新 510300**。
+- 510300 的 `etf_daily` 行全部来自 `source='research_import'`（本地 ML 流水线），最后更新 2026-09-04。
+- G1-05（data health）把这个静默问题（`rs_20d` 走模型 imputer）升级为**显式 BLOCKED** —— 收紧方向正确，缺的是数据生产责任。
+
+## 采纳方案：B+（独立 Benchmark Lane，不新建云函数、不污染 Universe）
+
+```text
+fetchDailyData
+├── production lane   Main5  ← etf_basic / getEtfList  → 决策 Universe（抓日线 + 折溢价）
+└── benchmark lane    510300 ← GEN1_BENCHMARK_CODES     → 只写 etf_daily（不抓折溢价、不进 Universe）
+```
+
+关键实现点（`tests/gen1-benchmark-pipeline.test.js` / Gate **G1-T** 逐条守卫）：
+
+| # | 要求 | 实现 |
+|---|---|---|
+| 1 | 基准单一事实源 | `src/common/constants.js` 的 `GEN1_BENCHMARK_CODE(S)`；抓取/健康/测试统一读它 |
+| 2 | 510300 绝不进 `etf_basic` | 基准清单来自常量，不来自 `getEtfList()`；测试断言任何情况下不写 `etf_basic` |
+| 3 | 不新建云函数，扩展现有任务 | `fetchDailyData` 内两条 Lane，同一交易日 / datasource / 调度窗口 |
+| 4 | 公共抓取函数，禁止复制 | `fetchAndPersistDaily(code,{role,fetchPremium,limit})`，Main5 与基准共用 |
+| 5 | **幂等必须含 510300** | `planDailyFetch()` 两条 Lane **分别**判定；任一缺失即不得 `already_fetched` |
+| 6 | 不混淆来源与角色 | `source` 仍是 `tencent/sina/eastmoney`；角色由 `code` 表达（**不新增 DB 字段**） |
+| 7 | 首次补齐完整窗口 | 基准 Lane 固定抓 **320 根**（覆盖 ≥ 260 根滚动窗口），upsert 覆盖旧的 `research_import` 近期窗口，不删更老历史 |
+| 8 | 复权口径一致 | 同一 `datasource.fetchDaily` → 腾讯 qfq 主源，与 Main5 同口径（backfill 后抽查 ret20） |
+| 9 | 新增 Benchmark 测试 | T1~T6，重点 T2「Main5 今日完整 + 基准今日缺失」幂等反例 |
+| 10 | 返回值显式报告 | `production_daily` / `benchmark_daily` / `overall = OK\|PARTIAL\|FAIL` |
+| 11 | 调度顺序 | 基准必须在同一 EOD 数据任务内先于 `materializeIndicators` → `runGen1ShadowEod` 完成 |
+| 12 | 首次补数后再恢复上线 | 见下方「1.5 部署数据管线 + backfill」 |
+
+**失败语义（关键）**：基准抓取失败 → 数据任务 `overall = PARTIAL`，**V3.6.1 生产数据更新不受影响**，Gen-1 后续 Data Health fail-closed（`BENCHMARK_MISSING` → `ML_OFF`）。即 Gen-1 作为增强层，**不能**因为自己的基准失败把基线拖死。
+
+**冻结管线文件未改**：`runGen1ShadowEod/index.js` 是 Pipeline Lock 覆盖的冻结文件，其中基准字面量**未替换**（替换会破坏冻结链、需重签 root anchor），改由 G1-T 守卫「字面量 === `GEN1_BENCHMARK_CODE`」——任何漂移 CI 立即 FAIL，运行时亦 fail-closed。
+
+---
+
+## 1.5 部署数据管线 + Benchmark backfill（**新增：必须在上线第 2 步之前完成**）
+
+```bash
+# ① 只部署数据管线（先不碰 Gen-1 决策链）
+node scripts/build-cloudfunctions.js
+python scripts/prepare-deploy.py
+tcb fn deploy fetchDailyData --dir dist-functions/fetchDailyData --force
+
+# ② 强制跑一次（基准 Lane 抓 320 根 → 覆盖 09-07/08/09 及近期完整滚动窗口）
+#    HTTP 触发：{"force": true}
+```
+
+**验收（不通过则 STOP，不得进入第 2 步）**：
+
+```text
+benchmarkLatestOfficialDate(510300) == Main5LatestOfficialDate     # 当前应为 2026-09-09
+fetchDailyData 返回 overall == 'OK'
+production_daily.ok == true  &&  benchmark_daily.ok == true
+510300 的 etf_daily.source ∈ { tencent, sina, eastmoney }（不再是 research_import 的近期窗口）
+510300 不出现在 getEtfList() / etf_basic / 前台标的列表
+```
+
+补齐后**重新执行第 2 步之前的「30 秒数据检查」**，通过才继续。
+
+---
+
 ## 0. 上线前提（全部满足才继续）
 
 | 项 | 期望值 |
 |---|---|
-| 本地 `npm test` | **36/36** |
-| Gen-1 Production Gates | **G1-A ~ G1-S 19/19** |
+| 本地 `npm test` | **37/37** |
+| Gen-1 Production Gates | **G1-A ~ G1-T 20/20** |
 | Immutable SHA | 11/11 |
 | Feature Pipeline Lock | 10/10（frozen 管线文件零改动） |
 | frozen model SHA | `d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712` |
 | `threshold_signal_p` | `0.65`（未改） |
-| 分支/P R 链 | #11→#12→#13→#14→#15→#16→#17→#18 全部 CI 绿 |
+| 分支/PR 链 | #11→#12→#13→#14→#15→#16→#17→#18 **全部已合并入 master**（merge commit，未 squash） |
 
 ---
 
-## 1. 按审计顺序合并 PR（每次 retarget + CI 绿后再 merge）
+## 1. ✅ 按审计顺序合并 PR（**2026-09-10 已完成**）
 
 ```text
-#11 → master
-#12 retarget master → 等 required CI 绿 → merge
-#13 retarget master → 等 required CI 绿 → merge
-#14 retarget master → 等 required CI 绿 → merge
-#15 retarget master → 等 required CI 绿 → merge
-#16 retarget master → 等 required CI 绿 → merge
-#17 retarget master → 等 required CI 绿 → merge
-#18 retarget master → 等 required CI 绿 → merge
+792f5b28 #18 → 42df9b6c #17 → cc7500e5 #16 → b019170a #15
+645646fd #14 → 9ca937b9 #13 → 563f4b79 #12 → fc4c0fd2 #11
 ```
+master push CI（792f5b28）= success。
 
-要点：
-- 历史 stacked base（`feat/wp-g1-p*`）**没有各自的 GitHub workflow run**（旧 base 未触发），
-  进入 master 前必须补齐 required CI。
+要点（踩坑记录）：
+- **`pull_request` 默认 trigger 不含 `edited`**：retarget base 不会触发 CI，会一直等到超时。
+  正确做法 = `PATCH {state:'closed'}` → `PATCH {state:'open'}`（触发 `reopened`），无需推空 commit。
 - **不要 squash** —— 这些 PR 记录了「Gen-1 如何一步步取得权限」，是未来审计资产。
-- retarget 用 `PATCH /repos/{owner}/{repo}/pulls/{n}` 改 `base`；改完会重新触发 `pull_request` CI。
 
 ---
 
@@ -60,10 +139,12 @@ tcb fn deploy runGen1ShadowEod --dir dist-functions/runGen1ShadowEod --force
 
 ---
 
-## 3. 确认 / 创建 `gen1_health_state`（**上线阻断项**）
+## 3. ✅ 确认 / 创建 `gen1_health_state`（**2026-09-10 已完成**）
 
 **为什么必须先做**：集合缺失 → `readHealthState` 抛错 → `READ_ERROR` → `ML_OFF` → `allow_canary=false`，
 于是切 CANARY 后会出现 `authorized=true` 但 `health_allowed=false / active=false`，**极易被误判为接线 bug**。
+
+**线上状态**：已用 CloudBase MCP 创建（`createCollection` + `uk_key` 唯一索引）。
 
 ```bash
 # 建集合（tcb db createCollection 无效，必须用 nosql execute）

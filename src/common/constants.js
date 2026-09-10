@@ -455,6 +455,25 @@ const MARKET_INDEXES = [
   { code: '399006', name: '创业板指', symbol: 'sz399006' }
 ];
 
+/**
+ * Gen-1 基准（Benchmark）序列 —— **单一事实源**（WP-G1-DATA-01）。
+ *
+ * ⚠️ 这些 code **不属于生产决策 Universe**（`etf_basic`），因此：
+ *   ① 绝不写入 `etf_basic` —— 否则会被 `getEtfList()` 当成第 6 只 ETF，
+ *      污染 runDecisionEngine / 前台标的列表 / 仓位统计；
+ *   ② 只写 `etf_daily`，由 `fetchDailyData` 的 **Benchmark Lane** 每日维护
+ *      （与生产 ETF 同一交易日、同一 datasource、同一调度窗口）；
+ *   ③ 供 Gen-1 `rs_20d`（相对基准 20 日超额）与 Data Health 基准对齐使用。
+ *
+ * 目的：消除「抓的是 A、模型算的是 B、Health 检查的是 C」的三方漂移。
+ *
+ * 注：`cloudfunctions/runGen1ShadowEod/index.js` 是冻结管线文件（Pipeline Lock），
+ * 其中基准字面量**不做替换**（改它会破坏冻结链），改由
+ * `tests/gen1-benchmark-pipeline.test.js` 守卫「字面量 === 本常量」，任何漂移 CI 立即 FAIL。
+ */
+const GEN1_BENCHMARK_CODE = '510300';
+const GEN1_BENCHMARK_CODES = Object.freeze(['510300']);
+
 /** 海外关联标的（V2.1 传导信号 + 市场环境，腾讯美股/东财指数，均已实测可用） */
 const GLOBAL_TICKERS = [
   { symbol: 'usMU', name: '美光科技', code: 'MU', market: 'em', secid: '105.MU', cik: '0000723125', related: '513310', factor: '存储周期', layer: 'hard_data' },
@@ -646,5 +665,6 @@ module.exports = {
   COOLDOWN_DAYS, BUILD_FIRST_LOT_PCT, ADD_STEP_PCT, ADD_TREND_STEP_PCT, ADD_BREAKOUT_MAX_PCT, ADD_THRESHOLD_PCT, OVER_ALLOC_REDUCE_PCT,
   OVER_ALLOC_THRESHOLDS, CASH_REGIME, MARKET_REGIMES, MARKET_REGIME_LABELS, CORE_CONFIRM_PERIODS, TRADE_CONFIRM_PERIODS,
   MARKET_INDEXES, METRIC_LAYERS, LAYER_WEIGHTS, GLOBAL_TICKERS,
+  GEN1_BENCHMARK_CODE, GEN1_BENCHMARK_CODES,
   SEC_FINANCIAL_TICKERS, FINANCIAL_CONDUCTION_MAP, MACRO_DEFS, HARD_DATA_INDICATORS
 };
