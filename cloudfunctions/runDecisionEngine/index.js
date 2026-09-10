@@ -25,6 +25,11 @@ const { replayAverageCost } = require('./common/utils/pnl');
 const { snapshotHoldingsMv, resolveCashYuan, liveTotalAsset } = require('./common/utils/live-asset');
 const { indicatorSignal, layerOf, syncFundamentalConfigs, pickLatestSeries } = require('./common/utils/fundamental');
 const { computeCooldownDays } = require('./common/utils/cooldown');
+// WP-G1（G1-01/02/03）：Gen-1 Authority 状态机 + Safety Core Permission + Canary 反事实链
+const { resolveAuthority } = require('./common/utils/gen1-authority');
+const { evaluateGen1Permission } = require('./common/utils/gen1-safety-permission');
+const { buildCanaryCounterfactual } = require('./common/utils/gen1-canary');
+const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
 const {
   COLLECTIONS, DEFAULT_PARAMS, TECH_SECTORS, SEMI_SECTORS,
   GRADE_SCORES, METRIC_TYPES, METRIC_LAYERS, LAYER_WEIGHTS,
@@ -536,6 +541,21 @@ exports.main = async (event = {}, context = {}) => {
     const effectiveTechMax = portfolio.effective_tech_cap != null ? portfolio.effective_tech_cap : techMax;
     let sectorUsed = portfolio.tech_position != null ? portfolio.tech_position : 0;
 
+    // ---- WP-G1 G1-01/G1-02：Gen-1 权限状态机 + 当日信号 ----
+    // 权限一律 fail-closed：未知/非法取值不得获得高于 ADVISORY 的权限；
+    // production_write / auto_execution 恒 false（见 gen1-authority）。
+    const gen1Authority = resolveAuthority(merged);
+    const gen1SignalByCode = {};
+    try {
+      const sigRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: latestDate });
+      for (const s of (sigRows || [])) gen1SignalByCode[String(s.code)] = s;
+    } catch (e) {
+      // 信号缺失不阻断生产决策；Safety 会按「不可用」fail-closed 处理
+    }
+    // canary 重算所需的 V3.6.1 上下文（仅 authority>=CANARY 时才真正调用）
+    let canaryV3Portfolio = null;
+    let canaryBarsByCode = null;
+
     for (const p of ordered) {
       try {
         if (p.error) { results.push({ code: p.etf.code, ok: false, error: p.error }); continue; }
@@ -583,6 +603,9 @@ exports.main = async (event = {}, context = {}) => {
         if (runV3Path) {
           const etfBars = barsCache ? barsCache[etf.code] : null;
           const v3Portfolio = buildV3Portfolio(portfolio, v3MarketEnv);
+          // WP-G1：缓存 canary 重算上下文（避免重复 build）
+          canaryV3Portfolio = v3Portfolio;
+          canaryBarsByCode = etfBars;
           const v3Result = decisionV3.runDecision(etf, p.snapshot, p.posWithCore, merged, {
             fundamental: p.fundamental,
             risk: p.risk,
@@ -616,6 +639,50 @@ exports.main = async (event = {}, context = {}) => {
 
         // 注入阶段通俗概括（来自 indicator_snapshot，供前端直接展示）
         if (p.snapshot.stage_summary) result.stage_summary = p.snapshot.stage_summary;
+
+        // ---- WP-G1 G1-02/G1-03：Safety Core Permission（source=SAFETY_CORE）+ Canary 反事实 ----
+        // 硬边界：以下字段**绝不**改写 result.final_target / final_action（生产仍为 V3.6.1）。
+        const gen1Signal = gen1SignalByCode[String(etf.code)] || null;
+        const baselineTarget = result.final_target;
+        const baselineAction = result.final_action;
+        const baselineStage = result.v361_baseline_stage || result.trend_stage_primary
+          || p.snapshot.trend_stage_primary || p.snapshot.stage || null;
+        const gen1Permission = evaluateGen1Permission({
+          params: merged,
+          signal: gen1Signal,
+          baseline: { trend_stage_primary: baselineStage, v361_baseline_target: baselineTarget },
+          risk: p.risk,
+          fundamental: p.fundamental,
+          snapshot: { structural_break: p.snapshot.structural_break, hard_break: p.snapshot.hard_break },
+          today,
+          dataHealth: null,       // G1-05 接入前：canary fail-closed 关闭
+          domainPermission: null  // G1-06 接入前：canary fail-closed 关闭
+        });
+        result.gen1_canary_source = 'V361_RERUN_S4';
+
+        // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
+        const canary = buildCanaryCounterfactual({
+          permission: gen1Permission,
+          baseline: { stage: baselineStage, target: baselineTarget, action: baselineAction },
+          recomputeCanaryTarget: (stage) => {
+            if (!canaryV3Portfolio) return { target: baselineTarget, action: baselineAction };
+            const c = decisionV3.runDecision(etf, p.snapshot, p.posWithCore, merged, {
+              fundamental: p.fundamental, risk: p.risk, portfolio: canaryV3Portfolio,
+              cooldownDays, trendStageState: p.position.trend_stage_state || {},
+              shockState: p.position.shock_state || null, recentSlowBreakScores: [],
+              riskEvents: p.risk.events || [], bars: canaryBarsByCode,
+              advisoryStageOverride: stage
+            });
+            return { target: c.final_target, action: c.final_action };
+          }
+        });
+        // G1-11 No-op 不变量：overlay 前后 final_target / final_action 必须逐字段一致
+        const noopBefore = { final_target: result.final_target, final_action: result.final_action };
+        Object.assign(result, applyGen1Overlay(result, gen1Permission, canary));
+        const noopCheck = verifyProductionNoop(noopBefore, result);
+        if (!noopCheck.ok) {
+          throw new Error(`Gen-1 overlay violated production No-op: ${noopCheck.diffs.join(', ')}`);
+        }
 
         await db.upsert(COLLECTIONS.DECISION_RESULT, result, { code: etf.code, decision_date: result.decision_date });
 
@@ -813,6 +880,14 @@ exports.main = async (event = {}, context = {}) => {
       bundle_id: merged.ml_shadow_bundle_id || 'shadow-bundle-v1',
       gen1_frozen: merged.ml_gen1_frozen !== false,
       engine_version: productionEngine,  // 与生产引擎同源，不再硬编码
+      // WP-G1：权限状态机 + Safety Core 许可来源 + Canary 通路状态（默认 path ready / off）
+      gen1_authority: gen1Authority.gen1_authority,
+      gen1_authority_label: gen1Authority.label,
+      permission_source: 'SAFETY_CORE',
+      production_write: false,
+      auto_execution: false,
+      canary_path_ready: true,
+      canary_enabled: false,
       note: mlFastPathEnabled
         ? 'ml_fast_path_enabled ignored while Gen-1 in SHADOW; production stays V3.6.1'
         : 'ML observing only — no authority to change production decisions'
@@ -828,7 +903,14 @@ exports.main = async (event = {}, context = {}) => {
       ml_model_id: mlModelId,
       ml_effective: false,
       ml_advisory_enabled: merged.ml_advisory_enabled !== false,
-      ml_execution_enabled: merged.ml_execution_enabled === true,
+      // G1-09：自动执行永久硬关 —— 即使数据库 ml_execution_enabled=true 亦不得开启
+      ml_execution_enabled: false,
+      // G1-01：Gen-1 权限状态机（单一真相；production_write / auto_execution 恒 false）
+      gen1_authority: gen1Authority.gen1_authority,
+      gen1_authority_label: gen1Authority.label,
+      gen1_production_write: false,
+      gen1_auto_execution: false,
+      gen1_safety_source: 'SAFETY_CORE',
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
       ml_shadow_observe: mlShadowObserve,
       trend_stage_enabled: trendStageEnabled,

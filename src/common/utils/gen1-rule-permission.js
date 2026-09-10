@@ -1,26 +1,47 @@
-/** Gen-1 Fast Path rule permission: Safety Core metadata only. */
+/**
+ * Gen-1 Fast Path rule permission（兼容薄适配层）。
+ *
+ * 自 WP-G1（G1-02）起，权限的**唯一实现**在 `gen1-safety-permission.js`：
+ * 它把 EOD 预检（EOD_STAGE_PRECHECK）与 Safety Core（SAFETY_CORE）明确拆开。
+ *
+ * 本文件保留旧函数签名（历史调用方/测试兼容），但内部委托给统一实现，
+ * 避免出现第二套权限判断逻辑（双重真相）。
+ *
+ * 返回结构保持向后兼容：
+ *   { permission, reason_code, reason_label, source }
+ * 另外附加：
+ *   eod_precheck_permission / safety_permission / effective_advisory / effective_canary
+ *
+ * @module gen1-rule-permission
+ */
 'use strict';
 
+const { evaluateGen1Permission } = require('./gen1-safety-permission');
+
 function gen1RulePermission(params, signal, baseline, risk, fundamental, snapshot, today) {
-  const blocked = (reason_code, reason_label) => ({ permission: 'BLOCK', reason_code, reason_label, source: 'SAFETY_CORE' });
-  const unavailable = (reason_code, reason_label) => ({ permission: null, reason_code, reason_label, source: 'SIGNAL' });
-  if (params.ml_shadow_observe !== true || params.ml_advisory_enabled !== true || params.ml_fast_path_enabled !== true) {
-    return blocked('GEN1_ADVISORY_DISABLED', 'Gen-1 人工建议或快速通道当前关闭');
-  }
-  if (!signal || !baseline || !today) return unavailable('SIGNAL_OR_BASELINE_MISSING', '缺少当日模型信号或 V3.6.1 基线');
-  if (String(signal.date || '').slice(0, 10) !== String(today).slice(0, 10)) return unavailable('SIGNAL_STALE', '不是当日 EOD 模型信号，等待收盘后更新');
-  if (String(signal.ml_model_id || signal.model_id || '') !== String(params.ml_challenger_model_id || 'HVT-A-ET-20260830')) {
-    return unavailable('MODEL_ID_MISMATCH', '模型版本与当前冻结配置不一致');
-  }
-  if (String(signal.rule_gate || signal.permission || '').toUpperCase() === 'BLOCK') {
-    return blocked(signal.rule_permission_reason_code || 'EOD_PRECHECK_BLOCK', signal.rule_permission_reason || 'EOD 阶段预检未通过');
-  }
-  const baseStage = String(baseline.trend_stage_primary || baseline.trend_stage || '').toUpperCase();
-  if (baseStage !== 'S2' && baseStage !== 'S3') return blocked('BASELINE_STAGE_NOT_ELIGIBLE', `V3.6.1 基线阶段为 ${baseStage || '未知'}，不属于 S2/S3 观察许可范围`);
-  if (risk && (risk.risk_override === true || risk.risk_flag === 'RED')) return blocked('HARD_RISK_OVERRIDE', 'Safety Core 风险熔断或硬风险覆盖生效');
-  if (fundamental && fundamental.f_state === 'F5') return blocked('FUNDAMENTAL_F5', '基本面 F5 证伪，禁止提前进攻');
-  if (snapshot && (snapshot.structural_break === true || snapshot.hard_break === true)) return blocked('STRUCTURAL_BREAK', '趋势结构破坏或 Hard Break 已触发');
-  return { permission: 'PERMIT', reason_code: 'SAFETY_CORE_PASS', reason_label: 'Safety Core 通过；仍需模型达到 Fast Path 阈值及仓位约束后才形成建议', source: 'SAFETY_CORE' };
+  const r = evaluateGen1Permission({
+    params: params || {},
+    signal: signal || null,
+    baseline: baseline || null,
+    risk: risk || null,
+    fundamental: fundamental || null,
+    snapshot: snapshot || null,
+    today: today || null
+  });
+  return {
+    permission: r.safety.permission,
+    reason_code: r.safety.reason_code,
+    reason_label: r.safety.reason,
+    source: r.safety.source,
+    // 扩展字段（向后兼容新增，不破坏旧调用方）
+    eod_precheck_permission: r.eod_precheck.permission,
+    eod_precheck_reason_code: r.eod_precheck.reason_code,
+    safety_permission: r.safety.permission,
+    safety_permission_reason_code: r.safety.reason_code,
+    effective_advisory: r.effective_advisory,
+    effective_canary: r.effective_canary,
+    gen1_authority: r.authority.gen1_authority
+  };
 }
 
 module.exports = { gen1RulePermission };
