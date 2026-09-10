@@ -22,7 +22,12 @@
  *   ml_counterfactual_target → final_target        ❌
  *   STAGE_W.S4 → final_target                      ❌
  *
- * WP-G1.2 G1.2-03（复审 P0）：A/B 必须**只有一个变量**（advisoryStageOverride）。
+ * WP-G1.3 G1.3-01（复审 P0）：Canary 语义 = **完整组合反事实（Full Portfolio Counterfactual）**，
+ * 而不是「每只 ETF 各自算一个更高的目标」。所有 ETF 按同一顺序运行、共享同一个
+ * `sectorRemainingLimit` / cap；只有 Model Candidate 走 `advisoryStageOverride=S4`，
+ * 其余仍是 baseline。因此最终得到的是「如果今天真的允许 Gen-1，整个组合会变成什么样」，
+ * 而不是五个可能互相冲突的独立 target。见 `stepCounterfactualLedger()`。
+ *
  * 调用方必须把基线调用用到的**完整上下文逐字段原样传入** canary 重算：
  *   portfolio / bars / trendStageState / shockState / recentSlowBreakScores /
  *   sectorRemainingLimit / cooldownDays / risk / fundamental
@@ -155,57 +160,115 @@ function sectorOccupation(currentPosition, suggestedPosition, finalTarget) {
   return Math.max(0, occupyTarget - (cur == null ? 0 : cur));
 }
 
+function numOr(v, dflt) {
+  return v == null || v === '' || !Number.isFinite(Number(v)) ? dflt : Number(v);
+}
+
+function round1(v) {
+  return Math.round(v * 10) / 10;
+}
+
 /**
- * WP-G1.2 G1.2-03：Canary 组合平价 —— 单只候选的组合层科技额度 clamp。
- *
- * 复审修正：不再自己发明第二套「可用新增额度」语义。直接用**生产同款**口径：
+ * WP-G1.3 G1.3-01：反事实组合的赛道剩余额度（**唯一**公式，生产即用同式）。
  *
  *   sectorRemainingLimit = max(0, effectiveTechMax - (sectorUsed - currentPosition))
  *
- * 其中 sectorUsed 是**组合科技总仓位**（种子 = portfolio.tech_position，逐只累加），
- * 因此真实持仓已被计入 —— 这是上一版把 `effectiveTechMax` 误当「新增额度」的修复。
+ * `sectorUsed` 是该账本当前的**组合科技总仓**（种子 = portfolio.tech_position，逐只累加），
+ * 因此真实持仓已被计入。
  *
  * @param {object} input
- * @param {boolean} input.isTech              是否科技赛道
- * @param {number}  input.baselineTarget      V3.6.1 基线目标
- * @param {number}  input.canaryTarget        canary 目标（已由 V3.6.1 rerun 得出）
- * @param {boolean} input.canaryEffective     canary 是否生效
- * @param {number}  input.sectorUsed          组合科技总仓位（含现任持仓，本 ETF 之前）
- * @param {number}  input.currentPosition     本 ETF 当前实际仓位
- * @param {number}  input.effectiveTechMax    科技赛道总仓上限
- * @returns {{canaryTarget, canaryDelta, clamped, sectorRemainingLimit}}
+ * @param {boolean} input.isTech            是否科技赛道
+ * @param {number}  input.sectorUsed        该账本当前的组合科技总仓
+ * @param {number}  input.currentPosition   本 ETF 当前实际仓位
+ * @param {number}  input.effectiveTechMax  科技赛道总仓上限
+ * @returns {number|null} 本 ETF 的目标上限（非科技 / 无上限 → null）
  */
-function clampCanaryCandidate(input) {
+function counterfactualSectorRemaining(input) {
   const x = input || {};
-  const numOr = (v, dflt) => (v == null || v === '' || !Number.isFinite(Number(v)) ? dflt : Number(v));
-  const base = numOr(x.baselineTarget, 0);
-  const max = numOr(x.effectiveTechMax, null);     // 注意：null 不可被 Number() 变成 0
-  const used = numOr(x.sectorUsed, numOr(x.techUsed, 0));  // 兼容旧字段名 techUsed
+  const cap = numOr(x.effectiveTechMax, null);   // 注意：null 不可被 Number() 变成 0
+  if (x.isTech !== true || cap == null) return null;
+  const used = numOr(x.sectorUsed, 0);
   const current = numOr(x.currentPosition, 0);
-  let target = numOr(x.canaryTarget, base);
-  const effective = x.canaryEffective === true;
+  return Math.max(0, cap - (used - current));
+}
+
+/**
+ * WP-G1.3 G1.3-01/04：**反事实组合账本单步推进** —— 生产与 Canary 的唯一实现。
+ *
+ * 复审 P0（2026-09-10 最终轮）：上一版只有 `gen1_canary_effective === true` 的科技 ETF
+ * 才推进 canary 账本 → **没有 Gen-1 Candidate、但 V3.6.1 baseline 自身建议加仓的科技 ETF，
+ * 其新增仓位被漏记**；后面真正生效的 Candidate 于是拿到虚假剩余额度，组合可越过 tech cap。
+ *
+ * 现语义 = **完整组合反事实（Full Portfolio Counterfactual）**：
+ *   - 每一个科技 ETF **都**推进 canary 账本（无论是否 Candidate）；
+ *   - Candidate    → 目标取 Gen-1（S4 rerun）结果、建议仓取 canary suggested；
+ *   - 非 Candidate → 目标取 V3.6.1 baseline 结果、建议仓取 baseline suggested；
+ *   - 全部 ETF 共享同一 `sectorRemainingLimit`（**cap 优先**）：后面的 ETF 可能因前面
+ *     Gen-1 占用而被压到**低于自身 baseline** —— 这是共享硬约束的必然结果，如实上报
+ *     （`baselineFloorBreached`）。WP-G1.2 的 `Math.max(base, limit)` 地板已废弃。
+ *
+ * 输出**不变量**：`nextSectorUsed <= effectiveTechMax`。
+ *   证明：occupation = max(0, min(suggested, target) − current) ≤ target − current，
+ *   且 target ≤ limit = cap − (used − current) ⟹ used + occupation ≤ cap。∎
+ *
+ * @param {object} input
+ * @param {boolean} input.isTech                是否科技赛道
+ * @param {number}  input.sectorUsed            该账本当前组合科技总仓（本 ETF 之前）
+ * @param {number}  input.currentPosition       本 ETF 当前实际仓位
+ * @param {number}  input.effectiveTechMax      科技赛道总仓上限
+ * @param {number}  input.baselineTarget        V3.6.1 基线目标
+ * @param {number}  [input.baselineSuggested]   V3.6.1 基线建议执行仓
+ * @param {boolean} input.canaryEffective       Gen-1 该只是否生效
+ * @param {number}  [input.canaryTarget]        Gen-1 目标（生效时）
+ * @param {number}  [input.canarySuggested]     Gen-1 建议执行仓（生效时）
+ * @param {number}  [input.sectorRemainingLimit] 可选：复用已算出的上限（保证与 rerun 同值）
+ * @returns {{sectorRemainingLimit, counterfactualTarget, counterfactualDelta,
+ *            counterfactualOccupation, nextSectorUsed, clamped, canaryEffective, baselineFloorBreached}}
+ */
+function stepCounterfactualLedger(input) {
+  const x = input || {};
   const isTech = x.isTech === true;
+  const current = numOr(x.currentPosition, 0);
+  const used = numOr(x.sectorUsed, 0);
+  const baselineTarget = numOr(x.baselineTarget, 0);
+  const canaryEffective = x.canaryEffective === true;
 
-  const sectorRemainingLimit = max == null ? null : Math.max(0, max - (used - current));
+  const sectorRemainingLimit = x.sectorRemainingLimit !== undefined
+    ? numOr(x.sectorRemainingLimit, null)
+    : counterfactualSectorRemaining({
+      isTech, sectorUsed: used, currentPosition: current, effectiveTechMax: x.effectiveTechMax
+    });
+
+  // Candidate → Gen-1 目标；非 Candidate → 仍走 baseline（stage 不变）
+  const intendedTarget = canaryEffective ? numOr(x.canaryTarget, baselineTarget) : baselineTarget;
+  const suggested = canaryEffective ? numOr(x.canarySuggested, null) : numOr(x.baselineSuggested, null);
+
+  let counterfactualTarget = intendedTarget;
   let clamped = false;
-
-  if (effective && isTech && sectorRemainingLimit != null) {
-    // 上限 clamp，但**不得低于 baseline**：Canary 只允许「不差于生产 / 不高于 cap」，
-    // 绝不因组合记账把目标压到生产基线之下（下限 = baselineTarget）。
-    const upper = Math.max(base, sectorRemainingLimit);
-    if (target > upper) {
-      target = Math.round(upper * 10) / 10;
-      clamped = true;
-    }
+  if (isTech && sectorRemainingLimit != null && intendedTarget > sectorRemainingLimit) {
+    counterfactualTarget = round1(sectorRemainingLimit);
+    clamped = true;
   }
 
-  const delta = Math.round((target - base) * 10) / 10;
-  return { canaryTarget: target, canaryDelta: delta, clamped, sectorRemainingLimit };
+  const occupation = sectorOccupation(current, suggested, counterfactualTarget);
+  // 非科技标的：不消费科技账本（账本是科技赛道专用），occupation 记 0
+  const effectiveOccupation = isTech ? occupation : 0;
+  return {
+    sectorRemainingLimit,
+    counterfactualTarget,
+    counterfactualDelta: round1(counterfactualTarget - baselineTarget),
+    counterfactualOccupation: Math.round(effectiveOccupation * 1e6) / 1e6,
+    nextSectorUsed: Math.round((used + effectiveOccupation) * 1e6) / 1e6,
+    clamped,
+    canaryEffective,
+    baselineFloorBreached: counterfactualTarget < baselineTarget
+  };
 }
 
 module.exports = {
   buildCanaryCounterfactual,
   assertProductionUntouched,
-  clampCanaryCandidate,
-  sectorOccupation
+  sectorOccupation,
+  counterfactualSectorRemaining,
+  stepCounterfactualLedger
 };

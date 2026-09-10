@@ -22,6 +22,8 @@
  *   G1-O Health Read Fail-Closed     三态读取；异常绝不回落 OK，且不落库
  *   G1-P Canary Context Parity       canary 继承生产全部输入（唯一变量 = stage override）
  *   G1-Q Economic Event Contract     event_cluster_id 去重 + 真实交易日历 40D
+ *   —— WP-G1.3 Counterfactual Portfolio Ledger ——
+ *   G1-R Counterfactual Ledger Guard 账本无条件推进（非 Candidate 按 baseline）+ 终局 cap 断言
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -51,11 +53,12 @@ const GATES = [
   { id: 'G1-N', name: 'Health Single Truth', script: 'tests/gen1-health-single-truth.test.js' },
   { id: 'G1-O', name: 'Health Read Fail-Closed', script: 'tests/gen1-health-failclosed.test.js' },
   { id: 'G1-P', name: 'Canary Context Parity', script: 'tests/gen1-runtime-single-truth.test.js' },
-  { id: 'G1-Q', name: 'Economic Event Contract', script: 'tests/gen1-economic-health.test.js' }
+  { id: 'G1-Q', name: 'Economic Event Contract', script: 'tests/gen1-economic-health.test.js' },
+  { id: 'G1-R', name: 'Counterfactual Ledger Guard', script: 'tests/gen1-counterfactual-ledger-static.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-Q）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-R）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {

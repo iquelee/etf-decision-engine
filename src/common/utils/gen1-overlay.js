@@ -72,6 +72,16 @@ function applyGen1Overlay(result, permission, canary) {
   out.gen1_canary_sector_remaining = c.gen1_canary_sector_remaining != null ? c.gen1_canary_sector_remaining : null;
   // WP-G1.2 G1.2-03：canary 建议执行仓（与生产同构的占用口径，用于组合层累计）
   out.gen1_canary_suggested_position = c.gen1_canary_suggested_position != null ? c.gen1_canary_suggested_position : null;
+  // WP-G1.3 G1.3-01/04：**完整组合反事实**目标（共享 cap 后、账本实际采用的 target）
+  //   —— gen1_canary_target 是 Gen-1 的「单只意图」，本字段是「组合一致后」的结果，二者可能不同。
+  out.gen1_counterfactual_target = c.gen1_counterfactual_target != null ? c.gen1_counterfactual_target : null;
+  out.gen1_counterfactual_delta = c.gen1_counterfactual_delta != null ? c.gen1_counterfactual_delta : null;
+  out.gen1_counterfactual_clamped = c.gen1_counterfactual_clamped === true;
+  out.gen1_counterfactual_sector_remaining = c.gen1_counterfactual_sector_remaining != null
+    ? c.gen1_counterfactual_sector_remaining : null;
+  out.gen1_counterfactual_stage_changed = c.gen1_counterfactual_stage_changed === true;
+  // 共享硬约束将目标压到 baseline 之下（组合所致，非模型降级）—— 必须显式可见，便于审计解释
+  out.gen1_counterfactual_baseline_floor_breached = c.gen1_counterfactual_baseline_floor_breached === true;
   out.v361_baseline_stage = c.v361_baseline_stage != null ? c.v361_baseline_stage : null;
   out.v361_baseline_target = c.v361_baseline_target != null ? c.v361_baseline_target : null;
   out.v361_baseline_action = c.v361_baseline_action != null ? c.v361_baseline_action : null;

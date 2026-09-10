@@ -193,16 +193,25 @@ function buildGen1ViewModel({ ml, decision, position } = {}) {
       execution_label: '自动交易：关闭'
     },
     // 生产目标 vs Canary 目标（必须一眼可区分）
+    // WP-G1.3 G1.3-01：canary_target_pct 展示**组合一致**后的反事实目标（账本实际采用值）；
+    // canary_intent_pct 是 Gen-1 的单只「意图」——二者在共享 tech cap 下可能不同。
     targets: {
       production_target_pct: pct(decision && decision.final_target),
       baseline_stage: (decision && (decision.v361_baseline_stage || decision.baseline_stage)) || (ml && ml.baseline_stage) || null,
       baseline_target_pct: decision && decision.v361_baseline_target != null
         ? pct(decision.v361_baseline_target) : pct(decision && decision.final_target),
       effective_stage: (decision && (decision.gen1_effective_stage || decision.effective_stage)) || null,
-      canary_target_pct: decision && decision.gen1_canary_target != null ? pct(decision.gen1_canary_target) : null,
-      canary_delta_pct: decision && decision.gen1_canary_delta != null ? pct(decision.gen1_canary_delta) : null,
+      canary_target_pct: decision && decision.gen1_counterfactual_target != null
+        ? pct(decision.gen1_counterfactual_target)
+        : (decision && decision.gen1_canary_target != null ? pct(decision.gen1_canary_target) : null),
+      canary_intent_pct: decision && decision.gen1_canary_target != null ? pct(decision.gen1_canary_target) : null,
+      canary_delta_pct: decision && decision.gen1_counterfactual_delta != null
+        ? pct(decision.gen1_counterfactual_delta) : null,
       canary_effective: !!(decision && decision.gen1_canary_effective === true),
-      canary_eligible: !!(decision && decision.gen1_canary_eligible === true)
+      canary_eligible: !!(decision && decision.gen1_canary_eligible === true),
+      // 组合约束（共享 cap）导致目标低于 baseline —— 组合所致，非模型/规则降级
+      counterfactual_clamped: !!(decision && decision.gen1_counterfactual_clamped === true),
+      counterfactual_baseline_floor_breached: !!(decision && decision.gen1_counterfactual_baseline_floor_breached === true)
     },
     audit: {
       model_id: ml && ml.model_id ? ml.model_id : null,
