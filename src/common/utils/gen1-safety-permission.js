@@ -200,9 +200,24 @@ function evaluateGen1Permission(input) {
       ? String(domain.permission || DOMAIN_BY_STATUS[domainStatus] || 'UNKNOWN').toUpperCase()
       : 'UNKNOWN';
 
+    // WP-G1.2 G1.2-01：healthGate **只**接受 healthStateToGate()（持久化 latch）产出。
+    // ml_shadow_signal.gen1_health_status 仅作审计快照（src.signalHealthSnapshot），不参与授权。
     const hg = src.healthGate || null;
     const healthAllowsAdvisory = !hg || hg.allow_advisory !== false;
     const healthAllowsCanary = !hg || hg.allow_canary !== false;
+    const healthEnvelope = hg ? {
+      status: hg.health != null ? hg.health : (hg.latched_health || null),
+      latched_health: hg.latched_health != null ? hg.latched_health : null,
+      gate_status: hg.gate_status || 'ACTIVE',
+      source: hg.source || 'GEN1_HEALTH_STATE_LATCH',
+      allow_advisory: hg.allow_advisory !== false,
+      allow_canary: hg.allow_canary !== false,
+      allow_gen1_timing: hg.allow_gen1_timing !== false,
+      manual_review_required: hg.manual_review_required === true,
+      economic_health: hg.economic_health || 'PENDING',
+      runtime_data_health: hg.runtime_data_health || 'UNKNOWN',
+      read_reason_code: hg.read_reason_code || null
+    } : null;
 
     const safetyPass = safety.permission === 'PERMIT';
     const dataNotBlocked = dataStatus !== 'BLOCKED';
@@ -248,7 +263,11 @@ function evaluateGen1Permission(input) {
         : { status: 'UNKNOWN', permission: 'UNKNOWN', reason_code: null },
       effective_advisory: effectiveAdvisory,
       effective_canary: effectiveCanary,
-      gen1_health_status: hg ? hg.health : null,
+      // WP-G1.2 G1.2-01：实时权限健康（唯一真相 = 持久化 latch）
+      health: healthEnvelope,
+      gen1_health_status: hg ? (hg.health != null ? hg.health : (hg.latched_health || null)) : null,
+      // 审计快照：信号生成当时的健康（**不**参与授权，仅用于对比/追溯）
+      signal_health_snapshot: src.signalHealthSnapshot != null ? src.signalHealthSnapshot : null,
       blocking_codes: blocking.slice()
     };
   }

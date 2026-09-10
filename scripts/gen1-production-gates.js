@@ -17,6 +17,11 @@
  *   G1-K Persistent Health Latch     跨冷启动保持 + 禁 auto reopen
  *   G1-L Economic Health Aggregator  样本不足必须 PENDING（不得 OK 冒充）
  *   G1-M Canary Portfolio Parity     sectorRemainingLimit 继承 + 科技合计不破 cap
+ *   —— WP-G1.2 Runtime Single-Truth Remediation ——
+ *   G1-N Health Single Truth         权限只认持久化 latch；signal 快照无权限
+ *   G1-O Health Read Fail-Closed     三态读取；异常绝不回落 OK，且不落库
+ *   G1-P Canary Context Parity       canary 继承生产全部输入（唯一变量 = stage override）
+ *   G1-Q Economic Event Contract     event_cluster_id 去重 + 真实交易日历 40D
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -42,11 +47,15 @@ const GATES = [
   { id: 'G1-J', name: 'Sector Contract Audit', script: 'scripts/audit-gen1-sector-contract.js' },
   { id: 'G1-K', name: 'Persistent Health Latch', script: 'tests/gen1-persistent-health.test.js' },
   { id: 'G1-L', name: 'Economic Health Aggregator', script: 'tests/gen1-economic-health.test.js' },
-  { id: 'G1-M', name: 'Canary Portfolio Parity', script: 'tests/gen1-canary-portfolio.test.js' }
+  { id: 'G1-M', name: 'Canary Portfolio Parity', script: 'tests/gen1-canary-portfolio.test.js' },
+  { id: 'G1-N', name: 'Health Single Truth', script: 'tests/gen1-health-single-truth.test.js' },
+  { id: 'G1-O', name: 'Health Read Fail-Closed', script: 'tests/gen1-health-failclosed.test.js' },
+  { id: 'G1-P', name: 'Canary Context Parity', script: 'tests/gen1-runtime-single-truth.test.js' },
+  { id: 'G1-Q', name: 'Economic Event Contract', script: 'tests/gen1-economic-health.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-M）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-Q）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {

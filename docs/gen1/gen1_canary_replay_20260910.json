@@ -10,12 +10,18 @@
     "fidelity_notes": [
       "risk/fundamental 无历史 → 固定 NORMAL/F3；Safety BLOCK 不含历史硬风险与 F5。",
       "canary target = min(STAGE_W[S4], 30%) 为上界代理，未重放完整 V3.6.1 组合约束。",
-      "regime 由 510300 MA20/MA60 推导（代理，非生产 regime）。"
+      "regime 由 510300 MA20/MA60 推导（代理，非生产 regime）。",
+      "WP-G1.2 G1.2-04：独立事件口径 = event_cluster_id 去重 + 真实交易日历 40D（旧「事件日期自排 index」已废弃）。"
     ],
     "counts": {
       "baseline_s2_days": 698,
       "candidates": 3,
+      "canary_effective_events": 3,
       "independent_events": 2,
+      "independent_events_gap_basis": "TRADING_DAYS",
+      "independent_events_clusters": 3,
+      "independent_events_all_unfiltered": 2,
+      "trading_calendar_days": 1696,
       "safety_permit": 3,
       "safety_block": 0,
       "safety_unavailable": 0,
@@ -96,6 +102,7 @@
       "regime": "RISK_OFF",
       "probability": 0.6959222325008784,
       "stage": "S2",
+      "event_cluster_id": "515880_2023-05-30",
       "data_health": "DATA_OK",
       "data_reason": null,
       "domain": "CANARY_LIMITED",
@@ -118,6 +125,7 @@
       "regime": "RANGE",
       "probability": 0.999999999999965,
       "stage": "S2",
+      "event_cluster_id": "159582_2025-12-23",
       "data_health": "DATA_OK",
       "data_reason": null,
       "domain": "CANARY_LIMITED",
@@ -140,6 +148,7 @@
       "regime": "RANGE",
       "probability": 0.9393939393939394,
       "stage": "S2",
+      "event_cluster_id": "159582_2025-12-24",
       "data_health": "DATA_OK",
       "data_reason": null,
       "domain": "CANARY_LIMITED",

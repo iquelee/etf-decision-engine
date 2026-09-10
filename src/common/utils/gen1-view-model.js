@@ -171,7 +171,15 @@ function buildGen1ViewModel({ ml, decision, position } = {}) {
       bundle_id: ml && ml.bundle_id ? ml.bundle_id : null,
       bundle_hash: (ml && ml.bundle_hash) || (ml && ml.feature_schema_hash) || null,
       feature_schema_hash: ml && ml.feature_schema_hash ? ml.feature_schema_hash : null,
-      health_status: (ml && ml.gen1_health_status) || (decision && decision.gen1_health_status) || null,
+      // WP-G1.2 G1.2-01：健康唯一真相 = 运行时持久化 latch（decision 侧）；
+      // signal 侧 gen1_health_status 只是「信号生成时刻的审计快照」，单列展示，不得冒充实时权限。
+      health_status: (decision && decision.gen1_health_status) || (ml && ml.gen1_health_status) || null,
+      health_source: (decision && decision.gen1_health_source) || null,
+      health_gate_status: (decision && decision.gen1_health_gate_status) || null,
+      health_manual_review_required: !!(decision && decision.gen1_health_manual_review_required),
+      health_economic_status: (decision && decision.gen1_health_economic_status) || null,
+      health_read_reason_code: (decision && decision.gen1_health_read_reason_code) || null,
+      signal_health_snapshot: (ml && ml.gen1_health_status) || null,
       data_health_status: (ml && ml.data_health_status) || null,
       data_health_reason_code: (ml && ml.data_health_reason_code) || null,
       data_freshness_days: ml && ml.data_age_days != null ? ml.data_age_days : null,
