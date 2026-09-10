@@ -207,8 +207,20 @@ function counterfactualSectorRemaining(input) {
  *     Gen-1 占用而被压到**低于自身 baseline** —— 这是共享硬约束的必然结果，如实上报
  *     （`baselineFloorBreached`）。WP-G1.2 的 `Math.max(base, limit)` 地板已废弃。
  *
- * 输出**不变量**：`nextSectorUsed <= effectiveTechMax`。
- *   证明：occupation = max(0, min(suggested, target) − current) ≤ target − current，
+ * 输出**不变量**（★ 精确表述，WP-G1.3 G1.3-11 修正）：
+ *   本账本是 **execution / intended ledger** —— 占用按**建议执行仓**计
+ *   （`occupation = max(0, min(suggested, target) − current)`，与生产完全一致），
+ *   因此只有「账本终值 ≤ cap」成立：
+ *     `nextSectorUsed <= max(起始仓位, cap)`；起始仓位 ≤ cap 时即 `<= cap`。
+ *
+ *   ⚠️ **不成立**（曾误写为第三条不变量）：`Σ counterfactualTarget <= cap`。
+ *   当 `suggested < target` 时（生产常态：建议执行仓小于战略目标），
+ *   账本按 suggested 推进，而 Σ final_target 可以远超 cap（例：4 只各 current 10 /
+ *   final_target 30 / suggested 15 → 账本 60 ≤ 65，但 Σ target = 105）。
+ *   这是**正确行为**（Gen-1 忠实复用了生产的真实组合分配逻辑），
+ *   但意味着 `Σ target` 只能作为**信息性**的战略目标合计上报，绝不可当作 cap 约束的证据。
+ *
+ * 证明（账本不变量）：occupation = max(0, min(suggested, target) − current) ≤ target − current，
  *   且 target ≤ limit = cap − (used − current) ⟹ used + occupation ≤ cap。∎
  *
  * @param {object} input
@@ -255,8 +267,11 @@ function stepCounterfactualLedger(input) {
   const effectiveOccupation = isTech ? occupation : 0;
   return {
     sectorRemainingLimit,
+    // 战略目标（theoretical/strategic target）：Gen-1 单只意图经组合 cap 压缩后的目标
     counterfactualTarget,
     counterfactualDelta: round1(counterfactualTarget - baselineTarget),
+    // 本轮组合约束后的**建议执行仓**（账本按它占用；与生产同口径）
+    counterfactualSuggestedPosition: suggested,
     counterfactualOccupation: Math.round(effectiveOccupation * 1e6) / 1e6,
     nextSectorUsed: Math.round((used + effectiveOccupation) * 1e6) / 1e6,
     clamped,

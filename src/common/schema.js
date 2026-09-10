@@ -520,6 +520,105 @@ const SCHEMAS = [
       { name: 'uk_date_code', keys: [{ field: 'date', direction: 'desc' }, { field: 'code', direction: 'asc' }], unique: true },
       { name: 'idx_code_date', keys: [{ field: 'code', direction: 'asc' }, { field: 'date', direction: 'desc' }], unique: false }
     ]
+  },
+
+  /* ===== WP-G1.3 G1.3-10：补齐「constants 有、SCHEMAS 缺」的运行时集合 =====
+   * 之前 G1.1-03 新增的 gen1_health_state（以及既有 runtime_status / shadow_v3_log /
+   * Gen-2 · Integrated Shadow 集合）只登记在 constants.js，未进入 SCHEMAS →
+   * init-collections.js 不会创建它们，线上是否存在完全靠人工保证。
+   * 对 gen1_health_state 而言这是**上线前置风险**：集合缺失会被健康读取判为
+   * READ_ERROR → ML_OFF → Canary 关闭（fail-closed 正确，但会让人误判为接线 bug）。
+   * 由 `tests/schema-collections-parity.test.js` 守卫：constants 与 SCHEMAS 必须一一对应。
+   */
+  {
+    name: COLLECTIONS.RUNTIME_STATUS,
+    fields: {
+      key: { type: 'string', required: true, desc: "固定 'runtime-status'（单文档，运行状态单一真相）" },
+      production_engine: { type: 'string', required: false, desc: '生产引擎版本（V3.6.1）' },
+      shadow_engine: { type: 'string', required: false, desc: '对照/shadow 引擎版本（V3.8）' },
+      ml_effective: { type: 'boolean', required: false, desc: '恒 false' },
+      gen1_authority: { type: 'string', required: false, desc: 'OFF/SHADOW/ADVISORY/CANARY/PRODUCTION' },
+      gen1_health_status: { type: 'string', required: false, desc: '持久化 latch 健康（唯一真相）' },
+      gen1_health_gate_status: { type: 'string', required: false, desc: 'ACTIVE/PENDING/READ_ERROR' },
+      gen1_allow_advisory: { type: 'boolean', required: false, desc: '是否允许 ADVISORY' },
+      gen1_allow_canary: { type: 'boolean', required: false, desc: '是否允许 CANARY' },
+      gen1_counterfactual_canary_active: { type: 'boolean', required: false, desc: '反事实通路本轮是否 active' },
+      gen1_counterfactual_ledger_ok: { type: 'boolean', required: false, desc: '反事实账本是否未越 cap' },
+      gen1_production_write: { type: 'boolean', required: false, desc: '恒 false' },
+      gen1_auto_execution: { type: 'boolean', required: false, desc: '恒 false' },
+      updated_at: { type: 'string', required: false, desc: '更新时间 ISO' }
+    },
+    indexes: [{ name: 'uk_key', keys: [{ field: 'key', direction: 'asc' }], unique: true }]
+  },
+  {
+    name: COLLECTIONS.GEN1_HEALTH_STATE,
+    fields: {
+      key: { type: 'string', required: true, desc: "固定 'gen1-health-state'（单文档持久化 latch）" },
+      current_health: { type: 'string', required: false, desc: '本轮即时健康 OK/WARNING/DEGRADED/ML_OFF' },
+      latched_health: { type: 'string', required: true, desc: '对外权威健康（含 latch 效果）' },
+      manual_review_required: { type: 'boolean', required: false, desc: 'DEGRADED/ML_OFF 需人工复核' },
+      degraded_at: { type: 'string', required: false, desc: '进入降级时间 ISO' },
+      ml_off_at: { type: 'string', required: false, desc: '进入停用时间 ISO' },
+      reviewed_at: { type: 'string', required: false, desc: '人工复核时间 ISO' },
+      reviewed_by: { type: 'string', required: false, desc: '人工复核人' },
+      recovery_allowed: { type: 'boolean', required: false, desc: '是否已允许恢复' },
+      runtime_data_health: { type: 'string', required: false, desc: '运行时数据健康 OK/DEGRADED/BLOCKED' },
+      economic_health: { type: 'string', required: false, desc: '经济健康 PENDING/OK/WARNING/DEGRADED/ML_OFF' },
+      economic: { type: 'object', required: false, desc: '经济健康明细（独立事件数等）' },
+      updated_at: { type: 'string', required: false, desc: '更新时间 ISO' }
+    },
+    indexes: [{ name: 'uk_key', keys: [{ field: 'key', direction: 'asc' }], unique: true }]
+  },
+  {
+    name: COLLECTIONS.SHADOW_V3_LOG,
+    fields: {
+      snap_date: { type: 'string', required: true, desc: '快照日 YYYY-MM-DD' },
+      payload: { type: 'object', required: false, desc: 'V3.8 对照明细' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'idx_snap_date', keys: [{ field: 'snap_date', direction: 'desc' }], unique: false }]
+  },
+  {
+    name: COLLECTIONS.GEN2_SHADOW,
+    fields: {
+      type: { type: 'string', required: true, desc: "文档类型（run 文档为 'gen2_run'）" },
+      run_id: { type: 'string', required: true, desc: 'Gen-2 运行 ID' },
+      trade_date: { type: 'string', required: false, desc: '交易日 YYYY-MM-DD' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'uk_type_run', keys: [{ field: 'type', direction: 'asc' }, { field: 'run_id', direction: 'asc' }], unique: true }]
+  },
+  {
+    name: COLLECTIONS.GEN2_DAILY,
+    fields: {
+      code: { type: 'string', required: true, desc: 'ETF 代码' },
+      trade_date: { type: 'string', required: false, desc: '交易日 YYYY-MM-DD' },
+      close: { type: 'number', required: false, desc: '收盘价（qfq 前复权）' }
+    },
+    indexes: []
+  },
+  {
+    name: COLLECTIONS.INTEGRATED_SHADOW_RUN,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'Integrated Shadow 运行 ID' },
+      trade_date: { type: 'string', required: false, desc: '交易日 YYYY-MM-DD' },
+      status: { type: 'string', required: false, desc: 'OK/DEPENDENCY_BLOCKED 等' },
+      production_write: { type: 'boolean', required: false, desc: '恒 false（只读反事实）' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'uk_run_id', keys: [{ field: 'run_id', direction: 'asc' }], unique: true }]
+  },
+  {
+    name: COLLECTIONS.INTEGRATED_SHADOW_RESULT,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'Integrated Shadow 运行 ID' },
+      code: { type: 'string', required: true, desc: 'ETF 代码' },
+      trade_date: { type: 'string', required: false, desc: '交易日 YYYY-MM-DD' },
+      layer: { type: 'string', required: false, desc: '权限层（四层模型）' },
+      production_write: { type: 'boolean', required: false, desc: '恒 false' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'uk_run_code', keys: [{ field: 'run_id', direction: 'asc' }, { field: 'code', direction: 'asc' }], unique: true }]
   }
 ];
 
