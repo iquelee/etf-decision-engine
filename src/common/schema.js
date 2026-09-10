@@ -50,6 +50,7 @@ const SCHEMAS = [
       premium_rate: { type: 'number', required: false, desc: '折溢价率%' },
       iopv: { type: 'number', required: false, desc: '参考净值' },
       source: { type: 'string', required: true, desc: 'akshare/eastmoney/tencent/sina' },
+      is_final: { type: 'boolean', required: false, desc: 'WP-G1-DATA-02 当日 bar 定稿标记：只有过了 15:30 定稿时点写入的当日 bar 才会带 true；历史 bar 不需要（按 trade_date 天然定稿）' },
       realtime: { type: 'object', required: false, desc: '盘中快照 {price,time}' }
     },
     indexes: [
