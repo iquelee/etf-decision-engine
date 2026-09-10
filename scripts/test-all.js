@@ -71,7 +71,7 @@ function stageB() {
 
 /* ---------- Stage C: Immutable Checks（真 SHA 锁，P0-A） ---------- */
 function stageC() {
-  console.log('\n== Stage C: Immutable Checks（Gen-1 frozen + V3.6.1 + GEN2 bundle）==');
+  console.log('\n== Stage C: Immutable Checks（Gen-1 frozen + V3.6.1 + GEN2 bundle + Gen-1 pipeline）==');
   // P0-A：不再用 `git diff --quiet HEAD`（CI 干净 checkout 恒 PASS 的假锁）。
   // 改为实际文件 SHA256 vs lock 文件 expected（GEN1/V361/GEN2_RULE_V2 lock）。
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-immutable.js')], { cwd: REPO, encoding: 'utf8' });
@@ -79,6 +79,13 @@ function stageC() {
   const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
   report('C', 'Immutable SHA lock（8 项：Gen-1 frozen×3 + model_id + V3.6.1×2 + GEN2 bundle×2）', ok);
+
+  // G1-11 Gate G1-B：Gen-1 Feature Pipeline Lock（指标/阶段/PARAMS/特征构建/RS20/schema/sector/健康/域策略）
+  const p = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-gen1-pipeline.js')], { cwd: REPO, encoding: 'utf8' });
+  const pOk = p.status === 0;
+  const pLines = (p.stdout + p.stderr).split('\n').filter(Boolean);
+  pLines.forEach((l) => console.log('  ' + l));
+  report('C', 'Gen-1 Feature Pipeline Lock（Gate G1-B，9 项；改一行指标实现即 FAIL）', pOk);
 }
 
 /* ---------- Stage D: Cross-language Parity ---------- */

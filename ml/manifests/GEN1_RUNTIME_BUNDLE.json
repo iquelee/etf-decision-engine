@@ -1,0 +1,18 @@
+{
+  "bundle_id": "gen1-runtime-hvta-20260830",
+  "model_id": "HVT-A-ET-20260830",
+  "model_sha256": "d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712",
+  "freeze_manifest_sha256": "30f5fe1c92e2e7be25e3c1b77f5c5dabd4ce3402ff6f4b712c2ae25cc2b0a5f0",
+  "inference_sha256": "8e741912a7883d38f016ed234d091e2799cf56e28c41bfff208b373ec8c5b819",
+  "feature_pipeline_lock": "ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json",
+  "feature_pipeline_hash": "f21c4632009fe7c6af3235d8bb5ecd3dfa2106b9e88a651129a0ca9bd11227c2",
+  "feature_schema_hash": "bbf0e0493a3ee28faabf97d96ac07ecb688ccc25939fa79c127d82646f251b80",
+  "threshold_signal_p": 0.65,
+  "threshold_version": "shadow-threshold-v1",
+  "calibration_version": "cal-isotonic-cv3-v1",
+  "domain_policy_version": "gen1-domain-policy-v1",
+  "permission_version": "gen1-safety-permission-v1",
+  "authority_version": "gen1-authority-v1",
+  "sealed_at": "2026-09-10",
+  "note": "Gen-1 运行时 bundle：模型 SHA + 特征管线 SHA + schema + 各策略版本。生产 Canary 前置条件之一。"
+}
