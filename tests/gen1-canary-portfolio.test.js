@@ -13,7 +13,7 @@
  *   2) ★ Baseline-only A + Canary B（复审场景，逐位复现）
  *   3) Baseline-only A/B + Canary C
  *   4) Canary A + Baseline-only B + Canary C
- *   5) 组合级不变量：canary 账本 / Σ 反事实目标 均 ≤ tech cap
+ *   5) 组合级不变量：账本 ≤ tech cap（Σ 战略目标**不**受 cap 约束，见 5c）
  *   6) 旧行为反例：漏记 baseline 占用会越界（证明本测试确有鉴别力）
  *   7) sectorOccupation 与生产公式逐位一致
  */
@@ -29,8 +29,10 @@ const EPS = 1e-9;
  * 模拟 runDecisionEngine 的科技 ETF 顺序处理（与运行时同构）。
  *
  * 账本种子 = 本批 ETF 的当前仓位之和 + 本批之外的科技持仓（`otherTechHoldings`）。
- * 注意：只有当 `otherTechHoldings === 0` 时才有 `Σ target === 账本终值`，
- * 因此「Σ 反事实目标 ≤ cap」只在该一致种子下断言；账本终值 ≤ cap 则恒成立。
+ *
+ * `executionEqualsStrategy`：本批**全部** ETF 都满足 suggested === target
+ *   （建议执行仓 = 战略目标）。只有在这个 regime 且种子一致时，才有 `Σ target === 账本终值`，
+ *   从而 `Σ target ≤ cap` 才是有效断言 —— 其余情况 Σ final_target 可合法地远超 cap。
  */
 function runPortfolio(etfs, opts) {
   const o = opts || {};
@@ -39,17 +41,22 @@ function runPortfolio(etfs, opts) {
   const seed = currentSum + other;
   let used = seed;
   const rows = [];
+  let executionEqualsStrategy = true;
   for (const e of etfs) {
+    const bSug = e.baselineSuggested != null ? e.baselineSuggested : e.baselineTarget;
+    const cSug = e.canarySuggested != null ? e.canarySuggested : e.canaryTarget;
+    if (bSug !== e.baselineTarget) executionEqualsStrategy = false;
+    if (e.canary === true && cSug !== e.canaryTarget) executionEqualsStrategy = false;
     const step = stepCounterfactualLedger({
       isTech: e.isTech !== false,
       sectorUsed: used,
       currentPosition: e.current,
       effectiveTechMax: TECH_MAX,
       baselineTarget: e.baselineTarget,
-      baselineSuggested: e.baselineSuggested != null ? e.baselineSuggested : e.baselineTarget,
+      baselineSuggested: bSug,
       canaryEffective: e.canary === true,
       canaryTarget: e.canaryTarget,
-      canarySuggested: e.canarySuggested != null ? e.canarySuggested : e.canaryTarget
+      canarySuggested: cSug
     });
     rows.push(Object.assign({ code: e.code }, step));
     used = step.nextSectorUsed;
@@ -57,16 +64,25 @@ function runPortfolio(etfs, opts) {
   const targetSum = rows.reduce((s, r) => s + r.counterfactualTarget, 0);
   return {
     rows, seed, finalTechPosition: Math.round(used * 1e6) / 1e6,
-    targetSum, consistentSeed: other === 0
+    targetSum, consistentSeed: other === 0, executionEqualsStrategy
   };
 }
 
 /**
- * 账本不变量（精确表述）：
- *   ① **恒成立**：账本终值 ≤ max(起始仓位, cap) —— 账本只会在 cap 之内「加」，绝不制造新的超额。
- *      （起始仓位本身已超 cap 时，账本既不会更低也不会更高，这是既有持仓的事实，不是本账本能修的。）
+ * 账本不变量（★ WP-G1.3 G1.3-11 修正后的精确表述）。
+ *
+ * 本账本是 **execution / intended ledger** —— 占用按**建议执行仓**计
+ * （`occupation = max(0, min(suggested, target) - current)`，与生产同口径），
+ * 因此被 cap 约束的是「建议执行到的仓位」，只有账本终值恒受约束：
+ *   ① **恒成立**：账本终值 ≤ max(起始仓位, cap) —— 绝不制造**新的**超额。
+ *      （起始仓位本身已超 cap 时，账本既不会更低也不会更高；这是既有持仓的事实，不是账本能修的。）
  *   ② 起始仓位 ≤ cap（正常情况）→ 账本终值 ≤ cap。
- *   ③ 一致种子（起始仓位 = Σ 本批当前仓位）→ Σ 反事实目标 ≤ cap。
+ *   ③ **条件成立**：仅当 `executionEqualsStrategy`（全部 ETF 的 suggested === target）
+ *      且种子一致时，`Σ counterfactualTarget ≤ cap`。
+ *
+ * ⚠️ 不把 ③ 当作普遍不变量：当 `suggested < target`（生产常态）时账本按 suggested 推进，
+ * 而 Σ final_target 可远超 cap（case 5c 给出反例）。曾经的测试生成器恰好让 suggested === target，
+ * 于是这条被误当成普遍成立 —— 属于「过强假设」，已修正。
  */
 function assertLedgerBounded(out, label) {
   const bound = Math.max(out.seed, TECH_MAX);
@@ -76,9 +92,9 @@ function assertLedgerBounded(out, label) {
     assert.ok(out.finalTechPosition <= TECH_MAX + EPS,
       `${label}: 起始仓位 ${out.seed} 未超 cap，账本 ${out.finalTechPosition} 不得越过 cap`);
   }
-  if (out.consistentSeed && out.seed <= TECH_MAX) {
+  if (out.consistentSeed && out.executionEqualsStrategy && out.seed <= TECH_MAX) {
     assert.ok(out.targetSum <= TECH_MAX + EPS,
-      `${label}: Σ 反事实目标 ${out.targetSum} 越过 cap ${TECH_MAX}`);
+      `${label}: [execution===strategy] Σ 目标 ${out.targetSum} 越过 cap ${TECH_MAX}`);
   }
 }
 
@@ -110,7 +126,9 @@ function assertLedgerBounded(out, label) {
   assert.strictEqual(b.counterfactualTarget, 20, '★ B 被压到 20，而非完整放行 25');
   assert.strictEqual(b.clamped, true);
   assert.strictEqual(r.finalTechPosition, TECH_MAX, '最终恰好 65，不越界');
-  assert.ok(r.targetSum <= TECH_MAX + EPS, `Σ 反事实目标 ${r.targetSum} 必须 <= cap 65`);
+  // 本 case 全部 ETF 的 suggested === target → Σ target 与账本同值，可精确断言
+  assert.strictEqual(r.targetSum, 45, 'A 25 + B 20');
+  assertLedgerBounded(r, 'case2');
 }
 
 /* ---- 3) Baseline-only A/B + Canary C ---- */
@@ -144,10 +162,10 @@ function assertLedgerBounded(out, label) {
   assert.strictEqual(c.counterfactualTarget, 10, '★ Canary C 被压到 10');
   assert.strictEqual(c.canaryEffective, true, 'C 仍是 Gen-1 Candidate（stage 变更），只是目标受组合约束');
   assert.strictEqual(r.finalTechPosition, TECH_MAX);
-  assert.ok(r.targetSum <= TECH_MAX + EPS, `Σ=${r.targetSum}`);
+  assert.strictEqual(r.targetSum, 55, 'A 25 + B 20 + C 10（execution===strategy regime）');
 }
 
-/* ---- 5) 随机压力：任意混合序列都不得越界（cap 优先不变量） ---- */
+/* ---- 5) 随机压力：任意混合序列都不得让**账本**越界（cap 优先不变量） ---- */
 {
   let seed = 20260910;
   const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
@@ -197,11 +215,30 @@ function assertLedgerBounded(out, label) {
     if (e.canary) legacyUsed += sectorOccupation(e.current, e.canaryTarget, target);
   }
   const legacySum = legacyTargets.reduce((s, v) => s + v, 0);
+  // 本 case 全部 suggested === target → Σ target 与账本同值，此比较才成立（见文件头 ③ 的条件）
   assert.ok(legacySum > TECH_MAX, `旧实现 Σ=${legacySum} 应越界（这正是被修的 P0）`);
 
   const fixed = runPortfolio(etfs, { otherTechHoldings: 0 });
-  assert.ok(fixed.targetSum <= TECH_MAX + EPS, `修复后 Σ=${fixed.targetSum} 不得越界`);
+  assert.strictEqual(fixed.targetSum, TECH_MAX, `修复后 Σ=${fixed.targetSum} 恰好 65，不得越界`);
   assertLedgerBounded(fixed, 'legacy-compare');
+}
+
+/* ---- 5c) ★ suggested < target（生产常态）：Σ 战略目标可远超 cap，但账本不越界 ----
+ * 复审指出的「过强假设」反例：账本是 execution/intended ledger，
+ * 被 cap 约束的是「建议执行到的仓位」，而不是 Σ final_target。 */
+{
+  const etfs = [];
+  for (let i = 0; i < 4; i += 1) {
+    etfs.push({ code: 'E' + i, current: 10, baselineTarget: 30, baselineSuggested: 15, canary: false });
+  }
+  const r = runPortfolio(etfs, { otherTechHoldings: 0 });
+  assert.strictEqual(r.seed, 40, '种子 = 4 × current 10');
+  assert.strictEqual(r.finalTechPosition, 60, '★ 账本按 suggested 占用：40 → 45 → 50 → 55 → 60');
+  assert.ok(r.finalTechPosition <= TECH_MAX + EPS, '★ 账本 60 ≤ cap 65');
+  assert.strictEqual(r.targetSum, 105, 'Σ final_target = 30+30+25+20 = 105');
+  assert.ok(r.targetSum > TECH_MAX, '★ Σ 战略目标 105 > cap 65 —— 这是**正确行为**，不是越界');
+  assert.strictEqual(r.executionEqualsStrategy, false, '本 case 明确处于 suggested < target regime');
+  assertLedgerBounded(r, 'case5c');
 }
 
 /* ---- 7) 非科技标的：不参与科技额度 ---- */

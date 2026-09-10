@@ -65,9 +65,21 @@ const CANARY_CODE = stripComments(CANARY);
   assert.ok(/const counterfactualLedgerOk = counterfactualTechPosition\s*\n?\s*<= Math\.max\(techPositionSeed, effectiveTechMax\)/.test(CODE),
     '★ 必须有终局断言 counterfactualTechPosition <= max(seed, cap)');
   assert.ok(/GEN1_COUNTERFACTUAL_LEDGER_OVERFLOW/.test(CODE), '越界必须产生 SECURITY 审计记录');
-  assert.ok(/gen1_counterfactual_tech_position: counterfactualTechPosition/.test(CODE));
+  assert.ok(/gen1_counterfactual_intended_tech_position: counterfactualTechPosition/.test(CODE),
+    '★ G1.3-11：必须提供精确名称 intended（账本是 execution/intended ledger）');
+  assert.ok(/gen1_counterfactual_tech_position: counterfactualTechPosition/.test(CODE),
+    '旧名保留为等价别名（向后兼容）');
   assert.ok(/gen1_production_tech_position: productionTechPosition/.test(CODE));
   assert.ok(/gen1_counterfactual_ledger_ok: counterfactualLedgerOk/.test(CODE));
+  // G1.3-11：Σ 战略目标只作信息性上报，且注明不受 cap 约束
+  assert.ok(/gen1_counterfactual_target_sum: Math\.round\(counterfactualTargetSum/.test(CODE));
+  // 注释类断言要用**原文**（CODE 已剥离注释）
+  assert.ok(/不受.{0,8}cap 约束/.test(RDE),
+    '★ Σ 战略目标必须显式标注「不受 cap 约束」，避免被误当成不变量');
+  assert.ok(/不得用作 cap 合规证据/.test(RDE),
+    '★ 必须写明 Σ 目标不得作为 cap 合规证据');
+  assert.ok(/gen1_counterfactual_suggested_position/.test(CODE),
+    '必须上报每只的反事实建议执行仓（Economic Health 聚合要用 suggested 而非 target）');
 }
 
 /* ---- 5) P1：mlMeta 不再用含混 boolean，改为显式 counterfactual_canary_* ---- */

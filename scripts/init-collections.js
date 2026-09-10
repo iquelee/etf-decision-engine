@@ -1,5 +1,5 @@
 /**
- * 初始化脚本：建 14 集合 + 索引 + 权限（引用 common/schema.js 单点真相）
+ * 初始化脚本：按 common/schema.js（单点真相）建集合 + 索引 + 权限说明。
  *
  * 用法：
  *   TCB_ENV=<你的环境ID> node init-collections.js
@@ -7,10 +7,15 @@
  *
  * 说明：
  * - 集合创建用 @cloudbase/node-sdk createCollection（已存在则跳过）；
- * - 索引：若本地装有 @cloudbase/cli（tcb），自动执行 tcb db createIndex；
+ * - 索引：若本地装有 @cloudbase/cli（tcb），自动执行 tcb createIndex；
  *   否则打印待执行的 CLI 命令，供手动执行；
  * - 权限：CloudBase 默认「仅创建者可读写」（安全规则预设），单用户系统无需额外改动，
  *   脚本会输出确认提示。
+ *
+ * WP-G1.3 G1.3-10：源码真相源已收敛到 `src/common/`（P0-01），
+ * 本脚本此前仍 require 旧的 `cloudfunctions/common/schema.js`（已不存在）→ 直接报错。
+ * 现改为 require `src/common/schema.js`；集合清单由 SCHEMAS 驱动，
+ * 并由 tests/schema-collections-parity.test.js 守卫 constants ↔ SCHEMAS 一一对应。
  */
 
 'use strict';
@@ -19,7 +24,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const cloudbase = require('@cloudbase/node-sdk');
 
-const { SCHEMAS, getCollectionNames } = require(path.join(__dirname, '..', 'cloudfunctions', 'common', 'schema.js'));
+const { SCHEMAS, getCollectionNames } = require(path.join(__dirname, '..', 'src', 'common', 'schema.js'));
 
 const envId = process.env.TCB_ENV || process.argv[2] || null;
 

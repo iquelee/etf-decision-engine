@@ -72,29 +72,42 @@ canarySectorUsed  // 反事实账本（种子同 = portfolio.tech_position）
 
 ---
 
-## 三、终局断言（G1.3-06）
+## 三、终局断言（G1.3-06；★ G1.3-11 修正表述）
 
-**精确不变量**（由 `stepCounterfactualLedger` 保证）：
+**先厘清账本性质**：本账本是 **execution / intended ledger** —— 占用按**建议执行仓**计
+（`occupation = max(0, min(suggested, target) − current)`，与生产**完全一致**）。
+因此被 Tech Cap 约束的是「**本轮建议实际执行到的仓位**」，**不是** `Σ final_target`。
+
+**精确不变量**：
 
 ```text
-① 恒成立：  counterfactual_tech_position <= max(起始科技仓位, cap)
-② 起始仓位 <= cap（正常情况）→  counterfactual_tech_position <= cap      ← 复审要求的断言
-③ 一致种子（起始仓位 = Σ 本批当前仓位）→  Σ 反事实目标 <= cap
+① 恒成立：        counterfactual_intended_tech_position <= max(起始科技仓位, cap)
+② 起始仓位≤cap：  counterfactual_intended_tech_position <= cap      ← 复审要求的断言
+③ 条件成立：      仅当「全部 ETF suggested === target」且种子一致时，Σ counterfactualTarget <= cap
 ```
 
 > ①为何要带 `max(seed, cap)`：若**起始**仓位本身已超 cap（用户实际持仓高于策略 cap），任何账本都不可能把它降到 cap 以下——账本只能保证**不制造新的超额**。该情形由 ② 的守卫条件单独区分，不会被用来掩盖越界。
-> ③为何要限定「一致种子」：`portfolio.tech_position` 可能包含本批 5 只之外的科技持仓；只有种子等于本批仓位之和时，`Σ 目标` 才等价于账本终值。
+
+> ⚠️ **G1.3-11 修正**：V4 初稿把「一致种子 → Σ 反事实目标 ≤ cap」写成普遍不变量，**这是错的**。当 `suggested < target`（生产常态）时账本按 suggested 推进，而 Σ final_target 可远超 cap：
+> ```text
+> 4 只科技，各 current 10（种子 40），final_target 30，suggested 15
+>   账本（intended）：40 → 45 → 50 → 55 → 60   ≤ 65 ✓
+>   Σ final_target  ：30 + 30 + 25 + 20 = 105  > 65  ← 正确行为，不是越界
+> ```
+> 原测试之所以通过，是因为其生成器恰好令 `suggested === target`（过强假设）。现已把 ③ 改为**条件不变量**，并新增 case 5c 固定该反例。
 
 **运行时实现**：`counterfactualLedgerOk`；违反 → `console.error('[SECURITY] GEN1_COUNTERFACTUAL_LEDGER_OVERFLOW: ...')` 并且 **`counterfactual_canary_active = false`**（fail-closed：不把越界的反事实标为 active，但**不影响 V3.6.1 生产结果**）。
 
 **runtime_status / mlMeta 新增**
 ```
-gen1_production_tech_position        生产账本终值
-gen1_counterfactual_tech_position    反事实账本终值
-gen1_counterfactual_tech_seed        起始科技仓位
-gen1_counterfactual_tech_cap         cap
-gen1_counterfactual_ledger_ok        断言结果
+gen1_production_tech_position              生产账本终值（按建议执行仓）
+gen1_counterfactual_intended_tech_position 反事实账本终值（★ 精确名称）
+gen1_counterfactual_tech_position          等价别名（向后兼容）
+gen1_counterfactual_tech_seed / _tech_cap  起始科技仓位 / cap
+gen1_counterfactual_ledger_ok              断言结果
+gen1_counterfactual_target_sum             信息性：Σ 战略目标（**不受 cap 约束**，不得作为 cap 合规证据）
 ```
+每只 ETF 另新增 `gen1_counterfactual_suggested_position`（组合约束后的建议执行仓）—— 未来 Economic Health 聚合评估 Timing Gain / Incremental Position / False Fast Path Cost 时应比较 **Baseline Suggested vs Counterfactual Suggested**，而不是只看 target。
 
 ---
 
@@ -164,8 +177,10 @@ runDecisionEngine 读到 NOT_INITIALIZED
 | GitHub CI | PASS（#36） | 待 #17 跑绿 |
 | **Counterfactual Portfolio Ledger** | ❌（漏记 baseline 占用） | ✅ **PASS**（G1-M 重写 + G1-R） |
 | **Counterfactual Canary Metadata** | ⚠️（硬编码 false） | ✅ **PASS**（4 个显式字段） |
+| **Ledger Naming / Invariant 表述** | ⚠️（Σ target 被误当不变量） | ✅ **PASS**（G1.3-11 修正 + case 5c 反例） |
+| **Schema / Collections 一致性** | ❌（gen1_health_state 未登记） | ✅ **PASS**（G1.3-10 + G1-S 守卫） |
 | ADVISORY_PRODUCTION | PASS | ✅ **PASS** |
-| **COUNTERFACTUAL_CANARY** | ⚠️ 剩 1 个 P0 | ✅ **工程就绪（待最终 Review 批准开启）** |
+| **COUNTERFACTUAL_CANARY** | ⚠️ 剩 1 个 P0 | ✅ **APPROVED**（复审正式批准，待按上线清单开启） |
 | CANARY Economic Gate | FAIL / insufficient | ❌ **FAIL / insufficient**（证据未扩容） |
 | LIMITED / FULL PRODUCTION | BLOCKED | ⛔ **BLOCKED** |
 | AUTO TRADING | OFF | **OFF** |
@@ -184,8 +199,47 @@ runDecisionEngine 读到 NOT_INITIALIZED
 #14 retarget master → CI → merge
 #15 retarget master → CI → merge
 #16 retarget master → CI → merge
-#17 retarget master → CI → merge（本版）
+#17 retarget master → CI → merge
+#18 retarget master → CI → merge（上线前置补齐：Schema/Collections + 账本命名）
 ```
+
+---
+
+## 十、上线前置补齐（G1.3-10 / G1.3-11，PR #18）
+
+### G1.3-10：`gen1_health_state` 未纳入 SCHEMAS（上线风险）
+
+复审发现：`GEN1_HEALTH_STATE` 只在 `constants.js` 声明，**未进入 `schema.js` 的 SCHEMAS** →
+`scripts/init-collections.js` 不会创建它，「线上是否存在」完全靠人工保证。
+
+风险链路（fail-closed 正确，但会被误判为接线 bug）：
+```text
+collection 缺失 → readHealthState 抛错 → READ_ERROR → ML_OFF → allow_canary=false
+→ 切 CANARY 后 authorized=true 但 health_allowed=false、active=false
+```
+
+排查同类问题时还发现 **7 个集合**都缺失（`shadow_v3_log`、`runtime_status`、`gen1_health_state`、
+`gen2_shadow`、`gen2_daily`、`integrated_shadow_run`、`integrated_shadow_result`），
+且 `init-collections.js` 仍 require **已不存在的** `cloudfunctions/common/schema.js`（P0-01 收敛后遗留）→ 脚本直接报错。
+
+**处理**
+- 7 个集合全部补入 SCHEMAS（字段 + 唯一键索引；`gen1_health_state` / `runtime_status` 用 `uk_key`）；
+- `init-collections.js` require 改为 `src/common/schema.js`，集合清单由 SCHEMAS 驱动；
+- **新增 Gate G1-S**（`tests/schema-collections-parity.test.js`）：constants ↔ SCHEMAS 必须一一对应（双向，无缺失无孤儿），并断言上线关键集合存在唯一键索引与 latch 字段。**这类「代码知道集合、初始化脚本不知道」的缺口从此不可能静默复发。**
+
+> 代码知道某个集合 ≠ 线上一定已创建。G1-S 保证的是「初始化脚本会自动创建」，
+> **线上是否真的存在仍需按上线清单验收**（见 `GEN1_CANARY_GO_LIVE_RUNBOOK.md` 第 3 步）。
+
+### G1.3-11：账本命名与不变量表述修正（复审 P1，不阻断 Canary）
+
+见第三节。要点：账本是 **execution/intended ledger**，`Σ final_target` **不受 cap 约束**。
+字段命名精确化（`gen1_counterfactual_intended_tech_position` 为准确名称，旧名保留为别名）、
+新增每只 `gen1_counterfactual_suggested_position`、新增信息性 `gen1_counterfactual_target_sum`，
+测试补 case 5c 固定反例。**算法未改**。
+
+**建议排期**：此项应在 **Economic Health 自动闭环**（Residual R1）之前完成 — 已在本 PR 完成，
+以便后续 Timing Gain / Incremental Position / False Fast Path Cost 直接比较
+**Baseline Suggested vs Counterfactual Suggested**。
 
 ---
 

@@ -565,6 +565,8 @@ exports.main = async (event = {}, context = {}) => {
     let canarySectorUsed = portfolio.tech_position != null ? portfolio.tech_position : 0;
     // G1.3-07：本轮真正执行了几次 Gen-1 反事实重算（S4 rerun）—— 用于对外状态字段
     let canaryInvocationCount = 0;
+    // G1.3-11：Σ 反事实**战略目标**（信息性；**不受** cap 约束，见步进函数注释）
+    let counterfactualTargetSum = 0;
     // G1.2-01/02：健康状态唯一真相 = 持久化 latch（三态读取，异常一律 fail-closed）
     let gen1GlobalGate;
     let gen1HealthState;
@@ -766,10 +768,12 @@ exports.main = async (event = {}, context = {}) => {
         canarySectorUsed = cfStep.nextSectorUsed;
         canary.gen1_counterfactual_target = cfStep.counterfactualTarget;
         canary.gen1_counterfactual_delta = cfStep.counterfactualDelta;
+        canary.gen1_counterfactual_suggested_position = cfStep.counterfactualSuggestedPosition;
         canary.gen1_counterfactual_clamped = cfStep.clamped;
         canary.gen1_counterfactual_baseline_floor_breached = cfStep.baselineFloorBreached;
         canary.gen1_counterfactual_sector_remaining = cfStep.sectorRemainingLimit;
         canary.gen1_counterfactual_stage_changed = canary.gen1_canary_effective === true;
+        if (isTechEtf) counterfactualTargetSum += cfStep.counterfactualTarget;
         if (canary.gen1_canary_effective === true) canaryInvocationCount += 1;
         if (cfStep.baselineFloorBreached) {
           console.warn(`[GEN1-CF] ${etf.code} 反事实目标 ${cfStep.counterfactualTarget}`
@@ -840,11 +844,15 @@ exports.main = async (event = {}, context = {}) => {
       }
     }
 
-    // ---- WP-G1.3 G1.3-06：反事实组合账本终局断言 ----
+    // ---- WP-G1.3 G1.3-06/11：反事实组合账本终局断言 ----
     // 两个并行账本：productionSectorUsed（生产）vs canarySectorUsed（完整组合反事实）。
-    // 精确不变量（由 stepCounterfactualLedger 保证）：
-    //   ① counterfactualTechPosition <= max(起始科技仓位, cap)  —— 账本绝不制造**新的**超额；
-    //   ② 起始仓位 <= cap（正常情况）→ counterfactualTechPosition <= cap（复审要求的断言）。
+    // ★ 本账本是 **execution / intended ledger**：占用按**建议执行仓**计
+    //   （occupation = max(0, min(suggested, target) - current)，与生产完全一致），
+    //   因此被约束的是「建议执行到的仓位」，**不是** Σ final_target（后者可远超 cap，
+    //   例：4 只各 current 10 / target 30 / suggested 15 → 账本 60 ≤ 65 而 Σ target = 105）。
+    // 精确不变量：
+    //   ① counterfactual_intended_tech_position <= max(起始科技仓位, cap)  —— 绝不制造**新的**超额；
+    //   ② 起始仓位 <= cap（正常情况）→ <= cap（复审要求的断言）。
     // 违反即为实现缺陷：如实上报并 fail-closed（不把本轮反事实标为 active），绝不静默吞掉。
     const productionTechPosition = Math.round(sectorUsed * 1e6) / 1e6;
     const counterfactualTechPosition = Math.round(canarySectorUsed * 1e6) / 1e6;
@@ -1013,12 +1021,17 @@ exports.main = async (event = {}, context = {}) => {
       counterfactual_canary_invocations: canaryInvocationCount,
       production_fast_path_enabled: false,
       canary_path_ready: true,        // 代码层能力就绪（与权限状态解耦）
-      // G1.3-06：两条并行账本终局（cap 约束下的组合反事实）
-      gen1_production_tech_position: productionTechPosition,
-      gen1_counterfactual_tech_position: counterfactualTechPosition,
-      gen1_counterfactual_tech_seed: techPositionSeed,
-      gen1_counterfactual_tech_cap: effectiveTechMax,
-      gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
+    // G1.3-06：两条并行账本终局（cap 约束下的组合反事实）
+    // G1.3-11：命名精确化 —— `intended` 才是准确名称（账本按**建议执行仓**占用，
+    //   不是 Σ final_target）。旧名 gen1_counterfactual_tech_position 保留为等价别名（向后兼容）。
+    gen1_production_tech_position: productionTechPosition,
+    gen1_counterfactual_intended_tech_position: counterfactualTechPosition,
+    gen1_counterfactual_tech_position: counterfactualTechPosition,
+    gen1_counterfactual_tech_seed: techPositionSeed,
+    gen1_counterfactual_tech_cap: effectiveTechMax,
+    gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
+    // 信息性：Σ 反事实战略目标（**不受 cap 约束**，不得用作 cap 合规证据）
+    gen1_counterfactual_target_sum: Math.round(counterfactualTargetSum * 1e6) / 1e6,
       note: mlFastPathEnabled
         ? 'ml_fast_path_enabled ignored while Gen-1 in SHADOW; production stays V3.6.1'
         : 'ML observing only — no authority to change production decisions'
@@ -1061,12 +1074,14 @@ exports.main = async (event = {}, context = {}) => {
       gen1_counterfactual_canary_active: cfActive,
       gen1_counterfactual_canary_invocations: canaryInvocationCount,
       gen1_production_fast_path_enabled: false,
-      // G1.3-06：两条并行账本终局 —— 断言 canary 账本 <= max(起始仓位, cap)
+      // G1.3-06/11：两条并行账本终局 —— intended 为精确名称（账本按建议执行仓占用）
       gen1_production_tech_position: productionTechPosition,
+      gen1_counterfactual_intended_tech_position: counterfactualTechPosition,
       gen1_counterfactual_tech_position: counterfactualTechPosition,
       gen1_counterfactual_tech_seed: techPositionSeed,
       gen1_counterfactual_tech_cap: effectiveTechMax,
       gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
+      gen1_counterfactual_target_sum: Math.round(counterfactualTargetSum * 1e6) / 1e6,
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
       ml_shadow_observe: mlShadowObserve,
       trend_stage_enabled: trendStageEnabled,
