@@ -4,13 +4,19 @@
  *
  * 命名门禁 G1-A ~ G1-H，供 CI 显式可见：
  *   G1-A Gen1 Frozen Artifact        冻结 artifact SHA + model_id
- *   G1-B Gen1 Feature Pipeline Lock  特征管线 SHA + root-of-trust
+ *   G1-B Gen1 Feature Pipeline Lock  特征管线 SHA + root-of-trust + 部署侧阈值一致
  *   G1-C Python ↔ Node Golden Parity 420 行大样本推理一致
  *   G1-D Safety Permission Tests     许可链（含任务包 6 组验收）
  *   G1-E Domain Gate Tests           域许可（含 518880 OOD 核心验收）
  *   G1-F Circuit Breaker Tests       熔断门 + 禁止 auto reopen
  *   G1-G Execution Boundary Tests    自动执行永久硬关 + 审计
  *   G1-H Production No-op Test       ADVISORY 下 final_target/final_action 逐字段不变
+ *   —— WP-G1.1 Canary Gate Remediation ——
+ *   G1-I Model Candidate Gate        Safety PERMIT ≠ 模型触发（P<0.65 不得 advisory/canary）
+ *   G1-J Sector Contract Audit       capability 声明 vs frozen encoder 逐 fold 事实
+ *   G1-K Persistent Health Latch     跨冷启动保持 + 禁 auto reopen
+ *   G1-L Economic Health Aggregator  样本不足必须 PENDING（不得 OK 冒充）
+ *   G1-M Canary Portfolio Parity     sectorRemainingLimit 继承 + 科技合计不破 cap
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -31,11 +37,16 @@ const GATES = [
   { id: 'G1-E', name: 'Domain Gate Tests', script: 'tests/gen1-domain-gate.test.js' },
   { id: 'G1-F', name: 'Circuit Breaker Tests', script: 'tests/gen1-circuit-breaker.test.js' },
   { id: 'G1-G', name: 'Execution Boundary Tests', script: 'tests/gen1-execution-boundary.test.js' },
-  { id: 'G1-H', name: 'Production No-op Test', script: 'tests/gen1-overlay-noop.test.js' }
+  { id: 'G1-H', name: 'Production No-op Test', script: 'tests/gen1-overlay-noop.test.js' },
+  { id: 'G1-I', name: 'Model Candidate Gate', script: 'tests/gen1-safety-permission.test.js' },
+  { id: 'G1-J', name: 'Sector Contract Audit', script: 'scripts/audit-gen1-sector-contract.js' },
+  { id: 'G1-K', name: 'Persistent Health Latch', script: 'tests/gen1-persistent-health.test.js' },
+  { id: 'G1-L', name: 'Economic Health Aggregator', script: 'tests/gen1-economic-health.test.js' },
+  { id: 'G1-M', name: 'Canary Portfolio Parity', script: 'tests/gen1-canary-portfolio.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-H）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-M）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {

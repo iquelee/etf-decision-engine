@@ -12,33 +12,50 @@ const { evaluateGen1Permission } = require('../src/common/utils/gen1-safety-perm
 const { buildCanaryCounterfactual } = require('../src/common/utils/gen1-canary');
 
 const TO = '2026-09-10';
-const baseParams = { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true };
-const signal = { date: TO, model_id: 'HVT-A-ET-20260830', calibrated_probability: 0.82, rule_gate: 'PERMIT' };
+const baseParams = { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true, gen1_authority: 'CANARY' };
+const signal = { date: TO, model_id: 'HVT-A-ET-20260830', ml_fast: true, calibrated_probability: 0.82, rule_gate: 'PERMIT', stage: 'S2' };
 const decision = { code: '513310', final_target: 15, final_action: 'WAIT', decision_date: TO, suggested_position: 15 };
 
 function perm(over) {
   return evaluateGen1Permission(Object.assign({
     params: baseParams, signal, baseline: { trend_stage_primary: 'S2', v361_baseline_target: 15 }, today: TO,
+    thresholdSignalP: 0.65,
     risk: { risk_override: false, risk_flag: 'NORMAL' }, fundamental: { f_state: 'F3' },
     snapshot: { structural_break: false, hard_break: false },
     dataHealth: { status: 'OK' }, domainPermission: { status: 'IN_DOMAIN', permission: 'ALLOW' }
   }, over || {}));
 }
 
-// 1) ADVISORY + PERMIT：final_target/final_action 完全不变
+// 1) Authority=CANARY 但无 recompute：final_target/final_action 完全不变
 {
   const p = perm();
   const canary = buildCanaryCounterfactual({ permission: p, baseline: { stage: 'S2', target: 15, action: 'WAIT' } });
   const out = applyGen1Overlay(decision, p, canary);
-  assert.strictEqual(out.final_target, 15, 'ADVISORY overlay 不得改 final_target');
+  assert.strictEqual(out.final_target, 15, 'overlay 不得改 final_target');
   assert.strictEqual(out.final_action, 'WAIT');
   assert.strictEqual(verifyProductionNoop(decision, out).ok, true);
-  // 但 Gen-1 字段已写入
+  // Gen-1 字段已写入
   assert.strictEqual(out.ml_rule_permission, 'PERMIT');
   assert.strictEqual(out.ml_rule_permission_source, 'SAFETY_CORE');
   assert.strictEqual(out.eod_precheck_permission, 'PERMIT');
-  assert.strictEqual(out.gen1_authority, 'ADVISORY');
-  assert.strictEqual(out.gen1_canary_effective, false, 'ADVISORY 不产生 canary');
+  assert.strictEqual(out.gen1_authority, 'CANARY');
+  assert.strictEqual(out.gen1_model_candidate, true, '模型候选已写入');
+  assert.strictEqual(out.gen1_canary_effective, true, 'authority=CANARY 且 Safety PASS → canary 生效');
+  assert.strictEqual(out.gen1_canary_target, 15, '无 recompute → canary target 回落 baseline');
+}
+
+// 1b) ADVISORY 权限：canary 必须关闭，production 仍不变
+{
+  const p = perm({ params: { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true, gen1_authority: 'ADVISORY' } });
+  const canary = buildCanaryCounterfactual({
+    permission: p, baseline: { stage: 'S2', target: 15, action: 'WAIT' },
+    recomputeCanaryTarget: () => ({ target: 25, action: 'BUILD' })
+  });
+  const out = applyGen1Overlay(decision, p, canary);
+  assert.strictEqual(out.gen1_canary_effective, false, 'ADVISORY 不得 canary');
+  assert.strictEqual(out.gen1_canary_target, 15);
+  assert.strictEqual(out.final_target, 15);
+  assert.strictEqual(verifyProductionNoop(decision, out).ok, true);
 }
 
 // 2) CANARY 且 canary target=25：final_target 仍必须为 15（canary 只落 gen1_canary_target）

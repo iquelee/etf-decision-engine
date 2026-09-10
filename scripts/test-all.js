@@ -85,7 +85,7 @@ function stageC() {
   const pOk = p.status === 0;
   const pLines = (p.stdout + p.stderr).split('\n').filter(Boolean);
   pLines.forEach((l) => console.log('  ' + l));
-  report('C', 'Gen-1 Feature Pipeline Lock（Gate G1-B，9 项；改一行指标实现即 FAIL）', pOk);
+  report('C', 'Gen-1 Feature Pipeline Lock（Gate G1-B，10 项；改一行指标实现或阈值不一致即 FAIL）', pOk);
 }
 
 /* ---------- Stage D: Cross-language Parity ---------- */
@@ -126,12 +126,12 @@ function stageF() {
 
 /* ---------- Stage G: Gen-1 Production Gates（WP-G1 / G1-11） ---------- */
 function stageG() {
-  console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-H）==');
+  console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-M）==');
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'gen1-production-gates.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
   const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
-  report('G', 'Gen-1 Production Gates G1-A~H（Frozen/Pipeline/Parity/Permission/Domain/Circuit/Execution/No-op）', ok);
+  report('G', 'Gen-1 Production Gates G1-A~M（含 Model Candidate/Sector Contract/Persistent Latch/Economic Health/Canary Portfolio）', ok);
 }
 
 /* ---------- 主流程 ---------- */

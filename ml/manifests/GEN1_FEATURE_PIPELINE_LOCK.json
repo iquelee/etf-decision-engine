@@ -17,7 +17,7 @@
     {
       "role": "feature_builder_and_params",
       "path": "cloudfunctions/runGen1ShadowEod/index.js",
-      "sha256": "db1b741c0c759e9fb851ff3fb7923837164b4136a0a6bea28c14798f72a0fdaa"
+      "sha256": "485244e4f79931b5f07c5216d83e6ce36f5ebb9112194d63a0f910e90eec33d7"
     },
     {
       "role": "feature_schema_and_thresholds",

@@ -19,13 +19,26 @@ assert.strictEqual(observed.advisory.delta_pct, 0);
 assert.strictEqual(observed.signal.probability, 0.42);
 
 const active = buildGen1ViewModel({
-  ml: { enabled: true, has_signal_row: true, is_stale: false, signal_status: 'CANDIDATE', advisory_effective: true, calibrated_probability: 0.78, permission: 'PERMIT' },
+  ml: { enabled: true, has_signal_row: true, is_stale: false, signal_status: 'CANDIDATE', advisory_effective: true, model_candidate: true, calibrated_probability: 0.78, permission: 'PERMIT' },
   decision: { ...baseDecision, final_action: 'ADD', gen1_advisory_target: 25, suggested_position: 15 },
   position: basePosition
 });
 assert.strictEqual(active.status.code, STATUS.FAST_PATH_ACTIVE);
 assert.strictEqual(active.advisory.target_pct, 25);
 assert.strictEqual(active.signal.fast_path, '已触发');
+
+// G1.1-01：advisory_effective=true 但 model_candidate=false（低概率 S2）绝不得表述为「已触发」
+const ruleOnly = buildGen1ViewModel({
+  ml: { enabled: true, has_signal_row: true, is_stale: false, signal_status: 'OBSERVED', advisory_effective: true, model_candidate: false, probability: 0.12, permission: 'PERMIT' },
+  decision: baseDecision,
+  position: basePosition
+});
+assert.strictEqual(ruleOnly.status.code, STATUS.OBSERVED, 'advisory_effective 但模型未触发 → 必须 OBSERVED');
+assert.notStrictEqual(ruleOnly.status.code, STATUS.FAST_PATH_ACTIVE);
+assert.strictEqual(ruleOnly.status.label, '观察中 · 模型未触发');
+assert.strictEqual(ruleOnly.signal.fast_path, '未触发');
+assert.strictEqual(ruleOnly.advisory.source, 'SAFETY_CORE_MAINTENANCE');
+assert.strictEqual(ruleOnly.advisory.target_pct, null, '模型未触发不得给出 Gen-1 目标仓');
 
 const stale = buildGen1ViewModel({
   ml: { enabled: true, has_signal_row: true, is_stale: true, signal_status: 'DEGRADED' },

@@ -33,11 +33,11 @@ for (const [cat, code] of [['storage', '513310'], ['ai_network', '515880'], ['se
   const gold = evaluateDomainPermission('gold', '518880');
   const p = evaluateGen1Permission({
     params: { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true, gen1_authority: 'CANARY' },
-    signal: { date: '2026-09-10', model_id: 'HVT-A-ET-20260830', calibrated_probability: 0.95, rule_gate: 'PERMIT' },
+    signal: { date: '2026-09-10', model_id: 'HVT-A-ET-20260830', ml_fast: true, calibrated_probability: 0.95, rule_gate: 'PERMIT', stage: 'S2' },
     baseline: { trend_stage_primary: 'S2', v361_baseline_target: 15 },
     risk: { risk_override: false, risk_flag: 'NORMAL' }, fundamental: { f_state: 'F3' },
     snapshot: { structural_break: false, hard_break: false },
-    today: '2026-09-10',
+    today: '2026-09-10', thresholdSignalP: 0.65,
     dataHealth: { status: 'OK' }, domainPermission: gold
   });
   assert.strictEqual(p.safety.permission, 'PERMIT', 'Safety 本身通过');

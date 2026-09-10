@@ -95,3 +95,26 @@ matrix:
 ## 当前状态（WP-G1 后）
 
 `npm test` **29/29** 全绿（A 22/22 文件、B Python、C Immutable 11/11 + Pipeline 9/9、D Gen-2 parity 360 行、E Secret、F build parity、**G Gen-1 Production Gates 8/8**）。
+
+---
+
+## WP-G1.1 Canary Gate Remediation（2026-09-10）
+
+新增门禁 **G1-I ~ G1-M**（Stage G 内，共 13 门）：
+
+| Gate | 名称 | 实现 |
+|---|---|---|
+| G1-I | Model Candidate Gate | `tests/gen1-safety-permission.test.js`（Safety PERMIT ≠ 模型触发） |
+| G1-J | Sector Contract Audit | `scripts/audit-gen1-sector-contract.js`（逐 fold encoder vs capability，drift → FAIL） |
+| G1-K | Persistent Health Latch | `tests/gen1-persistent-health.test.js`（跨冷启动 + 禁 auto reopen） |
+| G1-L | Economic Health Aggregator | `tests/gen1-economic-health.test.js`（样本不足 → PENDING） |
+| G1-M | Canary Portfolio Parity | `tests/gen1-canary-portfolio.test.js`（多科技候选聚合不破 tech cap） |
+
+其它变更：
+- **G1-B 扩至 10 项**：新增 `gen1-threshold/constants.js == frozen-manifest` 断言（`src/common/constants.js` 的 `gen1_frozen_threshold_p` 必须等于 frozen 阈值）。
+- **CI workflow 修 stacked PR**：`pull_request` 移除 base 分支过滤，`feat/*` 为 base 的 stacked PR 亦触发。
+- 持久化状态集合 `gen1_health_state`（key=`gen1-health-state`）；离线经济健康 CLI `scripts/gen1-health-aggregator.js`。
+
+## 当前状态（WP-G1.1 后）
+
+`npm test` **32/32** 全绿（A 25/25 文件、C Immutable 11/11 + Pipeline **10/10**、D 360 行、E、F、**G Gen-1 Production Gates 13/13**）。

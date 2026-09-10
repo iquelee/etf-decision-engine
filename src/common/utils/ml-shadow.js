@@ -188,6 +188,13 @@ function buildEtfMlShadow(params, decision, signal) {
     permission_hit: permissionHit,
     would_trigger_fast_path: wouldTrigger,
     signal_status,
+    // G1.1-01：Model Candidate（模型是否真的触发；必须由 decision 显式确认，缺省为 false）
+    model_candidate: decision && decision.gen1_model_candidate === true,
+    model_candidate_reason_code: pickStr(decision, ['gen1_model_candidate_reason_code']) || null,
+    model_probability: pickNum(decision, ['gen1_model_probability']) != null
+      ? pickNum(decision, ['gen1_model_probability']) : null,
+    model_threshold_p: pickNum(decision, ['gen1_model_threshold_p']) != null
+      ? pickNum(decision, ['gen1_model_threshold_p']) : null,
     advisory_effective: base.advisory_enabled === true && decision && decision.ml_advisory_effective === true,
     effective_stage: pickStr(decision, ['effective_stage', 'gen1_effective_stage', 'trend_stage']) || null,
     baseline_stage: pickStr(decision, ['v361_baseline_stage', 'baseline_stage']) || stage,
@@ -245,6 +252,10 @@ function slimCardMlShadow(full) {
     probability: full.probability,
     calibrated_probability: full.calibrated_probability,
     signal_status: full.signal_status,
+    model_candidate: !!full.model_candidate,
+    model_candidate_reason_code: full.model_candidate_reason_code || null,
+    model_probability: full.model_probability != null ? full.model_probability : null,
+    model_threshold_p: full.model_threshold_p != null ? full.model_threshold_p : null,
     advisory_effective: !!full.advisory_effective,
     effective_stage: full.effective_stage || null,
     baseline_stage: full.baseline_stage || null,

@@ -26,7 +26,7 @@ const RUNTIME_BUNDLE = 'ml/manifests/GEN1_RUNTIME_BUNDLE.json';
  * 合法变更管线锁时必须同步更新此值（PR diff 将非常醒目）。
  * 由 `node scripts/gen-gen1-pipeline-lock.js` 生成后填入。
  */
-const ROOT_ANCHOR_PIPELINE_LOCK = 'f21c4632009fe7c6af3235d8bb5ecd3dfa2106b9e88a651129a0ca9bd11227c2';
+const ROOT_ANCHOR_PIPELINE_LOCK = '8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad';
 
 function sha256lf(rel) {
   const raw = fs.readFileSync(path.join(REPO, rel)).toString('utf8').replace(/\r\n/g, '\n');
@@ -72,6 +72,15 @@ function verifyPipeline() {
     }
     const gen1Lock = JSON.parse(fs.readFileSync(path.join(REPO, 'ml/manifests/GEN1_IMMUTABLE_LOCK.json'), 'utf8'));
     add('gen1-runtime-bundle/model_sha256', gen1Lock.model_sha256, bundle.model_sha256);
+  }
+
+  // ⑤ G1.1-01：部署侧常量 constants.js 的阈值必须等于 frozen-manifest 阈值
+  {
+    const constantsSrc = fs.readFileSync(path.join(REPO, 'src/common/constants.js'), 'utf8');
+    const m = constantsSrc.match(/gen1_frozen_threshold_p:\s*([0-9.]+)/);
+    const deployValue = m ? Number(m[1]) : null;
+    const frozenValue = lock.derived ? Number(lock.derived.threshold_signal_p) : null;
+    add('gen1-threshold/constants.js == frozen-manifest', String(frozenValue), String(deployValue));
   }
 
   const ok = checks.every((c) => c.expected === c.actual);
