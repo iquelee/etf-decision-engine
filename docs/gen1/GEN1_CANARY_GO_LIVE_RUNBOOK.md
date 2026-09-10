@@ -69,6 +69,21 @@ fetchDailyData
 
 ## 1.5 部署数据管线 + Benchmark backfill（**新增：必须在上线第 2 步之前完成**）
 
+> **WP-G1-DATA-02 补充（2026-09-10）**：补数前必须已部署含定稿闸门的版本，规则如下。
+>
+> **① 当日 bar 定稿闸门**：`DAILY_BAR_FINALIZATION_CUTOFF = '15:30'`（北京时间）。
+> 落库前对每根 bar 判 `isBarWritable`：历史 bar（`trade_date < today`）**盘中也可安全回补**；
+> 当日 bar 只有过了 15:30 才允许写入，并打 `is_final: true`。
+> 因此**盘中跑 `force` 是安全的** —— 它会补齐历史、丢掉当天那根未定稿 bar。
+>
+> **② 「就绪」= 已定稿，不是「有成交量」**：`isStructurallyValidDailyBar()`（volume>0 && close>0）
+> 只说明字段完整；判定就绪用 `isFinalizedDailyBar()`（当日 bar 必须带 `is_final`）。
+> 盘中误写入的当日 bar 因此**永远不会**被当成正式 EOD，会在收盘后被抓取覆盖。
+>
+> **③ Lane 执行**：只抓 `plan.<lane>.to_fetch`；已就绪的标的**一次都不抓**
+> （避免生产数据已完整时，一次瞬时失败把 `overall` 打成 FAIL）。
+> 结果按 `READY_EXISTING / FETCHED_OK / FETCH_FAILED` 三态上报。
+
 ```bash
 # ① 只部署数据管线（先不碰 Gen-1 决策链）
 node scripts/build-cloudfunctions.js
@@ -82,11 +97,12 @@ tcb fn deploy fetchDailyData --dir dist-functions/fetchDailyData --force
 **验收（不通过则 STOP，不得进入第 2 步）**：
 
 ```text
-benchmarkLatestOfficialDate(510300) == Main5LatestOfficialDate     # 当前应为 2026-09-09
+benchmarkLatestOfficialDate(510300) == Main5LatestOfficialDate     # 当前应为 2026-09-09 或当日收盘价
 fetchDailyData 返回 overall == 'OK'
 production_daily.ok == true  &&  benchmark_daily.ok == true
 510300 的 etf_daily.source ∈ { tencent, sina, eastmoney }（不再是 research_import 的近期窗口）
 510300 不出现在 getEtfList() / etf_basic / 前台标的列表
+当日行（若有）带 is_final === true；`lane_execution.production_to_fetch` 只含未就绪标的
 ```
 
 补齐后**重新执行第 2 步之前的「30 秒数据检查」**，通过才继续。

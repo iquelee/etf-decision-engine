@@ -8,6 +8,14 @@
  *   - benchmark lane ：GEN1_BENCHMARK_CODES → Gen-1 rs_20d 基准，只写 etf_daily、不抓折溢价、
  *                      **绝不进入 etf_basic / getEtfList / 决策 Universe**
  *   两条 Lane 分别做幂等判定（任一缺失都不得 skip），失败语义见 daily-fetch-plan.js。
+ *
+ * WP-G1-DATA-02：执行层收口。
+ *   ① 真按 `plan.production.to_fetch` / `plan.benchmark.to_fetch` 执行 —— 已就绪的标的
+ *      **不再重复抓**（生产数据已完整时，不得因瞬时抓取失败把 overall 打成 FAIL）；
+ *   ② 落库前的**当日 bar 定稿闸门**：盘中（未到 DAILY_BAR_FINALIZATION_CUTOFF）即使
+ *      `force=true` 也只回补历史，**不写当天未定稿 bar**；收盘后写入并打 `is_final: true`；
+ *   ③ 就绪判定改用 `isFinalizedDailyBar`（当日 bar 必须带 `is_final` 标记），
+ *      因此盘中误写入的当日 bar 不会被当成正式 EOD，会在收盘后被自动覆盖。
  */
 
 'use strict';
@@ -15,10 +23,13 @@
 const cloudbase = require('@cloudbase/node-sdk');
 const db = require('./common/utils/db');
 const datasource = require('./common/utils/datasource');
-const { beijingNow, beijingDateStr, isOfficialDailyBar } = require('./common/utils/fetch-guard');
+const {
+  beijingNow, beijingDateStr, isStructurallyValidDailyBar, isFinalizedDailyBar, isBarWritable,
+  DAILY_BAR_FINALIZATION_CUTOFF
+} = require('./common/utils/fetch-guard');
 const { COLLECTIONS, MARKET_INDEXES, GLOBAL_TICKERS, GEN1_BENCHMARK_CODES } = require('./common/constants');
 const {
-  ROLE, planDailyFetch, summarizeDailyFetchResults, laneReadyCodes
+  ROLE, STATE, planDailyFetch, summarizeDailyFetchResults, finalizedCodesOnDate
 } = require('./common/utils/daily-fetch-plan');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
@@ -39,30 +50,34 @@ async function dailyRowsOn(dateStr) {
 }
 
 /**
- * 幂等检查（单 Lane 兼容 API）：codes 是否都已有今日正式日线。
- * 正式日线以 **volume 非空** 判定（V3.1 A1）：盘中 stub 即使误写 source='tencent'
- * （close=price, volume=null）也不得跳过收盘抓取。
+ * 幂等检查（单 Lane 兼容 API）：codes 是否都已有**当日定稿**日线。
+ * 定稿判定见 `isFinalizedDailyBar` —— 当日 bar 必须带落库时的 `is_final` 标记
+ * （有成交量不等于已收盘定稿）。
  *
- * ⚠️ 主流程**不再**直接使用它 —— 生产 ETF 与 Benchmark 必须分别判定
- * （见 `planDailyFetch`），否则「Main5 已就绪 + Benchmark 缺失」会被误判为已抓完。
+ * ⚠️ 主流程**不再**直接使用它 —— 生产 ETF 与 Benchmark 必须分别判定并按
+ * `plan.*.to_fetch` 执行（见 `planDailyFetch`）。
  */
 async function isAlreadyFetched(codes) {
-  const dateStr = beijingDateStr(beijingNow());
-  const rows = await dailyRowsOn(dateStr);
+  const today = beijingDateStr(beijingNow());
+  const rows = await dailyRowsOn(today);
   const list = (codes || []).map(String);
   if (list.length === 0) return false;
-  return laneReadyCodes(rows, list, dateStr, isOfficialDailyBar).length === list.length;
+  return finalizedCodesOnDate(rows, list, today, isFinalizedDailyBar).length === list.length;
 }
 
 /**
  * 抓取并落库单个标的的日线 —— **生产 ETF 与 Benchmark 共用同一实现**（禁止复制粘贴）。
+ *
+ * ★ WP-G1-DATA-02 定稿闸门：只写 `isBarWritable` 通过的 bar。
+ *   盘中（未到 `DAILY_BAR_FINALIZATION_CUTOFF`）即使是 `force` 回补，
+ *   也只写历史 bar，**丢掉当天未定稿的那根**；收盘后写当日 bar 并打 `is_final: true`。
  *
  * @param {string} code
  * @param {object} [opts]
  * @param {string}  [opts.role]          ROLE.PRODUCTION_ETF | ROLE.BENCHMARK（仅审计，不落库）
  * @param {boolean} [opts.fetchPremium]  是否抓折溢价/IOPV（Benchmark 不需要，默认 true）
  * @param {number}  [opts.limit]         抓取条数（默认 260；Benchmark 用 320 覆盖完整滚动窗口）
- * @returns {Promise<{code, role, bars, source, ok, latest_date}>}
+ * @returns {Promise<{code, role, bars, source, ok, state, latest_date, skipped_unfinalized}>}
  */
 async function fetchAndPersistDaily(code, opts) {
   const o = opts || {};
@@ -70,25 +85,32 @@ async function fetchAndPersistDaily(code, opts) {
   const fetchPremium = o.fetchPremium !== false;
   const limit = Number(o.limit) > 0 ? Number(o.limit) : 260;
 
+  const today = beijingDateStr(beijingNow());
   const { bars, source } = await datasource.fetchDaily(code, limit);
+
+  // ★ 定稿闸门：盘中丢弃「今天」这根未定稿 bar；历史 bar 照常回补
+  const writable = bars.filter((bar) => isBarWritable(bar, { today }));
+  const skippedUnfinalized = bars.length - writable.length;
 
   // 分批并发 upsert（幂等，key = code + trade_date）
   const chunks = [];
-  for (let i = 0; i < bars.length; i += 20) chunks.push(bars.slice(i, i + 20));
+  for (let i = 0; i < writable.length; i += 20) chunks.push(writable.slice(i, i + 20));
   for (const chunk of chunks) {
     await Promise.all(chunk.map((bar) => {
       const doc = Object.assign({ code }, bar);
       if (role === ROLE.PRODUCTION_ETF) { doc.premium_rate = null; doc.iopv = null; }
+      // 当日 bar（过了定稿时点才会走到这里）打上定稿标记，供 isFinalizedDailyBar 识别
+      if (String(bar.trade_date).slice(0, 10) === today) doc.is_final = true;
       return db.upsert(COLLECTIONS.ETF_DAILY, doc, { code, trade_date: bar.trade_date });
     }));
   }
-  const latestDate = bars.length ? bars[bars.length - 1].trade_date : null;
+  const latestDate = writable.length ? writable[writable.length - 1].trade_date : null;
 
   // 折溢价/IOPV（仅生产 ETF；失败不阻断，缺数标 null 不编造）
-  if (fetchPremium) {
+  if (fetchPremium && latestDate) {
     try {
       const prem = await datasource.fetchPremiumIopv(code);
-      if (prem && (prem.premium_rate != null || prem.iopv != null) && latestDate) {
+      if (prem && (prem.premium_rate != null || prem.iopv != null)) {
         const doc = await db.query(COLLECTIONS.ETF_DAILY, { code, trade_date: latestDate }, { limit: 1 });
         if (doc.length > 0) {
           await db.updateById(COLLECTIONS.ETF_DAILY, doc[0]._id,
@@ -98,11 +120,30 @@ async function fetchAndPersistDaily(code, opts) {
     } catch (e) { /* 折溢价缺失不阻断 */ }
   }
 
-  return { code, role, bars: bars.length, source, ok: true, latest_date: latestDate };
+  return {
+    code,
+    role,
+    bars: writable.length,
+    source,
+    ok: true,
+    state: STATE.FETCHED_OK,
+    latest_date: latestDate,
+    skipped_unfinalized: skippedUnfinalized
+  };
+}
+
+/** 已就绪（本轮不抓）的占位结果。 */
+function readyExistingResult(code, role, today) {
+  return {
+    code, role, bars: 0, source: null, ok: true,
+    state: STATE.READY_EXISTING, latest_date: today, skipped_unfinalized: 0
+  };
 }
 
 exports.isAlreadyFetched = isAlreadyFetched;
-exports.isOfficialDailyBar = isOfficialDailyBar;
+exports.isStructuralCheck = isStructurallyValidDailyBar;
+exports.isFinalizedCheck = isFinalizedDailyBar;
+exports.DAILY_BAR_FINALIZATION_CUTOFF = DAILY_BAR_FINALIZATION_CUTOFF;
 exports.fetchAndPersistDaily = fetchAndPersistDaily;
 
 exports.main = async (event = {}, context = {}) => {
@@ -144,15 +185,16 @@ exports.main = async (event = {}, context = {}) => {
     const benchmarkCodes = GEN1_BENCHMARK_CODES.slice();
 
     // 3. 幂等：两条 Lane **分别**判定（★ Benchmark 缺失不得被 Main5 就绪掩盖）
+    //    「就绪」= 当日 bar 已收盘定稿（isFinalizedDailyBar），不是「有成交量」
     const force = (event && event.force) === true;
     const existingRows = await dailyRowsOn(today);
     const plan = planDailyFetch({
-      decisionCodes, benchmarkCodes, existingRows, dateStr: today, force, isOfficial: isOfficialDailyBar
+      decisionCodes, benchmarkCodes, existingRows, dateStr: today, force, isFinalized: isFinalizedDailyBar
     });
     if (plan.skip) {
       const summary = summarizeDailyFetchResults({
-        productionResults: decisionCodes.map((c) => ({ code: c, ok: true, latest_date: today })),
-        benchmarkResults: benchmarkCodes.map((c) => ({ code: c, ok: true, latest_date: today })),
+        productionResults: decisionCodes.map((c) => readyExistingResult(c, ROLE.PRODUCTION_ETF, today)),
+        benchmarkResults: benchmarkCodes.map((c) => readyExistingResult(c, ROLE.BENCHMARK, today)),
         benchmarkCode: benchmarkCodes[0] || null
       });
       return {
@@ -160,32 +202,43 @@ exports.main = async (event = {}, context = {}) => {
         production_daily: summary.production_daily,
         benchmark_daily: summary.benchmark_daily,
         overall: summary.overall,
-        message: '两条 Lane 当日正式日线均已就绪，幂等跳过'
+        message: '两条 Lane 当日定稿日线均已就绪，幂等跳过'
       };
     }
 
-    // 4. Production Lane：Main5 日线 + 折溢价
+    // 4. Production Lane：只抓 `plan.production.to_fetch`（已就绪的不重复抓）
     let totalBars = 0;
-    for (const etf of etfs) {
+    const prodToFetch = plan.production.to_fetch;
+    for (const code of decisionCodes) {
+      if (prodToFetch.indexOf(code) < 0) {
+        results.push(readyExistingResult(code, ROLE.PRODUCTION_ETF, today));
+        continue;
+      }
       try {
-        const r = await fetchAndPersistDaily(etf.code, {
+        const r = await fetchAndPersistDaily(code, {
           role: ROLE.PRODUCTION_ETF, fetchPremium: true, limit: 260
         });
         totalBars += r.bars;
         results.push(r);
       } catch (e) {
         results.push({
-          code: etf.code, role: ROLE.PRODUCTION_ETF, bars: 0, source: null, ok: false,
-          error: String(e.message || e)
+          code, role: ROLE.PRODUCTION_ETF, bars: 0, source: null, ok: false,
+          state: STATE.FETCH_FAILED, latest_date: null, error: String(e.message || e)
         });
         await logFetch('daily', 'fail', 0, String(e.message || e), taskName, Date.now() - startedAt);
       }
     }
 
-    // 4b. Benchmark Lane：Gen-1 基准（320 根 → 首次即完成完整滚动窗口 backfill，之后每日幂等覆盖）
+    // 4b. Benchmark Lane：只抓 `plan.benchmark.to_fetch`
+    //     （320 根 → 首次即完成完整滚动窗口 backfill，之后每日幂等覆盖）
     //     失败只令数据任务 PARTIAL、Gen-1 后续 fail-closed；**不得阻断 V3.6.1 生产数据更新**
     const benchmarkResults = [];
+    const benchToFetch = plan.benchmark.to_fetch;
     for (const code of benchmarkCodes) {
+      if (benchToFetch.indexOf(code) < 0) {
+        benchmarkResults.push(readyExistingResult(code, ROLE.BENCHMARK, today));
+        continue;
+      }
       try {
         const r = await fetchAndPersistDaily(code, {
           role: ROLE.BENCHMARK, fetchPremium: false, limit: 320
@@ -194,7 +247,8 @@ exports.main = async (event = {}, context = {}) => {
         await logFetch('benchmark', 'success', r.bars, '', taskName, Date.now() - startedAt);
       } catch (e) {
         benchmarkResults.push({
-          code, role: ROLE.BENCHMARK, bars: 0, source: null, ok: false, error: String(e.message || e)
+          code, role: ROLE.BENCHMARK, bars: 0, source: null, ok: false,
+          state: STATE.FETCH_FAILED, latest_date: null, error: String(e.message || e)
         });
         await logFetch('benchmark', 'fail', 0, String(e.message || e), taskName, Date.now() - startedAt);
       }
@@ -387,6 +441,15 @@ exports.main = async (event = {}, context = {}) => {
       production_daily: laneSummary.production_daily,
       benchmark_daily: laneSummary.benchmark_daily,
       overall: laneSummary.overall,
+      // WP-G1-DATA-02：显式暴露「谁已就绪 / 本轮抓了谁」与定稿时点，便于运维与审计
+      finalization_cutoff: DAILY_BAR_FINALIZATION_CUTOFF,
+      lane_execution: {
+        production_ready: plan.production.ready,
+        production_to_fetch: prodToFetch,
+        benchmark_ready: plan.benchmark.ready,
+        benchmark_to_fetch: benchToFetch,
+        force
+      },
       chained
     };
   } catch (e) {
