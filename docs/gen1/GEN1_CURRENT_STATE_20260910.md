@@ -135,16 +135,30 @@ threshold signal_p   = 0.65（未改）             ✅
 | 读取结果 | 运行时门 | 允许 ADVISORY | 允许 CANARY | 落库 |
 |---|---|---|---|---|
 | `FOUND` | `ACTIVE` | 按 latch | 按 latch | 是 |
-| `NOT_INITIALIZED` | `PENDING` | ✅ | ❌ | 否 |
+| `NOT_INITIALIZED` | `PENDING` | ✅ | ❌ | **否（仅本次读取产生的状态不得写回）** |
+
+> ⚠️ 精确语义：`runDecisionEngine` 读到 `NOT_INITIALIZED` → PENDING / Canary OFF。
+> `persist_allowed=false` 只约束「本次读取产生的状态对象不得写回」，**不**禁用正常 bootstrap：
+> 下一次成功的 `runGen1ShadowEod` health evaluation 允许 `NOT_INITIALIZED → computeLatchedState() → FOUND → writeHealthState()` 创建正式 latch。
 | `READ_ERROR` | `READ_ERROR`（= ML_OFF） | ❌ | ❌ | **否**（绝不伪造 OK） |
 
 - 权限链**唯一**消费 `healthStateToGate()`；`ml_shadow_signal.gen1_health_status` 降级为审计快照。
 - latch 集合 `gen1_health_state`（单文档 `key='gen1-health-state'`），跨 CloudBase 冷启动保持，DEGRADED/ML_OFF 须人工复核才可恢复。
 
-## A.3 组合占用（唯一算法）
+## A.3 组合占用与反事实账本（唯一实现）
 
-`sectorOccupation(current, suggested, target)` —— 生产与 Canary 共用；
-`canarySectorUsed` 种子 = `portfolio.tech_position`，`limit = max(0, cap − (used − current))` 与生产同式。
+`sectorOccupation(current, suggested, target)` —— 生产与 Canary 共用。
+
+**两条并行账本**（WP-G1.3 起），每只科技 ETF 都推进两条：
+```js
+sectorUsed        // 生产账本
+canarySectorUsed  // 反事实账本（种子同 = portfolio.tech_position）
+```
+- `limit = max(0, cap − (used − current))` 与生产同式（`counterfactualSectorRemaining()`）；
+- 账本推进由 **`stepCounterfactualLedger()`** 统一实现：Candidate 走 S4 结果、**非 Candidate 走 V3.6.1 baseline 结果**；
+- **共享 cap 优先**：后续 ETF 可能被压到低于自身 baseline（`gen1_counterfactual_baseline_floor_breached` 显式上报）；
+- 终局断言：`counterfactual_tech_position ≤ max(起始仓位, cap)`；起始仓位 ≤ cap 时即 `≤ cap`。
+- 对外状态字段：`counterfactual_canary_authorized / _health_allowed / _active / _invocations` + `production_fast_path_enabled=false`（替代旧 `canary_enabled`）。
 
 ## A.4 独立事件口径
 
@@ -152,17 +166,18 @@ threshold signal_p   = 0.65（未改）             ✅
 
 ## A.5 门禁
 
-`npm test` → **35/35**；Gen-1 Production Gates **G1-A~Q 17/17**；Immutable 11/11；Pipeline Lock 10/10（frozen 管线文件零改动）。
+`npm test` → **36/36**；Gen-1 Production Gates **G1-A~R 18/18**；Immutable 11/11；Pipeline Lock 10/10（frozen 管线文件零改动）。
 
-## A.6 当前裁决
+## A.6 当前裁决（WP-G1.3 后）
 
 ```text
 ADVISORY_PRODUCTION              PASS
-COUNTERFACTUAL_CANARY（工程）     PASS（待最终 review 后由 param_config 开启）
+COUNTERFACTUAL_CANARY（工程）     PASS（账本已定死为「完整组合反事实」；待最终 Review 后由 param_config 开启）
 CANARY_ECONOMIC_GATE             FAIL / INSUFFICIENT（3 簇 / 2 独立事件；BULL=0；无 IN_DOMAIN 事件）
 LIMITED / FULL PRODUCTION        BLOCKED（缺 Economic Health 自动闭环 + 经济样本）
 AUTO TRADING                     OFF
 threshold signal_p = 0.65（未改）
 Gen-1 frozen model（未改，SHA d5e667c6…）
+gen1_authority = ADVISORY（未改）
 ```
 

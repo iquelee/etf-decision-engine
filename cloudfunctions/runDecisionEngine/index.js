@@ -26,9 +26,12 @@ const { snapshotHoldingsMv, resolveCashYuan, liveTotalAsset } = require('./commo
 const { indicatorSignal, layerOf, syncFundamentalConfigs, pickLatestSeries } = require('./common/utils/fundamental');
 const { computeCooldownDays } = require('./common/utils/cooldown');
 // WP-G1（G1-01/02/03）：Gen-1 Authority 状态机 + Safety Core Permission + Canary 反事实链
-const { resolveAuthority } = require('./common/utils/gen1-authority');
+const { resolveAuthority, authorityAllows } = require('./common/utils/gen1-authority');
 const { evaluateGen1Permission } = require('./common/utils/gen1-safety-permission');
-const { buildCanaryCounterfactual, clampCanaryCandidate, sectorOccupation } = require('./common/utils/gen1-canary');
+const {
+  buildCanaryCounterfactual, sectorOccupation,
+  counterfactualSectorRemaining, stepCounterfactualLedger
+} = require('./common/utils/gen1-canary');
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
 const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
@@ -556,9 +559,12 @@ exports.main = async (event = {}, context = {}) => {
       // 信号缺失不阻断生产决策；Safety 会按「不可用」fail-closed 处理
     }
     // canary 重算所需的 V3.6.1 上下文（仅 authority>=CANARY 时才真正调用）
-    // G1.1-05 / WP-G1.2 G1.2-03：Canary 组合平价 —— 科技额度按**组合总仓位**顺序累计，
+    // G1.1-05 / WP-G1.2 G1.2-03 / G1.3-01：Canary 组合平价 —— 科技额度按**组合总仓位**顺序累计，
     // 种子 = portfolio.tech_position（与生产 sectorUsed 完全同构），保证聚合不破 tech cap。
+    // G1.3-01：**所有**科技 ETF 都推进本账本（非 Candidate 按 baseline 推进）。
     let canarySectorUsed = portfolio.tech_position != null ? portfolio.tech_position : 0;
+    // G1.3-07：本轮真正执行了几次 Gen-1 反事实重算（S4 rerun）—— 用于对外状态字段
+    let canaryInvocationCount = 0;
     // G1.2-01/02：健康状态唯一真相 = 持久化 latch（三态读取，异常一律 fail-closed）
     let gen1GlobalGate;
     let gen1HealthState;
@@ -712,13 +718,14 @@ exports.main = async (event = {}, context = {}) => {
         result.gen1_canary_source = 'V361_RERUN_S4';
 
         // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
-        // G1.1-05 / G1.2-03：必须继承生产调用的**完整** Safety context（含 sectorRemainingLimit、
-        // slowBreak、trendStage、shock、bars、portfolio），并在科技赛道上做组合层累计 clamp。
+        // G1.2-03：必须继承生产调用的**完整** Safety context（含 slowBreak、trendStage、shock、bars、portfolio）。
+        // G1.3-01：**完整组合反事实** —— 所有科技 ETF 共享同一 canary 账本与 cap（cap 优先）。
         const isTechEtf = TECH_SECTORS.indexOf(etf.sector) >= 0;
         const currentPos = p.position.current_position || 0;
-        const canarySectorRemaining = isTechEtf
-          ? Math.max(0, effectiveTechMax - (canarySectorUsed - currentPos))
-          : (typeof sectorRemainingLimit === 'number' ? sectorRemainingLimit : null);
+        const canarySectorRemaining = counterfactualSectorRemaining({
+          isTech: isTechEtf, sectorUsed: canarySectorUsed, currentPosition: currentPos,
+          effectiveTechMax
+        });
         let canarySuggestedPosition = null;
         const canary = buildCanaryCounterfactual({
           permission: gen1Permission,
@@ -740,26 +747,33 @@ exports.main = async (event = {}, context = {}) => {
           }
         });
         canary.gen1_canary_sector_remaining = canarySectorRemaining;
-        canary.gen1_canary_clamped = false;
-        {
-          const cl = clampCanaryCandidate({
-            isTech: isTechEtf,
-            baselineTarget: baselineTarget,
-            canaryTarget: canary.gen1_canary_target,
-            canaryEffective: canary.gen1_canary_effective,
-            sectorUsed: canarySectorUsed,
-            currentPosition: currentPos,
-            effectiveTechMax: effectiveTechMax
-          });
-          if (cl.clamped) {
-            canary.gen1_canary_target = cl.canaryTarget;
-            canary.gen1_canary_delta = cl.canaryDelta;
-            canary.gen1_canary_clamped = true;
-          }
-        }
-        // G1.2-03：与生产**同一**占用算法累计 canary 的赛道占用（仅生效的 canary 才占额度）
-        if (isTechEtf && canary.gen1_canary_effective === true) {
-          canarySectorUsed += sectorOccupation(currentPos, canarySuggestedPosition, canary.gen1_canary_target);
+
+        // G1.3-01：账本单步推进 —— **每个科技 ETF 都推进**（非 Candidate 按 baseline 推进）。
+        // 这是复审 P0 的修复点：上一版只推进 gen1_canary_effective=true 的 ETF，
+        // 导致「baseline 自加仓但无 Gen-1」的科技 ETF 漏记，后续 Candidate 获得虚假额度。
+        const cfStep = stepCounterfactualLedger({
+          isTech: isTechEtf,
+          sectorUsed: canarySectorUsed,
+          currentPosition: currentPos,
+          effectiveTechMax,
+          baselineTarget,
+          baselineSuggested: result.suggested_position,
+          canaryEffective: canary.gen1_canary_effective === true,
+          canaryTarget: canary.gen1_canary_target,
+          canarySuggested: canarySuggestedPosition,
+          sectorRemainingLimit: canarySectorRemaining
+        });
+        canarySectorUsed = cfStep.nextSectorUsed;
+        canary.gen1_counterfactual_target = cfStep.counterfactualTarget;
+        canary.gen1_counterfactual_delta = cfStep.counterfactualDelta;
+        canary.gen1_counterfactual_clamped = cfStep.clamped;
+        canary.gen1_counterfactual_baseline_floor_breached = cfStep.baselineFloorBreached;
+        canary.gen1_counterfactual_sector_remaining = cfStep.sectorRemainingLimit;
+        canary.gen1_counterfactual_stage_changed = canary.gen1_canary_effective === true;
+        if (canary.gen1_canary_effective === true) canaryInvocationCount += 1;
+        if (cfStep.baselineFloorBreached) {
+          console.warn(`[GEN1-CF] ${etf.code} 反事实目标 ${cfStep.counterfactualTarget}`
+            + ` 低于 baseline ${baselineTarget}（共享 tech cap 优先，组合约束所致，非模型降级）`);
         }
         // G1-11 No-op 不变量：overlay 前后 final_target / final_action 必须逐字段一致
         const noopBefore = { final_target: result.final_target, final_action: result.final_action };
@@ -825,6 +839,27 @@ exports.main = async (event = {}, context = {}) => {
         results.push({ code: p.etf.code, ok: false, error: String(e.message || e) });
       }
     }
+
+    // ---- WP-G1.3 G1.3-06：反事实组合账本终局断言 ----
+    // 两个并行账本：productionSectorUsed（生产）vs canarySectorUsed（完整组合反事实）。
+    // 精确不变量（由 stepCounterfactualLedger 保证）：
+    //   ① counterfactualTechPosition <= max(起始科技仓位, cap)  —— 账本绝不制造**新的**超额；
+    //   ② 起始仓位 <= cap（正常情况）→ counterfactualTechPosition <= cap（复审要求的断言）。
+    // 违反即为实现缺陷：如实上报并 fail-closed（不把本轮反事实标为 active），绝不静默吞掉。
+    const productionTechPosition = Math.round(sectorUsed * 1e6) / 1e6;
+    const counterfactualTechPosition = Math.round(canarySectorUsed * 1e6) / 1e6;
+    const techPositionSeed = portfolio.tech_position != null ? portfolio.tech_position : 0;
+    const counterfactualLedgerOk = counterfactualTechPosition
+      <= Math.max(techPositionSeed, effectiveTechMax) + 1e-9;
+    if (!counterfactualLedgerOk) {
+      console.error(`[SECURITY] GEN1_COUNTERFACTUAL_LEDGER_OVERFLOW:`
+        + ` counterfactual_tech_position=${counterfactualTechPosition}`
+        + ` > max(seed=${techPositionSeed}, cap=${effectiveTechMax})`);
+    }
+    // G1.3-07：对外状态字段（替代旧 canary_enabled 硬编码）
+    const cfAuthorized = authorityAllows(gen1Authority.gen1_authority, 'CANARY_OVERRIDE');
+    const cfHealthAllowed = gen1GlobalGate.allow_canary === true;
+    const cfActive = cfAuthorized && cfHealthAllowed && counterfactualLedgerOk;
 
     // 写组合快照：snapshot_date 统一用「今天」（北京时间，组合快照时刻），
     // 与 decision_result.decision_date（数据最新日）语义分离，避免快照日期分裂。
@@ -971,8 +1006,19 @@ exports.main = async (event = {}, context = {}) => {
       permission_source: 'SAFETY_CORE',
       production_write: false,
       auto_execution: false,
-      canary_path_ready: true,
-      canary_enabled: false,
+      // G1.3-07：不再用含混的 canary_enabled / fast_path_enabled 表达反事实通路，拆成四个显式字段
+      counterfactual_canary_authorized: cfAuthorized,
+      counterfactual_canary_health_allowed: cfHealthAllowed,
+      counterfactual_canary_active: cfActive,
+      counterfactual_canary_invocations: canaryInvocationCount,
+      production_fast_path_enabled: false,
+      canary_path_ready: true,        // 代码层能力就绪（与权限状态解耦）
+      // G1.3-06：两条并行账本终局（cap 约束下的组合反事实）
+      gen1_production_tech_position: productionTechPosition,
+      gen1_counterfactual_tech_position: counterfactualTechPosition,
+      gen1_counterfactual_tech_seed: techPositionSeed,
+      gen1_counterfactual_tech_cap: effectiveTechMax,
+      gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
       note: mlFastPathEnabled
         ? 'ml_fast_path_enabled ignored while Gen-1 in SHADOW; production stays V3.6.1'
         : 'ML observing only — no authority to change production decisions'
@@ -1009,6 +1055,18 @@ exports.main = async (event = {}, context = {}) => {
       gen1_health_economic_status: gen1GlobalGate.economic_health || 'PENDING',
       gen1_allow_advisory: gen1GlobalGate.allow_advisory,
       gen1_allow_canary: gen1GlobalGate.allow_canary,
+      // G1.3-06/07：反事实通路状态（拆成显式字段，替代含混的 canary_enabled）
+      gen1_counterfactual_canary_authorized: cfAuthorized,
+      gen1_counterfactual_canary_health_allowed: cfHealthAllowed,
+      gen1_counterfactual_canary_active: cfActive,
+      gen1_counterfactual_canary_invocations: canaryInvocationCount,
+      gen1_production_fast_path_enabled: false,
+      // G1.3-06：两条并行账本终局 —— 断言 canary 账本 <= max(起始仓位, cap)
+      gen1_production_tech_position: productionTechPosition,
+      gen1_counterfactual_tech_position: counterfactualTechPosition,
+      gen1_counterfactual_tech_seed: techPositionSeed,
+      gen1_counterfactual_tech_cap: effectiveTechMax,
+      gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
       ml_shadow_observe: mlShadowObserve,
       trend_stage_enabled: trendStageEnabled,

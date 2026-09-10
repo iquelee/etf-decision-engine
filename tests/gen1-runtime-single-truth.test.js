@@ -37,20 +37,20 @@ const CODE = stripComments(RDE);
     'signal 侧 health 只能作为审计快照传入');
 }
 
-/* ---- P0-3a：Portfolio Cap 只有一个算法 ---- */
+/* ---- P0-3a：Portfolio Cap 只有一个算法（WP-G1.3 起为双账本） ---- */
 {
   assert.ok(/let canarySectorUsed = portfolio\.tech_position/.test(CODE),
     '★ canary 赛道占用种子必须 = portfolio.tech_position（含真实持仓）');
   assert.ok(!/let canaryTechUsed = 0;/.test(CODE), '★ 禁止再从 0 起算 canary 增量');
-  assert.ok(/clampCanaryCandidate\(\{[\s\S]{0,400}?sectorUsed:\s*canarySectorUsed/.test(CODE),
-    'canary clamp 必须使用组合总仓口径');
-  assert.ok(/canarySectorUsed \+= sectorOccupation\(/.test(CODE),
-    'canary 累计必须复用唯一的 sectorOccupation()');
-  // 生产侧也必须用同一个函数
+  // 账本推进必须走唯一的 stepCounterfactualLedger（内部即生产同款 limit 公式）
+  assert.ok(/stepCounterfactualLedger\(\{/.test(CODE), '★ 必须使用唯一账本推进函数');
+  assert.ok(/counterfactualSectorRemaining\(\{/.test(CODE),
+    '★ canary rerun 的 sectorRemainingLimit 必须来自唯一公式函数');
+  assert.ok(!/clampCanaryCandidate/.test(CODE),
+    '★ 旧的 clampCanaryCandidate（含 baseline 地板）不得再被调用');
+  // 生产侧占用仍复用同一 sectorOccupation()
   assert.ok(/sectorUsed \+= sectorOccupation\(current, result\.suggested_position, result\.final_target\)/.test(CODE),
     '★ 生产占用必须与 canary 共用 sectorOccupation()');
-  assert.ok(/canarySectorRemaining\s*=\s*isTechEtf[\s\S]{0,120}?effectiveTechMax - \(canarySectorUsed - currentPos\)/.test(CODE),
-    'canary sectorRemainingLimit 必须与生产同式（cap - 其他占用）');
 }
 
 /* ---- P0-3b：Replay 与 Runtime 只有一个上下文 ---- */
