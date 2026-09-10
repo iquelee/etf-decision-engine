@@ -155,6 +155,40 @@ function buildGen1ViewModel({ ml, decision, position } = {}) {
       binding_constraint: binding,
       binding_label: binding ? (CONSTRAINT_LABELS[binding] || binding) : '无额外限制'
     },
+    // WP-G1（G1-10）：Gen-1 生产就绪可观测性 —— 一眼看懂权限 / 健康 / 双目标
+    system: {
+      model_id: ml && ml.model_id ? ml.model_id : null,
+      authority: (ml && ml.gen1_authority) || (decision && decision.gen1_authority) || null,
+      authority_label: (ml && ml.gen1_authority_label) || null,
+      frozen_status: ml && ml.gen1_frozen === false ? 'NOT_FROZEN' : 'FROZEN_VERIFIED',
+      bundle_id: ml && ml.bundle_id ? ml.bundle_id : null,
+      bundle_hash: (ml && ml.bundle_hash) || (ml && ml.feature_schema_hash) || null,
+      feature_schema_hash: ml && ml.feature_schema_hash ? ml.feature_schema_hash : null,
+      health_status: (ml && ml.gen1_health_status) || (decision && decision.gen1_health_status) || null,
+      data_health_status: (ml && ml.data_health_status) || null,
+      data_health_reason_code: (ml && ml.data_health_reason_code) || null,
+      data_freshness_days: ml && ml.data_age_days != null ? ml.data_age_days : null,
+      signal_date: ml && ml.signal_date ? ml.signal_date : null,
+      expected_trade_date: (ml && ml.expected_trade_date) || (ml && ml.source_trade_date) || null,
+      domain_status: ml && ml.domain_status ? ml.domain_status : null,
+      domain_permission: (ml && ml.domain_permission) || null,
+      // 两个硬边界：生产写 / 自动交易恒 false
+      production_write: false,
+      auto_execution: false,
+      execution_label: '自动交易：关闭'
+    },
+    // 生产目标 vs Canary 目标（必须一眼可区分）
+    targets: {
+      production_target_pct: pct(decision && decision.final_target),
+      baseline_stage: (decision && (decision.v361_baseline_stage || decision.baseline_stage)) || (ml && ml.baseline_stage) || null,
+      baseline_target_pct: decision && decision.v361_baseline_target != null
+        ? pct(decision.v361_baseline_target) : pct(decision && decision.final_target),
+      effective_stage: (decision && (decision.gen1_effective_stage || decision.effective_stage)) || null,
+      canary_target_pct: decision && decision.gen1_canary_target != null ? pct(decision.gen1_canary_target) : null,
+      canary_delta_pct: decision && decision.gen1_canary_delta != null ? pct(decision.gen1_canary_delta) : null,
+      canary_effective: !!(decision && decision.gen1_canary_effective === true),
+      canary_eligible: !!(decision && decision.gen1_canary_eligible === true)
+    },
     audit: {
       model_id: ml && ml.model_id ? ml.model_id : null,
       model_state: ml && ml.signal_status ? ml.signal_status : null,

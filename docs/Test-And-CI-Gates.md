@@ -67,3 +67,31 @@ matrix:
 ## 当前状态
 
 `npm test` 18/18 全绿（A 13/13、B 30 项、C 8 项锁、D 360 行、E、F build parity）。已知缺口（记入 parity-contract.md）：reason_codes 文案两端差异不比对；null liquidity 传播差异（有效 ETF 无 null）。
+
+---
+
+## WP-G1 Gen-1 Production Gates（2026-09-10）
+
+新增 **Stage G**：`node scripts/gen1-production-gates.js`（同时作为显式 CI 步骤 `Gate G1-A~H`）。
+
+| Gate | 名称 | 实现 |
+|---|---|---|
+| G1-A | Gen1 Frozen Artifact | `scripts/verify-immutable.js`（frozen-model/manifest/inference SHA + model_id） |
+| G1-B | Gen1 Feature Pipeline Lock | `scripts/verify-gen1-pipeline.js`（指标/阶段/PARAMS/特征构建/schema + root-of-trust，9 项） |
+| G1-C | Python ↔ Node Golden Parity | `tests/gen1-parity.test.js`（420 行；max_abs_diff < 1e-10；0.65 分类 0 mismatch） |
+| G1-D | Safety Permission Tests | `tests/gen1-safety-permission.test.js` |
+| G1-E | Domain Gate Tests | `tests/gen1-domain-gate.test.js`（含 518880 OOD 核心验收） |
+| G1-F | Circuit Breaker Tests | `tests/gen1-circuit-breaker.test.js`（含禁 auto reopen） |
+| G1-G | Execution Boundary Tests | `tests/gen1-execution-boundary.test.js`（恒 false + 审计） |
+| G1-H | Production No-op Test | `tests/gen1-overlay-noop.test.js`（final_target/final_action 逐字段不变） |
+
+配套产出的冻结物：
+- `ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json`（`scripts/gen-gen1-pipeline-lock.js` 生成）
+- `ml/manifests/GEN1_RUNTIME_BUNDLE.json`
+- `fixtures/gen1/gen1_inference_golden_v1.json`（`scripts/gen-gen1-golden-fixture.js` 生成，seed=20260910）
+
+负向测试已验证：修改 `src/common/utils/indicators.js` 一行 → G1-B 立即 FAIL，还原即绿。
+
+## 当前状态（WP-G1 后）
+
+`npm test` **29/29** 全绿（A 22/22 文件、B Python、C Immutable 11/11 + Pipeline 9/9、D Gen-2 parity 360 行、E Secret、F build parity、**G Gen-1 Production Gates 8/8**）。
