@@ -48,6 +48,16 @@ function applyGen1Overlay(result, permission, canary) {
   out.gen1_authority = (p.authority && p.authority.gen1_authority) || null;
   out.ml_advisory_effective = p.effective_advisory === true;
   out.gen1_canary_eligible = p.effective_canary === true;
+  // WP-G1.2 G1.2-01：健康唯一真相（持久化 latch）+ 信号快照分列
+  // —— 前端/后台只应展示 gen1_health_source = GEN1_HEALTH_STATE_LATCH 的这一路。
+  const h = p.health || null;
+  out.gen1_health_status = h && h.status != null ? h.status : null;
+  out.gen1_health_source = h ? (h.source || 'GEN1_HEALTH_STATE_LATCH') : null;
+  out.gen1_health_gate_status = h ? (h.gate_status || 'ACTIVE') : null;
+  out.gen1_health_manual_review_required = h ? h.manual_review_required === true : false;
+  out.gen1_health_economic_status = h ? (h.economic_health || null) : null;
+  out.gen1_health_read_reason_code = h ? (h.read_reason_code || null) : null;
+  out.gen1_signal_health_snapshot = p.signal_health_snapshot != null ? p.signal_health_snapshot : null;
 
   // Canary 反事实字段
   const c = canary || {};
@@ -60,6 +70,8 @@ function applyGen1Overlay(result, permission, canary) {
   // G1.1-05：Canary 组合平价（组合层科技额度 clamp）
   out.gen1_canary_clamped = c.gen1_canary_clamped === true;
   out.gen1_canary_sector_remaining = c.gen1_canary_sector_remaining != null ? c.gen1_canary_sector_remaining : null;
+  // WP-G1.2 G1.2-03：canary 建议执行仓（与生产同构的占用口径，用于组合层累计）
+  out.gen1_canary_suggested_position = c.gen1_canary_suggested_position != null ? c.gen1_canary_suggested_position : null;
   out.v361_baseline_stage = c.v361_baseline_stage != null ? c.v361_baseline_stage : null;
   out.v361_baseline_target = c.v361_baseline_target != null ? c.v361_baseline_target : null;
   out.v361_baseline_action = c.v361_baseline_action != null ? c.v361_baseline_action : null;

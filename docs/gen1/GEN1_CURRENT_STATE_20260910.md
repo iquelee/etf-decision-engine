@@ -111,3 +111,58 @@ threshold signal_p   = 0.65（未改）             ✅
 ```
 
 以上全部满足 → 允许继续整改。
+
+---
+
+# 附录 A：整改后状态（WP-G1 → WP-G1.1 → WP-G1.2，2026-09-10）
+
+> 上文的「整改前」快照保留作审计基线。以下是当前实际状态。
+
+## A.1 权限现状（当前）
+
+| 维度 | 值 |
+|---|---|
+| Gen-1 authority | **ADVISORY**（显式状态机 `gen1-authority.js`；`gen1_authority` 走 `param_config`，可逆单字段） |
+| 状态机 | `OFF / SHADOW / ADVISORY / CANARY / PRODUCTION`（**PRODUCTION 永久锁定**） |
+| `production_write` | **恒 false** |
+| `auto_execution` | **恒 false**（`ml_execution_enabled=true` 也无法开启，另记审计） |
+| `final_target` authority | **V3.6.1**（Gen-1 只产 `gen1_canary_*` 反事实，运行期 `verifyProductionNoop` 强制校验） |
+| Safety source | `SAFETY_CORE`（由 `runDecisionEngine` 真产出） |
+| 三层权限语义 | `model_candidate`（S2 严格 + ml_fast + P≥0.65 + model_id 精确）→ `safety`（规则允许）→ `effective_*`（AND 数据/域/健康/authority） |
+
+## A.2 健康状态（WP-G1.2 后为唯一真相）
+
+| 读取结果 | 运行时门 | 允许 ADVISORY | 允许 CANARY | 落库 |
+|---|---|---|---|---|
+| `FOUND` | `ACTIVE` | 按 latch | 按 latch | 是 |
+| `NOT_INITIALIZED` | `PENDING` | ✅ | ❌ | 否 |
+| `READ_ERROR` | `READ_ERROR`（= ML_OFF） | ❌ | ❌ | **否**（绝不伪造 OK） |
+
+- 权限链**唯一**消费 `healthStateToGate()`；`ml_shadow_signal.gen1_health_status` 降级为审计快照。
+- latch 集合 `gen1_health_state`（单文档 `key='gen1-health-state'`），跨 CloudBase 冷启动保持，DEGRADED/ML_OFF 须人工复核才可恢复。
+
+## A.3 组合占用（唯一算法）
+
+`sectorOccupation(current, suggested, target)` —— 生产与 Canary 共用；
+`canarySectorUsed` 种子 = `portfolio.tech_position`，`limit = max(0, cap − (used − current))` 与生产同式。
+
+## A.4 独立事件口径
+
+`event_cluster_id` 去重 + **真实交易日历** 40D 间隔（无日历时 1.5× 自然日保守阈值，显式标注 `gap_basis`）。
+
+## A.5 门禁
+
+`npm test` → **35/35**；Gen-1 Production Gates **G1-A~Q 17/17**；Immutable 11/11；Pipeline Lock 10/10（frozen 管线文件零改动）。
+
+## A.6 当前裁决
+
+```text
+ADVISORY_PRODUCTION              PASS
+COUNTERFACTUAL_CANARY（工程）     PASS（待最终 review 后由 param_config 开启）
+CANARY_ECONOMIC_GATE             FAIL / INSUFFICIENT（3 簇 / 2 独立事件；BULL=0；无 IN_DOMAIN 事件）
+LIMITED / FULL PRODUCTION        BLOCKED（缺 Economic Health 自动闭环 + 经济样本）
+AUTO TRADING                     OFF
+threshold signal_p = 0.65（未改）
+Gen-1 frozen model（未改，SHA d5e667c6…）
+```
+

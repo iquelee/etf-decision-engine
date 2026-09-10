@@ -28,6 +28,7 @@ const manifest = require(path.join(REPO, 'cloudfunctions/runGen1ShadowEod/frozen
 const { evaluateDataHealth } = require(path.join(REPO, 'src/common/utils/gen1-data-health.js'));
 const { evaluateDomainPermission } = require(path.join(REPO, 'src/common/utils/gen1-domain-permission.js'));
 const { evaluateGen1Permission } = require(path.join(REPO, 'src/common/utils/gen1-safety-permission.js'));
+const { countIndependentEventsDetailed } = require(path.join(REPO, 'src/common/utils/gen1-economic-health.js'));
 
 const DATA_DIR = path.join(REPO, 'deliverables/etf_daily_ml_pool');
 const MAIN5 = ['513310', '515880', '159582', '159570', '518880'];
@@ -133,6 +134,7 @@ function main() {
 
   const events = [];
   let candidates = 0;
+  const tradingDaySet = new Set();   // WP-G1.2 G1.2-04：真实交易日历（Main5 并集）
   const counters = {
     safety_permit: 0, safety_block: 0, safety_unavailable: 0,
     ood_block: 0, data_block: 0, data_degraded: 0,
@@ -142,6 +144,7 @@ function main() {
   for (const code of MAIN5) {
     const bars = loadBars(code);
     if (bars.length < 80) continue;
+    bars.forEach((b) => tradingDaySet.add(b.trade_date));
     const panel = buildPanel(code, bars);
     const f0 = rowFromPanel(code, bars, panel[0], benchByDate);
     const got = Object.keys(f0).filter((k) => expected.includes(k)).sort();
@@ -223,6 +226,8 @@ function main() {
 
       events.push({
         code, date: d, regime, probability, stage: row.stage_t,
+        // WP-G1.2 G1.2-04：事件簇键 = 能力审计口径
+        event_cluster_id: `${code}_${d}`,
         data_health: bh.status, data_reason: bh.reason_code, domain: dm.permission,
         safety: perm.safety.permission, safety_reason: perm.safety.reason_code,
         baseline_stage_weight: baselineWeight, canary_stage_weight: canaryWeight,
@@ -233,20 +238,20 @@ function main() {
     }
   }
 
-  // 独立事件：同 code 间隔 >= 40 交易日
-  const byCode = {};
-  events.forEach((e) => { (byCode[e.code] = byCode[e.code] || []).push(e); });
-  let independent = 0;
-  const allDays = [...new Set(events.map((e) => e.date))].sort();
-  const dayIdx = new Map(allDays.map((d, i) => [d, i]));
-  for (const list of Object.values(byCode)) {
-    list.sort((a, b) => (a.date < b.date ? -1 : 1));
-    let last = -Infinity;
-    for (const e of list) {
-      const gi = dayIdx.get(e.date);
-      if (gi - last >= MAX_FORWARD) { independent += 1; last = gi; }
-    }
-  }
+  // 独立事件（WP-G1.2 G1.2-04 修正口径）：
+  //   ① event_cluster_id 去重（= 能力审计口径）；
+  //   ② 用**真实交易日历**（Main5 全历史交易日并集）判 40D 间隔；
+  //   ③ 只统计 canary_effective 的事件 —— 没有 Gen-1 介入的日子不构成 Gen-1 事件。
+  //   旧实现按「事件日期自排 index」近似，事件稀疏时会严重高估，已废弃。
+  const tradingCalendar = [...tradingDaySet].sort();
+  const changedEvents = events.filter((e) => e.canary_effective);
+  const indepDetail = countIndependentEventsDetailed(changedEvents, {
+    minGapDays: MAX_FORWARD, tradingCalendar
+  });
+  const independent = indepDetail.count;
+  const indepAllDetail = countIndependentEventsDetailed(events, {
+    minGapDays: MAX_FORWARD, tradingCalendar
+  });
 
   const changed = events.filter((e) => e.canary_effective);
   const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
@@ -287,12 +292,18 @@ function main() {
     fidelity_notes: [
       'risk/fundamental 无历史 → 固定 NORMAL/F3；Safety BLOCK 不含历史硬风险与 F5。',
       'canary target = min(STAGE_W[S4], 30%) 为上界代理，未重放完整 V3.6.1 组合约束。',
-      'regime 由 510300 MA20/MA60 推导（代理，非生产 regime）。'
+      'regime 由 510300 MA20/MA60 推导（代理，非生产 regime）。',
+      'WP-G1.2 G1.2-04：独立事件口径 = event_cluster_id 去重 + 真实交易日历 40D（旧「事件日期自排 index」已废弃）。'
     ],
     counts: {
       baseline_s2_days: counters.baseline_s2,
       candidates: candidates,
+      canary_effective_events: changedEvents.length,
       independent_events: independent,
+      independent_events_gap_basis: indepDetail.gap_basis,
+      independent_events_clusters: indepDetail.unique_clusters,
+      independent_events_all_unfiltered: indepAllDetail.count,
+      trading_calendar_days: indepDetail.trading_calendar_days,
       safety_permit: counters.safety_permit,
       safety_block: counters.safety_block,
       safety_unavailable: counters.safety_unavailable,

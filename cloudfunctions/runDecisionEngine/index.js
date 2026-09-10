@@ -28,11 +28,10 @@ const { computeCooldownDays } = require('./common/utils/cooldown');
 // WP-G1（G1-01/02/03）：Gen-1 Authority 状态机 + Safety Core Permission + Canary 反事实链
 const { resolveAuthority } = require('./common/utils/gen1-authority');
 const { evaluateGen1Permission } = require('./common/utils/gen1-safety-permission');
-const { buildCanaryCounterfactual, clampCanaryCandidate } = require('./common/utils/gen1-canary');
+const { buildCanaryCounterfactual, clampCanaryCandidate, sectorOccupation } = require('./common/utils/gen1-canary');
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
-const { circuitGate } = require('./common/utils/gen1-circuit-breaker');
-const { readHealthState, healthStateToGate } = require('./common/utils/gen1-health-state');
+const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
 const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
 const {
   COLLECTIONS, DEFAULT_PARAMS, TECH_SECTORS, SEMI_SECTORS,
@@ -557,22 +556,26 @@ exports.main = async (event = {}, context = {}) => {
       // 信号缺失不阻断生产决策；Safety 会按「不可用」fail-closed 处理
     }
     // canary 重算所需的 V3.6.1 上下文（仅 authority>=CANARY 时才真正调用）
-    let canaryV3Portfolio = null;
-    let canaryBarsByCode = null;
-    // G1.1-05：Canary 组合平价 —— 科技额度在 canary 候选间顺序累计，保证聚合不破 tech cap
-    let canaryTechUsed = 0;
-    // G1.1-03：健康状态来自**持久化 latch**（CloudBase 冷启动不失效）
-    let gen1GlobalHealth = 'OK';
-    let gen1GlobalGate = null;
-    let gen1HealthState = null;
+    // G1.1-05 / WP-G1.2 G1.2-03：Canary 组合平价 —— 科技额度按**组合总仓位**顺序累计，
+    // 种子 = portfolio.tech_position（与生产 sectorUsed 完全同构），保证聚合不破 tech cap。
+    let canarySectorUsed = portfolio.tech_position != null ? portfolio.tech_position : 0;
+    // G1.2-01/02：健康状态唯一真相 = 持久化 latch（三态读取，异常一律 fail-closed）
+    let gen1GlobalGate;
+    let gen1HealthState;
     try {
       gen1HealthState = await readHealthState(db, COLLECTIONS);
-      gen1GlobalGate = healthStateToGate(gen1HealthState);
-      gen1GlobalHealth = gen1GlobalGate.latched_health;
     } catch (e) {
-      gen1GlobalGate = circuitGate('ML_OFF');   // 读不到 → fail-closed
-      gen1GlobalHealth = 'ML_OFF';
-      gen1HealthState = { latched_health: 'ML_OFF', manual_review_required: true, economic_health: 'PENDING' };
+      // 防御性兜底：readHealthState 内部已 fail-closed，此处同样不得返回 OK
+      gen1HealthState = Object.assign(defaultHealthState(), {
+        read_status: 'READ_ERROR', read_reason_code: 'HEALTH_STATE_READ_ERROR'
+      });
+    }
+    gen1GlobalGate = healthStateToGate(gen1HealthState);
+    const gen1GlobalHealth = gen1GlobalGate.latched_health;
+    if (gen1GlobalGate.gate_status !== 'ACTIVE') {
+      console.warn(`[GEN1-HEALTH] gate_status=${gen1GlobalGate.gate_status}`
+        + ` reason=${gen1GlobalGate.read_reason_code} → allow_advisory=${gen1GlobalGate.allow_advisory}`
+        + ` allow_canary=${gen1GlobalGate.allow_canary}`);
     }
     // G1-09：执行边界（恒 false；配置试图开启时产生审计记录）
     const gen1Execution = resolveExecution(merged);
@@ -623,21 +626,32 @@ exports.main = async (event = {}, context = {}) => {
 
         let result = v38Result;
         let v3SlowBreakHistory = p.position.slow_break_history || [];
+        // WP-G1.2 G1.2-03：Canary A/B 必须「输入完全相同，只有 advisoryStageOverride 不同」。
+        // 这里在生产调用发生的那一刻把**全部**上下文冻结下来，供 canary 重算逐字段复用。
+        let canaryCtx = null;
 
         if (runV3Path) {
           const etfBars = barsCache ? barsCache[etf.code] : null;
           const v3Portfolio = buildV3Portfolio(portfolio, v3MarketEnv);
+          const v3TrendStageState = p.position.trend_stage_state || {};
+          const v3ShockState = p.position.shock_state || null;
           // WP-G1：缓存 canary 重算上下文（避免重复 build）
-          canaryV3Portfolio = v3Portfolio;
-          canaryBarsByCode = etfBars;
+          canaryCtx = {
+            portfolio: v3Portfolio,
+            bars: etfBars,
+            trendStageState: v3TrendStageState,
+            shockState: v3ShockState,
+            slowBreakScores: v3SlowBreakHistory,   // ★ 生产当次实参（append 之前）
+            sectorRemainingLimit
+          };
           const v3Result = decisionV3.runDecision(etf, p.snapshot, p.posWithCore, merged, {
             fundamental: p.fundamental,
             risk: p.risk,
             portfolio: v3Portfolio,
             cooldownDays,
             sectorRemainingLimit,
-            trendStageState: p.position.trend_stage_state || {},
-            shockState: p.position.shock_state || null,
+            trendStageState: v3TrendStageState,
+            shockState: v3ShockState,
             recentSlowBreakScores: v3SlowBreakHistory,
             riskEvents: p.risk.events || [],
             bars: etfBars
@@ -653,12 +667,10 @@ exports.main = async (event = {}, context = {}) => {
         // 更新科技赛道已用额度（本 ETF 本次的新增部分）
         // P1 回测结论：按「建议执行仓」占用（suggested_position - current）而非 final_target，
         // 避免多只科技 ETF 同时有信号时额度被目标仓占满、后续高分标的加不上（回测：被拦信号 12→0）
+        // WP-G1.2：占用算法收敛为唯一的 sectorOccupation()，生产与 Canary 共用同一函数。
         if (TECH_SECTORS.indexOf(etf.sector) >= 0) {
           const current = p.position.current_position || 0;
-          const occupyTarget = result.suggested_position != null
-            ? Math.min(result.suggested_position, result.final_target != null ? result.final_target : result.suggested_position)
-            : (result.final_target || 0);
-          sectorUsed += Math.max(0, occupyTarget - current);
+          sectorUsed += sectorOccupation(current, result.suggested_position, result.final_target);
         }
 
         // 注入阶段通俗概括（来自 indicator_snapshot，供前端直接展示）
@@ -677,9 +689,10 @@ exports.main = async (event = {}, context = {}) => {
         const gen1DataHealth = gen1Signal && gen1Signal.data_health_status
           ? { status: gen1Signal.data_health_status, reason_code: gen1Signal.data_health_reason_code || null }
           : null;
-        // G1-07：运行时熔断门（ML_OFF → 立即回退纯 V3.6.1）
-        const gen1HealthStatus = (gen1Signal && gen1Signal.gen1_health_status) || 'OK';
-        const gen1Gate = circuitGate(gen1HealthStatus);
+        // G1-07 / G1.2-01：运行时熔断门 —— **唯一真相**是持久化 latch（gen1GlobalGate）。
+        // 绝不再用 gen1Signal.gen1_health_status 重新推导权限（那会造成「信号快照 ≫ 实时 latch」的越权）。
+        const gen1SignalHealthSnapshot = gen1Signal ? (gen1Signal.gen1_health_status || null) : null;
+        const gen1Gate = gen1GlobalGate;
         const gen1Params = gen1Gate.allow_gen1_timing
           ? merged
           : Object.assign({}, merged, { ml_shadow_observe: false }); // 强制 OFF → Safety 一律 BLOCK
@@ -693,32 +706,37 @@ exports.main = async (event = {}, context = {}) => {
           today,
           dataHealth: gen1DataHealth,
           domainPermission: gen1Domain,
-          healthGate: gen1Gate
+          healthGate: gen1Gate,
+          signalHealthSnapshot: gen1SignalHealthSnapshot
         });
         result.gen1_canary_source = 'V361_RERUN_S4';
 
         // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
-        // G1.1-05：必须继承生产调用的完整 Safety context（含 sectorRemainingLimit），
-        // 并在科技赛道上做组合层累计 clamp，保证多只 canary 聚合不突破 tech cap。
+        // G1.1-05 / G1.2-03：必须继承生产调用的**完整** Safety context（含 sectorRemainingLimit、
+        // slowBreak、trendStage、shock、bars、portfolio），并在科技赛道上做组合层累计 clamp。
         const isTechEtf = TECH_SECTORS.indexOf(etf.sector) >= 0;
+        const currentPos = p.position.current_position || 0;
         const canarySectorRemaining = isTechEtf
-          ? Math.max(0, effectiveTechMax - canaryTechUsed)
+          ? Math.max(0, effectiveTechMax - (canarySectorUsed - currentPos))
           : (typeof sectorRemainingLimit === 'number' ? sectorRemainingLimit : null);
+        let canarySuggestedPosition = null;
         const canary = buildCanaryCounterfactual({
           permission: gen1Permission,
           baseline: { stage: baselineStage, target: baselineTarget, action: baselineAction },
           recomputeCanaryTarget: (stage) => {
-            if (!canaryV3Portfolio) return { target: baselineTarget, action: baselineAction };
+            if (!canaryCtx) return { target: baselineTarget, action: baselineAction };
             const c = decisionV3.runDecision(etf, p.snapshot, p.posWithCore, merged, {
-              fundamental: p.fundamental, risk: p.risk, portfolio: canaryV3Portfolio,
+              fundamental: p.fundamental, risk: p.risk, portfolio: canaryCtx.portfolio,
               cooldownDays,
               sectorRemainingLimit: canarySectorRemaining,
-              trendStageState: p.position.trend_stage_state || {},
-              shockState: p.position.shock_state || null, recentSlowBreakScores: [],
-              riskEvents: p.risk.events || [], bars: canaryBarsByCode,
+              trendStageState: canaryCtx.trendStageState,
+              shockState: canaryCtx.shockState,
+              recentSlowBreakScores: canaryCtx.slowBreakScores,
+              riskEvents: p.risk.events || [], bars: canaryCtx.bars,
               advisoryStageOverride: stage
             });
-            return { target: c.final_target, action: c.final_action };
+            canarySuggestedPosition = c.suggested_position != null ? c.suggested_position : null;
+            return { target: c.final_target, action: c.final_action, suggested_position: canarySuggestedPosition };
           }
         });
         canary.gen1_canary_sector_remaining = canarySectorRemaining;
@@ -729,15 +747,19 @@ exports.main = async (event = {}, context = {}) => {
             baselineTarget: baselineTarget,
             canaryTarget: canary.gen1_canary_target,
             canaryEffective: canary.gen1_canary_effective,
-            techUsed: canaryTechUsed,
+            sectorUsed: canarySectorUsed,
+            currentPosition: currentPos,
             effectiveTechMax: effectiveTechMax
           });
-          canaryTechUsed = cl.techUsed;
           if (cl.clamped) {
             canary.gen1_canary_target = cl.canaryTarget;
             canary.gen1_canary_delta = cl.canaryDelta;
             canary.gen1_canary_clamped = true;
           }
+        }
+        // G1.2-03：与生产**同一**占用算法累计 canary 的赛道占用（仅生效的 canary 才占额度）
+        if (isTechEtf && canary.gen1_canary_effective === true) {
+          canarySectorUsed += sectorOccupation(currentPos, canarySuggestedPosition, canary.gen1_canary_target);
         }
         // G1-11 No-op 不变量：overlay 前后 final_target / final_action 必须逐字段一致
         const noopBefore = { final_target: result.final_target, final_action: result.final_action };
@@ -977,9 +999,14 @@ exports.main = async (event = {}, context = {}) => {
       gen1_production_write: false,
       gen1_auto_execution: false,
       gen1_safety_source: 'SAFETY_CORE',
-      // G1-07：运行时健康状态 + 熔断门
+      // G1-07 / WP-G1.2 G1.2-01/02：运行时健康状态 + 熔断门（唯一真相 = 持久化 latch）
       gen1_health_status: gen1GlobalHealth,
       gen1_health_label: gen1GlobalGate.label,
+      gen1_health_source: gen1GlobalGate.source || 'GEN1_HEALTH_STATE_LATCH',
+      gen1_health_gate_status: gen1GlobalGate.gate_status || 'ACTIVE',
+      gen1_health_read_reason_code: gen1GlobalGate.read_reason_code || null,
+      gen1_health_manual_review_required: gen1GlobalGate.manual_review_required === true,
+      gen1_health_economic_status: gen1GlobalGate.economic_health || 'PENDING',
       gen1_allow_advisory: gen1GlobalGate.allow_advisory,
       gen1_allow_canary: gen1GlobalGate.allow_canary,
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
