@@ -1,0 +1,39 @@
+{
+  "version": "gen1-feature-pipeline-v1",
+  "model_id": "HVT-A-ET-20260830",
+  "sealed_at": "2026-09-10",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256) so Windows worktree == Linux CI",
+  "files": [
+    {
+      "role": "indicator_implementation",
+      "path": "src/common/utils/indicators.js",
+      "sha256": "5ff862d15e115ff19f670bcb1e7400fa68b69ad005f7f8fbc75f72edd3d2aa03"
+    },
+    {
+      "role": "trend_stage_implementation",
+      "path": "src/common/utils/trend-stage.js",
+      "sha256": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412"
+    },
+    {
+      "role": "feature_builder_and_params",
+      "path": "cloudfunctions/runGen1ShadowEod/index.js",
+      "sha256": "db1b741c0c759e9fb851ff3fb7923837164b4136a0a6bea28c14798f72a0fdaa"
+    },
+    {
+      "role": "feature_schema_and_thresholds",
+      "path": "cloudfunctions/runGen1ShadowEod/frozen-manifest.json",
+      "sha256": "30f5fe1c92e2e7be25e3c1b77f5c5dabd4ce3402ff6f4b712c2ae25cc2b0a5f0"
+    }
+  ],
+  "derived": {
+    "feature_schema_sha256": "bbf0e0493a3ee28faabf97d96ac07ecb688ccc25939fa79c127d82646f251b80",
+    "threshold_signal_p": 0.65,
+    "threshold_version": "shadow-threshold-v1",
+    "calibration_version": "cal-isotonic-cv3-v1",
+    "domain_policy_version": "gen1-domain-policy-v1",
+    "permission_version": "gen1-safety-permission-v1",
+    "authority_version": "gen1-authority-v1",
+    "circuit_breaker_version": "gen1-circuit-breaker-v1"
+  },
+  "rule": "Gen-1 特征管线冻结：任何 role 文件变更（指标/阶段/PARAMS/特征构建/RS20/schema/sector 映射/数据健康/域策略）都必须显式更新本锁并走审批；不得静默修改。"
+}

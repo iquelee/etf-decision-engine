@@ -13,6 +13,11 @@ const { COLLECTIONS } = require('./common/constants');
 const indicators = require('./common/utils/indicators');
 const { resolveTrendStage } = require('./common/utils/trend-stage');
 const { getCategoryCoverage, capabilityForApi } = require('./common/utils/gen1-capability');
+// WP-G1（G1-05/06/07）：Data Health Gate + Domain Permission + Circuit Breaker + 权限状态机
+const { resolveAuthority } = require('./common/utils/gen1-authority');
+const { evaluateDataHealth } = require('./common/utils/gen1-data-health');
+const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
+const { computeHealthStatus, circuitGate } = require('./common/utils/gen1-circuit-breaker');
 const manifest = require('./frozen-manifest.json');
 const { modelId, predictProbability } = require('./frozen-node-inference');
 
@@ -110,7 +115,8 @@ function latestFeature(code, bars, benchmarkBars) {
   }
   return {
     code, date: bars[index].trade_date, source_trade_date: bars[index].trade_date, stage_t: stage,
-    stage, close: bars[index].close, sector: SECTORS[code] || 'NA', ma20_slope: clean(snapshot.ma20_slope),
+    stage, close: bars[index].close, sector: SECTORS[code] || 'NA', history_bars: bars.length,
+    ma20_slope: clean(snapshot.ma20_slope),
     px_ma20: snapshot.ma20 ? clean(bars[index].close / snapshot.ma20 - 1) : null,
     px_ma60: snapshot.ma60 ? clean(bars[index].close / snapshot.ma60 - 1) : null,
     price_position: clean(snapshot.price_position), volume_ratio: clean(snapshot.volume_ratio),
@@ -141,7 +147,9 @@ exports.main = async (event = {}) => {
   if (targetDates.some((date) => !date) || new Set(targetDates).size !== 1) {
     throw new Error(`Main5 official EOD dates are incomplete: ${targetDates.join(',')}`);
   }
+  const day = targetDates[0];
   const benchmark = await officialBars('510300').catch(() => []);
+  const benchmarkLatestDate = benchmark.length ? benchmark[benchmark.length - 1].trade_date : null;
   const rows = MAIN5.map((code, index) => latestFeature(code, allBars[index], benchmark));
   const marketRegime = await latestMarketRegime();
   const candidates = rows.filter((row) => row.stage_t === 'S2');
@@ -150,11 +158,24 @@ exports.main = async (event = {}) => {
     throw new Error('Frozen Gen-1 inference produced an invalid probability');
   }
 
-  const day = targetDates[0];
   const featureHash = schemaHash();
+  const gen1Authority = resolveAuthority({ ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true });
   for (const row of rows) {
     // 审计元数据：不参与任何概率、阈值、规则许可或仓位计算。
     const applicability = getCategoryCoverage(row.sector);
+    // G1-06：域许可（有约束力，不再只是展示）
+    const domainPermission = evaluateDomainPermission(row.sector, row.code);
+    // G1-05：数据健康（Fail Closed —— 基准/管线缺失时禁止 advisory/canary）
+    const dataHealth = evaluateDataHealth({
+      features: row, mainLatestDate: day, benchmarkLatestDate,
+      historyBars: row.history_bars, minHistoryBars: 60
+    });
+    // G1-07：运行时熔断门
+    const healthStatus = computeHealthStatus({
+      dataHealth: dataHealth.status === 'DATA_OK' ? 'OK' : (dataHealth.status === 'DATA_DEGRADED' ? 'DEGRADED' : 'BLOCKED')
+    });
+    const gate = circuitGate(healthStatus);
+
     const probability = prediction.get(row.code);
     const modelEligible = row.stage_t === 'S2' && probability != null;
     const mlFast = modelEligible && probability >= manifest.thresholds.signal_p;
@@ -162,7 +183,11 @@ exports.main = async (event = {}) => {
     const rulePermissionReason = ruleGate === 'PERMIT'
       ? 'EOD 阶段预检通过；仍需 Safety Core 复核后才可形成 Fast Path 建议'
       : `EOD 阶段预检：当前阶段 ${row.stage_t} 不属于 S2/S3 观察许可范围`;
-    const candidate = mlFast && ruleGate === 'PERMIT';
+    // Fail-closed 组合门：数据 DATA_OK + 域非 OOD + 熔断允许 canary + 阈值 + 预检
+    const canaryAllowed = dataHealth.status === 'DATA_OK'
+      && domainPermission.permission !== 'BLOCK_CANARY'
+      && gate.allow_canary === true;
+    const candidate = mlFast && ruleGate === 'PERMIT' && canaryAllowed;
     await db.upsert(COLLECTIONS.ML_SHADOW_SIGNAL, {
       date: day, source_trade_date: day, code: row.code, stage: row.stage_t,
       category: applicability.category,
@@ -172,6 +197,22 @@ exports.main = async (event = {}) => {
       domain_status: applicability.domain_status,
       domain_status_label: applicability.label,
       domain_status_message: applicability.message,
+      // G1-06 域许可（有约束力）
+      domain_permission: domainPermission.permission,
+      domain_permission_reason_code: domainPermission.reason_code,
+      domain_permission_reason: domainPermission.reason,
+      domain_warning: domainPermission.warning,
+      // G1-05 数据健康
+      data_health_status: dataHealth.status,
+      data_health_reason_code: dataHealth.reason_code,
+      data_health_reason: dataHealth.reason,
+      missing_features: dataHealth.missing_features,
+      benchmark_latest_date: benchmarkLatestDate,
+      // G1-07 熔断
+      gen1_health_status: healthStatus,
+      canary_allowed: canaryAllowed,
+      // G1-01 权限
+      gen1_authority: gen1Authority.gen1_authority,
       market_regime: marketRegime,
       model_capability: capabilityForApi(),
       ml_probability: modelEligible ? probability : null,
@@ -182,7 +223,7 @@ exports.main = async (event = {}) => {
       rule_permission_source: 'EOD_STAGE_PRECHECK',
       fast_path_would_trigger: candidate,
       signal_status: candidate ? 'CANDIDATE' : (modelEligible ? 'OBSERVED' : 'NO_OPPORTUNITY'),
-      signal_status_reason: null,
+      signal_status_reason: canaryAllowed ? null : (dataHealth.reason || domainPermission.reason || null),
       signal_run_id: signalRunId,
       v361_target: STAGE_W[row.stage_t] || STAGE_W.S2,
       ml_counterfactual_target: candidate ? STAGE_W.S4 : (STAGE_W[row.stage_t] || STAGE_W.S2),
@@ -195,6 +236,9 @@ exports.main = async (event = {}) => {
   }
   return { ok: true, source_trade_date: day, signal_run_id: signalRunId, rows: rows.length, candidates: candidates.length,
     fast_path_candidates: rows.filter((r) => prediction.get(r.code) >= manifest.thresholds.signal_p).map((r) => r.code),
-    domain_statuses: rows.map((r) => ({ code: r.code, domain_status: getCategoryCoverage(r.sector).domain_status })),
+    domain_statuses: rows.map((r) => ({ code: r.code, domain_status: getCategoryCoverage(r.sector).domain_status,
+      domain_permission: evaluateDomainPermission(r.sector, r.code).permission })),
+    data_health: rows.map((r) => ({ code: r.code, status: evaluateDataHealth({ features: r, mainLatestDate: day, benchmarkLatestDate, historyBars: r.history_bars }).status })),
+    benchmark_latest_date: benchmarkLatestDate,
     duration_ms: Date.now() - startedAt, execution_enabled: false };
 };

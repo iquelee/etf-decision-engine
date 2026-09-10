@@ -30,6 +30,9 @@ const { resolveAuthority } = require('./common/utils/gen1-authority');
 const { evaluateGen1Permission } = require('./common/utils/gen1-safety-permission');
 const { buildCanaryCounterfactual } = require('./common/utils/gen1-canary');
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
+const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
+const { circuitGate } = require('./common/utils/gen1-circuit-breaker');
+const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
 const {
   COLLECTIONS, DEFAULT_PARAMS, TECH_SECTORS, SEMI_SECTORS,
   GRADE_SCORES, METRIC_TYPES, METRIC_LAYERS, LAYER_WEIGHTS,
@@ -555,6 +558,19 @@ exports.main = async (event = {}, context = {}) => {
     // canary 重算所需的 V3.6.1 上下文（仅 authority>=CANARY 时才真正调用）
     let canaryV3Portfolio = null;
     let canaryBarsByCode = null;
+    // G1-07：全局健康 = 各标的信号健康度的最差值（独立健康计算，模型不得自改）
+    const _HEALTH_RANK = { OK: 0, WARNING: 1, DEGRADED: 2, ML_OFF: 3 };
+    let gen1GlobalHealth = 'OK';
+    for (const s of Object.values(gen1SignalByCode)) {
+      const h = s.gen1_health_status || 'OK';
+      if ((_HEALTH_RANK[h] || 0) > (_HEALTH_RANK[gen1GlobalHealth] || 0)) gen1GlobalHealth = h;
+    }
+    const gen1GlobalGate = circuitGate(gen1GlobalHealth);
+    // G1-09：执行边界（恒 false；配置试图开启时产生审计记录）
+    const gen1Execution = resolveExecution(merged);
+    if (gen1Execution.audit) {
+      console.warn(`[SECURITY] ${gen1Execution.audit.code}: ${gen1Execution.audit.message}`);
+    }
 
     for (const p of ordered) {
       try {
@@ -647,16 +663,29 @@ exports.main = async (event = {}, context = {}) => {
         const baselineAction = result.final_action;
         const baselineStage = result.v361_baseline_stage || result.trend_stage_primary
           || p.snapshot.trend_stage_primary || p.snapshot.stage || null;
+        // G1-06：域许可（有约束力；OUT_OF_DOMAIN → 禁止 Canary）
+        const gen1Domain = evaluateDomainPermission(etf.sector, etf.code);
+        // G1-05：数据健康（沿用 runGen1ShadowEod 计算的当日结果；缺失 → fail-closed）
+        const gen1DataHealth = gen1Signal && gen1Signal.data_health_status
+          ? { status: gen1Signal.data_health_status, reason_code: gen1Signal.data_health_reason_code || null }
+          : null;
+        // G1-07：运行时熔断门（ML_OFF → 立即回退纯 V3.6.1）
+        const gen1HealthStatus = (gen1Signal && gen1Signal.gen1_health_status) || 'OK';
+        const gen1Gate = circuitGate(gen1HealthStatus);
+        const gen1Params = gen1Gate.allow_gen1_timing
+          ? merged
+          : Object.assign({}, merged, { ml_shadow_observe: false }); // 强制 OFF → Safety 一律 BLOCK
         const gen1Permission = evaluateGen1Permission({
-          params: merged,
+          params: gen1Params,
           signal: gen1Signal,
           baseline: { trend_stage_primary: baselineStage, v361_baseline_target: baselineTarget },
           risk: p.risk,
           fundamental: p.fundamental,
           snapshot: { structural_break: p.snapshot.structural_break, hard_break: p.snapshot.hard_break },
           today,
-          dataHealth: null,       // G1-05 接入前：canary fail-closed 关闭
-          domainPermission: null  // G1-06 接入前：canary fail-closed 关闭
+          dataHealth: gen1DataHealth,
+          domainPermission: gen1Domain,
+          healthGate: gen1Gate
         });
         result.gen1_canary_source = 'V361_RERUN_S4';
 
@@ -904,13 +933,21 @@ exports.main = async (event = {}, context = {}) => {
       ml_effective: false,
       ml_advisory_enabled: merged.ml_advisory_enabled !== false,
       // G1-09：自动执行永久硬关 —— 即使数据库 ml_execution_enabled=true 亦不得开启
-      ml_execution_enabled: false,
+      ml_execution_enabled: gen1Execution.execution_enabled,
+      gen1_execution_label: gen1Execution.label,
+      gen1_broker_wired: gen1Execution.broker_wired,
+      gen1_execution_audit: gen1Execution.audit || null,
       // G1-01：Gen-1 权限状态机（单一真相；production_write / auto_execution 恒 false）
       gen1_authority: gen1Authority.gen1_authority,
       gen1_authority_label: gen1Authority.label,
       gen1_production_write: false,
       gen1_auto_execution: false,
       gen1_safety_source: 'SAFETY_CORE',
+      // G1-07：运行时健康状态 + 熔断门
+      gen1_health_status: gen1GlobalHealth,
+      gen1_health_label: gen1GlobalGate.label,
+      gen1_allow_advisory: gen1GlobalGate.allow_advisory,
+      gen1_allow_canary: gen1GlobalGate.allow_canary,
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
       ml_shadow_observe: mlShadowObserve,
       trend_stage_enabled: trendStageEnabled,

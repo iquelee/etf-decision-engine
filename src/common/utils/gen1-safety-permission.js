@@ -169,15 +169,18 @@ function evaluateGen1Permission(input) {
       ? String(domain.permission || DOMAIN_BY_STATUS[domainStatus] || 'UNKNOWN').toUpperCase()
       : 'UNKNOWN';
 
-    // ADVISORY：safety PERMIT 且数据未 BLOCKED
+    // ADVISORY：safety PERMIT 且数据未 BLOCKED 且熔断门允许 advisory
+    const hg = src.healthGate || null;
+    const healthAllowsAdvisory = !hg || hg.allow_advisory !== false;
+    const healthAllowsCanary = !hg || hg.allow_canary !== false;
     const advisoryBlockedByData = dataStatus === 'BLOCKED';
-    const effectiveAdvisory = safety.permission === 'PERMIT' && !advisoryBlockedByData;
-    // CANARY：safety PERMIT 且数据 OK 且域许可为 ALLOW/CANARY_LIMITED
+    const effectiveAdvisory = safety.permission === 'PERMIT' && !advisoryBlockedByData && healthAllowsAdvisory;
+    // CANARY：safety PERMIT 且数据 OK 且域许可为 ALLOW/CANARY_LIMITED 且熔断门允许 canary
     //         UNKNOWN（未接入）时 fail-closed 阻断 canary
     const canaryDataOk = dataStatus === 'OK';
     const canaryDomainOk = domainPermission === 'ALLOW' || domainPermission === 'CANARY_LIMITED'
       || domainPermission === 'CANARY_ALLOWED_WITH_WARNING';
-    const effectiveCanary = safety.permission === 'PERMIT' && canaryDataOk && canaryDomainOk;
+    const effectiveCanary = safety.permission === 'PERMIT' && canaryDataOk && canaryDomainOk && healthAllowsCanary;
 
     return {
       authority,
@@ -199,6 +202,7 @@ function evaluateGen1Permission(input) {
         : { status: 'UNKNOWN', permission: 'UNKNOWN', reason_code: null },
       effective_advisory: effectiveAdvisory,
       effective_canary: effectiveCanary,
+      gen1_health_status: hg ? hg.health : null,
       blocking_codes: blocking.slice()
     };
   }
