@@ -71,13 +71,20 @@ function statusMeta(ml) {
   if (ml.is_stale === true || ml.has_signal_row === false) {
     return { code: STATUS.DATA_STALE, label: '数据待更新', message: '等待最新有效的 EOD 模型信号', tone: 'warn' };
   }
-  if (ml.advisory_effective === true) {
+  // G1.1-01：快速通道已触发 —— 必须 model_candidate 为真（Safety PERMIT ≠ 模型触发）
+  if (ml.advisory_effective === true && ml.model_candidate === true) {
     return { code: STATUS.FAST_PATH_ACTIVE, label: '快速通道已触发', message: 'Gen-1 已给出趋势启动增强建议', tone: 'good' };
   }
   const raw = String(ml.signal_status || '').toUpperCase();
   if (raw === STATUS.CANDIDATE) return { code: STATUS.CANDIDATE, label: '快速通道候选', message: '模型信号已达到候选条件，等待安全约束确认', tone: 'primary' };
   if (raw === STATUS.BLOCKED) return { code: STATUS.BLOCKED, label: '机会存在 · 风险规则阻止', message: '模型发现机会，但风险或组合约束尚未放行', tone: 'bad' };
-  if (raw === STATUS.OBSERVED) return { code: STATUS.OBSERVED, label: '观察中', message: '趋势正在观察，尚未达到快速通道条件', tone: 'primary' };
+  if (raw === STATUS.OBSERVED) {
+    // 规则允许但模型未触发（P 未达阈值）→ 明确表述为观察，不得提示「已触发」
+    if (ml.advisory_effective === true && ml.model_candidate !== true) {
+      return { code: STATUS.OBSERVED, label: '观察中 · 模型未触发', message: 'Safety Core 已允许，但模型概率尚未达到触发阈值', tone: 'primary' };
+    }
+    return { code: STATUS.OBSERVED, label: '观察中', message: '趋势正在观察，尚未达到快速通道条件', tone: 'primary' };
+  }
   if (raw === STATUS.DEGRADED) {
     return {
       code: STATUS.DEGRADED,

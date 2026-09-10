@@ -29,6 +29,8 @@ const COLLECTIONS = {
   RUNTIME_STATUS: 'runtime_status',
   /** Gen-1 Shadow 日信号（EOD 推送；观察元数据，不改仓位） */
   ML_SHADOW_SIGNAL: 'ml_shadow_signal',
+  /** G1.1-03：Gen-1 运行时健康 latch（持久化，跨 CloudBase 冷启动保持；key='gen1-health-state'） */
+  GEN1_HEALTH_STATE: 'gen1_health_state',
   /** Gen-2 Shadow 日观测（ranking/roles/portfolio_candidates；只读，不改生产仓位） */
   GEN2_SHADOW: 'gen2_shadow',
   /** Gen-2 研究日线（qfq 前复权，独立于生产 etf_daily，供 Gen-2 Shadow 对齐 Python 研究版口径） */
@@ -212,6 +214,12 @@ const DEFAULT_PARAMS = {
   ml_challenger_model_id: 'HVT-A-ET-20260830',
   ml_shadow_bundle_id: 'shadow-bundle-v1',
   ml_gen1_frozen: true,
+  /**
+   * G1.1-01：Gen-1 冻结信号阈值（部署可见的单一来源）。
+   * 必须与 cloudfunctions/runGen1ShadowEod/frozen-manifest.json 的 thresholds.signal_p 一致；
+   * 由 scripts/verify-gen1-pipeline.js 断言（不一致 → CI FAIL）。禁止后台修改。
+   */
+  gen1_frozen_threshold_p: 0.65,
   v3_breadth_source: 'index',   // breadth 源：index=三指数W(V38对齐) | portfolio=五票W
   // 牛市参与度 P0（2026-08-27）：V3.8 默认关；V3 Shadow 在 decision-v3 内按 v3_first_lot_breakout 开启
   first_lot_breakout: false,

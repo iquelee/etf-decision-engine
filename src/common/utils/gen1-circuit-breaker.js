@@ -27,7 +27,8 @@ const HEALTH_LABEL = Object.freeze({
   ML_OFF: 'Gen-1 已停用（纯 V3.6.1）'
 });
 
-/** 上一次健康状态（用于「恢复须人工复核」判定）；进程内即可，非持久。 */
+/** 上一次健康状态（仅测试辅助；**不得用于生产 latch**）。
+ * G1.1-03：生产 latch 必须是持久化的 —— 见 gen1-health-state.js（CloudBase 冷启动会清空进程内变量）。 */
 let _lastHealth = null;
 
 function worst(a, b) {
@@ -43,6 +44,8 @@ function worst(a, b) {
  * @param {number} [m.calibrationDrift]   校准漂移（0–1）
  * @param {string} [m.signalQuality]      'OK' | 'WEAK' | 'BROKEN'
  * @param {string} [m.dataHealth]         'OK' | 'DEGRADED' | 'BLOCKED'
+ * @param {string} [m.economicHealth]     G1.1-04 经济健康：'PENDING' | 'OK' | 'WARNING' | 'DEGRADED' | 'ML_OFF'
+ *                                        （PENDING = 样本不足，**不参与**判定，绝不视为 OK）
  * @param {boolean} [m.killSwitch]        人工总闸（ML_OFF）
  * @returns {string} HEALTH
  */
@@ -57,6 +60,11 @@ function computeHealthStatus(m) {
 
   if (x.dataHealth === 'BLOCKED') status = worst(status, HEALTH.ML_OFF);
   else if (x.dataHealth === 'DEGRADED') status = worst(status, HEALTH.DEGRADED);
+
+  // G1.1-04：经济健康（PENDING 不参与，避免「样本不足」被误当正常或异常）
+  if (x.economicHealth === 'ML_OFF') status = worst(status, HEALTH.ML_OFF);
+  else if (x.economicHealth === 'DEGRADED') status = worst(status, HEALTH.DEGRADED);
+  else if (x.economicHealth === 'WARNING') status = worst(status, HEALTH.WARNING);
 
   if (typeof x.incrementalAlpha === 'number' && x.incrementalAlpha < 0) status = worst(status, HEALTH.DEGRADED);
   if (typeof x.falseFastPathRate === 'number' && x.falseFastPathRate > 0.5) status = worst(status, HEALTH.DEGRADED);
@@ -103,7 +111,9 @@ function circuitGate(health) {
 }
 
 /**
- * 记录并判定「恢复」。从 DEGRADED / ML_OFF 直接跳回 OK/WARNING 而无人工确认 → 拒绝。
+ * ⚠️ DEPRECATED（G1.1-03）：进程内 latch 在 CloudBase Serverless 冷启动后失效，
+ * **不得用于生产**。生产请使用 `gen1-health-state.js` 的 `computeLatchedState`（持久化）。
+ * 保留此函数仅为历史单测与本地调试。
  * @returns {{accepted: boolean, status: string, reason: string}}
  */
 function applyHealthWithRecovery(health, manualReviewConfirmed) {

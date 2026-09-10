@@ -3,8 +3,9 @@ name: test
 on:
   push:
     branches: [master, main]
+  # G1.1-06：不限制 base 分支，保证 **stacked PR**（base=feat/*）同样触发 CI。
+  # 否则 PR #12~#14 这类 stacked PR 不会跑 workflow，「本地 npm test」会被误当成 CI 通过。
   pull_request:
-    branches: [master, main]
 
 jobs:
   test:

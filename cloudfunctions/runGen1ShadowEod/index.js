@@ -17,7 +17,11 @@ const { getCategoryCoverage, capabilityForApi } = require('./common/utils/gen1-c
 const { resolveAuthority } = require('./common/utils/gen1-authority');
 const { evaluateDataHealth } = require('./common/utils/gen1-data-health');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
-const { computeHealthStatus, circuitGate } = require('./common/utils/gen1-circuit-breaker');
+const { computeHealthStatus } = require('./common/utils/gen1-circuit-breaker');
+// G1.1-03/04：持久化健康 latch + 经济健康
+const {
+  readHealthState, writeHealthState, computeLatchedState, healthStateToGate, defaultHealthState
+} = require('./common/utils/gen1-health-state');
 const manifest = require('./frozen-manifest.json');
 const { modelId, predictProbability } = require('./frozen-node-inference');
 
@@ -160,22 +164,41 @@ exports.main = async (event = {}) => {
 
   const featureHash = schemaHash();
   const gen1Authority = resolveAuthority({ ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true });
-  for (const row of rows) {
-    // 审计元数据：不参与任何概率、阈值、规则许可或仓位计算。
-    const applicability = getCategoryCoverage(row.sector);
-    // G1-06：域许可（有约束力，不再只是展示）
-    const domainPermission = evaluateDomainPermission(row.sector, row.code);
-    // G1-05：数据健康（Fail Closed —— 基准/管线缺失时禁止 advisory/canary）
-    const dataHealth = evaluateDataHealth({
+
+  // ---- G1.1-03/04：持久化健康 latch（跨 CloudBase 冷启动保持）----
+  // 先对全部标的算 data/domain（纯计算），取最差数据健康；再与持久化的经济健康合成 → latch → 落库。
+  const perRow = rows.map((row) => ({
+    row,
+    applicability: getCategoryCoverage(row.sector),
+    domainPermission: evaluateDomainPermission(row.sector, row.code),
+    dataHealth: evaluateDataHealth({
       features: row, mainLatestDate: day, benchmarkLatestDate,
       historyBars: row.history_bars, minHistoryBars: 60
+    })
+  }));
+  const worstData = perRow.reduce((acc, x) => {
+    const s = x.dataHealth.status;
+    if (s === 'DATA_BLOCKED') return 'BLOCKED';
+    if (s === 'DATA_DEGRADED' && acc !== 'BLOCKED') return 'DEGRADED';
+    return acc;
+  }, 'OK');
+  let healthState = null;
+  try {
+    const prevState = await readHealthState(db, COLLECTIONS);
+    const incoming = computeHealthStatus({
+      dataHealth: worstData,
+      economicHealth: prevState.economic_health || 'PENDING'
     });
-    // G1-07：运行时熔断门
-    const healthStatus = computeHealthStatus({
-      dataHealth: dataHealth.status === 'DATA_OK' ? 'OK' : (dataHealth.status === 'DATA_DEGRADED' ? 'DEGRADED' : 'BLOCKED')
-    });
-    const gate = circuitGate(healthStatus);
+    const latched = computeLatchedState(prevState, incoming, { runtimeDataHealth: worstData });
+    healthState = await writeHealthState(db, latched.state, COLLECTIONS);
+  } catch (e) {
+    healthState = defaultHealthState();
+  }
+  const healthGate = healthStateToGate(healthState);
+  const healthStatus = healthState.latched_health;
 
+  for (const item of perRow) {
+    const { row, applicability, domainPermission, dataHealth } = item;
     const probability = prediction.get(row.code);
     const modelEligible = row.stage_t === 'S2' && probability != null;
     const mlFast = modelEligible && probability >= manifest.thresholds.signal_p;
@@ -183,11 +206,13 @@ exports.main = async (event = {}) => {
     const rulePermissionReason = ruleGate === 'PERMIT'
       ? 'EOD 阶段预检通过；仍需 Safety Core 复核后才可形成 Fast Path 建议'
       : `EOD 阶段预检：当前阶段 ${row.stage_t} 不属于 S2/S3 观察许可范围`;
-    // Fail-closed 组合门：数据 DATA_OK + 域非 OOD + 熔断允许 canary + 阈值 + 预检
-    const canaryAllowed = dataHealth.status === 'DATA_OK'
+    // Fail-closed 组合门：数据 DATA_OK + 域非 OOD + 熔断允许 canary + 阈值 + 预检 + 模型候选（S2 only）
+    const modelCandidate = row.stage_t === 'S2' && mlFast;
+    const canaryAllowed = modelCandidate
+      && dataHealth.status === 'DATA_OK'
       && domainPermission.permission !== 'BLOCK_CANARY'
-      && gate.allow_canary === true;
-    const candidate = mlFast && ruleGate === 'PERMIT' && canaryAllowed;
+      && healthGate.allow_canary === true;
+    const candidate = canaryAllowed && ruleGate === 'PERMIT';
     await db.upsert(COLLECTIONS.ML_SHADOW_SIGNAL, {
       date: day, source_trade_date: day, code: row.code, stage: row.stage_t,
       category: applicability.category,
@@ -208,9 +233,13 @@ exports.main = async (event = {}) => {
       data_health_reason: dataHealth.reason,
       missing_features: dataHealth.missing_features,
       benchmark_latest_date: benchmarkLatestDate,
-      // G1-07 熔断
-      gen1_health_status: healthStatus,
-      canary_allowed: canaryAllowed,
+        // G1-07 熔断（持久化 latch 结果）
+        gen1_health_status: healthStatus,
+        gen1_health_label: healthGate.label,
+        gen1_health_manual_review_required: healthGate.manual_review_required === true,
+        gen1_economic_health: healthState.economic_health || 'PENDING',
+        canary_allowed: canaryAllowed,
+        gen1_model_candidate: modelCandidate,
       // G1-01 权限
       gen1_authority: gen1Authority.gen1_authority,
       market_regime: marketRegime,

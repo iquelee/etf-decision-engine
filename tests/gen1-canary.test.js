@@ -11,11 +11,12 @@ const { evaluateGen1Permission } = require('../src/common/utils/gen1-safety-perm
 const TO = '2026-09-10';
 const params = { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true, gen1_authority: 'CANARY' };
 const baseline = { stage: 'S2', target: 15, action: 'WAIT' };
-const signal = { date: TO, model_id: 'HVT-A-ET-20260830', calibrated_probability: 0.82, rule_gate: 'PERMIT' };
+const signal = { date: TO, model_id: 'HVT-A-ET-20260830', ml_fast: true, calibrated_probability: 0.82, rule_gate: 'PERMIT', stage: 'S2' };
 
 function perm(over) {
   return evaluateGen1Permission(Object.assign({
     params, signal, baseline: { trend_stage_primary: 'S2', v361_baseline_target: 15 }, today: TO,
+    thresholdSignalP: 0.65,
     risk: { risk_override: false, risk_flag: 'NORMAL' }, fundamental: { f_state: 'F3' },
     snapshot: { structural_break: false, hard_break: false },
     dataHealth: { status: 'OK' }, domainPermission: { status: 'IN_DOMAIN', permission: 'ALLOW' }

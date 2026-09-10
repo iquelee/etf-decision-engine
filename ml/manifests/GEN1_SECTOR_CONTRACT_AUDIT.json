@@ -1,0 +1,175 @@
+{
+  "audit_version": "gen1-sector-contract-v1",
+  "model_id": "HVT-A-ET-20260830",
+  "generated_at": "2026-09-10",
+  "generator": "scripts/audit-gen1-sector-contract.js",
+  "encoder_categories_by_fold": [
+    [
+      "ai",
+      "biotech",
+      "comms",
+      "growth_broad",
+      "semi"
+    ],
+    [
+      "ai",
+      "ai_network",
+      "biotech",
+      "comms",
+      "growth_broad",
+      "semi",
+      "semi_equip",
+      "storage"
+    ],
+    [
+      "ai_network",
+      "biotech",
+      "growth_broad",
+      "semi",
+      "semi_equip",
+      "storage"
+    ]
+  ],
+  "encoder_categories_union": [
+    "ai",
+    "ai_network",
+    "biotech",
+    "comms",
+    "growth_broad",
+    "semi",
+    "semi_equip",
+    "storage"
+  ],
+  "declared_encoder_folds_in_capability": {
+    "biotech": [
+      true,
+      true,
+      true
+    ],
+    "storage": [
+      false,
+      true,
+      true
+    ],
+    "ai_network": [
+      false,
+      true,
+      true
+    ],
+    "semi_equip": [
+      false,
+      true,
+      true
+    ],
+    "gold": [
+      false,
+      false,
+      false
+    ]
+  },
+  "contract_version": "gen1-sector-contract-v1",
+  "runtime_sector_audit": {
+    "biotech": {
+      "code": "159570",
+      "encoder_folds_present": [
+        true,
+        true,
+        true
+      ],
+      "encoder_recognized_folds": 3,
+      "encoder_encode_per_fold": [
+        1,
+        2,
+        1
+      ],
+      "encoder_partial": false,
+      "encoder_recognized": true,
+      "domain_status": "IN_DOMAIN",
+      "declared_folds_match_encoder": true
+    },
+    "semi_equip": {
+      "code": "159582",
+      "encoder_folds_present": [
+        false,
+        true,
+        true
+      ],
+      "encoder_recognized_folds": 2,
+      "encoder_encode_per_fold": [
+        -1,
+        6,
+        4
+      ],
+      "encoder_partial": true,
+      "encoder_recognized": false,
+      "domain_status": "PARTIAL_COVERAGE",
+      "declared_folds_match_encoder": true
+    },
+    "storage": {
+      "code": "513310",
+      "encoder_folds_present": [
+        false,
+        true,
+        true
+      ],
+      "encoder_recognized_folds": 2,
+      "encoder_encode_per_fold": [
+        -1,
+        7,
+        5
+      ],
+      "encoder_partial": true,
+      "encoder_recognized": false,
+      "domain_status": "PARTIAL_COVERAGE",
+      "declared_folds_match_encoder": true
+    },
+    "ai_network": {
+      "code": "515880",
+      "encoder_folds_present": [
+        false,
+        true,
+        true
+      ],
+      "encoder_recognized_folds": 2,
+      "encoder_encode_per_fold": [
+        -1,
+        1,
+        0
+      ],
+      "encoder_partial": true,
+      "encoder_recognized": false,
+      "domain_status": "PARTIAL_COVERAGE",
+      "declared_folds_match_encoder": true
+    },
+    "gold": {
+      "code": "518880",
+      "encoder_folds_present": [
+        false,
+        false,
+        false
+      ],
+      "encoder_recognized_folds": 0,
+      "encoder_encode_per_fold": [
+        -1,
+        -1,
+        -1
+      ],
+      "encoder_partial": false,
+      "encoder_recognized": false,
+      "domain_status": "OUT_OF_DOMAIN",
+      "declared_folds_match_encoder": true
+    }
+  },
+  "drift": [],
+  "status": "CONSISTENT",
+  "contradiction": false,
+  "blocks_canary": true,
+  "canary_block_reason": "存在运行时 sector 在全部 fold 中均未被 encoder 认识（编码 -1）→ 该标的按 OUT_OF_DOMAIN 处理（gen1-domain-permission 返回 BLOCK_CANARY）。",
+  "notes": [
+    "审计结论：capability 的 observed_folds 与 frozen encoder 命中 fold 数**一致**（无矛盾）。",
+    "各 fold encoder 类别集合不同（fold0 不含 storage/ai_network/semi_equip）→ 这些类别有 1/3 fold 编码为 -1，",
+    "属已知 encoder 契约事实，对应 PARTIAL_COVERAGE 标注；gold 3/3 均 -1 → OUT_OF_DOMAIN。",
+    "未修改 frozen model / encoder（禁止）。若未来需要 storage→semi 等映射，",
+    "必须从原始训练数据证明映射关系并新建 runtime contract version / bundle version。"
+  ]
+}

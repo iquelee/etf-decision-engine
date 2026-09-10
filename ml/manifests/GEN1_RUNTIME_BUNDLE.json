@@ -5,7 +5,7 @@
   "freeze_manifest_sha256": "30f5fe1c92e2e7be25e3c1b77f5c5dabd4ce3402ff6f4b712c2ae25cc2b0a5f0",
   "inference_sha256": "8e741912a7883d38f016ed234d091e2799cf56e28c41bfff208b373ec8c5b819",
   "feature_pipeline_lock": "ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json",
-  "feature_pipeline_hash": "f21c4632009fe7c6af3235d8bb5ecd3dfa2106b9e88a651129a0ca9bd11227c2",
+  "feature_pipeline_hash": "8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad",
   "feature_schema_hash": "bbf0e0493a3ee28faabf97d96ac07ecb688ccc25939fa79c127d82646f251b80",
   "threshold_signal_p": 0.65,
   "threshold_version": "shadow-threshold-v1",

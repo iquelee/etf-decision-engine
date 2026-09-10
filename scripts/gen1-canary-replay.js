@@ -168,11 +168,18 @@ function main() {
 
       const perm = evaluateGen1Permission({
         params: { ml_shadow_observe: true, ml_advisory_enabled: true, ml_fast_path_enabled: true, gen1_authority: 'CANARY' },
-        signal: { date: d, model_id: modelId, rule_gate: 'PERMIT', calibrated_probability: probability },
+        // G1.1-01：必须显式提供 ml_fast 与 stage（与 runGen1ShadowEod 写出的信号行一致）
+        signal: {
+          date: d, model_id: modelId, rule_gate: 'PERMIT',
+          ml_fast: probability >= manifest.thresholds.signal_p,
+          calibrated_probability: probability, stage: row.stage_t
+        },
         baseline: { trend_stage_primary: row.stage_t, v361_baseline_target: null },
+        thresholdSignalP: manifest.thresholds.signal_p,
         risk: { risk_override: false, risk_flag: 'NORMAL' }, fundamental: { f_state: 'F3' },
         snapshot: { structural_break: false, hard_break: false },
-        today: d, dataHealth: { status: bh.status }, domainPermission: dm
+        today: d, dataHealth: { status: bh.status }, domainPermission: dm,
+        healthGate: { health: 'OK', allow_advisory: true, allow_canary: true }
       });
       if (perm.safety.permission === 'PERMIT') counters.safety_permit += 1;
       else if (perm.safety.permission === 'BLOCK') counters.safety_block += 1;

@@ -28,6 +28,7 @@ function applyGen1Overlay(result, permission, canary) {
   const p = permission || {};
   const s = p.safety || {};
   const e = p.eod_precheck || {};
+  const m = p.model || {};
 
   // Safety Core Permission（对外唯一许可来源）
   out.ml_rule_permission = s.permission == null ? null : s.permission;
@@ -38,6 +39,11 @@ function applyGen1Overlay(result, permission, canary) {
   out.eod_precheck_permission = e.permission == null ? null : e.permission;
   out.eod_precheck_reason_code = e.reason_code || null;
   out.eod_precheck_reason = e.reason || null;
+  // G1.1-01：Model Candidate（模型是否真的触发；Safety PERMIT ≠ 模型触发）
+  out.gen1_model_candidate = m.model_candidate === true;
+  out.gen1_model_candidate_reason_code = m.reason_code || null;
+  out.gen1_model_probability = m.probability == null ? null : m.probability;
+  out.gen1_model_threshold_p = m.threshold_signal_p == null ? null : m.threshold_signal_p;
   // Gen-1 授权状态
   out.gen1_authority = (p.authority && p.authority.gen1_authority) || null;
   out.ml_advisory_effective = p.effective_advisory === true;
@@ -51,6 +57,9 @@ function applyGen1Overlay(result, permission, canary) {
   out.gen1_canary_delta = c.gen1_canary_delta != null ? c.gen1_canary_delta : null;
   out.gen1_canary_effective = c.gen1_canary_effective === true;
   out.gen1_canary_reason_code = c.gen1_canary_reason_code != null ? c.gen1_canary_reason_code : null;
+  // G1.1-05：Canary 组合平价（组合层科技额度 clamp）
+  out.gen1_canary_clamped = c.gen1_canary_clamped === true;
+  out.gen1_canary_sector_remaining = c.gen1_canary_sector_remaining != null ? c.gen1_canary_sector_remaining : null;
   out.v361_baseline_stage = c.v361_baseline_stage != null ? c.v361_baseline_stage : null;
   out.v361_baseline_target = c.v361_baseline_target != null ? c.v361_baseline_target : null;
   out.v361_baseline_action = c.v361_baseline_action != null ? c.v361_baseline_action : null;

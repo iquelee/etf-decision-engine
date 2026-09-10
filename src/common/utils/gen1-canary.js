@@ -122,7 +122,49 @@ function assertProductionUntouched(before, after) {
   return { ok: diffs.length === 0, diffs };
 }
 
+/**
+ * G1.1-05：Canary 组合平价 —— 单只候选的组合层科技额度 clamp（顺序累计，与生产 sectorUsed 同构）。
+ *
+ * 保证：多个科技 Canary 目标聚合后不超过 effectiveTechMax。
+ *
+ * @param {object} input
+ * @param {boolean} input.isTech            是否科技赛道
+ * @param {number}  input.baselineTarget    V3.6.1 基线目标
+ * @param {number}  input.canaryTarget      canary 目标（已由 V3.6.1 rerun 得出）
+ * @param {boolean} input.canaryEffective   canary 是否生效
+ * @param {number}  input.techUsed          之前已占用的科技增量
+ * @param {number}  input.effectiveTechMax  科技赛道上限
+ * @returns {{canaryTarget, canaryDelta, clamped, techUsed, room}}
+ */
+function clampCanaryCandidate(input) {
+  const x = input || {};
+  const numOr = (v, dflt) => (v == null || v === '' || !Number.isFinite(Number(v)) ? dflt : Number(v));
+  const base = numOr(x.baselineTarget, 0);
+  const max = numOr(x.effectiveTechMax, null);   // 注意：null 不可被 Number() 变成 0
+  const used = numOr(x.techUsed, 0);
+  let target = numOr(x.canaryTarget, base);
+  const effective = x.canaryEffective === true;
+  const isTech = x.isTech === true;
+
+  let clamped = false;
+  let nextUsed = used;
+  const room = max == null ? null : Math.max(0, max - used);
+
+  if (effective && isTech && room != null) {
+    const deltaUp = Math.max(0, target - base);
+    if (deltaUp > room) {
+      target = Math.round((base + room) * 10) / 10;
+      clamped = true;
+    }
+    nextUsed = used + Math.max(0, target - base);
+  }
+
+  const delta = Math.round((target - base) * 10) / 10;
+  return { canaryTarget: target, canaryDelta: delta, clamped, techUsed: nextUsed, room };
+}
+
 module.exports = {
   buildCanaryCounterfactual,
-  assertProductionUntouched
+  assertProductionUntouched,
+  clampCanaryCandidate
 };
