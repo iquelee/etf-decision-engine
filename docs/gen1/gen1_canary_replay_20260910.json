@@ -1,0 +1,160 @@
+{
+  "summary": {
+    "engine": "gen1-canary-replay-v1",
+    "model_id": "HVT-A-ET-20260830",
+    "window": {
+      "from": "2023-01-01",
+      "to": "2026-09-04"
+    },
+    "fidelity": "PARTIAL_FIDELITY",
+    "fidelity_notes": [
+      "risk/fundamental 无历史 → 固定 NORMAL/F3；Safety BLOCK 不含历史硬风险与 F5。",
+      "canary target = min(STAGE_W[S4], 30%) 为上界代理，未重放完整 V3.6.1 组合约束。",
+      "regime 由 510300 MA20/MA60 推导（代理，非生产 regime）。"
+    ],
+    "counts": {
+      "baseline_s2_days": 698,
+      "candidates": 3,
+      "independent_events": 2,
+      "safety_permit": 3,
+      "safety_block": 0,
+      "safety_unavailable": 0,
+      "ood_block": 0,
+      "data_block": 0,
+      "data_degraded": 0,
+      "canary_change": 3
+    },
+    "timing": {
+      "timing_gain_weight_sum": 0.705,
+      "mean_stage_weight_delta": 0.235,
+      "false_fast_path": 0,
+      "false_fast_path_rate": 0,
+      "incremental_return_20d_mean": 0.16399856340232,
+      "incremental_return_40d_mean": 0.08790155965215891,
+      "mae_mean": -0.009147253546327469,
+      "mfe_mean": 0.21834522231067174,
+      "incremental_mdd_proxy": 0
+    },
+    "unit_note": "stage weight（Gen-1 阶段权重，pre-cap）；不是最终仓位 %。生产 target 需完整 V3.6.1 组合约束（未重放）。",
+    "by_regime": {
+      "BULL": {
+        "events": 0,
+        "canary_effective": 0,
+        "mean_exc20": null,
+        "false_fast_path": 0
+      },
+      "RANGE": {
+        "events": 2,
+        "canary_effective": 2,
+        "mean_exc20": 0.1736801240205954,
+        "false_fast_path": 0
+      },
+      "RISK_OFF": {
+        "events": 1,
+        "canary_effective": 1,
+        "mean_exc20": 0.14463544216576918,
+        "false_fast_path": 0
+      }
+    },
+    "by_code": {
+      "159570": {
+        "events": 0,
+        "canary_effective": 0,
+        "ood_block": 0,
+        "data_block": 0
+      },
+      "159582": {
+        "events": 2,
+        "canary_effective": 2,
+        "ood_block": 0,
+        "data_block": 0
+      },
+      "513310": {
+        "events": 0,
+        "canary_effective": 0,
+        "ood_block": 0,
+        "data_block": 0
+      },
+      "515880": {
+        "events": 1,
+        "canary_effective": 1,
+        "ood_block": 0,
+        "data_block": 0
+      },
+      "518880": {
+        "events": 0,
+        "canary_effective": 0,
+        "ood_block": 0,
+        "data_block": 0
+      }
+    }
+  },
+  "events": [
+    {
+      "code": "515880",
+      "date": "2023-05-30",
+      "regime": "RISK_OFF",
+      "probability": 0.6959222325008784,
+      "stage": "S2",
+      "data_health": "DATA_OK",
+      "data_reason": null,
+      "domain": "CANARY_LIMITED",
+      "safety": "PERMIT",
+      "safety_reason": "SAFETY_CORE_PASS",
+      "baseline_stage_weight": 0.4,
+      "canary_stage_weight": 0.635,
+      "stage_weight_delta": 0.235,
+      "canary_effective": true,
+      "ret20": 0.15053763440860224,
+      "exc20": 0.14463544216576918,
+      "ret40": 0.053763440860215006,
+      "exc40": 0.016101833215470762,
+      "mae": -0.005376344086021501,
+      "mfe": 0.23118279569892475
+    },
+    {
+      "code": "159582",
+      "date": "2025-12-23",
+      "regime": "RANGE",
+      "probability": 0.999999999999965,
+      "stage": "S2",
+      "data_health": "DATA_OK",
+      "data_reason": null,
+      "domain": "CANARY_LIMITED",
+      "safety": "PERMIT",
+      "safety_reason": "SAFETY_CORE_PASS",
+      "baseline_stage_weight": 0.4,
+      "canary_stage_weight": 0.635,
+      "stage_weight_delta": 0.235,
+      "canary_effective": true,
+      "ret20": 0.18805309734513287,
+      "exc20": 0.1642281027599044,
+      "ret40": 0.15929203539823011,
+      "exc40": 0.13590022253273304,
+      "mae": -0.008849557522123908,
+      "mfe": 0.2146017699115046
+    },
+    {
+      "code": "159582",
+      "date": "2025-12-24",
+      "regime": "RANGE",
+      "probability": 0.9393939393939394,
+      "stage": "S2",
+      "data_health": "DATA_OK",
+      "data_reason": null,
+      "domain": "CANARY_LIMITED",
+      "safety": "PERMIT",
+      "safety_reason": "SAFETY_CORE_PASS",
+      "baseline_stage_weight": 0.4,
+      "canary_stage_weight": 0.635,
+      "stage_weight_delta": 0.235,
+      "canary_effective": true,
+      "ret20": 0.19823788546255505,
+      "exc20": 0.1831321452812864,
+      "ret40": 0.13436123348017626,
+      "exc40": 0.11170262320827296,
+      "mae": -0.013215859030836996,
+      "mfe": 0.20925110132158586
+    }
+  ]
+}

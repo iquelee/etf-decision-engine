@@ -161,7 +161,10 @@ function evaluateGen1Permission(input) {
   function finish() {
     const dataHealth = src.dataHealth || null;
     const domain = src.domainPermission || null;
-    const dataStatus = dataHealth ? String(dataHealth.status || '').toUpperCase() : 'UNKNOWN';
+    // 词表归一化：同时接受 'OK'/'DEGRADED'/'BLOCKED' 与 'DATA_OK'/'DATA_DEGRADED'/'DATA_BLOCKED'
+    const dataStatus = dataHealth
+      ? String(dataHealth.status || '').toUpperCase().replace(/^DATA_/, '')
+      : 'UNKNOWN';
     // 域许可归一化：优先取 domain.permission（G1-06 输出），否则由 status 映射。
     const DOMAIN_BY_STATUS = { IN_DOMAIN: 'ALLOW', PARTIAL_COVERAGE: 'CANARY_LIMITED', OUT_OF_DOMAIN: 'BLOCK_CANARY' };
     const domainStatus = domain ? String(domain.status || '').toUpperCase() : 'UNKNOWN';

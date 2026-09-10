@@ -145,4 +145,17 @@ function run(over) {
   assert.strictEqual(r.effective_canary, false);
 }
 
+// 15) 词表归一化：runGen1ShadowEod 使用 DATA_OK/DATA_DEGRADED/DATA_BLOCKED，必须与 OK/DEGRADED/BLOCKED 等价
+{
+  const ok = run({ dataHealth: { status: 'DATA_OK' } });
+  assert.strictEqual(ok.effective_canary, true, 'DATA_OK 必须被识别为数据正常');
+  assert.strictEqual(ok.effective_advisory, true);
+  const deg = run({ dataHealth: { status: 'DATA_DEGRADED' } });
+  assert.strictEqual(deg.effective_advisory, true, 'DATA_DEGRADED 仍允许 advisory');
+  assert.strictEqual(deg.effective_canary, false, 'DATA_DEGRADED 禁止 canary');
+  const blk = run({ dataHealth: { status: 'DATA_BLOCKED' } });
+  assert.strictEqual(blk.effective_advisory, false, 'DATA_BLOCKED 必须关闭 advisory');
+  assert.strictEqual(blk.effective_canary, false);
+}
+
 console.log('gen1 safety permission tests passed');
