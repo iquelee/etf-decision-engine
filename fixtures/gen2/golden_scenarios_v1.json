@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "fixture_id": "gen2-golden-scenarios-v1",
+    "work_package": "WP-G2-01",
+    "created": "2026-09-11",
+    "rule_bundle": "gen2-rule-v2.0",
+    "universe_version": "universe_v1",
+    "purpose": "Gen-2 场景语义的跨语言共同规范：已确认业务不变量 + 双端实际输出 + 差异分类。",
+    "layer_contract": {
+      "input": "固定输入（双端共用同一份；结构化输入由各自 adapter 转成该端形态，adapter 差异必须显式记录）",
+      "invariants": "已确认的业务不变量（唯一 expected 只能来自这里，禁止把任一端现有输出写成 expected）",
+      "observations": "双端实际输出，由 scripts/parity/run_gen2_scenarios_{node.js,py} 生成，不预先填写"
+    },
+    "gate": "0 个未记录、未定位的差异；允许已登记并定位的 EXPLAINED / PENDING_RULING 项",
+    "forbidden": [
+      "不得为达成 0 差异而修改任一端规则/参数",
+      "不得把 Python 或 JS 任一现有输出当作唯一真值",
+      "不得在本包内改动 bundle / lock / 生产库 / 部署 / authority"
+    ]
+  },
+  "classification_vocabulary": {
+    "ALIGNED": "两端输出一致",
+    "EXPLAINED": "两端不一致但已定位到具体代码位置且有依据（adapter/接口差异等），不阻塞",
+    "PENDING_RULING": "两端都实现了同一语义但结果不同 → 需要业务裁决（本包不修，下一包决定）",
+    "EXCLUDED_BY_DESIGN": "某一端按设计不实现该概念（必须写明原因与位置）"
+  },
+  "known_differences": [
+    {
+      "id": "D-001",
+      "scenario": "G2S-03",
+      "case": "gate_call",
+      "fields": [
+        "roles.*",
+        "reason_codes.*",
+        "core_count",
+        "per_cluster_core.*"
+      ],
+      "status": "PENDING_RULING",
+      "location": "cloudfunctions/runGen2ShadowEod/index.js:715 (`if (!capDemoted.length) return;` 早退，跳过终局断言) vs ml/gen2/baseline/rule_v2_ab.py:134-136（`if cap_demoted.empty:` 仍先执行 `_assert_final_constraints(...)` 再返回）",
+      "reason": "同一 day（software_ai 有 3 个 CORE、无 cap 降级现任）下：替换门路径 JS 保留 3 CORE、Python 收敛到 2。同场景 assert_call 路径两端完全一致（roles/reason_codes/core_count 全 ALIGNED），说明约束逻辑本身一致，差异只在「无 cap 降级时是否仍执行终局断言」。需裁决：终局约束是否必须在 gate 路径上无条件执行（若是，需在某端补一次断言；不得两端口径并存）。",
+      "evidence": "G2S-03 gate_call: roles.159852 js=CORE/py=CHALLENGER; core_count js=3/py=2"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "G2S-01",
+      "title": "regime / selection 边界 + RISK_OFF 禁止新晋升",
+      "tier": "PURE_SEAM",
+      "status": "RUNNABLE",
+      "handler": "regime_selection",
+      "seam": {
+        "python": "gen2.portfolio.regime.classify_regime + gen2.portfolio.selection_permission.{selection_mode,max_core_count,selection_allowed}",
+        "js": "_internal.{classifyRegime,selectionMode,maxCoreCount,promotionAllowed} (runGen2ShadowEod/index.js:176-201)"
+      },
+      "input": {
+        "base_max_core": 5,
+        "cases": [
+          { "id": "s44", "market_score": 44 },
+          { "id": "s45", "market_score": 45 },
+          { "id": "s46", "market_score": 46 },
+          { "id": "s54", "market_score": 54 },
+          { "id": "s55", "market_score": 55 },
+          { "id": "s56", "market_score": 56 },
+          { "id": "s_null", "market_score": null }
+        ]
+      },
+      "invariants": [
+        { "id": "I-01-01", "applies_to": "both", "case": "s45", "field": "regime", "op": "eq", "value": "RISK_OFF" },
+        { "id": "I-01-02", "applies_to": "both", "case": "s44", "field": "regime", "op": "eq", "value": "RISK_OFF" },
+        { "id": "I-01-03", "applies_to": "both", "case": "s55", "field": "regime", "op": "eq", "value": "RISK_ON" },
+        { "id": "I-01-04", "applies_to": "both", "case": "s46", "field": "regime", "op": "eq", "value": "RANGE" },
+        { "id": "I-01-05", "applies_to": "both", "case": "s_null", "field": "regime", "op": "eq", "value": "RANGE" },
+        { "id": "I-01-06", "applies_to": "both", "case": "s45", "field": "promotion_allowed", "op": "is_false" },
+        { "id": "I-01-07", "applies_to": "both", "case": "s44", "field": "promotion_allowed", "op": "is_false" },
+        { "id": "I-01-08", "applies_to": "both", "case": "s46", "field": "promotion_allowed", "op": "is_true" },
+        { "id": "I-01-09", "applies_to": "both", "case": "s55", "field": "promotion_allowed", "op": "is_true" },
+        { "id": "I-01-10", "applies_to": "both", "case": "s45", "field": "selection_mode", "op": "eq", "value": "DISABLED" },
+        { "id": "I-01-11", "applies_to": "both", "case": "s46", "field": "selection_mode", "op": "eq", "value": "REDUCED" },
+        { "id": "I-01-12", "applies_to": "both", "case": "s55", "field": "selection_mode", "op": "eq", "value": "ACTIVE" },
+        { "id": "I-01-13", "applies_to": "both", "case": "s46", "field": "max_core_count", "op": "eq", "value": 3 },
+        { "id": "I-01-14", "applies_to": "both", "case": "s55", "field": "max_core_count", "op": "eq", "value": 5 },
+        { "id": "I-01-15", "applies_to": "both", "case": "s45", "field": "max_core_count", "op": "is_null" },
+        { "id": "I-01-16", "applies_to": "both", "case": "s_null", "field": "selection_mode", "op": "eq", "value": "REDUCED" },
+        { "id": "I-01-17", "applies_to": "both", "case": "s_null", "field": "max_core_count", "op": "eq", "value": 3 },
+        { "id": "I-01-18", "applies_to": "both", "case": "s_null", "field": "promotion_allowed", "op": "is_true" }
+      ]
+    },
+    {
+      "id": "G2S-02",
+      "title": "替换边际边界（min_replacement_edge = 8.0，惩罚项 2+2+1）",
+      "tier": "PURE_SEAM",
+      "status": "RUNNABLE",
+      "handler": "replacement_edge",
+      "seam": {
+        "python": "gen2.baseline.rule_v2_ab._replacement_edge / _should_replace",
+        "js": "computeReplacementEdge / shouldReplace (runGen2ShadowEod/index.js:702-710)"
+      },
+      "input": {
+        "cases": [
+          { "id": "e_eq", "challenger_alpha": 13.0, "incumbent_alpha": 0.0 },
+          { "id": "e_below", "challenger_alpha": 12.9, "incumbent_alpha": 0.0 },
+          { "id": "e_above", "challenger_alpha": 30.0, "incumbent_alpha": 10.0 },
+          { "id": "e_far_below", "challenger_alpha": 20.0, "incumbent_alpha": 10.0 }
+        ]
+      },
+      "invariants": [
+        { "id": "I-02-01", "applies_to": "both", "case": "e_eq", "field": "edge", "op": "eq", "value": 8.0 },
+        { "id": "I-02-02", "applies_to": "both", "case": "e_below", "field": "edge", "op": "eq", "value": 7.9 },
+        { "id": "I-02-03", "applies_to": "both", "case": "e_eq", "field": "should_replace", "op": "is_true" },
+        { "id": "I-02-04", "applies_to": "both", "case": "e_below", "field": "should_replace", "op": "is_false" },
+        { "id": "I-02-05", "applies_to": "both", "case": "e_above", "field": "should_replace", "op": "is_true" },
+        { "id": "I-02-06", "applies_to": "both", "case": "e_far_below", "field": "should_replace", "op": "is_false" }
+      ]
+    },
+    {
+      "id": "G2S-03",
+      "title": "cluster cap（software_ai 3 个 CORE → 收敛到 2）：替换门路径 vs 直接终局断言",
+      "tier": "STRUCTURED_SEAM",
+      "status": "RUNNABLE",
+      "handler": "cluster_cap",
+      "seam": {
+        "python": "gen2.baseline.rule_v2_ab._apply_replacement_gate / _assert_final_constraints",
+        "js": "applyReplacementGate / assertFinalRoleConstraints (runGen2ShadowEod/index.js:712-788)"
+      },
+      "input": {
+        "base_max_core": 5,
+        "max_core_per_cluster": 2,
+        "prev_roles": { "159770": "CORE", "159819": "CORE" },
+        "day": [
+          { "code": "159770", "role": "CORE", "role_before_cap": "CORE", "alpha_score_v2": 20.0, "cluster": "software_ai" },
+          { "code": "159819", "role": "CORE", "role_before_cap": "CORE", "alpha_score_v2": 10.0, "cluster": "software_ai" },
+          { "code": "159852", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 5.0, "cluster": "software_ai" }
+        ]
+      },
+      "invariants": [
+        { "id": "I-03-01", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "eq", "value": 2 },
+        { "id": "I-03-02", "applies_to": "both", "case": "assert_call", "field": "roles.159852", "op": "eq", "value": "CHALLENGER" },
+        { "id": "I-03-03", "applies_to": "both", "case": "assert_call", "field": "roles.159770", "op": "eq", "value": "CORE" },
+        { "id": "I-03-04", "applies_to": "both", "case": "assert_call", "field": "roles.159819", "op": "eq", "value": "CORE" },
+        { "id": "I-03-05", "applies_to": "js", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
+        { "id": "I-03-06", "applies_to": "python", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
+        { "id": "I-03-07", "applies_to": "both", "case": "gate_call", "field": "core_count", "op": "lte", "value": 3 }
+      ]
+    },
+    {
+      "id": "G2S-04",
+      "title": "CORE 总数 cap（6 → 5）且优先降级非现任",
+      "tier": "STRUCTURED_SEAM",
+      "status": "RUNNABLE",
+      "handler": "core_cap",
+      "seam": {
+        "python": "gen2.baseline.rule_v2_ab._assert_final_constraints",
+        "js": "assertFinalRoleConstraints (runGen2ShadowEod/index.js:760-788)"
+      },
+      "input": {
+        "base_max_core": 5,
+        "max_core_per_cluster": 2,
+        "prev_roles": { "159770": "CORE", "159819": "CORE", "159570": "CORE", "159992": "CORE", "510880": "CORE" },
+        "day": [
+          { "code": "159770", "role": "CORE", "alpha_score_v2": 30.0, "cluster": "software_ai" },
+          { "code": "159819", "role": "CORE", "alpha_score_v2": 28.0, "cluster": "software_ai" },
+          { "code": "159570", "role": "CORE", "alpha_score_v2": 26.0, "cluster": "healthcare" },
+          { "code": "159992", "role": "CORE", "alpha_score_v2": 24.0, "cluster": "healthcare" },
+          { "code": "510880", "role": "CORE", "alpha_score_v2": 22.0, "cluster": "defensive_dividend" },
+          { "code": "159582", "role": "CORE", "alpha_score_v2": 1.0, "cluster": "tech_hardware" }
+        ]
+      },
+      "invariants": [
+        { "id": "I-04-01", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "eq", "value": 5 },
+        { "id": "I-04-02", "applies_to": "both", "case": "assert_call", "field": "roles.159582", "op": "eq", "value": "CHALLENGER" },
+        { "id": "I-04-03", "applies_to": "both", "case": "assert_call", "field": "roles.510880", "op": "eq", "value": "CORE" },
+        { "id": "I-04-04", "applies_to": "both", "case": "assert_call", "field": "roles.159770", "op": "eq", "value": "CORE" },
+        { "id": "I-04-05", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "lte", "value": 5 }
+      ]
+    },
+    {
+      "id": "G2S-05",
+      "title": "替换事务：边际不足撤销 / 边际达标接受",
+      "tier": "STRUCTURED_SEAM",
+      "status": "RUNNABLE",
+      "handler": "replacement_transaction",
+      "seam": {
+        "python": "gen2.baseline.rule_v2_ab._apply_replacement_gate",
+        "js": "applyReplacementGate (runGen2ShadowEod/index.js:712-759)"
+      },
+      "input": {
+        "base_max_core": 5,
+        "max_core_per_cluster": 2,
+        "cases": [
+          {
+            "id": "revoke",
+            "prev_roles": { "159582": "CORE" },
+            "day": [
+              { "code": "159582", "role": "CHALLENGER", "role_before_cap": "CORE", "alpha_score_v2": 30.0, "cluster": "tech_hardware" },
+              { "code": "159995", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 35.0, "cluster": "tech_hardware" }
+            ]
+          },
+          {
+            "id": "accept",
+            "prev_roles": { "159582": "CORE" },
+            "day": [
+              { "code": "159582", "role": "CHALLENGER", "role_before_cap": "CORE", "alpha_score_v2": 10.0, "cluster": "tech_hardware" },
+              { "code": "159995", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 30.0, "cluster": "tech_hardware" }
+            ]
+          }
+        ]
+      },
+      "invariants": [
+        { "id": "I-05-01", "applies_to": "both", "case": "revoke", "field": "roles.159582", "op": "eq", "value": "CORE" },
+        { "id": "I-05-02", "applies_to": "both", "case": "revoke", "field": "roles.159995", "op": "eq", "value": "CHALLENGER" },
+        { "id": "I-05-03", "applies_to": "both", "case": "accept", "field": "roles.159582", "op": "eq", "value": "CHALLENGER" },
+        { "id": "I-05-04", "applies_to": "both", "case": "accept", "field": "roles.159995", "op": "eq", "value": "CORE" }
+      ]
+    },
+    {
+      "id": "G2S-06",
+      "title": "逐日 eligibility / 数据闸门 → run 状态（四态模型待裁决）",
+      "tier": "RUN_LEVEL",
+      "status": "PENDING_SEAM",
+      "handler": null,
+      "seam": {
+        "python": "gen2.data.quality（函数级：逐日质量检查）",
+        "js": "runGen2ShadowEod main() 内的 failGate 路径（run 级，index.js:1078-1150）"
+      },
+      "input": {
+        "dimensions": [
+          "Expected Date / As-Of 不一致（陈旧）",
+          "重复日期（同一 trade_date 多行）",
+          "缺 benchmark（510300 无数据）",
+          "有效历史不足（< min_history_days）",
+          "字段完整性（NaN / 缺列）",
+          "非 30 资产（universe_count != 30）"
+        ]
+      },
+      "invariants": [],
+      "deferred_to": "WP-G2-03",
+      "deferred_reason": "两端 seam 不对称（Python 为函数级质量检查、JS 为 run 级 main() 闸门），无法在同一输入下直接比对；且状态模型将由四态（running / blocked / failed / completed）替换当前 running/failed/completed，需先定状态契约再写场景。"
+    },
+    {
+      "id": "G2S-07",
+      "title": "晋升连续性（persistence 5 日）与 NO_CORE 硬门槛",
+      "tier": "ROLES_STATE_MACHINE",
+      "status": "PENDING_SEAM",
+      "handler": null,
+      "seam": {
+        "python": "gen2.baseline.rule_v2_ab.build_v2_roles(features, rankings, config)（另需 universe records + config）",
+        "js": "buildDailyRoles(features)（配置读自 bundle/param 内联常量）"
+      },
+      "input": {
+        "dimensions": [
+          "above_core_days 第 4 / 5 / 6 日（promotion_persistence_days=5）",
+          "NO_CORE 硬门槛触发后不得恢复为 CORE",
+          "RISK_OFF 期间不得新晋升（与 G2S-01 的权限层一致）",
+          "tech cap 与 cluster cap 对最终角色的影响"
+        ]
+      },
+      "invariants": [],
+      "deferred_to": "WP-G2-03",
+      "deferred_reason": "输入契约不同：JS buildDailyRoles(features) 单参数，Python build_v2_roles(features, rankings, config) 需 rankings + 配置 + universe records。需先统一 roles seam 的输入契约（含 config 来源），否则无法构造「同一输入」。"
+    }
+  ]
+}
