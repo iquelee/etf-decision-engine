@@ -25,7 +25,7 @@ const fixturePath = process.argv[2] || path.join(ROOT, 'fixtures', 'gen2', 'gold
 const outPath = process.argv[3] || null;
 const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
-const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
+const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG, ROLE_THRESHOLDS, resolveRoleThresholds, SELECTION_SCORE_WEIGHTS, SELECTION_SCORE_SOURCE, combineSelectionScore, applySelectionScores, selectionScoreHash,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
   + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
   + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
@@ -119,7 +119,7 @@ function expandPanel(panel, c) {
         rs20_vs_benchmark: R4(0.06 - 0.006 * (k - 1)),
         rs60_vs_benchmark: R4(0.05 - 0.005 * (k - 1)),
         rs_accel_5d: R4(0.02 - 0.002 * (k - 1)),
-        breakout_distance: R4(0.03 - 0.003 * (k - 1)),
+        breakout_distance: c.breakout_ascending ? R4(0.003 * k) : R4(0.03 - 0.003 * (k - 1)),
         benchmark_px_ma20: R4(c.benchmark.px_ma20),
         benchmark_px_ma60: R4(c.benchmark.px_ma60),
         eligibility: 'ELIGIBLE'
@@ -292,6 +292,15 @@ async function runMainCase(panel, caseSpec) {
   };
 }
 
+/** 跨端可比的评分摘要（3 位小数；与 Python selection_digest 逐字一致） */
+function selectionDigest(features, places = 3) {
+  const rows = features
+    .filter((f) => f.alpha_score_v2 != null && isFinite(f.alpha_score_v2))
+    .map((f) => `${f.trade_date}~${f.code}~${Number(f.alpha_score_v2).toFixed(places)}`)
+    .sort();
+  return crypto.createHash('sha256').update(rows.join('|')).digest('hex');
+}
+
 const HANDLERS = {
   regime_selection(sc) {
     const out = {};
@@ -402,8 +411,91 @@ const HANDLERS = {
       out[c.id] = snap;
     }
     return out;
+  },
+  /** G2S-08：显式 Selection Score 注入 + 角色阈值（F1/F2 跨语言 parity） */
+  selection_injection(sc) {
+    const panel = sc.input.panel;
+    const out = {};
+    let canon = null;
+    for (const rawCase of sc.input.cases) {
+      // panel 级 days / rank_order 作为默认值合入 case（cases 只声明差异旋钮）
+      const c = Object.assign({}, rawCase, {
+        days: rawCase.days || panel.days,
+        rank_order: rawCase.rank_order || panel.rank_order_default
+      });
+      const rows = expandPanel(panel, c);
+      const feat = rows.map((r) => Object.assign({}, r));
+      A.computeLeadershipScore(feat);
+
+      let meta;
+      if (c.explicit_rank_order) {
+        const order = c.explicit_rank_order;
+        const inj = {};
+        for (const f of feat) {
+          const idx = order.indexOf(f.code);
+          const v = order.length - idx;
+          (inj[f.trade_date] = inj[f.trade_date] || {})[f.code] = v;
+        }
+        meta = A.applySelectionScores(feat, inj, 'EXPLICIT_ORDER');
+      } else if (c.selection) {
+        const inj = {};
+        for (const f of feat) {
+          (inj[f.trade_date] = inj[f.trade_date] || {})[f.code] = A.combineSelectionScore(f, c.selection);
+        }
+        meta = A.applySelectionScores(feat, inj, 'SCENARIO_ALPHA');
+      } else {
+        meta = A.applySelectionScores(feat, null);
+      }
+
+      A.rankFeatures(feat);
+      const thresholds = c.role_thresholds
+        ? A.resolveRoleThresholds({ role_thresholds: c.role_thresholds })
+        : A.ROLE_THRESHOLDS;
+      const roles = A.buildDailyRoles(feat, thresholds);
+      // 显式构造与 Python 端逐字一致的字段集（不使用 rolesSnapshot 的 reasons 等额外字段）
+      const days = {};
+      const coreCount = {};
+      const clusterCore = {};
+      for (const r of roles) {
+        const d = String(Number(String(r.trade_date).slice(8, 10)));
+        (days[d] = days[d] || {})[r.code] = r.role;
+        coreCount[d] = (coreCount[d] || 0) + (r.role === 'CORE' ? 1 : 0);
+        if (r.role === 'CORE') {
+          const cl = A.UNIVERSE.cluster[r.code] || 'other';
+          (clusterCore[d] = clusterCore[d] || {})[cl] = ((clusterCore[d] || {})[cl] || 0) + 1;
+        }
+      }
+      const clusterUsed = {};
+      for (const x of panel.codes) clusterUsed[x.code] = A.UNIVERSE.cluster[x.code] || 'other';
+      const snap = { days, core_count: coreCount, cluster_core_count: clusterCore, cluster_used: clusterUsed };
+      snap.panel_sha256 = panelHash(rows);
+      snap.panel_rows = rows.length;
+      snap.score_source = meta.score_source;
+      snap.score_digest = selectionDigest(feat);
+      snap.role_thresholds_effective = {
+        core_pct: thresholds.core_pct,
+        challenger_pct: thresholds.challenger_pct,
+        satellite_pct: thresholds.satellite_pct
+      };
+      snap.role_thresholds_source_class = c.role_thresholds ? 'EXPLICIT' : 'RUNNING_CONFIG';
+      if (c.id === 'canonical') canon = snap;
+      const isCanon = c.id === 'canonical';
+      snap.score_digest_distinct_from_canonical = (canon && !isCanon)
+        ? snap.score_digest !== canon.score_digest : null;
+      snap.roles_differ_from_canonical = (canon && !isCanon)
+        ? JSON.stringify(snap.days) !== JSON.stringify(canon.days) : null;
+      snap.core_count_differs_from_canonical = (canon && !isCanon)
+        ? JSON.stringify(snap.core_count) !== JSON.stringify(canon.core_count) : null;
+      if (c.explicit_rank_order) {
+        const lastDay = Object.keys(snap.days).sort().pop();
+        snap.role_order_matches_injection = snap.days[lastDay][c.explicit_rank_order[0]] === 'CORE';
+      }
+      out[c.id] = snap;
+    }
+    return out;
   }
 };
+
 
 async function main() {
   const results = {

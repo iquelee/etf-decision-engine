@@ -15,13 +15,19 @@ import pandas as pd
 from gen2.backtest.benchmark import build_benchmark_weights
 from gen2.backtest.costs import apply_turnover_cost
 from gen2.backtest.rotation_backtest import shift_weights_next_trade_date
-from gen2.baseline.alpha_score import compute_alpha_score_v2
+from gen2.baseline.alpha_score import compute_alpha_score_v2  # noqa: F401 —— 保留以兼容历史导入，生产角色链已改为显式评分注入
+from gen2.baseline.selection_scores import (
+    SelectionScores,
+    canonical_selection_scores,
+    validate_selection_scores,
+)
 from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_universe_definition, load_universe_records
 from gen2.features.build_features import build_feature_matrix
 from gen2.labels.build_labels import build_labels, build_labels_vs_market
 from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.regime import classify_regime
 from gen2.portfolio.role_engine import _cap_core_roles, _consecutive_by_code
+from gen2.portfolio.role_thresholds import load_role_thresholds
 from gen2.portfolio.selection_permission import DISABLED, max_core_count, selection_mode
 from gen2.ranking.rank_engine import run_rank_engine
 
@@ -38,10 +44,13 @@ def _spearman_ic(df: pd.DataFrame, score_col: str, label_col: str) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
-def signal_ab(features, rankings, labels_uni, labels_mkt) -> pd.DataFrame:
-    """V1 composite vs V2 alpha 的信号层 IC 对比。"""
-    # V2 alpha score
-    alpha = compute_alpha_score_v2(features)[["trade_date", "code", "alpha_score_v2", "market_score"]]
+def signal_ab(features, rankings, labels_uni, labels_mkt,
+              selection_scores: SelectionScores | None = None) -> pd.DataFrame:
+    """V1 composite vs V2 alpha 的信号层 IC 对比（WP-G2-05：评分显式注入，不默认重算）。"""
+    if selection_scores is None:
+        selection_scores = canonical_selection_scores(features)
+    alpha = features[["trade_date", "code", "market_score"]].merge(
+        selection_scores.merge_frame(), on=["trade_date", "code"], how="inner")
     df = rankings.merge(labels_uni[["trade_date", "code", "y_rank_20d"]], on=["trade_date", "code"])
     df = df.merge(labels_mkt[["trade_date", "code", "y_rank_vs_market_20d"]], on=["trade_date", "code"])
     df = df.merge(alpha, on=["trade_date", "code"])
@@ -55,8 +64,12 @@ def signal_ab(features, rankings, labels_uni, labels_mkt) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def signal_ab_by_regime(features, rankings, labels_mkt) -> pd.DataFrame:
-    alpha = compute_alpha_score_v2(features)[["trade_date", "code", "alpha_score_v2", "market_score"]]
+def signal_ab_by_regime(features, rankings, labels_mkt,
+                        selection_scores: SelectionScores | None = None) -> pd.DataFrame:
+    if selection_scores is None:
+        selection_scores = canonical_selection_scores(features)
+    alpha = features[["trade_date", "code", "market_score"]].merge(
+        selection_scores.merge_frame(), on=["trade_date", "code"], how="inner")
     df = rankings.merge(labels_mkt[["trade_date", "code", "y_rank_vs_market_20d"]], on=["trade_date", "code"])
     df = df.merge(alpha, on=["trade_date", "code"])
     df["regime"] = df["market_score"].map(classify_regime)
@@ -173,20 +186,33 @@ def finalize_roles(
     _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
 
 
-def build_v2_roles(features, rankings, config) -> pd.DataFrame:
-    """V2 完整角色状态机：alpha 排名 + persistence 滞后 + Selection Permission + NO_CORE + cluster cap。"""
+def build_v2_roles(features, rankings, config, *, selection_scores: SelectionScores) -> pd.DataFrame:
+    """V2 完整角色状态机：alpha 排名 + persistence 滞后 + Selection Permission + NO_CORE + cluster cap。
+
+    WP-G2-05（F1 修复）：Alpha 必须由调用方**显式注入** `selection_scores`：
+      * 本函数不再内部重算 Alpha，也**绝不**覆盖外部评分；
+      * 评分键必须与角色状态机输入面板（rankings）完全一致（缺一即失败）；
+      * 角色阈值走显式 `role_thresholds`（core/challenger/satellite_top_fraction）。
+
+    正式入口用 `canonical_selection_scores(features)`；敏感性实验用 `build_selection_scores(...)`。
+    """
     from gen2.data.loader import load_universe_records
+
+    validate_selection_scores(selection_scores, rankings, context="build_v2_roles")
+    thresholds = load_role_thresholds(config)
     records = load_universe_records()
     pcfg = config["portfolio"]
     promotion_days = int(pcfg.get("promotion_persistence_days", 5))
     demotion_days = int(pcfg.get("demotion_persistence_days", 5))
     max_core_per_cluster = int(pcfg.get("max_core_per_cluster", 2))
     base_max_core = int(pcfg.get("max_core_count", 5))
-    core_pct = 0.80
-    satellite_pct = 0.60
+    core_pct = thresholds.core_pct
+    challenger_pct = thresholds.challenger_pct
+    satellite_pct = thresholds.satellite_pct
 
-    alpha = compute_alpha_score_v2(features)[["trade_date", "code", "alpha_score_v2", "market_score", "px_ma60"]]
-    rk = rankings.merge(alpha, on=["trade_date", "code"], how="left")
+    base = features[["trade_date", "code", "market_score", "px_ma60"]]
+    rk = rankings.merge(base, on=["trade_date", "code"], how="left")
+    rk = rk.merge(selection_scores.merge_frame(), on=["trade_date", "code"], how="left")
     # alpha 排名（同日横截面）
     rk = rk.sort_values(["trade_date", "alpha_score_v2"], ascending=[True, False])
     rk["alpha_rank"] = rk.groupby("trade_date").cumcount() + 1
@@ -223,7 +249,7 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
         mode = day["perm_mode"].iloc[0]
         max_core = max_core_count(day["market_score"].iloc[0], base=base_max_core)
         proposed = np.select(
-            [day["alpha_pct"] >= core_pct, day["alpha_pct"] >= 0.70, day["alpha_pct"] >= satellite_pct],
+            [day["alpha_pct"] >= core_pct, day["alpha_pct"] >= challenger_pct, day["alpha_pct"] >= satellite_pct],
             ["CORE", "CHALLENGER", "SATELLITE"],
             default="RESERVE",
         )
@@ -340,10 +366,14 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
     return roles
 
 
-def run_v2_backtest(features, rankings, config, output_dir=None) -> pd.DataFrame:
+def run_v2_backtest(features, rankings, config, output_dir=None,
+                    selection_scores: SelectionScores | None = None) -> pd.DataFrame:
     from gen2.backtest.ledger import run_ledger
 
-    roles = build_v2_roles(features, rankings, config)
+    if selection_scores is None:
+        # 显式 canonical：研究入口默认使用正式 Rule V2 的 Alpha（调用方可注入替代 Alpha）
+        selection_scores = canonical_selection_scores(features)
+    roles = build_v2_roles(features, rankings, config, selection_scores=selection_scores)
     candidates = roles[["trade_date", "code", "role", "target_weight", "name", "correlation_cluster"]].copy()
     candidates["priority"] = 1
     defended = apply_regime_defense(candidates, features, config=config)
@@ -420,10 +450,17 @@ def run(output_dir=None) -> dict:
     labels_uni = build_labels(features)
     labels_mkt = build_labels_vs_market(features)
 
-    sig = signal_ab(features, rankings, labels_uni, labels_mkt)
-    sig_reg = signal_ab_by_regime(features, rankings, labels_mkt)
-    bt = run_v2_backtest(features, rankings, cfg, output_dir=output_dir)
-    return {"signal_ab": sig, "signal_regime": sig_reg, "backtest": bt}
+    selection = canonical_selection_scores(features)
+    sig = signal_ab(features, rankings, labels_uni, labels_mkt, selection_scores=selection)
+    sig_reg = signal_ab_by_regime(features, rankings, labels_mkt, selection_scores=selection)
+    bt = run_v2_backtest(features, rankings, cfg, output_dir=output_dir, selection_scores=selection)
+    return {
+        "signal_ab": sig,
+        "signal_regime": sig_reg,
+        "backtest": bt,
+        "selection": selection.metadata(),
+        "role_thresholds": load_role_thresholds(cfg).as_dict(),
+    }
 
 
 if __name__ == "__main__":

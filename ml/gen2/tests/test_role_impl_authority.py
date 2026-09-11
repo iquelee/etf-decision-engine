@@ -135,7 +135,9 @@ class TestRoleImplementationAuthority(unittest.TestCase):
         path = ML_ROOT / "gen2" / "baseline" / "v2_role_view.py"
         src = path.read_text(encoding="utf-8")
         self.assertIn("from gen2.baseline.rule_v2_ab import build_v2_roles", src)
-        self.assertIn("build_v2_roles(features, rankings, config)", src)
+        self.assertIn("build_v2_roles(features, rankings, config, selection_scores=selection_scores)", src)
+        self.assertIn("canonical_selection_scores", src,
+                      "视图必须显式使用 canonical 评分入口（WP-G2-05）")
         for forbidden in ("proposed_role", "current_roles", "PROMOTION_CONFIRMED", "NO_CORE_TREND_GATE"):
             self.assertNotIn(forbidden, src, f"研究视图不得包含角色决策逻辑：{forbidden}")
         # 三个研究脚本必须改用视图

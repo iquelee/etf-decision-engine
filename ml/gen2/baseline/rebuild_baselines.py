@@ -38,10 +38,12 @@ from gen2.backtest.ledger import (
     ledger_summary,
     run_ledger,
 )
+from gen2.baseline.selection_scores import SelectionScores, canonical_selection_scores
 from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_universe_definition, load_universe_records
 from gen2.features.build_features import build_feature_matrix
 from gen2.portfolio.defense_gate import apply_regime_defense
+from gen2.portfolio.role_thresholds import load_role_thresholds
 from gen2.portfolio.portfolio_builder import build_portfolio_candidates
 from gen2.ranking.rank_engine import run_rank_engine
 
@@ -64,9 +66,15 @@ def perf_metrics(net: pd.Series) -> dict:
     return {"days": days, "cumulative_return": total, "cagr": cagr, "sharpe": sharpe, "mdd": mdd}
 
 
-def build_weight_frames(features: pd.DataFrame, rankings: pd.DataFrame, cfg: dict, main5: list) -> dict:
-    """四类同口径目标权重（decision-date 语义；账本用 execution_lag=1 落到 T+1）。"""
-    roles = build_v2_role_view(features, rankings, cfg)
+def build_weight_frames(features: pd.DataFrame, rankings: pd.DataFrame, cfg: dict, main5: list,
+                        *, selection_scores: SelectionScores | None = None) -> dict:
+    """四类同口径目标权重（decision-date 语义；账本用 execution_lag=1 落到 T+1）。
+
+    WP-G2-05：Alpha 显式注入（None → canonical），角色链不再内部重算。
+    """
+    if selection_scores is None:
+        selection_scores = canonical_selection_scores(features)
+    roles = build_v2_role_view(features, rankings, cfg, selection_scores=selection_scores)
     candidates = build_portfolio_candidates(roles)
     defended = apply_regime_defense(candidates, features, config=cfg)
     bench = build_benchmark_weights(rankings, main5)
@@ -135,7 +143,9 @@ def build_unified_baselines(
     features = build_feature_matrix(bars=bars, records=records, config=cfg)
     rankings = run_rank_engine(features)
 
-    weights_map = build_weight_frames(features, rankings, cfg, main5)
+    # WP-G2-05：canonical Alpha 显式构造一次，角色链与账本共用（并记录 provenance）
+    selection = canonical_selection_scores(features)
+    weights_map = build_weight_frames(features, rankings, cfg, main5, selection_scores=selection)
     roles = weights_map.pop("_roles")
 
     returns = features[["trade_date", "code", "ret_1d"]].copy()
@@ -182,6 +192,8 @@ def build_unified_baselines(
     summary.to_csv(out / "ledger_summary.csv", index=False)
     (out / "calendar_meta.json").write_text(json.dumps({
         "calendar": cal_meta,
+        "selection": selection.metadata(),
+        "role_thresholds": load_role_thresholds(cfg).as_dict(),
         "common_window": window_meta,
         "ledger_contract": LEDGER_CONTRACT,
         "cost_levels": cost_levels,
@@ -193,6 +205,7 @@ def build_unified_baselines(
 
     verification = {
         "calendar": cal_meta,
+        "selection": selection.metadata(),
         "window": window_meta,
         "conservation_max_error": float(summary["conservation_max_error"].max()),
         "cash_min": float(summary["cash_min"].min()),

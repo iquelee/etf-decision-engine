@@ -26,6 +26,7 @@ from gen2.baseline.rule_v2_ab import (  # noqa: E402
     _replacement_edge,
     _should_replace,
     build_v2_roles,
+    canonical_selection_scores,
     finalize_roles,
 )
 from gen2.baseline.leadership_score import compute_leadership_score  # noqa: E402
@@ -187,7 +188,7 @@ def expand_panel(panel, case):
                 "rs20_vs_benchmark": r4(0.06 - 0.006 * (k - 1)),
                 "rs60_vs_benchmark": r4(0.05 - 0.005 * (k - 1)),
                 "rs_accel_5d": r4(0.02 - 0.002 * (k - 1)),
-                "breakout_distance": r4(0.03 - 0.003 * (k - 1)),
+                "breakout_distance": r4(0.003 * k) if case.get("breakout_ascending") else r4(0.03 - 0.003 * (k - 1)),
                 "benchmark_px_ma20": r4(case["benchmark"]["px_ma20"]),
                 "benchmark_px_ma60": r4(case["benchmark"]["px_ma60"]),
                 "eligibility": "ELIGIBLE",
@@ -244,7 +245,8 @@ def h_roles_panel(sc):
         scored = compute_leadership_score(df)
         scored = compute_alpha_score_v2(scored)
         rankings = scored[["trade_date", "code", "name", "correlation_cluster"]].copy()
-        res = build_v2_roles(scored, rankings, cfg)
+        res = build_v2_roles(scored, rankings, cfg,
+                         selection_scores=canonical_selection_scores(scored))
 
         days, reasons, reasons_norm, cluster_core = {}, {}, {}, {}
         for _, row in res.iterrows():
@@ -417,6 +419,106 @@ def h_run_status_gate(sc):
     return out
 
 
+def selection_digest(frame, places=3):
+    """跨端可比的评分摘要（3 位小数；与 Node 端 selectionDigest 逐字一致）。"""
+    from gen2.baseline.selection_scores import SELECTION_SCORE_COL
+
+    rows = []
+    for _, r in frame.iterrows():
+        rows.append("%s~%s~%.*f" % (str(r["trade_date"]), str(r["code"]), places, float(r[SELECTION_SCORE_COL])))
+    return hashlib.sha256("|".join(sorted(rows)).encode("utf-8")).hexdigest()
+
+
+def h_selection_injection(sc):
+    """G2S-08：显式 Selection Score 注入 + 角色阈值（F1/F2 跨语言 parity）。"""
+    from gen2.baseline.rule_v2_ab import build_v2_roles
+    from gen2.data.loader import load_gen2_config
+    from gen2.baseline.selection_scores import (
+        SELECTION_SCORE_COL, SelectionScores, build_selection_scores, canonical_selection_scores,
+    )
+    from gen2.portfolio.role_thresholds import load_role_thresholds
+
+    panel = sc["input"]["panel"]
+    cluster_map = {c["code"]: c["cluster"] for c in panel["codes"]}
+    base_cfg = load_gen2_config()
+    default_thresholds = load_role_thresholds(base_cfg)
+
+    out = {}
+    canon = None
+    for raw_case in sc["input"]["cases"]:
+        # panel 级 days / rank_order 作为默认值合入 case（cases 只声明差异旋钮）
+        c = dict(raw_case)
+        c.setdefault("days", panel["days"])
+        c.setdefault("rank_order", panel["rank_order_default"])
+        rows = expand_panel(panel, c)
+        df = pd.DataFrame(rows)
+        df["market_score"] = regime_market_score(df["benchmark_px_ma20"], df["benchmark_px_ma60"])
+        df["name"] = df["code"]
+        df["correlation_cluster"] = df["code"].map(cluster_map)
+
+        order = c.get("explicit_rank_order")
+        if order:
+            n = len(order)
+            frame = df[["trade_date", "code"]].copy()
+            frame[SELECTION_SCORE_COL] = frame["code"].map({code: float(n - i) for i, code in enumerate(order)})
+            scores = SelectionScores(frame=frame, score_version="explicit-order",
+                                     score_source="EXPLICIT_ORDER",
+                                     content_hash=selection_digest(frame), weights={})
+        elif c.get("selection"):
+            scores = build_selection_scores(df, c["selection"], score_version="scenario-" + c["id"],
+                                            score_source="SCENARIO_ALPHA")
+        else:
+            scores = canonical_selection_scores(df)
+
+        cfg = dict(base_cfg)
+        cfg["portfolio"] = dict(base_cfg["portfolio"])
+        if c.get("role_thresholds"):
+            cfg["portfolio"]["role_thresholds"] = c["role_thresholds"]
+        thresholds = load_role_thresholds(cfg)
+
+        rankings = df[["trade_date", "code", "name", "correlation_cluster"]].copy()
+        res = build_v2_roles(df, rankings, cfg, selection_scores=scores)
+
+        days, core_count, cluster_core = {}, {}, {}
+        for _, row in res.iterrows():
+            d = str(int(str(row["trade_date"]).split("-")[-1]))
+            days.setdefault(d, {})[row["code"]] = row["role"]
+            core_count[d] = core_count.get(d, 0) + (1 if row["role"] == "CORE" else 0)
+            if row["role"] == "CORE":
+                cl = cluster_map.get(row["code"], "other")
+                cluster_core.setdefault(d, {})[cl] = cluster_core.get(d, {}).get(cl, 0) + 1
+
+        snap = {
+            "panel_sha256": panel_hash(rows),
+            "panel_rows": len(rows),
+            "score_source": scores.score_source,
+            "score_digest": selection_digest(scores.frame),
+            "role_thresholds_effective": {
+                "core_pct": thresholds.core_pct,
+                "challenger_pct": thresholds.challenger_pct,
+                "satellite_pct": thresholds.satellite_pct,
+            },
+            "role_thresholds_source_class": "EXPLICIT" if c.get("role_thresholds") else "RUNNING_CONFIG",
+            "days": days,
+            "core_count": core_count,
+            "cluster_core_count": cluster_core,
+            "cluster_used": dict(cluster_map),
+        }
+        if canon is None and c["id"] == "canonical":
+            canon = snap
+        snap["score_digest_distinct_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else snap["score_digest"] != canon["score_digest"]
+        snap["roles_differ_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else json.dumps(snap["days"], sort_keys=True) != json.dumps(canon["days"], sort_keys=True)
+        snap["core_count_differs_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else json.dumps(snap["core_count"], sort_keys=True) != json.dumps(canon["core_count"], sort_keys=True)
+        if order:
+            last_day = sorted(days)[-1]
+            snap["role_order_matches_injection"] = days[last_day].get(order[0]) == "CORE"
+        out[c["id"]] = snap
+    return out
+
+
 HANDLERS = {
     "regime_selection": h_regime_selection,
     "replacement_edge": h_replacement_edge,
@@ -425,6 +527,7 @@ HANDLERS = {
     "replacement_transaction": h_replacement_transaction,
     "roles_panel": h_roles_panel,
     "run_status_gate": h_run_status_gate,
+    "selection_injection": h_selection_injection,
 }
 
 

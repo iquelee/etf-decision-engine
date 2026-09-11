@@ -222,19 +222,22 @@ class ScenarioEffectivenessGuardTest(unittest.TestCase):
 
     def test_stale_registry_fails(self):
         from gen2.baseline.rebuild_research_baselines import classify_scenarios, check_registry
-        # rs_heavy 已登记为无效，这里让它变成组合有效 → 登记表过期必须报错
+        # 合成登记表：rs_heavy 登记为无效，但这次它组合有效 → 登记表过期必须报错
         df = self._frame([("baseline", {}),
                           ("rs_heavy", {"cumulative_return": 0.9, "rank_ic_mean": 0.02})])
         with self.assertRaises(ValueError) as ctx:
-            check_registry(classify_scenarios(df))
+            check_registry(classify_scenarios(df), {"rs_heavy": "F1"})
         self.assertIn("登记表已过期", str(ctx.exception))
 
-    def test_registered_names_match_known_problems(self):
+    def test_committed_registry_is_consistent_with_specs(self):
         from gen2.baseline.sensitivity_matrix import REGISTERED_INEFFECTIVE, scenario_specs
         names = {s["name"] for s in scenario_specs()}
         self.assertTrue(set(REGISTERED_INEFFECTIVE) <= names, "登记的场景必须存在于场景声明中")
-        self.assertEqual(REGISTERED_INEFFECTIVE.get("top_q30"), "F2")
-        self.assertEqual(REGISTERED_INEFFECTIVE.get("rs_heavy"), "F1")
+        for scenario, problem in REGISTERED_INEFFECTIVE.items():
+            self.assertTrue(problem.startswith("F"), f"{scenario} 的问题编号必须以 F 开头")
+        # WP-G2-05 后 F1/F2 的六个场景已真正生效，登记表必须为空（否则 check_registry 会报「过期」）
+        self.assertEqual(REGISTERED_INEFFECTIVE, {},
+                         "WP-G2-05 后六个场景已生效，登记表必须清空（新增无效场景时才登记）")
 
 
 class CommittedReportTest(unittest.TestCase):
@@ -262,31 +265,51 @@ class CommittedReportTest(unittest.TestCase):
         self.assertIn("当前有效（唯一权威口径）", itext)
         self.assertIn("gen2_b1_research_baselines_20260911.md", itext)
 
-    def test_research_report_downgrades_ineffective_scenarios(self):
-        """F1/F2 守卫：六个无效场景只能出现在信号层/完全无效表，且必须带显式标记。"""
-        from gen2.baseline.sensitivity_matrix import REGISTERED_INEFFECTIVE
+    def test_research_report_partitions_scenarios(self):
+        """报告必须把每个场景恰好放进一张表，且无效场景必须已登记（与重跑状态无关）。"""
+        from gen2.baseline.sensitivity_matrix import REGISTERED_INEFFECTIVE, scenario_specs
         research = ROOT / "ml" / "gen2" / "reports" / "gen2_b1_research_baselines_20260911.md"
         text = research.read_text(encoding="utf-8")
 
-        # 组合敏感性表（§3）里不得出现任何无效场景
-        portfolio_section = text.split("## 3. 组合敏感性")[1].split("## 3.1")[0]
-        for name in REGISTERED_INEFFECTIVE:
-            self.assertNotIn(f"| {name} |", portfolio_section,
-                             f"{name} 组合结果与 baseline 逐位相同，不得出现在组合敏感性表")
+        def section(start, end):
+            return text.split(start)[1].split(end)[0]
 
-        # 显式标记必须存在
-        signal_section = text.split("## 3.1")[1].split("## 3.2")[0]
-        noop_section = text.split("## 3.2")[1].split("## 4.")[0]
-        for name in ("rs_heavy", "momentum_heavy", "trend_heavy", "quality_heavy"):
-            self.assertIn(f"| {name} |", signal_section)
-            self.assertIn("signal_only", signal_section)
-            self.assertIn("portfolio_effective", signal_section)
-        for name in ("top_q30", "top_q40"):
-            self.assertIn(f"| {name} |", noop_section)
-        self.assertIn("portfolio_effective = false", text.replace("`", ""))
-        # 无效场景的组合指标不得出现在信号层表里（只允许 RankIC 类指标）
+        def names(sec):
+            out = []
+            for line in sec.splitlines():
+                line = line.strip()
+                if not line.startswith("| "):
+                    continue
+                cell = line.split("|")[1].strip()
+                if cell and cell not in ("—", "场景"):
+                    out.append(cell)
+            return out
+
+        portfolio = names(section("## 3. 组合敏感性", "## 3.1"))
+        signal_only = names(section("## 3.1", "## 3.2"))
+        no_effect = names(section("## 3.2", "## 4."))
+        declared = {spec["name"] for spec in scenario_specs()}
+
+        listed = portfolio + signal_only + no_effect
+        self.assertEqual(sorted(listed), sorted(declared), "每个场景必须恰好出现在一张表里")
+        self.assertEqual(len(listed), len(set(listed)), "场景不得跨表重复")
+        for name in signal_only + no_effect:
+            self.assertIn(name, REGISTERED_INEFFECTIVE, f"{name} 被判为组合无效应但未登记")
+
+        # 组合有效性声明与标记必须在场
+        self.assertIn("portfolio_effective", text)
+        # 信号层表只允许信号指标（去掉解释性文字后再断言）
+        sig_sec = section("## 3.1", "## 3.2").replace("组合净值 / Sharpe / MDD", "")
         for metric in ("累计收益", "Sharpe", "MDD"):
-            self.assertNotIn(metric, signal_section.replace("组合净值 / Sharpe / MDD", ""))
+            self.assertNotIn(metric, sig_sec, f"信号层表不得含组合指标 {metric}")
+
+    def test_research_report_declares_f1_f2_resolution_and_f4(self):
+        """F1/F2 处置与 F4 新登记必须在报告中留痕。"""
+        research = ROOT / "ml" / "gen2" / "reports" / "gen2_b1_research_baselines_20260911.md"
+        text = research.read_text(encoding="utf-8")
+        for key in ["selection_scores", "role_thresholds", "F1", "F2", "F3", "F4",
+                    "WP-G2-04", "不构成 Rule V2 的经济结论"]:
+            self.assertIn(key, text, f"研究基线报告缺少：{key}")
 
 
 if __name__ == "__main__":

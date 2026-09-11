@@ -1476,6 +1476,264 @@
           "value": "SATELLITE"
         }
       ]
+    },
+    {
+      "id": "G2S-08",
+      "title": "Selection Score 显式注入 + 角色阈值（F1/F2 跨语言 parity）",
+      "tier": "STRUCTURED_SEAM",
+      "status": "RUNNABLE",
+      "handler": "selection_injection",
+      "seam": {
+        "python": "gen2.baseline.selection_scores.canonical_selection_scores / build_selection_scores + rule_v2_ab.build_v2_roles(selection_scores=...) + portfolio.role_thresholds",
+        "js": "runGen2ShadowEod computeLeadershipScore / combineSelectionScore / applySelectionScores + buildDailyRoles(features, roleThresholds) + resolveRoleThresholds"
+      },
+      "input": {
+        "note": "同一份 canonical 面板（V1 规则逐字一致，panel_sha256 跨端校验）；各 case 只改变「注入的评分」或「角色阈值」。重量级 parity 证据 = 两端 score_hash 必须相等（各自独立实现组件百分位 + 加权合成）。",
+        "panel": {
+          "expansion": "V1",
+          "expansion_note": "两端各自用同一份 V1 规则展开（rank_order 决定 8 个 alpha 驱动列的相对大小 → trend/rs/breakout 百分位 → alpha 排序）；展开后必须计算 panel_sha256 并由 cross_equal 校验，确保两端吃的是同一份输入",
+          "codes": [
+            {
+              "code": "513310",
+              "cluster": "tech_hardware",
+              "incumbent": true
+            },
+            {
+              "code": "159582",
+              "cluster": "tech_hardware",
+              "incumbent": true
+            },
+            {
+              "code": "159570",
+              "cluster": "healthcare",
+              "incumbent": true
+            },
+            {
+              "code": "159770",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159819",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159852",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159995",
+              "cluster": "tech_hardware",
+              "incumbent": false
+            },
+            {
+              "code": "159992",
+              "cluster": "healthcare",
+              "incumbent": false
+            },
+            {
+              "code": "510880",
+              "cluster": "defensive_dividend",
+              "incumbent": false
+            },
+            {
+              "code": "159915",
+              "cluster": "growth_broad",
+              "incumbent": false
+            }
+          ],
+          "rank_order_note": "rank_order[k] = 第 k+1 高 alpha；n=10 时 rank1..3 的百分位为 1.0/0.9/0.8（≥ core_pct 0.8 → above core），rank4 为 0.7",
+          "days": 6,
+          "rank_order_default": [
+            "159770",
+            "159819",
+            "159852",
+            "159995",
+            "159992",
+            "510880",
+            "159915",
+            "513310",
+            "159582",
+            "159570"
+          ],
+          "panel_defaults_note": "days / rank_order_default 为 panel 级默认值，cases 只声明差异旋钮（selection / role_thresholds / explicit_rank_order）",
+          "breakout_ascending_note": "breakout_distance 在 G2S-08 中改为随 rank_order 递增（与其他 7 列反向）→ 打破单调，使「只看 rs / 只看 trend」这类替代权重在数值上可与 canonical 区分（否则同序面板下任何正权重都得到同一组百分位）。"
+        },
+        "cases": [
+          {
+            "id": "canonical",
+            "selection": null,
+            "role_thresholds": null,
+            "benchmark": {
+              "px_ma20": 0.03,
+              "px_ma60": 0.02
+            },
+            "trend_break": {},
+            "breakout_ascending": true
+          },
+          {
+            "id": "rs_only",
+            "selection": {
+              "rs": 1.0
+            },
+            "role_thresholds": null,
+            "benchmark": {
+              "px_ma20": 0.03,
+              "px_ma60": 0.02
+            },
+            "trend_break": {},
+            "breakout_ascending": true
+          },
+          {
+            "id": "trend_only",
+            "selection": {
+              "trend": 1.0
+            },
+            "role_thresholds": null,
+            "benchmark": {
+              "px_ma20": 0.03,
+              "px_ma60": 0.02
+            },
+            "trend_break": {},
+            "breakout_ascending": true
+          },
+          {
+            "id": "explicit_order",
+            "explicit_rank_order": [
+              "159915",
+              "510880",
+              "159992",
+              "159995",
+              "159852",
+              "159819",
+              "159770",
+              "159570",
+              "159582",
+              "513310"
+            ],
+            "selection": null,
+            "role_thresholds": null,
+            "benchmark": {
+              "px_ma20": 0.03,
+              "px_ma60": 0.02
+            },
+            "trend_break": {},
+            "breakout_ascending": true
+          },
+          {
+            "id": "core_top40",
+            "selection": null,
+            "role_thresholds": {
+              "core_top_fraction": 0.4,
+              "challenger_top_fraction": 0.4,
+              "satellite_top_fraction": 0.4
+            },
+            "benchmark": {
+              "px_ma20": 0.03,
+              "px_ma60": 0.02
+            },
+            "trend_break": {},
+            "breakout_ascending": true
+          }
+        ],
+        "case_semantics": {
+          "canonical": "selection=None → canonical Alpha（bundle.alpha 等权三因子）",
+          "rs_only/trend_only": "替代 Alpha 权重（只保留单一组件）→ 必须改变被消费的评分（score_hash 与 canonical 不同）",
+          "explicit_order": "显式注入评分（按 declared rank_order 从高到低赋值）→ 角色排名必须完全跟随注入顺序（证明注入真正驱动状态机，而非只改了一个不被消费的列）",
+          "core_top40": "显式 role_thresholds（0.40/0.40/0.40）→ CORE 数量必须多于 canonical"
+        }
+      },
+      "invariants": [
+        {
+          "id": "I-08-01",
+          "applies_to": "both",
+          "case": "canonical",
+          "field": "score_source",
+          "op": "eq",
+          "value": "bundle.alpha"
+        },
+        {
+          "id": "I-08-02",
+          "applies_to": "both",
+          "case": "canonical",
+          "field": "score_digest",
+          "op": "not_null"
+        },
+        {
+          "id": "I-08-03",
+          "applies_to": "both",
+          "case": "canonical",
+          "field": "role_thresholds_effective.core_pct",
+          "op": "eq",
+          "value": 0.8
+        },
+        {
+          "id": "I-08-04",
+          "applies_to": "both",
+          "case": "rs_only",
+          "field": "score_source",
+          "op": "eq",
+          "value": "SCENARIO_ALPHA"
+        },
+        {
+          "id": "I-08-05",
+          "applies_to": "both",
+          "case": "rs_only",
+          "field": "score_digest_distinct_from_canonical",
+          "op": "is_true"
+        },
+        {
+          "id": "I-08-06",
+          "applies_to": "both",
+          "case": "trend_only",
+          "field": "score_digest_distinct_from_canonical",
+          "op": "is_true"
+        },
+        {
+          "id": "I-08-07",
+          "applies_to": "both",
+          "case": "explicit_order",
+          "field": "roles_differ_from_canonical",
+          "op": "is_true"
+        },
+        {
+          "id": "I-08-08",
+          "applies_to": "both",
+          "case": "explicit_order",
+          "field": "role_order_matches_injection",
+          "op": "is_true"
+        },
+        {
+          "id": "I-08-09",
+          "applies_to": "both",
+          "case": "core_top40",
+          "field": "core_count_differs_from_canonical",
+          "op": "is_true"
+        },
+        {
+          "id": "I-08-10",
+          "applies_to": "both",
+          "case": "core_top40",
+          "field": "role_thresholds_effective.core_pct",
+          "op": "eq",
+          "value": 0.6
+        },
+        {
+          "id": "I-08-11",
+          "applies_to": "both",
+          "case": "canonical",
+          "field": "panel_sha256",
+          "op": "not_null"
+        }
+      ],
+      "notes": [
+        "面板 8 个 alpha 驱动列全部随 rank_order 单调，因此任何正权重都保持同序 —— 重量级 case 的权重替换只改变评分数值（score_hash），不改角色顺序；真正证明「注入驱动状态机」的是 explicit_order case。",
+        "role_thresholds_source 在两端标签不同（Python CONFIG_ROLE_THRESHOLDS / JS RUNTIME_BUNDLE），因此比对用归一化字段 role_thresholds_source_class（EXPLICIT / RUNNING_CONFIG）。",
+        "score_digest = 对 (trade_date, code, score) 按 3 位小数格式化的定长串做 sha256 —— 跨端可比，避免 12 位/6 位格式化差异造成伪差异；运行记录里的 64-hex 内部哈希仍按各端精度。",
+        "broken monotonicity: breakout_distance 反向（case.breakout_ascending）——否则等权/单因子权重在数值上不可区分。"
+      ]
     }
   ]
 }

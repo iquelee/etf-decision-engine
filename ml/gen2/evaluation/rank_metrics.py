@@ -3,15 +3,22 @@ from __future__ import annotations
 import pandas as pd
 
 
-def rank_ic_by_date(rankings: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
+def rank_ic_by_date(rankings: pd.DataFrame, labels: pd.DataFrame,
+                    score_col: str = "leadership_score") -> pd.DataFrame:
+    """逐日 Rank IC。
+
+    `score_col` 默认仍是历史列 `leadership_score`（兼容旧调用）；
+    WP-G2-05 之后，凡是关心「角色状态机实际消费的 Alpha」的调用都必须显式传
+    `score_col="selection_score"`（注入的显式评分），否则算的是已不参与决策的旧复合分。
+    """
     df = rankings.merge(labels, on=["trade_date", "code"], how="inner")
-    df = df.dropna(subset=["leadership_score", "y_rank_20d"])
+    df = df.dropna(subset=[score_col, "y_rank_20d"])
     rows = []
     for d, g in df.groupby("trade_date"):
-        if len(g) < 3 or g["leadership_score"].nunique() < 2 or g["y_rank_20d"].nunique() < 2:
+        if len(g) < 3 or g[score_col].nunique() < 2 or g["y_rank_20d"].nunique() < 2:
             continue
         # Spearman = Pearson correlation of ranks; avoid scipy dependency.
-        x = g["leadership_score"].rank(method="average")
+        x = g[score_col].rank(method="average")
         y = g["y_rank_20d"].rank(method="average")
         rows.append({"trade_date": d, "rank_ic": x.corr(y, method="pearson"), "n": len(g)})
     return pd.DataFrame(rows)
