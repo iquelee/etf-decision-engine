@@ -377,6 +377,79 @@ function dedupByDate(bars) {
   return out;
 }
 
+/**
+ * 关键日线字段：缺失 / 非有限即视为「数据不可用」（A2 字段完整性）。
+ * amount 允许缺失（成交额可由 close×volume 估算），故不在关键字段内。
+ */
+const CRITICAL_BAR_FIELDS = ['open', 'high', 'low', 'close', 'volume'];
+
+/**
+ * 输入完整性体检（A2 数据闸门，WP-G2-03 剩余切片）。
+ *
+ *   字段完整性 → NAN_OR_MISSING_FIELD：trade_date 必须存在；OHLCV 必须为有限数值
+ *   唯一交易日 → DUPLICATE_TRADE_DATE：同一 code 不得出现重复 trade_date
+ *
+ * 说明：这两个闸门是「不发布不完整/脏横截面」的前置条件。此前实现会静默 dedup，
+ * 让重复/脏数据被当成有效横截面参与排名 —— 现改为 blocked（可预期业务结果，不是系统故障）。
+ * 只读：不修改入参。
+ *
+ * @returns {null|{gate:string, detail:string, code:string, trade_date?:string, field?:string}}
+ */
+function inspectBarsIntegrity(barsByCode, codes) {
+  for (const code of codes) {
+    const rows = barsByCode[code];
+    if (!rows || !rows.length) continue; // 缺失由后续 benchmark / eligibility 闸门判定
+    const seen = new Set();
+    for (const b of rows) {
+      const d = dateKey(b.trade_date);
+      if (!d) return { gate: 'NAN_OR_MISSING_FIELD', detail: `${code} 存在缺失 trade_date 的行`, code };
+      for (const f of CRITICAL_BAR_FIELDS) {
+        const v = b[f];
+        const nv = Number(v);
+        if (v == null || v === '' || v === true || v === false || !Number.isFinite(nv)) {
+          return {
+            gate: 'NAN_OR_MISSING_FIELD',
+            detail: `${code} ${d} 字段 ${f} 缺失或非有限值（${String(v)}）`,
+            code, trade_date: d, field: f
+          };
+        }
+      }
+      if (seen.has(d)) {
+        return { gate: 'DUPLICATE_TRADE_DATE', detail: `${code} 交易日 ${d} 重复`, code, trade_date: d };
+      }
+      seen.add(d);
+    }
+  }
+  return null;
+}
+
+/**
+ * 发布前完整性校验（纯函数，A3 原子发布契约）。
+ *
+ *   唯一 code / 行数与唯一数一致 / alpha 全部有限 / 至少写入 1 行
+ * 任一不满足 → blocked + PUBLISH_VALIDATION_FAILED（今日没有可信结果，不是系统故障）。
+ * 抽成纯函数是为了让「发布完整性」成为可跨语言比对的 seam（WP-G2-03 G2S-06）。
+ */
+function validatePublishResults(rows, written) {
+  const list = Array.isArray(rows) ? rows : [];
+  const uniqueCodeCount = new Set(list.map((r) => r.code)).size;
+  const nonFiniteAlpha = list.filter((r) => r.alpha_score_v2 == null || !Number.isFinite(r.alpha_score_v2)).length;
+  const writtenCount = Number.isFinite(Number(written)) ? Number(written) : 0;
+  if (uniqueCodeCount === 0 || uniqueCodeCount !== list.length || nonFiniteAlpha > 0 || writtenCount === 0) {
+    return {
+      ok: false, status: 'blocked', status_reason: 'PUBLISH_VALIDATION_FAILED',
+      data_gate: 'PUBLISH_VALIDATION_FAILED',
+      unique_code_count: uniqueCodeCount, row_count: list.length,
+      non_finite_alpha: nonFiniteAlpha, written: writtenCount
+    };
+  }
+  return {
+    ok: true, status: 'completed', status_reason: null, data_gate: null,
+    unique_code_count: uniqueCodeCount, row_count: list.length,
+    non_finite_alpha: nonFiniteAlpha, written: writtenCount
+  };
+}
+
 /** 过滤出有限值索引与值（供横截面排名排除 null/NaN） */
 function finiteIndexValues(values) {
   const idx = [];
@@ -1059,7 +1132,10 @@ exports._internal = {
   // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）与两个组件，供跨语言 parity 读取
   finalizeRoles,
   applyReplacementGate,
-  assertFinalRoleConstraints
+  assertFinalRoleConstraints,
+  // WP-G2-03：run 状态四态的纯函数 seam（数据完整性体检 + 发布完整性校验）
+  inspectBarsIntegrity,
+  validatePublishResults
 };
 
 exports.main = async (event = {}, context = {}) => {
@@ -1115,6 +1191,10 @@ exports.main = async (event = {}, context = {}) => {
       return { ok: false, status: 'blocked', status_reason: 'DATA_OR_ELIGIBILITY_GATE', error: String(error || ''), data_gate: gate, mode, ...extra };
     };
 
+    // 0) 输入完整性（A2：字段完整性 + 唯一交易日）——早于任何统计，脏数据不得参与排名。
+    const integrity = inspectBarsIntegrity(barsByCode, allCodes);
+    if (integrity) return await failGate(integrity.gate, integrity.detail, integrity);
+
     // 1) benchmark 存在性 + 唯一交易日完整性
     const benchBarsRaw = barsByCode[UNIVERSE.benchmark_code];
     if (!benchBarsRaw || !benchBarsRaw.length) {
@@ -1169,6 +1249,14 @@ exports.main = async (event = {}, context = {}) => {
     const codes = eligibleToday;
     if (!codes.length) {
       return await failGate('NO_ELIGIBLE_TODAY', '当日无合格 universe 数据', { as_of: asOf, excluded });
+    }
+    // 完整横截面契约（A2/A3：universe_count=30 才允许发布；规划 §A2「非 30 资产 → blocked」）。
+    // 缺任何一只即无法保证横截面百分位/角色约束可信，故宁可 blocked 也不发布残缺结果。
+    if (codes.length !== UNIVERSE.target_size) {
+      return await failGate(
+        'UNIVERSE_INCOMPLETE',
+        `当日合格横截面 ${codes.length}/${UNIVERSE.target_size}，缺 ${UNIVERSE.target_size - codes.length} 只，禁止发布不完整横截面`,
+        { as_of: asOf, excluded, eligible_count: codes.length });
     }
     // 统一把内存数据清洗为「去重 + 截断到 dataCutoff」后的版本，后续特征/角色一律消费清洗后数据
     for (const c of Object.keys(barsByCode)) {
@@ -1279,15 +1367,15 @@ exports.main = async (event = {}, context = {}) => {
       written += 1;
     }
 
-    // P1-2：发布前完整性校验——唯一 code、预期集合、行数、特征有效性。不满足则写 failed 记录，不发布 completed。
-    const uniqueCodeCount = new Set(latestDefended.map((r) => r.code)).size;
-    const nonFiniteAlpha = latestDefended.filter((r) => r.alpha_score_v2 == null || !Number.isFinite(r.alpha_score_v2)).length;
-    if (uniqueCodeCount === 0 || uniqueCodeCount !== latestDefended.length || nonFiniteAlpha > 0 || written === 0) {
+    // P1-2：发布前完整性校验——唯一 code、预期集合、行数、特征有效性。不满足则不发布 completed。
+    // WP-G2-03：校验逻辑抽成纯函数 validatePublishResults（跨语言 parity seam，见 scripts/parity）。
+    const pub = validatePublishResults(latestDefended, written);
+    if (!pub.ok) {
       // WP-G2-03 四态：输出完整性问题 = 今日没有可信结果 → blocked（不是系统故障）
       await db.upsert(COLLECTIONS.GEN2_SHADOW, {
         ...runDoc, status: 'blocked',
         status_reason: 'PUBLISH_VALIDATION_FAILED',
-        fail_reason: `Publish validation failed: unique=${uniqueCodeCount}/${latestDefended.length} non_finite_alpha=${nonFiniteAlpha} written=${written}`,
+        fail_reason: `Publish validation failed: unique=${pub.unique_code_count}/${pub.row_count} non_finite_alpha=${pub.non_finite_alpha} written=${written}`,
         completed_at: null
       }, { type: 'gen2_run', run_id: runId });
       return { ok: false, status: 'blocked', status_reason: 'PUBLISH_VALIDATION_FAILED', error: 'Gen-2 发布前完整性校验失败，不发布 completed', data_gate: 'PUBLISH_VALIDATION_FAILED', written };

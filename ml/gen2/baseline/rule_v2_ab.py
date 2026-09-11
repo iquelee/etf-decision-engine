@@ -271,6 +271,14 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
         # F03 修复：显式传 V2 的 alpha 排序，禁止读旧 leadership_score。
         day["role_before_cap"] = day["role"]
         day["role"] = _cap_core_roles(day, max_core, max_core_per_cluster, priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
+        # D-004（WP-G2-03 裁决）：被 cap 降级的行必须留下审计码。
+        # 否则 reason_codes 仍写 PROMOTION_CONFIRMED 而 role 已是 SATELLITE —— 审计串与最终角色矛盾。
+        # 追加顺序与 JS 逐字一致：状态机原因 → CLUSTER_CAP_DEMOTED →（finalize_roles 内）FINAL_*。
+        cap_demoted = (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")
+        if cap_demoted.any():
+            day.loc[cap_demoted, "reason_codes"] = (
+                day.loc[cap_demoted, "reason_codes"].astype(str) + "|CLUSTER_CAP_DEMOTED"
+            )
         # F09：自愿替换校验 + 组合约束最终断言。WP-G2-03（D-001）起统一走 finalize_roles 出口，
         # 保证「任何角色生成路径返回前都无条件执行一次终局约束检查」。
         finalize_roles(day, current_roles, base_max_core, max_core_per_cluster)

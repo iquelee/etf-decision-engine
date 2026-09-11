@@ -147,6 +147,33 @@ class TestScenarioParity(unittest.TestCase):
                 continue
             self.assertTrue(sc["deferred_to"].startswith("WP-"), f"{sc['id']} deferred_to 非法")
 
+    def test_no_pending_seam_and_no_pending_ruling(self):
+        """WP-G2-03 收尾：不得再有 PENDING_SEAM 场景，也不得有 PENDING_RULING 差异。"""
+        pending_seam = [s["id"] for s in self.fixture["scenarios"] if s["status"] != "RUNNABLE"]
+        self.assertFalse(pending_seam, f"仍有 PENDING_SEAM 场景：{pending_seam}")
+        pending_ruling = [e["id"] for e in self.fixture.get("known_differences", [])
+                          if e["status"] == "PENDING_RULING"]
+        self.assertFalse(pending_ruling, f"仍有 PENDING_RULING 差异：{pending_ruling}")
+
+    def test_v2_role_authority_declared(self):
+        mig = self.fixture.get("seam_contracts", {}).get("role_engine_migration", {})
+        self.assertEqual(mig.get("authoritative"), "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles",
+                         "必须标明 V2 唯一权威角色实现")
+        self.assertEqual(mig.get("legacy", {}).get("status"), "LEGACY_V1_ONLY")
+        self.assertIn("ml/gen2/baseline/rule_v2_ab.py", mig.get("blocked_v2_paths", []))
+        self.assertIn("scripts/parity/run_gen2_scenarios.py", mig.get("blocked_v2_paths", []))
+        self.assertTrue(mig.get("work_item", "").startswith("WP-"), "迁移必须登记为明确工作项")
+
+    def test_run_status_gate_order_declared(self):
+        gate = self.fixture.get("seam_contracts", {}).get("run_status_gate", {})
+        order = gate.get("gate_order", [])
+        expect = ["NAN_OR_MISSING_FIELD", "DUPLICATE_TRADE_DATE", "BENCHMARK_MISSING",
+                  "BENCHMARK_INSUFFICIENT_HISTORY", "STALE_BATCH", "NO_ELIGIBLE_TODAY",
+                  "UNIVERSE_INCOMPLETE", "PUBLISH_VALIDATION_FAILED"]
+        self.assertEqual(len(order), len(expect), "闸门顺序条目数不符")
+        for i, name in enumerate(expect):
+            self.assertIn(name, order[i], f"闸门顺序第 {i + 1} 位应为 {name}")
+
 
 if __name__ == "__main__":
     unittest.main()

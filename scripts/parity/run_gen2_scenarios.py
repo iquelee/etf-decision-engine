@@ -30,7 +30,7 @@ from gen2.baseline.rule_v2_ab import (  # noqa: E402
 )
 from gen2.baseline.leadership_score import compute_leadership_score  # noqa: E402
 from gen2.baseline.alpha_score import compute_alpha_score_v2  # noqa: E402
-from gen2.portfolio.role_engine import build_daily_roles  # noqa: E402
+from gen2.data.run_gate import evaluate_run_gate, validate_publish_results  # noqa: E402
 from gen2.portfolio.regime import classify_regime, market_score as regime_market_score  # noqa: E402
 from gen2.portfolio.selection_permission import (  # noqa: E402
     max_core_count,
@@ -238,9 +238,9 @@ def h_roles_panel(sc):
         df["correlation_cluster"] = df["code"].map(cluster_map)
         # canonical roles seam（Python 侧）= V2 规则 rule_v2_ab.build_v2_roles：
         #   它是 B1 账本 / B3 OOS / 360 行 parity 使用的实现，也是**唯一含 NO_CORE 硬门槛与
-        #   Selection Permission（RISK_OFF 禁晋升）** 的 Python 实现。
-        #   注意：portfolio/role_engine.build_daily_roles 是另一套实现，缺 NO_CORE 门槛与权限门，
-        #   本包不选它作为 seam；两者的差异已作为发现登记（见夹具 seam_contracts.python_roles_implementations）。
+        #   Selection Permission（RISK_OFF 禁晋升）** 的 Python 实现（V2 唯一权威，用户裁决 2026-09-11）。
+        #   portfolio 下的 legacy V1 角色实现缺 NO_CORE 门槛与权限门，禁止用于 V2 语义；
+        #   其调用源守卫见 ml/gen2/tests/test_role_impl_authority.py。
         scored = compute_leadership_score(df)
         scored = compute_alpha_score_v2(scored)
         rankings = scored[["trade_date", "code", "name", "correlation_cluster"]].copy()
@@ -271,6 +271,152 @@ def h_roles_panel(sc):
     return out
 
 
+# ---------------- canonical run panel 展开（RUN_V1；与 Node 端逐字一致） ----------------
+
+def run_panel_codes(panel):
+    return list(panel["codes"]) + [panel["benchmark_code"]]
+
+
+def run_panel_base(panel):
+    """生成 run 级日线面板：全整数运算，保证两端逐位一致。"""
+    from datetime import date, timedelta
+
+    y, m, d = (int(x) for x in panel["base_date"].split("-"))
+    start = date(y, m, d)
+    rows = []
+    for i in range(panel["days"]):
+        ds = (start + timedelta(days=i)).isoformat()
+        for j, code in enumerate(run_panel_codes(panel)):
+            step_q = 100 + 5 * j
+            close = panel["price_base"] + (i * step_q) // 100
+            volume = panel["volume"] + 1000 * j
+            rows.append({
+                "code": code, "trade_date": ds,
+                "open": close - 1, "high": close + 2, "low": close - 2, "close": close,
+                "volume": volume, "amount": volume * close,
+            })
+    return rows
+
+
+def group_by_code(rows):
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(r["code"], []).append(r)
+    return groups
+
+
+def apply_run_mutations(rows, mutations, panel):
+    """变异算子（与 Node 端逐字一致）：制造陈旧 / 重复 / 缺基准 / 短历史 / NaN 等场景。"""
+    groups = group_by_code(rows)
+
+    def sel(spec):
+        if spec == "eligible":
+            return list(panel["codes"])
+        if spec == "all":
+            return run_panel_codes(panel)
+        return list(spec) if isinstance(spec, list) else [spec]
+
+    for m in mutations or []:
+        codes = sel(m["codes"] if m.get("codes") is not None else m.get("code"))
+        if m["op"] == "slice_last":
+            for c in codes:
+                if c in groups:
+                    groups[c] = groups[c][-m["n"]:]
+        elif m["op"] == "drop_code":
+            for c in codes:
+                groups.pop(c, None)
+        elif m["op"] == "stale_shift":
+            for c in codes:
+                if c in groups:
+                    groups[c] = groups[c][: len(groups[c]) - m["days"]]
+        elif m["op"] == "duplicate_last":
+            for c in codes:
+                if c in groups:
+                    groups[c].append(dict(groups[c][-1]))
+        elif m["op"] == "nan_field":
+            for c in codes:
+                g = groups.get(c)
+                if not g:
+                    continue
+                idx = len(g) + m["row"] if m["row"] < 0 else m["row"]
+                g[idx] = dict(g[idx])
+                g[idx][m["field"]] = None
+        else:
+            raise SystemExit(f"unknown run mutation op {m['op']}")
+
+    out = [r for g in groups.values() for r in g]
+    out.sort(key=lambda r: (r["trade_date"], r["code"]))
+    return out
+
+
+def _fmt_cell(v):
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return str(v).lower()
+    if isinstance(v, (int, float)):
+        return f"{float(v):.4f}"
+    return str(v)
+
+
+def run_panel_hash(rows):
+    keys = ["code", "trade_date", "open", "high", "low", "close", "volume", "amount"]
+    lines = [",".join(_fmt_cell(r[k]) for k in keys) for r in rows]
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def run_publish_hash(codes, alphas, written):
+    line = "|".join(str(c) for c in codes) + ";" + "|".join(_fmt_cell(a) for a in alphas) + ";" + str(written)
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()
+
+
+def _own_universe():
+    from gen2.data.loader import load_universe_records
+
+    return load_universe_records()
+
+
+def h_run_status_gate(sc):
+    """run 状态四态：数据闸门（run 级）+ 系统异常 + 发布完整性（纯函数 seam）。"""
+    panel = sc["input"]["panel"]
+    records = _own_universe()
+    own_codes = sorted(str(c) for c in records.keys())
+    declared = sorted(run_panel_codes(panel))
+    own_target = len([c for c in own_codes if c != panel["benchmark_code"]])
+    self_check = {
+        "universe_matches_fixture": own_codes == declared,
+        "target_size_matches_fixture": own_target == panel["target_size"],
+    }
+    out = {}
+    for c in sc["input"]["data_cases"]:
+        rows = apply_run_mutations(run_panel_base(panel), c.get("mutations", []), panel)
+        try:
+            if c.get("simulate_system_error"):
+                raise RuntimeError("injected system error (SYSTEM_ERROR simulation)")
+            res = evaluate_run_gate(
+                group_by_code(rows),
+                eligible_codes=panel["codes"],
+                benchmark_code=panel["benchmark_code"],
+                target_size=panel["target_size"],
+                expected_trade_date=(c.get("event") or {}).get("expected_trade_date"),
+                mode=(c.get("event") or {}).get("mode", "REPLAY"),
+            )
+            obs = {"status": res["status"], "status_reason": res["status_reason"], "data_gate": res["data_gate"]}
+        except Exception:  # noqa: BLE001 —— 运行异常 → failed（与 JS catch 路径同语义）
+            obs = {"status": "failed", "status_reason": "SYSTEM_ERROR", "data_gate": None}
+        obs["panel_sha256"] = run_panel_hash(rows)
+        obs.update(self_check)
+        out[c["id"]] = obs
+
+    for c in sc["input"]["publish_cases"]:
+        res = validate_publish_results(c["codes"], c["alphas"], c["written"])
+        obs = {"status": res["status"], "status_reason": res["status_reason"], "data_gate": res["data_gate"],
+               "panel_sha256": run_publish_hash(c["codes"], c["alphas"], c["written"])}
+        obs.update(self_check)
+        out[c["id"]] = obs
+    return out
+
+
 HANDLERS = {
     "regime_selection": h_regime_selection,
     "replacement_edge": h_replacement_edge,
@@ -278,6 +424,7 @@ HANDLERS = {
     "core_cap": h_core_cap,
     "replacement_transaction": h_replacement_transaction,
     "roles_panel": h_roles_panel,
+    "run_status_gate": h_run_status_gate,
 }
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -8,6 +10,30 @@ from gen2.data.loader import load_gen2_config, load_universe_records
 CORE_PCT = 0.80
 CHALLENGER_PCT = 0.70
 SATELLITE_PCT = 0.60
+
+#: **V2 唯一权威角色实现**（用户裁决 2026-09-11，WP-G2-03）。
+#:
+#: `build_daily_roles`（本模块）与它语义不同：本模块缺 NO_CORE 硬门槛与 Selection Permission，
+#: 因此**禁止**用于 V2 回测 / 敏感性 / 归因 / 生产 parity / 账本重算（B1）与 Frozen OOS（B3）。
+#: 迁移（研究脚本改为兼容包装层或改调权威实现）登记为 WP-G2-05，见
+#: fixtures/gen2/golden_scenarios_v1.json → seam_contracts.role_engine_migration。
+V2_AUTHORITATIVE_ROLE_IMPL = "gen2.baseline.rule_v2_ab.build_v2_roles"
+
+#: 允许继续调用 legacy `build_daily_roles` 的模块（仅历史 V1 分析路径）；
+#: 新增消费者会让 ml/gen2/tests/test_role_impl_authority.py 失败 —— 这是刻意的防分叉守卫。
+LEGACY_V1_CONSUMER_ALLOWLIST = frozenset({
+    "gen2.baseline.rule_rotation",
+    "gen2.baseline.sensitivity_matrix",
+    "gen2.evaluation.attribution",
+    "gen2.tests.test_gen2_foundation",
+})
+
+#: V2 路径白名单：以下模块**不得**出现 `build_daily_roles`（它们是 V2 权威语义的使用者）
+V2_PATH_FORBIDDEN_ROLE_IMPL = (
+    "ml/gen2/baseline/rule_v2_ab.py",
+    "ml/gen2/baseline/rule_v21_ab.py",
+    "scripts/parity/run_gen2_scenarios.py",
+)
 
 
 def _initial_roles(records: dict) -> dict[str, str]:
@@ -64,6 +90,20 @@ def _cap_core_roles(day: pd.DataFrame, max_core_count: int, max_core_per_cluster
 
 
 def build_daily_roles(rankings: pd.DataFrame, config: dict | None = None) -> pd.DataFrame:
+    """[LEGACY · V1-ONLY] 逐日角色状态机（**不是** V2 权威实现）。
+
+    ⚠️ 本实现**缺 NO_CORE 硬门槛与 Selection Permission**（RISK_OFF 禁晋升），
+    与 `V2_AUTHORITATIVE_ROLE_IMPL` 的语义不同；两套状态机分别打补丁会再次分叉。
+
+    允许的消费者：`LEGACY_V1_CONSUMER_ALLOWLIST`（历史 V1 分析路径）。
+    V2 语义请使用 `gen2.baseline.rule_v2_ab.build_v2_roles`。
+    """
+    warnings.warn(
+        "gen2.portfolio.role_engine.build_daily_roles 是 LEGACY V1-only 实现（缺 NO_CORE 与权限门）；"
+        f"V2 请使用 {V2_AUTHORITATIVE_ROLE_IMPL}。迁移见 WP-G2-05。",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     cfg = config or load_gen2_config()
     pcfg = cfg["portfolio"]
     promotion_days = int(pcfg.get("promotion_persistence_days", 5))

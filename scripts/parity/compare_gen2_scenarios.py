@@ -171,7 +171,7 @@ def main() -> int:
     gate_ok = not inv_failed and not unlocated
 
     report = {
-        "work_package": "WP-G2-01",
+        "work_package": fixture.get("meta", {}).get("work_package", "WP-G2-01"),
         "fixture": Path(args.fixture).name,
         "js_source": js.get("source"),
         "py_source": py.get("source"),
@@ -198,7 +198,7 @@ def main() -> int:
     (out_dir / "diff-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     lines = [
-        "# WP-G2-01 Gen-2 场景双端比对报告",
+        f"# {report['work_package']} Gen-2 场景双端比对报告",
         "",
         f"- 夹具：`{report['fixture']}`",
         f"- 双端：JS `{report['js_source']}` / Python `{report['py_source']}`",

@@ -28,16 +28,20 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
   + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
-  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles };\n';
+  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
+  + ' inspectBarsIntegrity, validatePublishResults };\n';
 
-function loadAudit() {
+/** 空 db（纯函数场景用；run 级场景另见 makeRunDb） */
+const EMPTY_DB = { query: async () => [], upsert: async () => {} };
+
+function loadEntry(dbImpl) {
   const box = {
     exports: {},
     require: (p) => {
       if (p === 'fs') return require('fs');
       if (p === 'path') return require('path');
       if (p === 'crypto') return require('crypto');
-      if (p === './common/utils/db') return { query: async () => [], upsert: async () => {} };
+      if (p === './common/utils/db') return dbImpl || EMPTY_DB;
       if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
       return require(path.join(FN_DIR, p));
     },
@@ -45,10 +49,10 @@ function loadAudit() {
     console
   };
   vm.runInNewContext(SOURCE + AUDIT_EXPORT, box);
-  return box.exports.audit;
+  return box.exports;
 }
 
-const A = loadAudit();
+const A = loadEntry(EMPTY_DB).audit;
 const r4 = (v) => (v == null ? null : Math.round(v * 1e4) / 1e4);
 const num = (v) => (v == null || v === '' ? null : Number(v));
 
@@ -167,6 +171,127 @@ function rolesSnapshot(dayRows, panelCodes) {
   return { days, reasons, reasons_norm: reasonsNorm, cluster_core_count: clusterCore, cluster_used: clusterUsed };
 }
 
+/* ---------- canonical run panel 展开（RUN_V1；与 Python 端逐字一致） ---------- */
+
+function runPanelCodes(panel) {
+  return panel.codes.concat([panel.benchmark_code]);
+}
+
+/** 生成 run 级日线面板：全整数运算，保证两端逐位一致 */
+function runPanelBase(panel) {
+  const rows = [];
+  const base = Date.parse(panel.base_date + 'T00:00:00Z');
+  const codes = runPanelCodes(panel);
+  for (let i = 0; i < panel.days; i += 1) {
+    const d = new Date(base + i * 86400000).toISOString().slice(0, 10);
+    codes.forEach((code, j) => {
+      const stepQ = 100 + 5 * j; // 每只标的不同斜率（百分比×100，整数）
+      const close = panel.price_base + Math.floor((i * stepQ) / 100);
+      const volume = panel.volume + 1000 * j;
+      rows.push({
+        code, trade_date: d,
+        open: close - 1, high: close + 2, low: close - 2, close,
+        volume, amount: volume * close
+      });
+    });
+  }
+  return rows;
+}
+
+function groupByCode(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!m.has(r.code)) m.set(r.code, []);
+    m.get(r.code).push(r);
+  }
+  return m;
+}
+
+/** 变异算子（与 Python 端逐字一致）：制造陈旧 / 重复 / 缺基准 / 短历史 / NaN 等场景 */
+function applyRunMutations(rows, mutations, panel) {
+  const groups = groupByCode(rows);
+  const sel = (spec) => {
+    if (spec === 'eligible') return panel.codes.slice();
+    if (spec === 'all') return runPanelCodes(panel);
+    return Array.isArray(spec) ? spec.slice() : [spec];
+  };
+  for (const m of mutations || []) {
+    const codes = sel(m.codes != null ? m.codes : m.code);
+    if (m.op === 'slice_last') {
+      for (const c of codes) if (groups.has(c)) groups.set(c, groups.get(c).slice(-m.n));
+    } else if (m.op === 'drop_code') {
+      for (const c of codes) groups.delete(c);
+    } else if (m.op === 'stale_shift') {
+      for (const c of codes) if (groups.has(c)) groups.set(c, groups.get(c).slice(0, groups.get(c).length - m.days));
+    } else if (m.op === 'duplicate_last') {
+      for (const c of codes) {
+        if (!groups.has(c)) continue;
+        const g = groups.get(c);
+        g.push(Object.assign({}, g[g.length - 1]));
+      }
+    } else if (m.op === 'nan_field') {
+      for (const c of codes) {
+        const g = groups.get(c);
+        if (!g) continue;
+        const idx = m.row < 0 ? g.length + m.row : m.row;
+        g[idx] = Object.assign({}, g[idx]);
+        g[idx][m.field] = null;
+      }
+    } else {
+      throw new Error(`unknown run mutation op ${m.op}`);
+    }
+  }
+  const out = [];
+  for (const g of groups.values()) out.push(...g);
+  out.sort((a, b) => (a.trade_date < b.trade_date ? -1 : a.trade_date > b.trade_date ? 1
+    : (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)));
+  return out;
+}
+
+const fmtCell = (v) => (v == null ? 'null' : (typeof v === 'number' ? v.toFixed(4) : String(v)));
+
+function runPanelHash(rows) {
+  const lines = rows.map((r) => [r.code, r.trade_date, r.open, r.high, r.low, r.close, r.volume, r.amount]
+    .map(fmtCell).join(','));
+  return crypto.createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
+}
+
+function runPublishHash(codes, alphas, written) {
+  const line = codes.join('|') + ';' + alphas.map(fmtCell).join('|') + ';' + String(written);
+  return crypto.createHash('sha256').update(line, 'utf8').digest('hex');
+}
+
+/** 注入式 db：query 返回面板数据；simulate_system_error 时抛异常以触发 failed 路径 */
+function makeRunDb(groups, opts) {
+  const writes = [];
+  const db = {
+    query: async (collection, where) => {
+      if (opts && opts.failQuery) throw new Error('injected db query failure (SYSTEM_ERROR simulation)');
+      const code = where && where.code;
+      return (groups.get(code) || []).slice();
+    },
+    upsert: async (collection, doc) => { writes.push({ collection, doc }); }
+  };
+  return { db, writes };
+}
+
+/** 驱动真实 main()：注入 db + 事件，取「最后一次 gen2_run 写入 / 返回值」的规范化状态 */
+async function runMainCase(panel, caseSpec) {
+  const rows = applyRunMutations(runPanelBase(panel), caseSpec.mutations, panel);
+  const { db, writes } = makeRunDb(groupByCode(rows), { failQuery: !!caseSpec.simulate_system_error });
+  const entry = loadEntry(db);
+  const out = await entry.main(Object.assign({}, caseSpec.event || {}));
+  const runs = writes.filter((w) => w.doc && w.doc.type === 'gen2_run');
+  const last = runs.length ? runs[runs.length - 1].doc : null;
+  const pick = (a, b) => (a === undefined || a === null ? (b === undefined ? null : b) : a);
+  return {
+    status: pick(out && out.status, last && last.status),
+    status_reason: pick(out && out.status_reason, last && last.status_reason),
+    data_gate: pick(out && out.data_gate, last && last.data_gate),
+    panel_sha256: runPanelHash(rows)
+  };
+}
+
 const HANDLERS = {
   regime_selection(sc) {
     const out = {};
@@ -231,6 +356,34 @@ const HANDLERS = {
     return out;
   },
 
+  async run_status_gate(sc) {
+    const panel = sc.input.panel;
+    const declared = runPanelCodes(panel).slice().sort().join(',');
+    const ownUniverse = A.UNIVERSE.eligible_codes.concat([A.UNIVERSE.benchmark_code]).slice().sort().join(',');
+    const selfCheck = {
+      universe_matches_fixture: declared === ownUniverse,
+      target_size_matches_fixture: A.UNIVERSE.target_size === panel.target_size
+    };
+    const out = {};
+    for (const c of sc.input.data_cases) {
+      // run 级 seam：注入 db 驱动真实 main()，观察 run 文档状态（不作弊、不旁路）
+      const obs = await runMainCase(panel, c);
+      out[c.id] = Object.assign(obs, selfCheck);
+    }
+    for (const c of sc.input.publish_cases) {
+      // 发布完整性 seam：直调纯函数（唯一 code / 非有限 alpha / 写入 0 行）
+      const rows = c.codes.map((code, i) => ({
+        code, alpha_score_v2: c.alphas[i] == null ? null : Number(c.alphas[i])
+      }));
+      const res = A.validatePublishResults(rows, c.written);
+      out[c.id] = Object.assign({
+        status: res.status, status_reason: res.status_reason, data_gate: res.data_gate,
+        panel_sha256: runPublishHash(c.codes, c.alphas, c.written)
+      }, selfCheck);
+    }
+    return out;
+  },
+
   roles_panel(sc) {
     const panel = sc.input.panel;
     const out = {};
@@ -252,7 +405,7 @@ const HANDLERS = {
   }
 };
 
-function main() {
+async function main() {
   const results = {
     engine: 'js',
     source: 'cloudfunctions/runGen2ShadowEod/index.js',
@@ -273,11 +426,11 @@ function main() {
     }
     const handler = HANDLERS[sc.handler];
     if (!handler) throw new Error(`unknown handler ${sc.handler} for ${sc.id}`);
-    results.scenarios[sc.id] = handler(sc);
+    results.scenarios[sc.id] = await handler(sc);
   }
   const text = JSON.stringify(results, null, 2);
   if (outPath) fs.writeFileSync(outPath, text);
   else process.stdout.write(text + '\n');
 }
 
-main();
+main().catch((e) => { console.error(e); process.exit(1); });
