@@ -94,9 +94,11 @@ def classify_scenarios(sens: pd.DataFrame) -> list[dict]:
                        if (base_spec.get("weights") or {}).get(k) != v}
         knob_diff = {k: v for k, v in (spec.get("portfolio") or {}).items()
                      if (base_spec.get("portfolio") or {}).get(k) != v}
+        selection = spec.get("selection")
         out.append({
             "scenario": name,
             "status": status,
+            "selection_diff": dict(selection) if selection else {},
             "portfolio_effective": status == EFFECTIVE,
             "signal_only": status == SIGNAL_ONLY,
             "registered_problem": REGISTERED_INEFFECTIVE.get(name),
@@ -109,8 +111,14 @@ def classify_scenarios(sens: pd.DataFrame) -> list[dict]:
     return out
 
 
-def check_registry(classified: list[dict]) -> None:
-    """登记表守卫：无效场景必须已登记；已登记的不能悄悄变回有效。"""
+def check_registry(classified: list[dict], registry: dict | None = None) -> None:
+    """登记表守卫：无效场景必须已登记；已登记的不能悄悄变回有效。
+
+    `registry` 默认取 `sensitivity_matrix.REGISTERED_INEFFECTIVE`（可显式传入以便测试）。
+    """
+    registry = REGISTERED_INEFFECTIVE if registry is None else registry
+    for c in classified:
+        c["registered_problem"] = registry.get(c["scenario"])
     unregistered = [c["scenario"] for c in classified
                     if c["status"] != EFFECTIVE and not c["registered_problem"]]
     if unregistered:
@@ -125,6 +133,18 @@ def check_registry(classified: list[dict]) -> None:
         raise ValueError(
             "登记表已过期：%s 已变回组合有效（例如注入链修复后重跑）。"
             "请更新 REGISTERED_INEFFECTIVE（移除或改写这些条目）后再生成报告。" % ", ".join(sorted(stale)))
+
+
+def describe_diff(item: dict) -> str:
+    """把「场景声明与 baseline 的差异」写成一行（替代 Alpha / 角色阈值 / 其它旋钮）。"""
+    parts = []
+    if item.get("selection_diff"):
+        parts.append("选择评分=" + "|".join("%s:%s" % (k, v) for k, v in item["selection_diff"].items()))
+    if item.get("portfolio_knob_diff"):
+        parts.append("；".join("%s=%s" % (k, v) for k, v in item["portfolio_knob_diff"].items()))
+    if item.get("weight_diff"):
+        parts.append("领导力权重=" + "|".join("%s:%s" % (k, v) for k, v in item["weight_diff"].items()))
+    return "；".join(parts) or "—"
 
 
 def load_inputs(research_dir: Path) -> dict:
@@ -213,11 +233,9 @@ def render_report(inputs: dict, classified: list[dict]) -> str:
             base_row["total_turnover"], base_row["rank_ic_mean"]))
     for c in effective:
         r = sens_index[c["scenario"]]
-        diff = "；".join(["%s=%s" % (k, v) for k, v in
-                          {**c["portfolio_knob_diff"], **c["weight_diff"]}.items()]) or "—"
         lines.append("| %s | %+.3f | %.3f | %.3f | %.0f | %.5f | %s |" % (
             c["scenario"], r["cumulative_return"], r["sharpe"], r["max_drawdown"],
-            r["total_turnover"], r["rank_ic_mean"], diff))
+            r["total_turnover"], r["rank_ic_mean"], describe_diff(c)))
 
     # ---- 信号层敏感性（组合无效）----
     lines += [
@@ -227,6 +245,7 @@ def render_report(inputs: dict, classified: list[dict]) -> str:
         "> 这些场景的旋钮**没有改变 V2 状态机消费的 Alpha**，其组合指标与 baseline 逐位相同，",
         "> 因此**只展示信号层指标**；组合净值 / Sharpe / MDD **不得引用**。",
         "> 修复工作项：WP-G2-05（`selection_scores` 显式注入链）。",
+        "> **本版为空** = 没有场景被判为「组合无效应」（F1/F2 修复后，替代 Alpha 与角色阈值均已真正生效）。",
         "",
         "| 场景 | RankIC 均值 | IC>0 占比 | signal_only | portfolio_effective | 登记 |",
         "|---|---|---|---|---|---|",
@@ -243,6 +262,7 @@ def render_report(inputs: dict, classified: list[dict]) -> str:
         "",
         "> 这些场景既没有改变组合、也没有改变信号：声明的旋钮当前**没有任何代码读取**。",
         "> 不得作为任何结论展示；需按登记工作项改为显式角色阈值配置（`role_thresholds`）。",
+        "> **本版为空** = 不存在「旋钮完全没被读取」的场景。",
         "",
         "| 场景 | 声明差异 | RankIC 均值 | signal_only | portfolio_effective | 登记 |",
         "|---|---|---|---|---|---|",
@@ -250,47 +270,58 @@ def render_report(inputs: dict, classified: list[dict]) -> str:
     if not no_effect:
         lines.append("| — | — | — | — | — | 无 |")
     for c in no_effect:
-        diff = "；".join(["%s=%s" % (k, v) for k, v in
-                          {**c["portfolio_knob_diff"], **c["weight_diff"]}.items()]) or "—"
         lines.append("| %s | %s | %.5f | false | false | %s |" % (
-            c["scenario"], diff, c["rank_ic_mean"], c["registered_problem"] or "?"))
+            c["scenario"], describe_diff(c), c["rank_ic_mean"], c["registered_problem"] or "?"))
 
     lines += [
         "",
-        "## 4. 问题登记与裁决（2026-09-11）",
+        "## 4. 问题登记与处置（2026-09-11）",
         "",
-        "### F1 · 权重类场景未进入 V2 状态机消费的 Alpha —— **必须修，进入 WP-G2-05**",
-        "根因：`build_v2_roles` 内部对 `features` 静默重算 `alpha_score_v2` 并作为排名依据，",
-        "外部传入的 `weights` 只作用于 `rankings.leadership_score`，**不影响角色决策**。",
-        "裁决（用户）：" ,
-        "1. 禁止 `build_v2_roles` 内部静默重算并覆盖外部已提供的 Alpha；",
-        "2. 新增显式、可校验的 `selection_scores` 输入（键 `trade_date + code`；必须覆盖当日全部 eligible ETF；",
-        "   分数必须有限；记录 `score_version` / `score_source` / 内容哈希；缺失、重复、覆盖不完整即失败，",
-        "   **不得 fallback 到另一套分数**）；",
-        "3. 正式 Rule V2 入口传 canonical Alpha，敏感性实验传替代 Alpha；",
-        "4. **在本包合并前**，权重类场景必须从组合敏感性报告中移除或标记为 `signal_only = true` / `portfolio_effective = false`",
-        "   （本报告已按此执行），只能保留为 Rank IC 的信号层分析。",
+        "### F1 · 权重类场景未进入 V2 状态机消费的 Alpha —— **已修（WP-G2-05）**",
+        "根因（修复前）：`build_v2_roles` 内部对 `features` 静默重算 `alpha_score_v2` 并作为排名依据，",
+        "外部传入的 `weights` 只作用于 `rankings.leadership_score`，**不影响角色决策** → 场景净值完全相同。",
         "",
-        "### F2 · `top_quantile` 语义含混且不生效 —— 改为显式角色分层配置",
-        "裁决（用户）：**不删除配置，也不保留 `top_quantile`**，改为：",
+        "修复（按用户裁决）：",
+        "1. `build_v2_roles(features, rankings, config, *, selection_scores)` —— 评分**必须显式注入**，",
+        "   内部不再重算、也绝不覆盖外部评分；缺/多/重复/非有限键一律失败，**不 fallback**；",
+        "2. 评分带 provenance：`score_version` / `score_source` / 内容哈希（canonical = `bundle.alpha` 等权三因子）；",
+        "3. 正式入口传 canonical，敏感性场景传**替代 Alpha**（本报告的 `selection` 列）；",
+        "4. JS 侧对称：`computeLeadershipScore` 按同一权重合成、`applySelectionScores` 做精确覆盖校验，",
+        "   跨语言 parity 由 `G2S-08` 强制（两端 `score_digest` 必须一致）。",
+        "5. 报告守卫：任何「声明了旋钮但组合指标与 baseline 逐位相同」的场景会被自动降级为信号层分析",
+        "   （`signal_only=true` / `portfolio_effective=false`）并在生成时**报错**要求登记，除非明确登记在案。",
+        "",
+        "### F2 · `top_quantile` 语义含混且不生效 —— **已改为显式角色分层（WP-G2-05）**",
+        "现行契约（`portfolio.role_thresholds`；bundle 侧为 `selection.role_thresholds`，B2 冻结时补齐）：",
         "",
         "```json",
         "{ \"role_thresholds\": { \"core_top_fraction\": 0.20, \"challenger_top_fraction\": 0.30, \"satellite_top_fraction\": 0.40 } }",
         "```",
         "",
-        "含义为「位于前多少比例」（不需要 `1 - top_quantile` 反向推导）；校验规则：",
+        "含义为「位于前多少比例」（不需要 `1 - top_quantile` 反向推导）；校验",
         "`0 < core_top_fraction <= challenger_top_fraction <= satellite_top_fraction < 1`；",
-        "默认值必须与当前行为一致（避免把配置清理混成策略调参）；旧 `top_quantile` 仅作迁移审计字段保留，",
-        "退出运行路径，新 bundle 生效后禁止再读取。",
+        "默认值与旧行为等价（core 0.80 / challenger 0.70 / satellite 0.60），因此这次迁移不是策略调参；",
+        "旧 `top_quantile` 只作迁移审计字段（`top_quantile_legacy_audit`），**运行路径不再读取**",
+        "（Python 读不到 `role_thresholds` 直接报错；JS 在 bundle 尚未补齐时回落并显式标注",
+        "`role_thresholds_source=LEGACY_TOP_QUANTILE_AUDIT`）。",
         "",
-        "### F3 · 敏感性费用档白跑 4 倍 —— **保留在 WP-G2-02（本包）**",
+        "### F3 · 敏感性费用档白跑 4 倍 —— 已修（WP-G2-02）",
         "`evaluate_scenario` 只关心单档 `cost_bps`，但内层 `run_rotation_backtest` 自行重载配置跑满 4 档。",
-        "已加 `cost_levels` 显式参数：运行时间约 38min → 10min，**数值不变**，不影响策略解释。",
+        "已加 `cost_levels` 显式参数：运行时间约 38min → 10min，**数值不变**。",
+        "",
+        "### F4 · 研究脚本的组合构建口径与权威账本不一致（**新登记，未修**）",
+        "`build_portfolio_candidates` 把 CORE 权重重置为等权 `1/n`（**丢弃** `build_v2_roles` 计算的",
+        "单只/cluster/广义科技上限），并以 legacy `rank`（leadership 排名）作为 `priority`；",
+        "`run_rotation_backtest` 亦不含防守腿。因此研究基线（归因 / 敏感性）与",
+        "`rule_v2_ab.run_v2_backtest`（含上限 + 防守）**不是同一组合口径**。",
+        "→ 建议单独立项（组合构建层统一），**不在 WP-G2-05 内擅自改动**。",
         "",
         "## 5. 边界",
         "",
         "- 以上均为**研究基线**，不构成 Rule V2 的经济结论；不冻结 bundle/lock、不重跑 OOS、",
         "  不改 authority / 部署 / 正式仓位。",
+        "- WP-G2-05 完成并通过 Python/JS parity 后，仍需 **WP-G2-04 重新生成 bundle/lock**，",
+        "  并在此之后基于新实现重跑 B1 与 B3 —— 本报告的重跑早于该时点，仅用于证明 F1/F2 已生效。",
         "- 复现：`PYTHONPATH=ml python -m gen2.baseline.rebuild_baselines`（B1 账本基线）、",
         "  三个研究脚本（角色基线 / 归因 / 敏感性，输出隔离到 `research/`）、",
         "  本报告：`PYTHONPATH=ml python -m gen2.baseline.rebuild_research_baselines`。",

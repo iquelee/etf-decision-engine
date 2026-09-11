@@ -19,6 +19,7 @@
   "ranking": {
     "engine_id": "gen2-rule-v2",
     "top_quantile": 0.2,
+    "top_quantile_status": "MIGRATION_AUDIT_ONLY（WP-G2-05 / F2：已无任何运行路径读取；角色分层见 portfolio.role_thresholds）",
     "feature_version": "feature_v1",
     "label_version": "label_v1_excess_rank_20d"
   },
@@ -33,7 +34,16 @@
     "max_tech_weight": 0.65,
     "tech_clusters": ["tech_hardware", "software_ai"],
     "initial_role_for_incumbent": "CORE",
-    "top_quantile": 0.2,
+    "role_thresholds": {
+      "core_top_fraction": 0.20,
+      "challenger_top_fraction": 0.30,
+      "satellite_top_fraction": 0.40
+    },
+    "top_quantile_legacy_audit": {
+      "top_quantile": 0.2,
+      "status": "MIGRATION_AUDIT_ONLY",
+      "note": "WP-G2-05 / F2：旧字段 top_quantile 已退出运行路径（原语义需要 1-top_quantile 反向推导）。运行阈值一律使用上面的 role_thresholds，默认值与原行为等价（core 0.80 / challenger 0.70 / satellite 0.60）。"
+    },
     "defense": {
       "enabled": true,
       "risk_off_exposure_scale": 0.50,

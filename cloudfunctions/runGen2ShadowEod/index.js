@@ -134,6 +134,116 @@ const ALPHA_WEIGHTS_V2 = {
   breakout: _alpha.breakout != null ? _alpha.breakout : 1 / 3
 };
 
+/* ---------------- 显式 Selection Score（WP-G2-05 / F1 修复） ----------------
+ *
+ * 设计（与 Python `ml/gen2/baseline/selection_scores.py` 对称）：
+ *   特征 → Alpha 计算/注入 → Alpha 排名 → 角色状态机 → 候选权重 → 账本
+ * 评分必须显式、可校验、带 provenance（score_version / score_source / score_hash）；
+ * 显式注入时缺键、多键、重复键一律抛错，不允许静默 fallback。
+ */
+
+/** 组件分数字段（与 Python COMPONENT_SCORE_COLUMNS 一致） */
+const SELECTION_COMPONENT_FIELDS = {
+  trend: 'trend_score',
+  rs: 'rs_score',
+  breakout: 'breakout_approach_score',
+  stage: 'stage_quality',
+  momentum: 'momentum_accel_score',
+  consolidation: 'consolidation_score',
+  volatility: 'volatility_quality_score',
+  liquidity: 'liquidity_score',
+  diversification: 'diversification_score'
+};
+
+/** canonical Alpha 权重 = bundle.alpha（Trend/RS/Breakout 等权） */
+const SELECTION_SCORE_WEIGHTS = Object.assign({}, ALPHA_WEIGHTS_V2);
+const SELECTION_SCORE_VERSION = 'alpha-v2-equal-3';
+const SELECTION_SCORE_SOURCE = 'bundle.alpha';
+
+/** 按组件权重合成评分；权重全等时走算术平均（与历史 mean() 逐位一致） */
+function combineSelectionScore(row, weights) {
+  const entries = Object.keys(weights || {})
+    .map((k) => [SELECTION_COMPONENT_FIELDS[k], Number(weights[k])])
+    .filter(([col, w]) => col && isFinite(w) && w > 0);
+  if (!entries.length) throw new Error('selection score weights 为空或不合法');
+  const valid = entries.filter(([col]) => row[col] != null && isFinite(row[col]));
+  if (!valid.length) return null;
+  const firstW = valid[0][1];
+  if (valid.every(([, w]) => w === firstW)) return mean(valid.map(([col]) => row[col]));
+  const wsum = valid.reduce((acc, [, w]) => acc + w, 0);
+  return valid.reduce((acc, [col, w]) => acc + row[col] * w, 0) / wsum;
+}
+
+function selectionScoreHash(features) {
+  const rows = features
+    .filter((f) => f.alpha_score_v2 != null && isFinite(f.alpha_score_v2))
+    .map((f) => `${f.trade_date}~${f.code}~${Number(f.alpha_score_v2).toFixed(6)}`)
+    .sort();
+  return crypto.createHash('sha256').update(rows.join('|')).digest('hex');
+}
+
+function validateSelectionWeights(weights) {
+  const keys = Object.keys(weights || {});
+  if (!keys.length) throw new Error('selection weights 不能为空');
+  let sum = 0;
+  for (const k of keys) {
+    if (!SELECTION_COMPONENT_FIELDS[k]) throw new Error(`selection weights 含未知组件 ${k}`);
+    const w = Number(weights[k]);
+    if (!isFinite(w) || w < 0) throw new Error(`selection weights[${k}] 必须是非负有限数，实际 ${weights[k]}`);
+    sum += w;
+  }
+  if (!(sum > 0)) throw new Error('selection weights 不能全为 0');
+}
+
+/**
+ * 校验/注入 selection score。
+ * explicit = { trade_date: { code: score } } 时做**精确覆盖校验**（缺/多/重复/非有限 → 抛错）；
+ * explicit = null 时只校验并返回 provenance（canonical 评分已由 computeLeadershipScore 按
+ * SELECTION_SCORE_WEIGHTS 写入各行）。
+ */
+function applySelectionScores(features, explicit, scoreSource) {
+  validateSelectionWeights(SELECTION_SCORE_WEIGHTS);
+  if (explicit) {
+    const seen = {};
+    let assigned = 0;
+    for (const f of features) {
+      const day = explicit[f.trade_date];
+      if (!day || !Object.prototype.hasOwnProperty.call(day, f.code)) {
+        throw new Error(`selection score 未覆盖 ${f.trade_date}/${f.code}（禁止 fallback 到另一套分数）`);
+      }
+      const v = Number(day[f.code]);
+      if (!isFinite(v)) throw new Error(`selection score 非有限值 ${f.trade_date}/${f.code}=${day[f.code]}`);
+      const key = `${f.trade_date}~${f.code}`;
+      if (seen[key]) throw new Error(`selection score 重复键 ${key}`);
+      seen[key] = true;
+      f.alpha_score_v2 = v;
+      assigned += 1;
+    }
+    for (const d of Object.keys(explicit)) {
+      for (const c of Object.keys(explicit[d])) {
+        if (!features.some((f) => f.trade_date === d && f.code === c)) {
+          throw new Error(`selection score 含不属于面板的键 ${d}/${c}`);
+        }
+      }
+    }
+    return {
+      score_version: scoreSource ? `${scoreSource}-version` : 'explicit',
+      score_source: scoreSource || 'EXPLICIT_INJECTION',
+      score_hash: selectionScoreHash(features),
+      score_coverage: assigned,
+      score_null_rows: 0
+    };
+  }
+  const nullRows = features.filter((f) => f.alpha_score_v2 == null || !isFinite(f.alpha_score_v2)).length;
+  return {
+    score_version: SELECTION_SCORE_VERSION,
+    score_source: SELECTION_SCORE_SOURCE,
+    score_hash: selectionScoreHash(features),
+    score_coverage: features.length - nullRows,
+    score_null_rows: nullRows
+  };
+}
+
 // 角色状态机参数（与 config/gen2.yaml portfolio 一致）
 const PORTFOLIO_CFG = {
   promotion_persistence_days: _sel.promotion_persistence_days != null ? _sel.promotion_persistence_days : 5,
@@ -161,9 +271,70 @@ const DEFENSE_CFG = {
   vol_target_annualized: _def.vol_target_annualized != null ? _def.vol_target_annualized : 0.17
 };
 
-const CORE_PCT = _sel.core_pct != null ? _sel.core_pct : 0.80;
-const CHALLENGER_PCT = _sel.challenger_pct != null ? _sel.challenger_pct : 0.70;
-const SATELLITE_PCT = _sel.satellite_pct != null ? _sel.satellite_pct : 0.60;
+/**
+ * 角色分层阈值（WP-G2-05 / F2 修复）。
+ *
+ * 显式契约：`selection.role_thresholds = { core_top_fraction, challenger_top_fraction, satellite_top_fraction }`
+ * 含义为「位于前多少比例」（不需要 1 - top_quantile 反向推导），校验
+ * 0 < core <= challenger <= satellite < 1；默认值与旧行为等价（core 0.80 / challenger 0.70 / satellite 0.60）。
+ *
+ * 迁移窗口：当前冻结 bundle（gen2-rule-v2.0）尚无 role_thresholds，此时**显式**回落到旧
+ * `top_quantile` 并把 source 标为 LEGACY_TOP_QUANTILE_AUDIT（写进运行记录，绝不静默）。
+ * WP-G2-04 重新生成 bundle 后本回落分支自动失效（并由测试强制 source=RUNTIME_BUNDLE）。
+ */
+function validateTopFractions(rt, label) {
+  const keys = ['core_top_fraction', 'challenger_top_fraction', 'satellite_top_fraction'];
+  const vals = {};
+  for (const k of keys) {
+    const v = rt[k];
+    if (v == null || !isFinite(Number(v))) throw new Error(`${label}.${k} 必须是有限数值，实际 ${v}`);
+    vals[k] = Number(v);
+  }
+  const { core_top_fraction: c, challenger_top_fraction: ch, satellite_top_fraction: sa } = vals;
+  if (!(c > 0 && sa < 1) || !(c <= ch && ch <= sa)) {
+    throw new Error(`${label} 必须满足 0 < core_top_fraction <= challenger_top_fraction <= satellite_top_fraction < 1，实际 ${c}/${ch}/${sa}`);
+  }
+  return vals;
+}
+
+function resolveRoleThresholds(sel) {
+  const node = sel && sel.role_thresholds;
+  if (node && typeof node === 'object') {
+    const vals = validateTopFractions(node, 'selection.role_thresholds');
+    return {
+      source: 'RUNTIME_BUNDLE',
+      top_fractions: vals,
+      core_pct: 1 - vals.core_top_fraction,
+      challenger_pct: 1 - vals.challenger_top_fraction,
+      satellite_pct: 1 - vals.satellite_top_fraction
+    };
+  }
+  // 迁移窗口（bundle 尚未含 role_thresholds）：读旧 top_quantile，但显式标注来源
+  const corePct = 1 - (PORTFOLIO_CFG.top_quantile != null ? PORTFOLIO_CFG.top_quantile : 0.2);
+  const challengerPct = _sel.challenger_pct != null ? _sel.challenger_pct : 0.70;
+  const satellitePct = _sel.satellite_pct != null ? _sel.satellite_pct : 0.60;
+  if (!(corePct >= challengerPct && challengerPct >= satellitePct)) {
+    throw new Error(`遗留 top_quantile/challenger_pct/satellite_pct 派生的切点顺序非法：${corePct}/${challengerPct}/${satellitePct}`);
+  }
+  // 迁移审计用的分位回推：四舍五入到 1e-10，避免 1-(1-0.2)=0.19999999999999996 这类噪声写进运行记录
+  const frac = (v) => Math.round((1 - v) * 1e10) / 1e10;
+  return {
+    source: 'LEGACY_TOP_QUANTILE_AUDIT',
+    top_fractions: {
+      core_top_fraction: frac(corePct),
+      challenger_top_fraction: frac(challengerPct),
+      satellite_top_fraction: frac(satellitePct)
+    },
+    core_pct: corePct,
+    challenger_pct: challengerPct,
+    satellite_pct: satellitePct
+  };
+}
+
+const ROLE_THRESHOLDS = resolveRoleThresholds(_sel);
+const CORE_PCT = ROLE_THRESHOLDS.core_pct;
+const CHALLENGER_PCT = ROLE_THRESHOLDS.challenger_pct;
+const SATELLITE_PCT = ROLE_THRESHOLDS.satellite_pct;
 
 /* ---------------- 统一 Regime 契约（与 ml/gen2/portfolio/regime.py 一致） ---------------- */
 
@@ -728,7 +899,8 @@ function computeLeadershipScore(features) {
       ));
       // F02：AlphaScore-v2 = (Trend + RS + Breakout) / 3（与 Python alpha_score.py ALPHA_WEIGHTS_V2 一致）
       // P0-1：用等权 mean（忽略 null）；三个组件全 null 时 alpha 为 null，不参与排名。
-      r.alpha_score_v2 = mean([r.trend_score, r.rs_score, r.breakout_approach_score]);
+      // WP-G2-05（F1）：改由 SELECTION_SCORE_WEIGHTS 统一合成，权重可外部注入（敏感性实验）。
+      r.alpha_score_v2 = combineSelectionScore(r, SELECTION_SCORE_WEIGHTS);
       // 绝对趋势闸门（NO_CORE）：价格在 60 日线上方才可成为 CORE
       r.trend_gate = r.px_ma60 != null && r.px_ma60 > 0;
       // 市场 regime（用于 Selection Permission / Defense 统一契约）
@@ -873,8 +1045,13 @@ function assertFinalRoleConstraints(day, prevRoles) {
   }
 }
 
-function buildDailyRoles(features) {
-  const corePct = 1.0 - PORTFOLIO_CFG.top_quantile; // 0.8
+function buildDailyRoles(features, roleThresholds) {
+  // WP-G2-05：阈值来自显式 role_thresholds（迁移窗口内由旧 top_quantile 派生，来源写入运行记录）；
+  // roleThresholds 参数供跨语言 parity / 场景实验显式覆盖，默认即运行配置。
+  const T = roleThresholds || ROLE_THRESHOLDS;
+  const corePct = T.core_pct;
+  const challengerPct = T.challenger_pct;
+  const satellitePct = T.satellite_pct;
   // 按 code 正序，计算 above_core_days / below_satellite_days
   const byCode = {};
   for (const f of features) (byCode[f.code] = byCode[f.code] || []).push(f);
@@ -882,7 +1059,7 @@ function buildDailyRoles(features) {
     const arr = byCode[code].sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1));
     // F04：above_core 累计「完整准入条件」（alpha 前 20% 且过趋势闸门），跌破 MA60 不累计晋升天数
     const above = arr.map((r) => r.rank_percentile >= corePct && r.trend_gate);
-    const below = arr.map((r) => r.rank_percentile < SATELLITE_PCT);
+    const below = arr.map((r) => r.rank_percentile < satellitePct);
     const aboveDays = consecutiveTrue(above);
     const belowDays = consecutiveTrue(below);
     arr.forEach((r, i) => {
@@ -903,8 +1080,8 @@ function buildDailyRoles(features) {
     // proposed role
     for (const r of day) {
       if (r.rank_percentile >= corePct) r.proposed_role = 'CORE';
-      else if (r.rank_percentile >= CHALLENGER_PCT) r.proposed_role = 'CHALLENGER';
-      else if (r.rank_percentile >= SATELLITE_PCT) r.proposed_role = 'SATELLITE';
+      else if (r.rank_percentile >= challengerPct) r.proposed_role = 'CHALLENGER';
+      else if (r.rank_percentile >= satellitePct) r.proposed_role = 'SATELLITE';
       else r.proposed_role = 'RESERVE';
       r.reason_codes = {
         CORE: 'LEADERSHIP_TOP_QUINTILE',
@@ -1135,7 +1312,18 @@ exports._internal = {
   assertFinalRoleConstraints,
   // WP-G2-03：run 状态四态的纯函数 seam（数据完整性体检 + 发布完整性校验）
   inspectBarsIntegrity,
-  validatePublishResults
+  validatePublishResults,
+  // WP-G2-05：显式 Selection Score 注入链 + 角色阈值（F1/F2）
+  ROLE_THRESHOLDS,
+  resolveRoleThresholds,
+  SELECTION_SCORE_WEIGHTS,
+  SELECTION_SCORE_VERSION,
+  SELECTION_SCORE_SOURCE,
+  SELECTION_COMPONENT_FIELDS,
+  combineSelectionScore,
+  selectionScoreHash,
+  validateSelectionWeights,
+  applySelectionScores
 };
 
 exports.main = async (event = {}, context = {}) => {
@@ -1280,6 +1468,8 @@ exports.main = async (event = {}, context = {}) => {
     features = addBenchmark(features, benchmarkFeatures);
     features = addCorrelations(features);
     features = computeLeadershipScore(features);
+    // WP-G2-05（F1）：评分 provenance + 校验（canonical 权重来自 bundle.alpha；显式注入时精确覆盖校验）
+    const selectionMeta = applySelectionScores(features, null);
     features = rankFeatures(features);
 
     // 只保留最近一个交易日（落库最新横截面）
@@ -1322,6 +1512,14 @@ exports.main = async (event = {}, context = {}) => {
       selection_confidence: selectionConfidence,
       confidence_reason: confidenceReason,
       role_classification: rcls,
+      // WP-G2-05：Alpha 与角色阈值的 provenance（可审计；不是从 legacy 字段反推）
+      selection_score_version: selectionMeta.score_version,
+      selection_score_source: selectionMeta.score_source,
+      selection_score_hash: selectionMeta.score_hash,
+      selection_score_coverage: selectionMeta.score_coverage,
+      selection_score_null_rows: selectionMeta.score_null_rows,
+      role_thresholds: ROLE_THRESHOLDS.top_fractions,
+      role_thresholds_source: ROLE_THRESHOLDS.source,
       benchmark: UNIVERSE.benchmark_code,
       status: 'running', // F12：先标 running，全部 ranking 写完后置 completed
       production_write: false,
