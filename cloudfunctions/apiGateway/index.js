@@ -17,6 +17,8 @@ const { computeReviewStats } = require('./common/utils/review-stats');
 const { computeCooldownDays } = require('./common/utils/cooldown');
 const fund = require('./common/utils/fundamental');
 const { buildPortfolioMlShadow, buildEtfMlShadow, slimCardMlShadow } = require('./common/utils/ml-shadow');
+// PR-UI-01：三层契约 ViewModel（production / gen1 counterfactual / system_runtime）
+const { buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1 } = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -115,6 +117,16 @@ async function computeDashboardPnl(etfs) {
 }
 
 /** 三问 + 账户总览 + 5 ETF 状态卡 */
+/** 运行状态单一真相（runtime_status 单文档）；读不到返回 null，调用方按 fail-open 展示兜底 */
+async function getRuntimeStatus() {
+  try {
+    const rows = await db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 });
+    return rows && rows[0] ? rows[0] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function getDashboard() {
   const etfs = await db.getEtfList();
   const positions = await db.query(COLLECTIONS.PORTFOLIO_POSITION, {});
@@ -140,6 +152,8 @@ async function getDashboard() {
     orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 1
   });
   const portSnapshot = snapshots[0] || null;  // P2-2：并发拉取所有 ETF 的最新决策（原顺序 await → Promise.all，标的池扩大不线性变慢）
+  // PR-UI-01：三层契约的运行时真相（authority/health 只来自 runtime_status）
+  const runtime = await getRuntimeStatus();
   const decisionsMap = {};
   const mlSignalMap = {};
   await Promise.all(etfs.map(async (etf) => {
@@ -165,10 +179,24 @@ async function getDashboard() {
     const cardMl = slimCardMlShadow(
       buildEtfMlShadow(paramBag, decision, mlSignalMap[etf.code])
     );
+    // PR-UI-01：新契约 —— production（V3.6.1 唯一决策）与 gen1（反事实 canary）分层下发。
+    // 前端新 UI 只消费这两个块；ml_shadow 保留一轮兼容但不再承载权限语义。
+    const uiVm = buildEtfUiViewModel({
+      code: etf.code,
+      name: etf.name,
+      sector: etf.sector,
+      decision,
+      position: pos,
+      signal: mlSignalMap[etf.code],
+      runtime,
+      actionLabel: decision ? resolveActionLabel(decision.final_action, decision.action_label) : null
+    });
     cards.push({
       code: etf.code,
       name: etf.name,
       sector: etf.sector,
+      production: uiVm.production,
+      gen1: uiVm.gen1,
       stage,
       wait_reason: waitReason,
       action: decision ? decision.final_action : null,
@@ -263,6 +291,8 @@ async function getDashboard() {
   return {
     engine_mode,
     v3_mode,
+    // PR-UI-01：系统级三层契约（production ACTIVE / gen1 CANARY / gen2 SHADOW）
+    system_runtime: buildSystemRuntime(runtime),
     ml_shadow,
     three_questions: {
       market_status: marketStatus,
@@ -396,6 +426,18 @@ async function getEtfDetail(code) {
   const signal = await getLatestMlShadowSignal(code);
   const liveDecision = withChineseActionLabel(await attachLiveCooldown(decision));
   const ml_shadow = buildEtfMlShadow(paramBag, liveDecision, signal);
+  // PR-UI-01：新契约 —— production / gen1 分层 + system_runtime（Vue 不再从 ml_shadow 组合权限语义）
+  const runtime = await getRuntimeStatus();
+  const uiVm = buildEtfUiViewModel({
+    code,
+    name: etf.name,
+    sector: etf.sector,
+    decision: liveDecision,
+    position: pos,
+    signal,
+    runtime,
+    actionLabel: liveDecision ? liveDecision.action_label : null
+  });
 
   return {
     basic: etf,
@@ -403,6 +445,9 @@ async function getEtfDetail(code) {
     // 冷静期实时化：决策快照里的 cooldown_days 是生成时的历史值，展示用「北京今天」重算的当前剩余
     decision: liveDecision,
     ml_shadow,
+    production: uiVm.production,
+    gen1: uiVm.gen1,
+    system_runtime: buildSystemRuntime(runtime),
     fundamental,
     risk_events: riskEvents,
     position: pos || { current_position: 0, target_position: etf.target_position || 0, max_position: etf.max_position || 30 },
@@ -567,6 +612,11 @@ async function getReview(from, to) {
 
   const review = computeReviewStats(decisions, heldTrades);
 
+  // PR-UI-01：复盘生产字段固定来自 final_action/final_target/suggested_position，
+  // 生产来源引擎恒为 V3.6.1（runtime_status.production_engine）；Gen-1 仅作独立反事实块下发。
+  const runtime = await getRuntimeStatus();
+  const productionEngine = buildSystemRuntime(runtime).production.engine;
+
   // 安全：复盘为公网无鉴权接口，不返回成交明细（仅聚合统计与决策链），成交明细走后台 adminGateway
   const target = d => (d.final_target != null ? d.final_target : d.target_position);
   const decisionsSafe = decisions.map((d) => ({
@@ -576,7 +626,9 @@ async function getReview(from, to) {
     final_target: target(d),
     target_position: target(d),
     suggested_position: d.suggested_position,
-    current_position: actualHeldPosition(d.code, d.decision_date, snapshots, heldTrades)
+    current_position: actualHeldPosition(d.code, d.decision_date, snapshots, heldTrades),
+    engine: productionEngine,
+    gen1: buildReviewGen1(d)
   }));
 
   // 实际操作（去敏：不含股数/金额，公网接口安全约束）——登记的操作立即可见，附匹配到的最近系统建议（决策日≤操作日）

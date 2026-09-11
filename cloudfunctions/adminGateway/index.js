@@ -21,6 +21,8 @@ const { hashPassword, verifyPassword } = require('./common/utils/admin-auth');
 const { requestId, safeErrorResponse } = require('./common/utils/gateway-errors');
 const { triggerIntelRefresh } = require('./common/utils/intel-refresh');
 const { isDateStr, clampInt, isRiskEventTypeKey, normalizeRiskFlag, parseFiniteNumber } = require('./common/utils/request-validate');
+// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约
+const { buildHealthTruth, buildCanaryLedger, buildEtfGen1 } = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -29,30 +31,53 @@ function fail(message, code = 1) { return { code, data: null, message }; }
 
 function beijingDateStr() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
 
-/** 后台模型健康摘要：只读，不影响 Gen-1 / V3.6.1 的任何开关和计算。 */
+/**
+ * 后台 Gen-1 Canary 健康摘要（PR-UI-01 重写）：只读，不影响 Gen-1 / V3.6.1 的任何开关和计算。
+ *
+ * 数据源（四处真值）：
+ *   runtime_status     authority / health 四真值 / canary 通路 / 账本（唯一运行时真相）
+ *   gen1_health_state  持久化熔断 latch（交叉核对 current/latched/economic）
+ *   ml_shadow_signal   每标的最新信号（概率 / 数据健康 / 域 / 日期）
+ *   decision_result    每标的最新决策（Safety 许可 / 模型候选 / 反事实账本字段）
+ *
+ * 返回：Health 四字段（status/gate/source/safety_source，禁止合并）+ Canary Ledger 五字段
+ * + authority + 每标的信号表行。legacy 顶层字段（advisory_enabled 等）保留一轮兼容，
+ * 但不再承载权限语义 —— 权限真相只看 authority 块。
+ */
 async function getGen1Health() {
-  const [{ params }, etfs] = await Promise.all([
+  const [{ params }, etfs, runtimeRows, healthRows] = await Promise.all([
     db.getParamConfig().catch(() => ({ params: {} })),
-    db.getEtfList().catch(() => [])
+    db.getEtfList().catch(() => []),
+    db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 }).catch(() => []),
+    db.query(COLLECTIONS.GEN1_HEALTH_STATE, { key: 'gen1-health-state' }, { limit: 1 }).catch(() => [])
   ]);
   const p = params || {};
+  const runtime = runtimeRows && runtimeRows[0] ? runtimeRows[0] : null;
+  const healthState = healthRows && healthRows[0] ? healthRows[0] : null;
   const today = beijingDateStr();
+
   const rows = await Promise.all((etfs || []).map(async (etf) => {
-    const [signals, dailyRows] = await Promise.all([
+    const [signals, dailyRows, decisions] = await Promise.all([
       db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { code: etf.code }, {
         orderBy: [{ field: 'date', direction: 'desc' }], limit: 1
       }).catch(() => []),
       db.query(COLLECTIONS.ETF_DAILY, { code: etf.code }, {
         orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 10
+      }).catch(() => []),
+      db.query(COLLECTIONS.DECISION_RESULT, { code: etf.code }, {
+        orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 1
       }).catch(() => [])
     ]);
     const signal = signals[0] || null;
+    const decision = decisions[0] || null;
     const signalDate = String((signal && (signal.date || signal.signal_date)) || '').slice(0, 10) || null;
     // 信号应与最新“正式 EOD”对齐，而不是强制等于自然日；盘中/早晨没有
     // 当日收盘数据时，上一交易日信号仍是有效的最新参考。
     const latestEod = (dailyRows || []).find((r) => r.source !== 'realtime' && r.trade_date && Number.isFinite(Number(r.close)));
     const latestEodDate = latestEod ? String(latestEod.trade_date).slice(0, 10) : null;
     const fresh = !!signalDate && (!latestEodDate || signalDate >= latestEodDate);
+    // PR-UI-01：新契约行（信号 / 数据健康 / 域 / Safety / 反事实，全部来自决策+信号真值）
+    const gen1 = buildEtfGen1({ code: etf.code, sector: etf.sector, decision, signal, runtime });
     return {
       code: etf.code,
       name: etf.name,
@@ -60,18 +85,65 @@ async function getGen1Health() {
       latest_eod_date: latestEodDate,
       status: !signal ? '缺少信号' : (fresh ? '与最新收盘同步' : '等待最新收盘信号'),
       fresh,
-      probability: signal && (signal.calibrated_probability != null ? signal.calibrated_probability : signal.ml_probability),
-      permission: signal && (signal.rule_gate || signal.permission) || null,
-      fast_path_candidate: !!(signal && (signal.fast_path_would_trigger || signal.would_trigger_fast_path))
+      probability: gen1.signal.probability,
+      permission: gen1.safety.permission,
+      fast_path_candidate: !!(decision && decision.gen1_model_candidate === true),
+      // 新契约字段（Control Center Main5 Signal Table 消费）
+      gen1_status: gen1.status,
+      stage: gen1.signal.stage,
+      threshold: gen1.signal.threshold,
+      model_candidate: gen1.signal.model_candidate,
+      data_health_status: gen1.data.health_status,
+      source_trade_date: gen1.data.source_trade_date,
+      benchmark_latest_date: gen1.data.benchmark_latest_date,
+      domain_status: gen1.applicability.domain_status,
+      domain_permission: gen1.applicability.domain_permission,
+      safety_permission: gen1.safety.permission,
+      canary_eligible: !!(decision && decision.gen1_canary_eligible === true),
+      baseline_suggested_pct: decision && decision.suggested_position != null ? decision.suggested_position : null,
+      counterfactual_suggested_pct: gen1.counterfactual.suggested_pct,
+      counterfactual_delta_pct: gen1.counterfactual.delta_pct
     };
   }));
+
+  const healthTruth = buildHealthTruth(runtime);
+  const ledger = buildCanaryLedger(runtime);
   return {
-    model_id: p.ml_challenger_model_id || 'HVT-A-ET-20260830',
-    frozen: p.ml_gen1_frozen !== false,
+    model_id: (runtime && runtime.ml_model_id) || p.ml_challenger_model_id || 'HVT-A-ET-20260830',
+    frozen: (runtime ? runtime.ml_gen1_frozen !== false : p.ml_gen1_frozen !== false),
+    // legacy 兼容字段（一轮保留；不得再被解读为真实运行权限 —— 权限真相看 authority）
     advisory_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true,
     fast_path_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true && p.ml_fast_path_enabled === true,
+    legacy_params_note: '兼容/历史配置；真实运行权限请看 runtime_status',
     auto_trading: '关闭',
     today,
+    // 新契约（PR-UI-01）
+    authority: {
+      value: runtime ? (runtime.gen1_authority || null) : null,
+      label: runtime ? (runtime.gen1_authority_label || null) : null
+    },
+    // Health 四真值：逐字段独立，禁止合并为一个“健康正常”
+    gen1_health_status: healthTruth.gen1_health_status,
+    gen1_health_gate_status: healthTruth.gen1_health_gate_status,
+    gen1_health_source: healthTruth.gen1_health_source,
+    gen1_safety_source: healthTruth.gen1_safety_source,
+    health_latch: healthState ? {
+      current_health: healthState.current_health || null,
+      latched_health: healthState.latched_health || null,
+      manual_review_required: healthState.manual_review_required === true,
+      economic_health: healthState.economic_health || null,
+      runtime_data_health: healthState.runtime_data_health || null
+    } : null,
+    canary: {
+      counterfactual_active: runtime ? runtime.gen1_counterfactual_canary_active === true : false,
+      counterfactual_invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
+        ? runtime.gen1_counterfactual_canary_invocations : 0,
+      production_write: false,
+      production_fast_path_enabled: false,
+      auto_execution: false
+    },
+    // Canary Ledger（cap 合规证据只看 intended；target_sum 仅 info）
+    ledger,
     rows
   };
 }
