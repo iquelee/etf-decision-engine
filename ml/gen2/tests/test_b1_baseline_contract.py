@@ -30,6 +30,20 @@ from gen2.baseline.rebuild_baselines import (  # noqa: E402
     build_unified_baselines,
 )
 
+def _b1_dataset_available() -> bool:
+    """B1 端到端需要本地 Gen-2 日线池（`deliverables/etf_daily_ml_pool/`，**未入库**）。
+
+    CI 上没有该数据 → 显式跳过（而不是伪造通过）；本地跑法：
+        PYTHONPATH=ml python -m unittest gen2.tests.test_b1_baseline_contract
+    """
+    try:
+        from gen2.data.loader import load_daily_bars
+        bars = load_daily_bars(validate=False)
+        return bars is not None and len(bars) > 0
+    except Exception:  # noqa: BLE001 —— 缺数据 / 读失败都视为不可用
+        return False
+
+
 EXPECTED_STRATEGIES = {
     "gen2_v2_defended",
     "gen2_v2_undefended",
@@ -78,6 +92,11 @@ class BaselineEndToEndTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if not _b1_dataset_available():
+            raise unittest.SkipTest(
+                "本地 Gen-2 日线池（deliverables/etf_daily_ml_pool，未入库）不可用 → "
+                "B1 端到端基线在 CI 跳过；账本口径由 test_ledger.py / LedgerContractTest 用合成数据强制。"
+            )
         cls.tmp = tempfile.TemporaryDirectory()
         out = Path(cls.tmp.name) / "out"
         rep = Path(cls.tmp.name) / "rep"
@@ -136,15 +155,6 @@ class BaselineEndToEndTest(unittest.TestCase):
         for key in ["资金守恒验收", "同口径比较", "公共窗口", "旧角色语义审计基线", "不用于宣称"]:
             self.assertIn(key, text, f"报告缺少必需章节/声明：{key}")
 
-    def test_committed_full_report_states_boundaries(self):
-        """仓库内的完整基线报告必须保留边界声明与历史基线声明。"""
-        full = ROOT / "ml" / "gen2" / "reports" / f"gen2_{BASELINE_ID}.md"
-        if not full.exists():
-            self.skipTest("完整基线报告未生成（本地未跑全窗口）")
-        text = full.read_text(encoding="utf-8").replace("*", "")
-        self.assertIn("旧角色语义审计基线", text)
-        self.assertIn("不用于宣称 Rule V2 的经济表现", text)
-        self.assertIn("不冻结 bundle/lock", text)
 
 
 class LedgerContractTest(unittest.TestCase):
@@ -165,6 +175,31 @@ class LedgerContractTest(unittest.TestCase):
         self.assertEqual(float(default.iloc[1]["turnover"]), float(explicit.iloc[1]["turnover"]))
         # 默认即 lag=1：首日不成交
         self.assertEqual(float(default.iloc[0]["turnover"]), 0.0)
+
+
+class CommittedReportTest(unittest.TestCase):
+    """不依赖本地数据的守卫：仓库内提交的基线与索引必须保留边界声明。"""
+
+    def test_committed_full_report_states_boundaries(self):
+        full = ROOT / "ml" / "gen2" / "reports" / f"gen2_{BASELINE_ID}.md"
+        self.assertTrue(full.exists(), "B1 基线报告必须入库")
+        text = full.read_text(encoding="utf-8").replace("*", "")
+        for key in ["旧角色语义审计基线", "不用于宣称 Rule V2 的经济表现", "不冻结 bundle/lock",
+                    "资金守恒验收", "公共窗口"]:
+            self.assertIn(key, text, f"B1 报告缺少必需声明：{key}")
+
+    def test_research_baseline_report_and_index(self):
+        rep = ROOT / "ml" / "gen2" / "reports"
+        research = rep / "gen2_b1_research_baselines_20260911.md"
+        index = rep / "README.md"
+        self.assertTrue(research.exists(), "研究基线报告必须入库")
+        self.assertTrue(index.exists(), "报告索引必须入库")
+        rtext = research.read_text(encoding="utf-8")
+        for key in ["F1", "F2", "F3", "不构成 Rule V2 的经济结论"]:
+            self.assertIn(key, rtext, f"研究基线报告缺少：{key}")
+        itext = index.read_text(encoding="utf-8")
+        self.assertIn("旧角色语义审计基线", itext)
+        self.assertIn("当前有效（唯一权威口径）", itext)
 
 
 if __name__ == "__main__":
