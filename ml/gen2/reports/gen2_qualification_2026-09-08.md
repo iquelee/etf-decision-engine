@@ -1,5 +1,13 @@
 # Gen-2 资格判定报告 v3 — WP9.2 措辞修正 + WP9.3A Stateful Economic Replay
 
+> ⚠️ **旧角色语义审计基线 —— 不可与新结果逐位比较**
+>
+> 本报告产生于 PR #24 之前：角色语义来自旧实现（缺 NO_CORE 硬门槛与 Selection Permission），
+> 回测账本为旧口径（现金腿被计入换手，持有现金缓冲的策略费用最多高估 2 倍）。
+> 仅作**审计基线**留存；**不得**用于继续宣称 Rule V2 的经济表现。
+> 新基线见 `ml/gen2/reports/gen2_b1_ledger_baseline_20260911.md`（WP-G2-02 / B1，唯一权威角色语义 + 唯一权威账本）。
+
+
 日期：2026-09-09。v3 变更：
 - **WP9.2 措辞修正**（审查 §2-4）：Promotion-Actionable Alpha 命名、RISK_OFF 语义精确化、top_quintile 切片口径更正、撤销「Case C alpha 整体失效」。
 - **新增 WP9.3A Stateful Economic Replay**（审查 §8）：回答「+0.10 的 Promotion Alpha 经 persistence/demotion/replacement/cap/turnover 后还剩多少」。

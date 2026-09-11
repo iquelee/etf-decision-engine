@@ -1,5 +1,13 @@
 # Gen-2 Rule Ranking 回测：30 只 universe_v1
 
+> ⚠️ **旧角色语义审计基线 —— 不可与新结果逐位比较**
+>
+> 本报告产生于 PR #24 之前：角色语义来自旧实现（缺 NO_CORE 硬门槛与 Selection Permission），
+> 回测账本为旧口径（现金腿被计入换手，持有现金缓冲的策略费用最多高估 2 倍）。
+> 仅作**审计基线**留存；**不得**用于继续宣称 Rule V2 的经济表现。
+> 新基线见 `ml/gen2/reports/gen2_b1_ledger_baseline_20260911.md`（WP-G2-02 / B1，唯一权威角色语义 + 唯一权威账本）。
+
+
 **Experiment ID**：`gen2-exp-0002-rule-baseline-universe-v1`
 **Universe**：`universe_v1`（正式 30 只 + benchmark 510300）
 **Feature**：`feature_v1`　**Label**：`label_v1_excess_rank_20d`

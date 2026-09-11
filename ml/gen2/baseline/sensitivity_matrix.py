@@ -14,7 +14,7 @@ from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
 
 
-def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0):
+def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0, output_dir=None):
     cfg = load_gen2_config()
     cfg = dict(cfg)
     cfg["portfolio"] = {**cfg["portfolio"], **portfolio}
@@ -23,7 +23,9 @@ def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0):
     ic = rank_ic_by_date(rankings, labels)
     roles = build_v2_role_view(features, rankings, cfg)
     candidates = build_portfolio_candidates(roles)
-    summary, _ = run_rotation_backtest(features, rankings, candidates, output_dir=None)
+    # 本场景只关心 cost_bps 这一档：显式传入，避免内层回测白跑配置的全部费用档
+    summary, _ = run_rotation_backtest(features, rankings, candidates, output_dir=output_dir,
+                                       cost_levels=[cost_bps])
     bt = summary[(summary["strategy"] == "rule_leadership_rotation") & (summary["cost_bps"] == cost_bps)]
     row = {
         "scenario": "",
@@ -39,7 +41,8 @@ def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0):
     return row
 
 
-def run_sensitivity_matrix(output_path: str | Path | None = None) -> pd.DataFrame:
+def run_sensitivity_matrix(output_path: str | Path | None = None, *, output_dir=None) -> pd.DataFrame:
+    """敏感性矩阵（V2 权威角色语义 + 唯一权威账本）。output_dir 用于隔离各场景回测的中间产物。"""
     cfg = load_gen2_config()
     bars = load_daily_bars()
     records = load_universe_records()
@@ -77,7 +80,7 @@ def run_sensitivity_matrix(output_path: str | Path | None = None) -> pd.DataFram
     scenarios.append(("core7", base_weights, {**base_portfolio, "max_core_count": 7}))
 
     for name, weights, portfolio in scenarios:
-        row = evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0)
+        row = evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0, output_dir=output_dir)
         row["scenario"] = name
         row["weights"] = "|".join(f"{k}={v}" for k, v in weights.items() if k in ("trend", "rs", "stage", "momentum", "consolidation", "volatility", "diversification"))
         rows.append(row)
