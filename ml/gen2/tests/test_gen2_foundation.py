@@ -15,7 +15,7 @@ from gen2.data.loader import GEN2_ROOT, PROJECT_ROOT, load_gen2_config, load_uni
 from gen2.data.schema import validate_daily_bars
 from gen2.features.build_features import compute_time_series_features
 from gen2.portfolio.cluster_constraints import apply_cluster_cap
-from gen2.portfolio.role_engine import build_daily_roles
+from gen2.baseline.rule_v2_ab import build_v2_roles
 from gen2.ranking.rank_postprocess import validate_rankings
 
 
@@ -125,28 +125,25 @@ class Gen2FoundationTest(unittest.TestCase):
         self.assertEqual((out["role"] == "CORE").sum(), 3)
         self.assertLessEqual((out[(out["role"] == "CORE") & (out["correlation_cluster"] == "tech")]).shape[0], 2)
 
-    def test_replacement_hysteresis(self):
-        dates = pd.bdate_range("2026-01-01", periods=6).date
-        rows = []
-        for i, d in enumerate(dates):
-            rows.append({"trade_date": d, "code": "NEW", "name": "NEW", "rank": 1, "rank_percentile": 1.0, "leadership_score": 90, "correlation_cluster": "new"})
-            rows.append({"trade_date": d, "code": "OLD", "name": "OLD", "rank": 2, "rank_percentile": 0.5, "leadership_score": 80, "correlation_cluster": "old"})
-        rankings = pd.DataFrame(rows)
-        records = {
-            "OLD": type("R", (), {"core_eligible": True, "research_only": False, "strategic_role_hint": "", "incumbent": True})(),
-            "NEW": type("R", (), {"core_eligible": True, "research_only": False, "strategic_role_hint": "", "incumbent": False})(),
-        }
-        # Monkeypatch loader used inside role_engine.
+    def test_legacy_role_impl_is_blocked(self):
+        """WP-G2-03：legacy 独立状态机已停用（fail-fast），任何调用都必须抛错，防止再次语义分叉。"""
+        # 用模块属性访问（不做名字导入）：保持「仓库内零 legacy 消费者」这一静态规则可校验
         import gen2.portfolio.role_engine as role_engine
-        old_loader = role_engine.load_universe_records
-        role_engine.load_universe_records = lambda: records
-        try:
-            roles = build_daily_roles(rankings, config={"portfolio": {"promotion_persistence_days": 5, "demotion_persistence_days": 5, "max_core_count": 2, "max_core_per_cluster": 2}})
-        finally:
-            role_engine.load_universe_records = old_loader
-        new_roles = roles[roles["code"] == "NEW"]["role"].tolist()
-        self.assertEqual(new_roles[:4], ["CHALLENGER"] * 4)
-        self.assertEqual(new_roles[-1], "CORE")
+        import pandas as pd
+
+        rankings = pd.DataFrame([{
+            "trade_date": __import__("datetime").date(2026, 1, 5), "code": "NEW", "name": "NEW",
+            "rank": 1, "rank_percentile": 1.0, "leadership_score": 90, "correlation_cluster": "new",
+        }])
+        with self.assertRaises(RuntimeError) as ctx:
+            role_engine.build_daily_roles(rankings, config={"portfolio": {}})
+        self.assertIn("build_v2_roles", str(ctx.exception), "错误信息必须指向 V2 权威实现")
+
+    def test_v2_authoritative_role_impl_importable(self):
+        """V2 唯一权威角色实现必须可导入（角色语义唯一入口）。"""
+        from gen2.baseline.v2_role_view import build_v2_role_view
+        self.assertTrue(callable(build_v2_roles))
+        self.assertTrue(callable(build_v2_role_view))
 
     def test_turnover_cost_applied(self):
         d1, d2 = date(2026, 1, 1), date(2026, 1, 2)

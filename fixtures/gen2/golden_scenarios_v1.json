@@ -81,14 +81,14 @@
       "finding": "Python 存在两套 roles 实现，语义不同；本包选定 rule_v2_ab.build_v2_roles 作为 canonical seam（B1 账本 / B3 OOS / 360 行 parity 使用者，且是唯一含 NO_CORE 硬门槛与 Selection Permission 的实现）。",
       "implementations": {
         "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles": "SEAM（本包使用）— 含 NO_CORE_TREND_GATE / PROMOTION_BLOCKED_BY_PERMISSION；reason 无 LEADERSHIP_* 区间码与 _WAIT·_KEEP 后缀，且未记录 CLUSTER_CAP_DEMOTED",
-        "ml/gen2/portfolio/role_engine.py::build_daily_roles": "LEGACY_V1_ONLY（rule_rotation / sensitivity_matrix / attribution / 历史 V1 测试使用）— reason 词表与 JS 一致，但**缺 NO_CORE 硬门槛与权限门**，禁止用于 V2 语义。"
+        "ml/gen2/portfolio/role_engine.py::build_daily_roles": "DISABLED / fail-fast（调用即抛 RuntimeError）— legacy 独立状态机已删除实现体（仅保留守卫），仓库内零消费者。角色语义一律走 rule_v2_ab.build_v2_roles。"
       },
       "measured_evidence": [
         "面板 no_core 情形：513310 第 3 天跌破 MA60 → JS=CHALLENGER(NO_CORE_TREND_GATE)，role_engine=CORE（无 NO_CORE 门槛）",
         "面板 risk_off 情形：159770 在 RISK_OFF 下 → JS=PROMOTION_BLOCKED_BY_PERMISSION，role_engine=PROMOTION_HYSTERESIS_WAIT（无权限门；角色结果仍为 CHALLENGER）",
         "面板 risk_on 第 1-4 天：现任 159570/159582 → JS=CHALLENGER/RESERVE，role_engine=CORE（降级语义不同）"
       ],
-      "action": "已裁决（用户 2026-09-11）：**唯一权威 V2 角色实现 = ml/gen2/baseline/rule_v2_ab.build_v2_roles**；portfolio/role_engine.build_daily_roles 标为 LEGACY_V1_ONLY，不得再作为 V2 回测/敏感性/归因/生产 parity 的独立角色实现。本包已阻断 V2 路径误用 + 增加调用源测试，见 seam_contracts.role_engine_migration。"
+      "action": "已裁决并执行完毕（用户 2026-09-11 收紧版）：V2 唯一权威角色实现 = rule_v2_ab.build_v2_roles；legacy 独立状态机已停用（fail-fast、零消费者）；研究脚本改走 gen2.baseline.v2_role_view.build_v2_role_view（角色语义来自权威实现，仅补 rank / rank_percentile / leadership_score / persistence_days 展示列）。见 seam_contracts.role_engine_migration。"
     },
     "reason_normalization": {
       "purpose": "reason_codes 的**语义**对比口径：剥离纯标签差异后比较，原始串仍完整保留供审计。",
@@ -104,26 +104,34 @@
       "work_item": "WP-G2-05",
       "authoritative": "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles",
       "authority_constant": "gen2.portfolio.role_engine.V2_AUTHORITATIVE_ROLE_IMPL",
-      "decision": "用户裁决 2026-09-11：rule_v2_ab.build_v2_roles 为当前 V2 唯一权威角色语义（它是 B1 账本 / B3 OOS / 360 行 parity 的实际使用者，且唯一含 NO_CORE 硬门槛与 Selection Permission）。",
+      "decision": "用户裁决 2026-09-11（收紧版）：rule_v2_ab.build_v2_roles 为当前 V2 唯一权威角色语义；role_engine.build_daily_roles 禁止被 V2 回测、敏感性分析、归因、parity 调用。",
       "legacy": {
         "module": "ml/gen2/portfolio/role_engine.py",
-        "status": "LEGACY_V1_ONLY",
-        "consumers_allowlist": [
-          "gen2.baseline.rule_rotation",
-          "gen2.baseline.sensitivity_matrix",
-          "gen2.evaluation.attribution",
-          "gen2.tests.test_gen2_foundation"
-        ]
+        "status": "DISABLED_FAIL_FAST",
+        "behavior": "调用即抛 RuntimeError（错误信息指向 build_v2_roles 与 v2_role_view）；实现体已删除，仅保留守卫；纯工具函数 _cap_core_roles / _consecutive_by_code 保留（权威实现依赖）",
+        "consumers": []
       },
+      "research_view": "ml/gen2/baseline/v2_role_view.py::build_v2_role_view（角色语义 100% 委托权威实现；仅补展示/派生列 rank / rank_percentile / leadership_score / persistence_days）",
+      "migrated_callers": [
+        "ml/gen2/baseline/rule_rotation.py",
+        "ml/gen2/baseline/sensitivity_matrix.py",
+        "ml/gen2/evaluation/attribution.py"
+      ],
       "blocked_v2_paths": [
         "ml/gen2/baseline/rule_v2_ab.py",
         "ml/gen2/baseline/rule_v21_ab.py",
+        "ml/gen2/baseline/rule_rotation.py",
+        "ml/gen2/baseline/sensitivity_matrix.py",
+        "ml/gen2/evaluation/attribution.py",
         "scripts/parity/run_gen2_scenarios.py"
       ],
-      "scope_now": "本包只做两件事：①阻断 role_engine.build_daily_roles 在 V2 路径被误用（静态守卫 + 调用源测试）；②移除 parity runner 中未使用的引用。研究脚本迁移到权威实现（或改为兼容包装层）登记为 WP-G2-05，不在本包重构。",
+      "future_option": "若确需保留 build_daily_roles 这个名字，只能改造为调用权威实现的兼容包装层（不得重新实现角色决策），再显式加入 LEGACY_V1_CONSUMER_ALLOWLIST —— 该白名单当前为空，直接加入而不改造会被守卫测试拦下。",
+      "semantic_change_notice": "rule_rotation / sensitivity_matrix / attribution 的产物（换手、归因、敏感性数字）现在反映 V2 语义（含 NO_CORE 与权限门），与历史报告不再逐位可比；这些产物需在 WP-G2-02（B1 账本重算）一并重算。",
       "tests": [
-        "ml/gen2/tests/test_role_impl_authority.py"
-      ]
+        "ml/gen2/tests/test_role_impl_authority.py",
+        "ml/gen2/tests/test_gen2_foundation.py::test_legacy_role_impl_is_blocked"
+      ],
+      "verified_on_real_data": "真实 universe 面板（features 38083 行 / rankings 30992 行）跑通：视图 14 项下游列无缺失、role 分布正常（CORE 3703 / HEDGE 691）、真实数据已出现 CLUSTER_CAP_DEMOTED 审计码；build_portfolio_candidates / build_rotation_events(1183) / apply_regime_defense / build_cluster_exposure / cluster_concentration / core_residence_days 全部通过"
     }
   },
   "known_differences": [

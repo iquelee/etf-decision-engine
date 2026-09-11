@@ -10,7 +10,7 @@ from gen2.evaluation.rank_metrics import rank_ic_by_date
 from gen2.features.build_features import build_feature_matrix
 from gen2.labels.build_labels import build_labels
 from gen2.portfolio.portfolio_builder import build_portfolio_candidates
-from gen2.portfolio.role_engine import build_daily_roles
+from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
 
 
@@ -21,7 +21,7 @@ def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0):
     cfg["evaluation"] = {"include_cost_sensitivity_bps": [cost_bps]}
     rankings = run_rank_engine(features, weights=weights)
     ic = rank_ic_by_date(rankings, labels)
-    roles = build_daily_roles(rankings, config=cfg)
+    roles = build_v2_role_view(features, rankings, cfg)
     candidates = build_portfolio_candidates(roles)
     summary, _ = run_rotation_backtest(features, rankings, candidates, output_dir=None)
     bt = summary[(summary["strategy"] == "rule_leadership_rotation") & (summary["cost_bps"] == cost_bps)]

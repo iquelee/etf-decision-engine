@@ -83,14 +83,25 @@ failed      代码、网络、数据库等运行异常 → 系统未正常完成
   + `I-07-17`（同两天 role=SATELLITE）在两侧测试强制；
 * 仅 `reason_codes` 审计串变化，**角色结果不变**；因触及 reason 词表，随 D-001 计入规则实现修正。
 
-## 9. V2 角色实现唯一化（用户裁决 2026-09-11）
+## 9. V2 角色实现唯一化（用户裁决 2026-09-11，收紧版）
 
 | 项 | 结论 |
 |---|---|
 | **V2 唯一权威实现** | `ml/gen2/baseline/rule_v2_ab.py::build_v2_roles`（B1 账本 / B3 OOS / 360 行 parity 的实际使用者，唯一含 NO_CORE 硬门槛与 Selection Permission） |
-| legacy 实现 | `ml/gen2/portfolio/role_engine.py::build_daily_roles` → 标为 `LEGACY_V1_ONLY`（docstring 标注 + `DeprecationWarning`） |
-| 本包动作 | ①阻断 V2 路径误用（`V2_PATH_FORBIDDEN_ROLE_IMPL` 静态守卫）；②移除 parity runner 中未使用引用；③新增调用源测试 `ml/gen2/tests/test_role_impl_authority.py`（非白名单消费者即失败 + 白名单腐烂即失败） |
-| 迁移工作项 | **WP-G2-05**：研究脚本（rule_rotation / sensitivity_matrix / attribution）改为兼容包装层或改调权威实现 —— 不在本包重构 |
+| legacy 独立状态机 | `role_engine.build_daily_roles` → **DISABLED / fail-fast**：实现体已删除（仅保留守卫），调用即抛 `RuntimeError`，错误信息指向权威实现；纯工具函数 `_cap_core_roles` / `_consecutive_by_code` 保留（权威实现依赖） |
+| 仓库内消费者 | **0**（`LEGACY_V1_CONSUMER_ALLOWLIST` 为空且无例外） |
+| 研究脚本迁移 | `rule_rotation` / `sensitivity_matrix` / `attribution` 改走 **`gen2.baseline.v2_role_view.build_v2_role_view(features, rankings, cfg)`** —— 角色语义 100% 委托权威实现，仅补 `rank` / `rank_percentile` / `leadership_score` / `persistence_days` 展示列 |
+| 守卫测试 | `ml/gen2/tests/test_role_impl_authority.py`（7 项：6 条禁用路径零引用 / 全仓库零消费者 / fail-fast / 实现体已删除 / 视图必须委托权威 / D-004 审计码顺序 / 白名单必须为空）+ `test_gen2_foundation.py::test_legacy_role_impl_is_blocked` |
+| 未来选项 | 若确需保留 `build_daily_roles` 这个名字，只能改造为**调用权威实现的兼容包装层**，再显式加入白名单（当前为空，直接加入而不改造会被测试拦下） |
+| 迁移工作项 | **WP-G2-05**（本轮已完成调用路径迁移；剩余为下游产物重算，归入 WP-G2-02） |
+
+**真实数据烟测**（不是纸面推断）：`features` 38,083 行 / `rankings` 30,992 行 → 视图 **14 项下游列无缺失**、
+role 分布正常（CORE 3,703 / HEDGE 691）、**真实数据已出现 `CLUSTER_CAP_DEMOTED` 审计码**；
+`build_portfolio_candidates` / `build_rotation_events`(1,183) / `apply_regime_defense` /
+`build_cluster_exposure` / `cluster_concentration` / `core_residence_days` 全部通过。
+
+⚠️ **语义变更周知**：三个研究脚本的产物（换手、归因、敏感性数字）现在反映 **V2 语义**（含 NO_CORE 与权限门），
+与历史报告不再逐位可比 —— 需在 **WP-G2-02（B1 账本重算）** 一并重算，本轮未重新生成它们的报告。
 
 ## 10. G2S-06 解锁（run 状态四态，双端可执行）
 

@@ -159,9 +159,13 @@ class TestScenarioParity(unittest.TestCase):
         mig = self.fixture.get("seam_contracts", {}).get("role_engine_migration", {})
         self.assertEqual(mig.get("authoritative"), "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles",
                          "必须标明 V2 唯一权威角色实现")
-        self.assertEqual(mig.get("legacy", {}).get("status"), "LEGACY_V1_ONLY")
-        self.assertIn("ml/gen2/baseline/rule_v2_ab.py", mig.get("blocked_v2_paths", []))
-        self.assertIn("scripts/parity/run_gen2_scenarios.py", mig.get("blocked_v2_paths", []))
+        # legacy 独立状态机必须处于「已停用」而非「仍可用」
+        self.assertEqual(mig.get("legacy", {}).get("status"), "DISABLED_FAIL_FAST")
+        self.assertEqual(mig.get("legacy", {}).get("consumers"), [], "legacy 实现必须零消费者")
+        self.assertIn("v2_role_view", mig.get("research_view", ""), "必须登记研究视图作为展示列来源")
+        for rel in ("ml/gen2/baseline/rule_rotation.py", "ml/gen2/baseline/sensitivity_matrix.py",
+                    "ml/gen2/evaluation/attribution.py", "scripts/parity/run_gen2_scenarios.py"):
+            self.assertIn(rel, mig.get("blocked_v2_paths", []), f"{rel} 必须在禁用清单中")
         self.assertTrue(mig.get("work_item", "").startswith("WP-"), "迁移必须登记为明确工作项")
 
     def test_run_status_gate_order_declared(self):
