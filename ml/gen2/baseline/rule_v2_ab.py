@@ -127,11 +127,13 @@ def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: 
     被 cap 降级的「现任 CORE」（上一日 CORE 且 cap 前仍 CORE、cap 后非 CORE）需有
     alpha 边际达标的同 cluster 新晋升者才接受替换；否则撤销（恢复现任、退回最弱晋升者）。
     硬退出（NO_CORE）已在前置状态机降为非 CORE，不经过此校验。
+
+    WP-G2-03（D-002 裁决）：本函数**只负责替换事务**，不再承担终局约束检查；
+    终局检查统一由 `finalize_roles()` 在角色生成出口无条件执行（与 Node finalizeRoles 对称）。
     """
     prev_s = _prev_role_series(day["code"], prev_roles)
     cap_demoted = day[(prev_s == "CORE") & (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")]
     if cap_demoted.empty:
-        _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
         return
 
     promoted_indices = list(day[(prev_s != "CORE") & (day["role"] == "CORE")].index)
@@ -155,8 +157,6 @@ def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: 
         day.loc[weakest_idx, "role"] = "CHALLENGER"
         day.loc[weakest_idx, "reason_codes"] = str(day.loc[weakest_idx, "reason_codes"]) + "|REPLACEMENT_BLOCKED"
         promoted_indices.remove(weakest_idx)
-
-    _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
 
 
 def finalize_roles(
