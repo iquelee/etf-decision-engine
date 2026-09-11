@@ -159,6 +159,20 @@ def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: 
     _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
 
 
+def finalize_roles(
+    day: pd.DataFrame, prev_roles: dict, base_max_core: int, max_core_per_cluster: int
+) -> None:
+    """角色生成的**统一出口**（WP-G2-03 / D-001 裁决，与 Node `finalizeRoles` 对称）。
+
+    替换事务（`_apply_replacement_gate`）→ **无条件**终局约束检查（`_assert_final_constraints`）。
+
+    不变量：任何角色生成路径在返回前都必须执行一次终局约束检查 ——
+    与当天是否存在 cap 降级现任、是否有替换、是否提前返回无关。
+    """
+    _apply_replacement_gate(day, prev_roles, base_max_core, max_core_per_cluster)
+    _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
+
+
 def build_v2_roles(features, rankings, config) -> pd.DataFrame:
     """V2 完整角色状态机：alpha 排名 + persistence 滞后 + Selection Permission + NO_CORE + cluster cap。"""
     from gen2.data.loader import load_universe_records
@@ -257,8 +271,9 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
         # F03 修复：显式传 V2 的 alpha 排序，禁止读旧 leadership_score。
         day["role_before_cap"] = day["role"]
         day["role"] = _cap_core_roles(day, max_core, max_core_per_cluster, priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
-        # F09：自愿替换校验 + 组合约束最终断言（与 Node applyReplacementGate/assertFinalRoleConstraints 一致）
-        _apply_replacement_gate(day, current_roles, base_max_core, max_core_per_cluster)
+        # F09：自愿替换校验 + 组合约束最终断言。WP-G2-03（D-001）起统一走 finalize_roles 出口，
+        # 保证「任何角色生成路径返回前都无条件执行一次终局约束检查」。
+        finalize_roles(day, current_roles, base_max_core, max_core_per_cluster)
 
         for row in day.itertuples():
             current_roles[row.code] = row.role

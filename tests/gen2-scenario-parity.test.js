@@ -66,7 +66,7 @@ const OUT_DIR = path.join(REPO, 'outputs', 'gen2-wp-g2-01');
   console.log('[PASS] G2S-A 夹具三层结构与 schema 完整');
 }
 
-/* ---------- 2. known_differences 登记完整性 ---------- */
+/* ---------- 2. known_differences / resolved_differences 登记完整性 ---------- */
 {
   const known = fixture.known_differences || [];
   for (const e of known) {
@@ -76,7 +76,34 @@ const OUT_DIR = path.join(REPO, 'outputs', 'gen2-wp-g2-01');
     assert.ok(e.status !== 'ALIGNED', `${e.id} 登记项不得是 ALIGNED`);
     assert.ok((e.fields && e.fields.length) || e.field, `${e.id} 必须声明 fields/field`);
   }
-  console.log(`[PASS] G2S-B known_differences 登记完整（${known.length} 条，全部带定位）`);
+
+  // 已结案差异必须留下裁决与回归证据（防止"悄悄修掉、没有留痕"）
+  const resolved = fixture.resolved_differences || [];
+  const scenarioIds = new Set(fixture.scenarios.map((s) => s.id));
+  const allInvariantIds = new Set();
+  for (const sc of fixture.scenarios) for (const inv of sc.invariants || []) allInvariantIds.add(inv.id);
+  for (const e of resolved) {
+    assert.strictEqual(e.status, 'RESOLVED', `${e.id} 结案项 status 必须为 RESOLVED`);
+    for (const k of ['id', 'scenario', 'ruling', 'fixed_in']) {
+      assert.ok(e[k], `结案项 ${e.id || '?'} 缺 ${k}`);
+    }
+    assert.ok(scenarioIds.has(e.scenario), `${e.id} 指向不存在的场景`);
+    assert.ok(e.semantic_change, `${e.id} 必须说明是否为语义变更及其影响`);
+    for (const invId of e.regression_invariants || []) {
+      assert.ok(allInvariantIds.has(invId), `${e.id} 引用了不存在的不变量 ${invId}`);
+    }
+    assert.ok((e.regression_invariants || []).length > 0, `${e.id} 必须登记回归不变量`);
+  }
+
+  // seam 契约块（roles panel / run 状态四态）
+  const sc = fixture.seam_contracts || {};
+  assert.ok(sc.roles_panel && sc.roles_panel.canonical_input && sc.roles_panel.side_adapters,
+    '必须声明 roles seam 的共同输入契约');
+  assert.ok(sc.run_status_gate && sc.run_status_gate.states, '必须声明 run 状态四态契约');
+  for (const st of ['running', 'completed', 'blocked', 'failed']) {
+    assert.ok(sc.run_status_gate.states[st], `四态契约缺 ${st}`);
+  }
+  console.log(`[PASS] G2S-B 差异登记完整（待裁决/已定位 ${known.length} 条，已结案 ${resolved.length} 条）+ seam 契约齐备`);
 }
 
 /* ---------- 3. 跑 Node 端 runner + 校验该端不变量 ---------- */

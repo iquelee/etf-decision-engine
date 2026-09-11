@@ -24,9 +24,53 @@
     "PENDING_RULING": "两端都实现了同一语义但结果不同 → 需要业务裁决（本包不修，下一包决定）",
     "EXCLUDED_BY_DESIGN": "某一端按设计不实现该概念（必须写明原因与位置）"
   },
+  "seam_contracts": {
+    "roles_panel": {
+      "purpose": "roles 状态机（晋升连续性 / NO_CORE / 角色最终约束）的共同输入契约；G2S-07 依赖本契约的可执行适配器。",
+      "canonical_input": {
+        "panel_rows": "每行 = (trade_date, code, 特征列)；完整特征集见 fixtures/gen2/parity_fixture.json",
+        "required_features": [
+          "trade_date",
+          "code",
+          "close / px_ma60 / px_ma20",
+          "ret_1d / ret_20d / ret_60d",
+          "benchmark_px_ma20 / benchmark_px_ma60"
+        ],
+        "initial_roles": "起始角色表（code → CORE/CHALLENGER/SATELLITE/RESERVE/HEDGE）",
+        "config": "max_core_count / max_core_per_cluster / promotion_persistence_days / demotion_persistence_days / min_replacement_edge（来源：GEN2_RULE_V2_BUNDLE）"
+      },
+      "side_adapters": {
+        "js": "computeLeadershipScore(panel) → rankFeatures(panel) → buildDailyRoles(panel)；配置由 bundle 内联解析",
+        "python": "compute_leadership_score(df) → compute_alpha_score_v2(df) → build_v2_roles(features, rankings, config)；rankings 为 (trade_date, code) 索引，config 由 load_gen2_config()"
+      },
+      "gap_to_close": [
+        "Python 需 rankings 与 config 两个额外入参 → 适配器需从 canonical panel 派生 rankings 并显式加载 config",
+        "两侧 rank/percentile 与 trend_gate 的派生必须来自同一 canonical 输入，禁止各自造数",
+        "解锁后方可运行 G2S-07（晋升连续性 / NO_CORE）"
+      ],
+      "status": "SPEC_ONLY（契约已定义；可执行适配器为 WP-G2-03 剩余切片）"
+    },
+    "run_status_gate": {
+      "purpose": "Gen-2 run 状态四态契约（G2S-06 依赖）。",
+      "states": {
+        "running": "已开始、尚未发布完整横截面（消费者不得读取）",
+        "completed": "唯一可消费状态；必须满足唯一 code / universe_count / 输出哈希校验",
+        "blocked": "数据、资格、约束不通过 → 今日没有可信 Gen-2 结果（可预期业务结果；前台只展示 V3.6.1）",
+        "failed": "代码、网络、数据库等运行异常 → 系统未正常完成"
+      },
+      "rules": [
+        "blocked 与 failed 不得合并，文案与告警必须区分",
+        "数据闸门（BENCHMARK_MISSING / BENCHMARK_INSUFFICIENT_HISTORY / STALE_BATCH / NO_ELIGIBLE_TODAY）→ blocked",
+        "发布前完整性校验失败（唯一 code / 非有限 alpha / 写入 0 行）→ blocked",
+        "未捕获异常（代码 / 网络 / DB）→ failed",
+        "任何非 completed 状态都不得被前台消费为建议"
+      ],
+      "status": "IMPLEMENTED（runGen2ShadowEod；G2S-06 的场景化验证待 roles/run 闸门场景切片）"
+    }
+  },
   "known_differences": [
     {
-      "id": "D-001",
+      "id": "D-002",
       "scenario": "G2S-03",
       "case": "gate_call",
       "fields": [
@@ -35,10 +79,31 @@
         "core_count",
         "per_cluster_core.*"
       ],
-      "status": "PENDING_RULING",
-      "location": "cloudfunctions/runGen2ShadowEod/index.js:715 (`if (!capDemoted.length) return;` 早退，跳过终局断言) vs ml/gen2/baseline/rule_v2_ab.py:134-136（`if cap_demoted.empty:` 仍先执行 `_assert_final_constraints(...)` 再返回）",
-      "reason": "同一 day（software_ai 有 3 个 CORE、无 cap 降级现任）下：替换门路径 JS 保留 3 CORE、Python 收敛到 2。同场景 assert_call 路径两端完全一致（roles/reason_codes/core_count 全 ALIGNED），说明约束逻辑本身一致，差异只在「无 cap 降级时是否仍执行终局断言」。需裁决：终局约束是否必须在 gate 路径上无条件执行（若是，需在某端补一次断言；不得两端口径并存）。",
-      "evidence": "G2S-03 gate_call: roles.159852 js=CORE/py=CHALLENGER; core_count js=3/py=2"
+      "status": "EXPLAINED",
+      "location": "cloudfunctions/runGen2ShadowEod/index.js applyReplacementGate（仅替换事务，不再断言）vs ml/gen2/baseline/rule_v2_ab.py _apply_replacement_gate（内部仍执行 _assert_final_constraints）",
+      "reason": "WP-G2-03 裁决后，裸替换门的职责在两端不同：JS 只做替换事务、终局检查统一由 finalizeRoles 出口执行；Python 的替换门内部仍保留断言（其 finalize_roles 再断言一次，幂等）。契约出口以 exit_call 为准，此处保留登记以便未来收口。",
+      "evidence": "G2S-03 gate_call: roles.159852 js=CORE/py=CHALLENGER; core_count js=3/py=2；同场景 exit_call 两端一致"
+    }
+  ],
+  "resolved_differences": [
+    {
+      "id": "D-001",
+      "status": "RESOLVED",
+      "scenario": "G2S-03",
+      "case": "gate_call",
+      "ruling": "任何角色生成路径结束前必须无条件执行一次终局约束检查；applyReplacementGate 只负责替换事务，buildDailyRoles 在所有角色变化完成后统一调用 assertFinalRoleConstraints。终局检查不得藏在替换门内部（否则新增早退分支又会绕过约束）。",
+      "ruling_source": "用户裁决 2026-09-11",
+      "fixed_in": [
+        "cloudfunctions/runGen2ShadowEod/index.js（新增 finalizeRoles；applyReplacementGate 去掉内部断言与早退绕过；buildDailyRoles 出口改为 finalizeRoles）",
+        "ml/gen2/baseline/rule_v2_ab.py（新增对称出口 finalize_roles；build_v2_roles 改用 finalize_roles）"
+      ],
+      "regression_invariants": [
+        "I-03-08",
+        "I-03-09",
+        "I-03-10",
+        "I-03-11"
+      ],
+      "semantic_change": "本次修复改变 JS 的实际角色结果（即使未改阈值），属规则**实现**语义变更：Rule V2 不再沿用「已封版」的资格表述；bundle/lock 需重新生成并重跑 B3 OOS（WP-G2-04）。"
     }
   ],
   "scenarios": [
@@ -114,13 +179,13 @@
     },
     {
       "id": "G2S-03",
-      "title": "cluster cap（software_ai 3 个 CORE → 收敛到 2）：替换门路径 vs 直接终局断言",
+      "title": "cluster cap（software_ai 3 个 CORE → 2）：替换门路径 vs 直接终局断言 vs 统一出口",
       "tier": "STRUCTURED_SEAM",
       "status": "RUNNABLE",
       "handler": "cluster_cap",
       "seam": {
-        "python": "gen2.baseline.rule_v2_ab._apply_replacement_gate / _assert_final_constraints",
-        "js": "applyReplacementGate / assertFinalRoleConstraints (runGen2ShadowEod/index.js:712-788)"
+        "python": "gen2.baseline.rule_v2_ab.{_apply_replacement_gate, _assert_final_constraints, finalize_roles}",
+        "js": "applyReplacementGate / assertFinalRoleConstraints / finalizeRoles (runGen2ShadowEod/index.js)"
       },
       "input": {
         "base_max_core": 5,
@@ -139,7 +204,11 @@
         { "id": "I-03-04", "applies_to": "both", "case": "assert_call", "field": "roles.159819", "op": "eq", "value": "CORE" },
         { "id": "I-03-05", "applies_to": "js", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
         { "id": "I-03-06", "applies_to": "python", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
-        { "id": "I-03-07", "applies_to": "both", "case": "gate_call", "field": "core_count", "op": "lte", "value": 3 }
+        { "id": "I-03-07", "applies_to": "both", "case": "gate_call", "field": "core_count", "op": "lte", "value": 3 },
+        { "id": "I-03-08", "applies_to": "both", "case": "exit_call", "field": "core_count", "op": "eq", "value": 2 },
+        { "id": "I-03-09", "applies_to": "both", "case": "exit_call", "field": "roles.159852", "op": "eq", "value": "CHALLENGER" },
+        { "id": "I-03-10", "applies_to": "both", "case": "exit_call", "field": "roles.159770", "op": "eq", "value": "CORE" },
+        { "id": "I-03-11", "applies_to": "both", "case": "exit_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" }
       ]
     },
     {

@@ -24,6 +24,7 @@ from gen2.baseline.rule_v2_ab import (  # noqa: E402
     _assert_final_constraints,
     _replacement_edge,
     _should_replace,
+    finalize_roles,
 )
 from gen2.portfolio.regime import classify_regime  # noqa: E402
 from gen2.portfolio.selection_permission import (  # noqa: E402
@@ -125,6 +126,11 @@ def h_cluster_cap(sc):
     day_gate = to_day_df(sc["input"]["day"])
     _apply_replacement_gate(day_gate, dict(prev), base, per_cluster)
     out["gate_call"] = snapshot(day_gate)
+
+    # WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查），与 Node finalizeRoles 对称
+    day_exit = to_day_df(sc["input"]["day"])
+    finalize_roles(day_exit, dict(prev), base, per_cluster)
+    out["exit_call"] = snapshot(day_exit)
     return out
 
 

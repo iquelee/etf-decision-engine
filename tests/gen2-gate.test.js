@@ -37,7 +37,7 @@ function load(data, failRankingAt = 0) {
     if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
     return require(path.join(ROOT, p));
   }, Date, console };
-  vm.runInNewContext(SOURCE + '\nexports.audit = {UNIVERSE, buildDailyRoles, buildPortfolioCandidates, applyReplacementGate, assertFinalRoleConstraints};', box);
+  vm.runInNewContext(SOURCE + '\nexports.audit = {UNIVERSE, buildDailyRoles, buildPortfolioCandidates, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles};', box);
   return { entry: box.exports, writes };
 }
 
@@ -115,14 +115,43 @@ async function main() {
     assert('候选 119 行阻断', out.ok === false && out.data_gate === 'NO_ELIGIBLE_TODAY', out);
   }
 
-  // 失败必须写 failed 运行记录、不写 completed
+  // WP-G2-03 四态：数据/资格闸门未通过 → blocked（可预期业务结果），且绝不写 completed
   {
     const data = fullData();
     const { entry: e, writes } = load(data);
     await e.main({ mode: 'LIVE', expected_trade_date: '2026-09-07' });
     const runs = writes.filter((w) => w.doc.type === 'gen2_run');
-    assert('失败写 failed 记录', runs.some((w) => w.doc.status === 'failed'));
-    assert('失败不写 completed', !runs.some((w) => w.doc.status === 'completed'));
+    assert('数据闸门写 blocked 记录', runs.some((w) => w.doc.status === 'blocked'));
+    assert('数据闸门不写 failed（blocked 与 failed 不合并）', !runs.some((w) => w.doc.status === 'failed'));
+    assert('数据闸门不写 completed', !runs.some((w) => w.doc.status === 'completed'));
+    assert('blocked 带 status_reason', runs.some((w) => w.doc.status === 'blocked' && w.doc.status_reason === 'DATA_OR_ELIGIBILITY_GATE'));
+  }
+
+  // WP-G2-03（D-001 裁决回归）：任何角色生成路径在返回前都必须无条件执行终局约束检查。
+  // 无 cap 降级现任时，software_ai 有 3 个 CORE，统一出口必须收敛到 2。
+  {
+    const { entry: e } = load(fullData());
+    const day = [
+      { code: '159770', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 20, reason_codes: '' },
+      { code: '159819', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 10, reason_codes: '' },
+      { code: '159852', role: 'CORE', role_before_cap: 'CHALLENGER', alpha_score_v2: 5, reason_codes: '' }
+    ];
+    const prev = { '159770': 'CORE', '159819': 'CORE' };
+    const capped = e.audit.finalizeRoles(day, Object.assign({}, prev));
+    const cores = capped.filter((r) => r.role === 'CORE');
+    assert('统一出口无条件收敛（3 → 2 个 software_ai CORE）', cores.length === 2, capped);
+    assert('降级的是非现任晋升者', capped.find((r) => r.code === '159852').role === 'CHALLENGER', capped);
+    assert('现任 CORE 未被降级', capped.find((r) => r.code === '159770').role === 'CORE'
+      && capped.find((r) => r.code === '159819').role === 'CORE', capped);
+
+    // 替换门本身只做事务，不再承担终局检查（防止未来新增早退分支绕过约束）
+    const day2 = [
+      { code: '159770', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 20, reason_codes: '' },
+      { code: '159819', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 10, reason_codes: '' },
+      { code: '159852', role: 'CORE', role_before_cap: 'CHALLENGER', alpha_score_v2: 5, reason_codes: '' }
+    ];
+    e.audit.applyReplacementGate(day2, Object.assign({}, prev));
+    assert('替换门不再内含终局断言（职责单一）', day2.filter((r) => r.role === 'CORE').length === 3, day2);
   }
 
   console.log('== P0-5 replacement 不破坏 cluster cap ==');

@@ -84,6 +84,7 @@ async function main() {
     const data = {
       gen2_shadow: [
         { type: 'gen2_run', run_id: 'runFail', status: 'failed', run_date: '2026-09-05', created_at: '2026-09-05T11:00:00.000Z' },
+        { type: 'gen2_run', run_id: 'runBlocked', status: 'blocked', run_date: '2026-09-05', created_at: '2026-09-05T11:30:00.000Z' },
         { type: 'gen2_run', run_id: 'runRunning', status: 'running', run_date: '2026-09-05', created_at: '2026-09-05T12:00:00.000Z' },
         { type: 'gen2_run', run_id: 'runOK', status: 'completed', run_date: '2026-09-05', created_at: '2026-09-05T10:00:00.000Z', selection_confidence: 'DEGRADED' },
         { type: 'gen2_ranking', run_id: 'runOK', code: '518880', rank: 1, role: 'HEDGE', target_weight: 0.15, alpha_score_v2: 50 },
@@ -91,7 +92,7 @@ async function main() {
     };
     const e = load(data);
     const out = await e.audit.getGen2SelectionShadow({});
-    assert('跳过 failed/running，选 completed', out.run.run_id === 'runOK', out.run);
+    assert('跳过 failed/blocked/running，选 completed', out.run.run_id === 'runOK', out.run);
     assert('completed 状态正确', out.selection.status === 'completed');
   }
 

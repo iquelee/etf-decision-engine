@@ -710,6 +710,8 @@ function shouldReplace(challengerAlpha, incumbentAlpha) {
 }
 
 function applyReplacementGate(day, prevRoles) {
+  // WP-G2-03（D-001 裁决）：本函数**只负责替换事务**，不承担终局约束检查。
+  // 终局约束统一由 finalizeRoles() 在角色生成路径的出口无条件执行。
   // 被 cap 降级的「现任 CORE」：上一日 CORE 且 cap 前仍 CORE、cap 后非 CORE
   const capDemoted = day.filter((r) => (prevRoles[r.code] || 'RESERVE') === 'CORE' && r.role_before_cap === 'CORE' && r.role !== 'CORE');
   if (!capDemoted.length) return;
@@ -749,10 +751,20 @@ function applyReplacementGate(day, prevRoles) {
     const pi = promoted.indexOf(weakest);
     if (pi >= 0) promoted.splice(pi, 1);
   }
+}
 
-  // 最终组合约束断言（P0-5）：恢复后重新校验 cluster 数量 cap 与 CORE 总数 cap。
-  // 不得用「末尾再盲目 cap」把恢复的现任又删掉；只允许在异常时降级同 cluster 的晋升者（非现任）。
+/**
+ * 角色生成的**统一出口**（WP-G2-03 / D-001 裁决）：
+ *   替换事务（applyReplacementGate）→ **无条件**终局约束检查（assertFinalRoleConstraints）。
+ *
+ * 不变量：任何角色生成路径在返回前都必须执行一次终局约束检查 ——
+ * 与当天是否存在 cap 降级现任、是否有替换、是否提前返回**无关**。
+ * 目的：终局检查不允许藏在替换门内部（否则新增早退分支就会绕过约束）。
+ */
+function finalizeRoles(day, prevRoles) {
+  applyReplacementGate(day, prevRoles);
   assertFinalRoleConstraints(day, prevRoles);
+  return day;
 }
 
 /** 组合约束最终断言：CORE 总数 ≤ max_core_count，每 cluster CORE 数 ≤ max_core_per_cluster。
@@ -899,7 +911,8 @@ function buildDailyRoles(features) {
     // F09：自愿替换校验。被 cap 降级的「现任 CORE」（上一日 CORE 且 cap 前仍 CORE）
     // 需有 alpha 边际 >= min_replacement_edge 的新晋升者才接受替换；否则撤销（恢复现任、退回最弱晋升者）。
     // 硬退出（NO_CORE）已在前置状态机把 role 降为非 CORE，不经过此校验、不被阈值阻塞。
-    applyReplacementGate(day, currentRoles);
+    // WP-G2-03（D-001）：替换事务 + **无条件**终局约束检查统一在 finalizeRoles 出口执行。
+    finalizeRoles(day, currentRoles);
 
     for (const r of day) {
       currentRoles[r.code] = r.role;
@@ -1042,7 +1055,11 @@ exports._internal = {
   initialRoles,
   buildDailyRoles,
   buildPortfolioCandidates,
-  applyDefense
+  applyDefense,
+  // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）与两个组件，供跨语言 parity 读取
+  finalizeRoles,
+  applyReplacementGate,
+  assertFinalRoleConstraints
 };
 
 exports.main = async (event = {}, context = {}) => {
@@ -1078,16 +1095,24 @@ exports.main = async (event = {}, context = {}) => {
     const expectedTradeDate = dateKey(event.expected_trade_date || event.as_of_trade_date) || null;
 
     // 闸门失败：写 failed 运行记录（不得产生 completed 决策快照），再返回
+    /**
+     * 数据/资格/约束闸门未通过 → run 状态 **blocked**（可预期的业务结果，不是系统故障）。
+     * 四态契约（WP-G2-03）：running → completed | blocked | failed
+     *   blocked  今日没有可信的 Gen-2 结果（数据陈旧/重复/缺基准/短历史/无合格标的等），前台只展示 V3.6.1
+     *   failed   代码/网络/数据库等运行异常，系统未正常完成
+     * 二者处理、告警与文案必须区分，不得合并。
+     */
     const failGate = async (gate, error, extra = {}) => {
       try {
         await db.upsert(COLLECTIONS.GEN2_SHADOW, {
           type: 'gen2_run', run_id: runId, engine_id: ENGINE_ID,
-          universe_version: UNIVERSE.version, mode, status: 'failed',
+          universe_version: UNIVERSE.version, mode, status: 'blocked',
+          status_reason: 'DATA_OR_ELIGIBILITY_GATE',
           data_gate: gate, error: String(error || '').slice(0, 300),
           created_at: new Date().toISOString()
         }, { type: 'gen2_run', run_id: runId });
       } catch (e2) { /* 忽略失败记录落库失败 */ }
-      return { ok: false, error: String(error || ''), data_gate: gate, mode, ...extra };
+      return { ok: false, status: 'blocked', status_reason: 'DATA_OR_ELIGIBILITY_GATE', error: String(error || ''), data_gate: gate, mode, ...extra };
     };
 
     // 1) benchmark 存在性 + 唯一交易日完整性
@@ -1258,12 +1283,14 @@ exports.main = async (event = {}, context = {}) => {
     const uniqueCodeCount = new Set(latestDefended.map((r) => r.code)).size;
     const nonFiniteAlpha = latestDefended.filter((r) => r.alpha_score_v2 == null || !Number.isFinite(r.alpha_score_v2)).length;
     if (uniqueCodeCount === 0 || uniqueCodeCount !== latestDefended.length || nonFiniteAlpha > 0 || written === 0) {
+      // WP-G2-03 四态：输出完整性问题 = 今日没有可信结果 → blocked（不是系统故障）
       await db.upsert(COLLECTIONS.GEN2_SHADOW, {
-        ...runDoc, status: 'failed',
+        ...runDoc, status: 'blocked',
+        status_reason: 'PUBLISH_VALIDATION_FAILED',
         fail_reason: `Publish validation failed: unique=${uniqueCodeCount}/${latestDefended.length} non_finite_alpha=${nonFiniteAlpha} written=${written}`,
         completed_at: null
       }, { type: 'gen2_run', run_id: runId });
-      return { ok: false, error: 'Gen-2 发布前完整性校验失败，不发布 completed', data_gate: 'PUBLISH_VALIDATION_FAILED', written };
+      return { ok: false, status: 'blocked', status_reason: 'PUBLISH_VALIDATION_FAILED', error: 'Gen-2 发布前完整性校验失败，不发布 completed', data_gate: 'PUBLISH_VALIDATION_FAILED', written };
     }
 
     // F12：全部 ranking 写完后，原子发布 completed（半途失败则停留在 running，不误读为完整横截面）
@@ -1299,6 +1326,18 @@ exports.main = async (event = {}, context = {}) => {
     };
   } catch (e) {
     const errMsg = String(e && e.message ? e.message : e);
+    // WP-G2-03 四态：代码/网络/数据库等**运行异常** → failed（与 blocked 严格区分）：
+    //   failed 表示系统未正常完成；blocked 表示系统正常但今日数据/资格/约束未通过。
+    try {
+      await db.upsert(COLLECTIONS.GEN2_SHADOW, {
+        type: 'gen2_run', run_id: runId, engine_id: ENGINE_ID,
+        universe_version: UNIVERSE.version, status: 'failed',
+        status_reason: 'SYSTEM_ERROR',
+        error: errMsg.slice(0, 300),
+        created_at: new Date().toISOString(),
+        completed_at: new Date().toISOString()
+      }, { type: 'gen2_run', run_id: runId });
+    } catch (e2) { /* 忽略失败记录落库失败 */ }
     try {
       await db.upsert(COLLECTIONS.GEN2_SHADOW, {
         type: 'gen2_error',
@@ -1308,6 +1347,6 @@ exports.main = async (event = {}, context = {}) => {
         created_at: new Date().toISOString()
       }, { type: 'gen2_error', run_id: runId });
     } catch (e2) { /* 忽略错误落库失败 */ }
-    return { ok: false, error: errMsg };
+    return { ok: false, status: 'failed', status_reason: 'SYSTEM_ERROR', error: errMsg };
   }
 };

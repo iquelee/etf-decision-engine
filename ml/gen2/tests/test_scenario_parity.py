@@ -118,6 +118,29 @@ class TestScenarioParity(unittest.TestCase):
                 self.assertTrue(e.get(key), f"差异登记 {e.get('id')} 缺 {key}")
             self.assertTrue(e.get("fields") or e.get("field"), f"{e['id']} 缺 fields")
 
+    def test_resolved_differences_keep_audit_trail(self):
+        scenario_ids = {s["id"] for s in self.fixture["scenarios"]}
+        invariant_ids = {inv["id"] for s in self.fixture["scenarios"] for inv in s.get("invariants", [])}
+        resolved = self.fixture.get("resolved_differences", [])
+        self.assertTrue(resolved, "必须登记已结案差异（D-001）")
+        for e in resolved:
+            self.assertEqual(e["status"], "RESOLVED", f"{e['id']} 结案项 status 必须为 RESOLVED")
+            for key in ("id", "scenario", "ruling", "fixed_in", "semantic_change"):
+                self.assertTrue(e.get(key), f"结案项 {e.get('id')} 缺 {key}")
+            self.assertIn(e["scenario"], scenario_ids)
+            self.assertTrue(e.get("regression_invariants"), f"{e['id']} 必须登记回归不变量")
+            for inv_id in e["regression_invariants"]:
+                self.assertIn(inv_id, invariant_ids, f"{e['id']} 引用不存在的不变量 {inv_id}")
+
+    def test_seam_contracts_declared(self):
+        sc = self.fixture.get("seam_contracts", {})
+        self.assertIn("roles_panel", sc)
+        self.assertIn("canonical_input", sc["roles_panel"])
+        self.assertIn("side_adapters", sc["roles_panel"])
+        states = sc.get("run_status_gate", {}).get("states", {})
+        for st in ("running", "completed", "blocked", "failed"):
+            self.assertIn(st, states, f"四态契约缺 {st}")
+
     def test_pending_scenarios_declare_owner(self):
         for sc in self.fixture["scenarios"]:
             if sc["status"] == "RUNNABLE":

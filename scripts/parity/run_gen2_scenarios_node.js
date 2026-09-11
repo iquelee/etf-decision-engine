@@ -26,7 +26,7 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
 const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
-  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints };\n';
+  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles };\n';
 
 function loadAudit() {
   const box = {
@@ -126,6 +126,11 @@ const HANDLERS = {
     const dayGate = mk();
     A.applyReplacementGate(dayGate, Object.assign({}, prev));
     out.gate_call = snapshot(dayGate);
+
+    // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）
+    const dayExit = mk();
+    A.finalizeRoles(dayExit, Object.assign({}, prev));
+    out.exit_call = snapshot(dayExit);
     return out;
   },
 
