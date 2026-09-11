@@ -177,6 +177,66 @@ class LedgerContractTest(unittest.TestCase):
         self.assertEqual(float(default.iloc[0]["turnover"]), 0.0)
 
 
+class ScenarioEffectivenessGuardTest(unittest.TestCase):
+    """F1/F2 守卫：声明了旋钮但组合结果与 baseline 逐位相同的场景，不得作为组合结论。
+
+    用合成数据测试（不依赖本地日线池），保证 CI 也守得住。
+    """
+
+    def _frame(self, rows):
+        base = dict(rank_ic_mean=0.01, rank_ic_pos_rate=0.50, cumulative_return=0.5,
+                    annualized_return=0.05, sharpe=0.3, max_drawdown=-0.5, total_turnover=200.0)
+        out = []
+        for name, over in rows:
+            out.append({"scenario": name, **{**base, **over}})
+        return pd.DataFrame(out)
+
+    def test_classification_three_way(self):
+        from gen2.baseline.rebuild_research_baselines import (
+            classify_scenarios, EFFECTIVE, SIGNAL_ONLY, NO_EFFECT_AT_ALL,
+        )
+        df = self._frame([
+            ("baseline", {}),
+            ("rs_heavy", {"rank_ic_mean": 0.02}),                       # 信号变、组合不变 → 仅信号
+            ("top_q30", {}),                                            # 两层都不变 → 完全无效
+            ("promotion3", {"cumulative_return": 0.7, "sharpe": 0.4}),   # 组合变 → 组合有效
+        ])
+        got = {c["scenario"]: c for c in classify_scenarios(df)}
+        self.assertEqual(got["rs_heavy"]["status"], SIGNAL_ONLY)
+        self.assertTrue(got["rs_heavy"]["signal_only"])
+        self.assertFalse(got["rs_heavy"]["portfolio_effective"])
+        self.assertEqual(got["top_q30"]["status"], NO_EFFECT_AT_ALL)
+        self.assertFalse(got["top_q30"]["signal_only"])
+        self.assertEqual(got["promotion3"]["status"], EFFECTIVE)
+        self.assertTrue(got["promotion3"]["portfolio_effective"])
+        self.assertNotIn("baseline", got, "baseline 不参与分类")
+
+    def test_unregistered_ineffective_scenario_fails(self):
+        from gen2.baseline.rebuild_research_baselines import classify_scenarios, check_registry
+        df = self._frame([("baseline", {}),
+                          ("brand_new_noop", {"rank_ic_mean": 0.02})])
+        with self.assertRaises(ValueError) as ctx:
+            check_registry(classify_scenarios(df))
+        self.assertIn("brand_new_noop", str(ctx.exception))
+        self.assertIn("REGISTERED_INEFFECTIVE", str(ctx.exception))
+
+    def test_stale_registry_fails(self):
+        from gen2.baseline.rebuild_research_baselines import classify_scenarios, check_registry
+        # rs_heavy 已登记为无效，这里让它变成组合有效 → 登记表过期必须报错
+        df = self._frame([("baseline", {}),
+                          ("rs_heavy", {"cumulative_return": 0.9, "rank_ic_mean": 0.02})])
+        with self.assertRaises(ValueError) as ctx:
+            check_registry(classify_scenarios(df))
+        self.assertIn("登记表已过期", str(ctx.exception))
+
+    def test_registered_names_match_known_problems(self):
+        from gen2.baseline.sensitivity_matrix import REGISTERED_INEFFECTIVE, scenario_specs
+        names = {s["name"] for s in scenario_specs()}
+        self.assertTrue(set(REGISTERED_INEFFECTIVE) <= names, "登记的场景必须存在于场景声明中")
+        self.assertEqual(REGISTERED_INEFFECTIVE.get("top_q30"), "F2")
+        self.assertEqual(REGISTERED_INEFFECTIVE.get("rs_heavy"), "F1")
+
+
 class CommittedReportTest(unittest.TestCase):
     """不依赖本地数据的守卫：仓库内提交的基线与索引必须保留边界声明。"""
 
@@ -200,6 +260,33 @@ class CommittedReportTest(unittest.TestCase):
         itext = index.read_text(encoding="utf-8")
         self.assertIn("旧角色语义审计基线", itext)
         self.assertIn("当前有效（唯一权威口径）", itext)
+        self.assertIn("gen2_b1_research_baselines_20260911.md", itext)
+
+    def test_research_report_downgrades_ineffective_scenarios(self):
+        """F1/F2 守卫：六个无效场景只能出现在信号层/完全无效表，且必须带显式标记。"""
+        from gen2.baseline.sensitivity_matrix import REGISTERED_INEFFECTIVE
+        research = ROOT / "ml" / "gen2" / "reports" / "gen2_b1_research_baselines_20260911.md"
+        text = research.read_text(encoding="utf-8")
+
+        # 组合敏感性表（§3）里不得出现任何无效场景
+        portfolio_section = text.split("## 3. 组合敏感性")[1].split("## 3.1")[0]
+        for name in REGISTERED_INEFFECTIVE:
+            self.assertNotIn(f"| {name} |", portfolio_section,
+                             f"{name} 组合结果与 baseline 逐位相同，不得出现在组合敏感性表")
+
+        # 显式标记必须存在
+        signal_section = text.split("## 3.1")[1].split("## 3.2")[0]
+        noop_section = text.split("## 3.2")[1].split("## 4.")[0]
+        for name in ("rs_heavy", "momentum_heavy", "trend_heavy", "quality_heavy"):
+            self.assertIn(f"| {name} |", signal_section)
+            self.assertIn("signal_only", signal_section)
+            self.assertIn("portfolio_effective", signal_section)
+        for name in ("top_q30", "top_q40"):
+            self.assertIn(f"| {name} |", noop_section)
+        self.assertIn("portfolio_effective = false", text.replace("`", ""))
+        # 无效场景的组合指标不得出现在信号层表里（只允许 RankIC 类指标）
+        for metric in ("累计收益", "Sharpe", "MDD"):
+            self.assertNotIn(metric, signal_section.replace("组合净值 / Sharpe / MDD", ""))
 
 
 if __name__ == "__main__":

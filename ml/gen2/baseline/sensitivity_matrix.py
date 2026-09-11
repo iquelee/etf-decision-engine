@@ -14,6 +14,61 @@ from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
 
 
+#: 场景旋钮的声明式定义（**唯一来源**）
+#:
+#: 报告生成器（`rebuild_research_baselines`）与 runner 共用这一份声明，
+#: 这样「场景声明了什么旋钮」与「跑出什么结果」不会各说各话。
+#: 注意：`weights` 当前只作用于 `rank_engine` 的 `leadership_score`；是否真正进入
+#: 角色状态机消费的 Alpha 由 F1 / WP-G2-05 的 `selection_scores` 注入链决定 ——
+#: 不能只看这里的声明就断言场景「改变了组合」。
+BASE_WEIGHTS = {
+    "trend": 0.20, "rs": 0.25, "stage": 0.15, "momentum": 0.10,
+    "consolidation": 0.10, "breakout": 0.05, "volatility": 0.05,
+    "liquidity": 0.05, "diversification": 0.05,
+}
+
+BASE_PORTFOLIO = {
+    "promotion_persistence_days": 5,
+    "demotion_persistence_days": 5,
+    "max_core_count": 5,
+    "max_core_per_cluster": 2,
+    "min_replacement_edge": 8.0,
+    "top_quantile": 0.2,
+}
+
+
+def scenario_specs() -> list[dict]:
+    """敏感性场景声明（name / weights / portfolio）。runner 与报告生成器共用。"""
+    P = BASE_PORTFOLIO
+    W = BASE_WEIGHTS
+    return [
+        {"name": "baseline", "weights": W, "portfolio": P},
+        {"name": "rs_heavy", "weights": {**W, "rs": 0.35, "trend": 0.15, "stage": 0.10}, "portfolio": P},
+        {"name": "momentum_heavy", "weights": {**W, "momentum": 0.20, "consolidation": 0.05, "stage": 0.10}, "portfolio": P},
+        {"name": "trend_heavy", "weights": {**W, "trend": 0.30, "rs": 0.20, "stage": 0.10}, "portfolio": P},
+        {"name": "quality_heavy", "weights": {**W, "volatility": 0.10, "diversification": 0.10, "rs": 0.20, "trend": 0.15}, "portfolio": P},
+        {"name": "promotion3", "weights": W, "portfolio": {**P, "promotion_persistence_days": 3, "demotion_persistence_days": 3}},
+        {"name": "promotion10", "weights": W, "portfolio": {**P, "promotion_persistence_days": 10, "demotion_persistence_days": 10}},
+        {"name": "cluster_cap3", "weights": W, "portfolio": {**P, "max_core_per_cluster": 3}},
+        {"name": "top_q30", "weights": W, "portfolio": {**P, "top_quantile": 0.30}},
+        {"name": "top_q40", "weights": W, "portfolio": {**P, "top_quantile": 0.40}},
+        {"name": "core3", "weights": W, "portfolio": {**P, "max_core_count": 3}},
+        {"name": "core7", "weights": W, "portfolio": {**P, "max_core_count": 7}},
+    ]
+
+
+#: 声明了旋钮但组合结果与 baseline 逐位相同的场景 → 只能作信号层分析（F1/F2）。
+#: 报告生成器要求「检测到的无效场景必须在此登记」，否则报错（防止新出现的静默无效场景被当结论展示）。
+REGISTERED_INEFFECTIVE = {
+    "rs_heavy": "F1",
+    "momentum_heavy": "F1",
+    "trend_heavy": "F1",
+    "quality_heavy": "F1",
+    "top_q30": "F2",
+    "top_q40": "F2",
+}
+
+
 def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0, output_dir=None):
     cfg = load_gen2_config()
     cfg = dict(cfg)
@@ -49,37 +104,9 @@ def run_sensitivity_matrix(output_path: str | Path | None = None, *, output_dir=
     features = build_feature_matrix(bars=bars, records=records, config=cfg)
     labels = build_labels(features)
 
-    base_portfolio = {
-        "promotion_persistence_days": 5,
-        "demotion_persistence_days": 5,
-        "max_core_count": 5,
-        "max_core_per_cluster": 2,
-        "min_replacement_edge": 8.0,
-        "top_quantile": 0.2,
-    }
-    base_weights = {
-        "trend": 0.20, "rs": 0.25, "stage": 0.15, "momentum": 0.10,
-        "consolidation": 0.10, "breakout": 0.05, "volatility": 0.05,
-        "liquidity": 0.05, "diversification": 0.05,
-    }
-
     rows = []
-    scenarios = []
-
-    scenarios.append(("baseline", base_weights, base_portfolio))
-    scenarios.append(("rs_heavy", {**base_weights, "rs": 0.35, "trend": 0.15, "stage": 0.10}, base_portfolio))
-    scenarios.append(("momentum_heavy", {**base_weights, "momentum": 0.20, "consolidation": 0.05, "stage": 0.10}, base_portfolio))
-    scenarios.append(("trend_heavy", {**base_weights, "trend": 0.30, "rs": 0.20, "stage": 0.10}, base_portfolio))
-    scenarios.append(("quality_heavy", {**base_weights, "volatility": 0.10, "diversification": 0.10, "rs": 0.20, "trend": 0.15}, base_portfolio))
-    scenarios.append(("promotion3", base_weights, {**base_portfolio, "promotion_persistence_days": 3, "demotion_persistence_days": 3}))
-    scenarios.append(("promotion10", base_weights, {**base_portfolio, "promotion_persistence_days": 10, "demotion_persistence_days": 10}))
-    scenarios.append(("cluster_cap3", base_weights, {**base_portfolio, "max_core_per_cluster": 3}))
-    scenarios.append(("top_q30", base_weights, {**base_portfolio, "top_quantile": 0.30}))
-    scenarios.append(("top_q40", base_weights, {**base_portfolio, "top_quantile": 0.40}))
-    scenarios.append(("core3", base_weights, {**base_portfolio, "max_core_count": 3}))
-    scenarios.append(("core7", base_weights, {**base_portfolio, "max_core_count": 7}))
-
-    for name, weights, portfolio in scenarios:
+    for spec in scenario_specs():
+        name, weights, portfolio = spec["name"], spec["weights"], spec["portfolio"]
         row = evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0, output_dir=output_dir)
         row["scenario"] = name
         row["weights"] = "|".join(f"{k}={v}" for k, v in weights.items() if k in ("trend", "rs", "stage", "momentum", "consolidation", "volatility", "diversification"))

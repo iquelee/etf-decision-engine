@@ -8,7 +8,7 @@
 | 报告 | 内容 |
 |---|---|
 | `gen2_b1_ledger_baseline_20260911.md` | **B1 回测账本基线**：唯一权威角色语义 + 唯一权威账本，四类策略同口径比较 + 资金守恒验收 |
-| `gen2_b1_research_baselines_20260911.md` | **B1 研究基线**：角色基线 / 归因 / 敏感性三个基线 + 本轮暴露的三个问题（F1 权重敏感性在 V2 下失效、F2 top_quantile 失效、F3 费用档白跑已修） |
+| `gen2_b1_research_baselines_20260911.md` | **B1 研究基线**：角色基线 / 归因 / 敏感性 + 组合有效性守卫。**无效场景已降级**：`rs_heavy`/`momentum_heavy`/`trend_heavy`/`quality_heavy` 标 `signal_only=true, portfolio_effective=false`（F1 → WP-G2-05）；`top_q30`/`top_q40` 旋钮未被任何一层读取（F2 → 改 `role_thresholds`）；F3 费用档白跑已修（数值不变）。生成器：`python -m gen2.baseline.rebuild_research_baselines`（检测到未登记/已过期的无效场景会直接报错） |
 | `gen2_b1_research_rule_rotation_20260911.md` | 角色基线回测报告（新口径，Economic Gate = FAIL/UNPROVEN） |
 | `gen2_rule_impl_correction_20260911.md` | 规则实现语义变更记录（D-001/D-002/D-004 收口、V2 角色权威唯一化、G2S-06 解锁） |
 | `gen2_scenario_parity_20260911.md` | 双端场景比对报告（G2S-01..07 不变量与差异分类） |
