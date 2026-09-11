@@ -4,10 +4,11 @@
  *
  * 用「真实生产库导出数据」（outputs/gen1-ui-contract-samples/real-data-fixture.json）
  * 在本地驱动 dist-functions 里的真实 gateway 处理器（db 层打桩，其余全是真代码），
- * 产出三份 API 契约样例供人工审查三层字段是否串位：
+ * 产出四份 API 契约样例供人工审查三层字段是否串位：
  *
  *   api-dashboard.json           GET /api/dashboard
  *   api-etf-513310.json          GET /api/etf/513310
+ *   api-review.json              GET /api/review?from=&to=
  *   api-admin-gen1-health.json   GET /api/admin/gen1/health
  *
  * 只读：不触网、不部署、不写库。param_config 中 admin_* 敏感文档已剔除，
@@ -135,6 +136,12 @@ async function main() {
 
   results['api-dashboard.json'] = await apiGateway.main({ httpMethod: 'GET', path: '/api/dashboard' });
   results['api-etf-513310.json'] = await apiGateway.main({ httpMethod: 'GET', path: '/api/etf/513310' });
+  // review-fix：复盘页需要「生产决策 | Gen-1 反事实 | 实际操作」三段直出，补第四份样例
+  results['api-review.json'] = await apiGateway.main({
+    httpMethod: 'GET',
+    path: '/api/review',
+    queryStringParameters: { from: '2026-09-01', to: '2026-09-10' }
+  });
   results['api-admin-gen1-health.json'] = await adminGateway.main({
     httpMethod: 'GET',
     path: '/api/admin/gen1/health',
@@ -167,6 +174,50 @@ async function main() {
   assert.strictEqual(detail.production.suggested_pct, detail.decision.suggested_position, 'detail production.suggested');
   assert.strictEqual(detail.gen1.authority, 'CANARY');
   assert.ok(detail.system_runtime && detail.system_runtime.gen1.health_status === 'OK');
+  assert.strictEqual(detail.legacy.deprecated, true, 'detail 必须下发 legacy.deprecated');
+  assert.strictEqual(detail.legacy.do_not_use_for_authority, true, 'detail 必须下发 legacy.do_not_use_for_authority');
+
+  /* review-fix P0：stage 三拆必须用真实反例守住（513310 当日 signal=S0 / baseline=effective=S1） */
+  assert.strictEqual(detail.gen1.stages.signal, 'S0', 'stages.signal = ml_shadow_signal.stage = S0');
+  assert.strictEqual(detail.gen1.stages.baseline, 'S1', 'stages.baseline = v361_baseline_stage = S1');
+  assert.strictEqual(detail.gen1.stages.effective, 'S1', 'stages.effective = gen1_effective_stage = S1');
+  assert.strictEqual(detail.gen1.signal.stage, detail.gen1.stages.signal, '兼容字段 signal.stage === stages.signal');
+  assert.notStrictEqual(detail.gen1.signal.stage, detail.gen1.stages.effective,
+    'signal.stage 不得冒充 effective stage');
+  assert.strictEqual(detail.gen1.safety.evaluated_stage, 'S0', 'Safety 实际评估阶段 = S0（与其文案一致）');
+  assert.strictEqual(detail.gen1.safety.stage_source, 'EOD_STAGE_PRECHECK', 'Safety stage 来源可追溯');
+
+  /* review-fix P1-1：canary 权限链三真值 */
+  const c1 = dash.system_runtime.gen1;
+  assert.strictEqual(typeof c1.counterfactual_authorized, 'boolean', 'system_runtime.gen1 必须含 counterfactual_authorized');
+  assert.strictEqual(typeof c1.counterfactual_health_allowed, 'boolean', 'system_runtime.gen1 必须含 counterfactual_health_allowed');
+  assert.strictEqual(c1.counterfactual_authorized, true);
+  assert.strictEqual(c1.counterfactual_health_allowed, true);
+  assert.strictEqual(c1.counterfactual_active, true);
+  assert.strictEqual(c1.counterfactual_inactive_reason, null, '已激活时归因必须为 null');
+
+  /* review-fix P1-2：dashboard legacy 声明 */
+  assert.strictEqual(dash.legacy.deprecated, true);
+  assert.strictEqual(dash.legacy.do_not_use_for_authority, true);
+  assert.ok(dash.legacy.fields.indexOf('ml_shadow.fast_path_enabled') >= 0);
+
+  /* 第四份：review 行必须能直出「生产 | 反事实 | 实操」 */
+  const reviewPayload = results['api-review.json'];
+  assert.ok(reviewPayload && reviewPayload.data && Array.isArray(reviewPayload.data.decisions),
+    'api-review 必须返回 decisions 数组');
+  const rv = reviewPayload.data.decisions.find((x) => x.code === '513310' && x.decision_date === '2026-09-10')
+    || reviewPayload.data.decisions[0];
+  assert.ok(rv, 'review 至少需一条 decision');
+  assert.ok(rv.production, 'review 行必须含 production 块');
+  assert.strictEqual(rv.production.action, rv.final_action, 'review production.action === final_action');
+  assert.strictEqual(rv.production.suggested, rv.suggested_position, 'review production.suggested === suggested_position');
+  assert.strictEqual(rv.production.engine, 'v3.6.1', 'review 生产引擎恒 V3.6.1');
+  assert.ok(rv.gen1, 'review 行必须含 gen1 块');
+  assert.ok(rv.gen1.counterfactual && 'suggested_pct' in rv.gen1.counterfactual, 'gen1.counterfactual.suggested_pct 必须存在');
+  assert.ok('delta_pct' in rv.gen1.counterfactual, 'gen1.counterfactual.delta_pct 必须存在');
+  assert.ok(rv.gen1.status, 'gen1.status 必须存在');
+  assert.strictEqual(rv.gen1.stages.signal, null, 'Review 无信号联表，stages.signal 显式 null');
+
   const health = results['api-admin-gen1-health.json'].data;
   assert.strictEqual(health.gen1_health_status, 'OK');
   assert.strictEqual(health.gen1_health_gate_status, 'ACTIVE');
@@ -174,9 +225,30 @@ async function main() {
   assert.strictEqual(health.gen1_safety_source, 'SAFETY_CORE');
   assert.strictEqual(health.ledger.gen1_counterfactual_ledger_ok, true);
   assert.strictEqual(health.ledger.gen1_counterfactual_intended_tech_position, 16.2);
-  assert.strictEqual(health.canary.production_write, false);
   assert.strictEqual(health.authority.value, 'CANARY');
-  console.log('\n[self-check] 三份样例三层字段自检 PASS（production / gen1 / runtime 无串位）');
+  /* review-fix P1-1：canary 新形状 */
+  assert.strictEqual(health.canary.authorized, true);
+  assert.strictEqual(health.canary.health_allowed, true);
+  assert.strictEqual(health.canary.active, true);
+  assert.strictEqual(health.canary.inactive_reason, null);
+  assert.strictEqual(health.canary.invocations, 0);
+  assert.strictEqual(health.canary.production_write, false);
+  assert.strictEqual(health.canary.production_fast_path_enabled, false);
+  assert.strictEqual(health.canary.auto_execution, false);
+  /* review-fix P1-2：admin legacy 声明 */
+  assert.strictEqual(health.legacy.deprecated, true);
+  assert.strictEqual(health.legacy.do_not_use_for_authority, true);
+  /* review-fix P0：admin 行三种 stage 分列（513310：S0 / S1 / S1） */
+  const row513 = health.rows.find((r) => r.code === '513310');
+  assert.ok(row513, 'admin rows 必须含 513310');
+  assert.strictEqual(row513.stage_signal, 'S0');
+  assert.strictEqual(row513.stage_baseline, 'S1');
+  assert.strictEqual(row513.stage_effective, 'S1');
+  assert.strictEqual(row513.stage, row513.stage_signal, '兼容字段 stage === stage_signal');
+  assert.strictEqual(row513.safety_evaluated_stage, 'S0');
+  assert.strictEqual(row513.safety_stage_source, 'EOD_STAGE_PRECHECK');
+
+  console.log('\n[self-check] 四份样例自检 PASS（三层 runtime / production / gen1 无串位，stage 三拆与 legacy 声明到位）');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

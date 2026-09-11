@@ -21,8 +21,10 @@ const { hashPassword, verifyPassword } = require('./common/utils/admin-auth');
 const { requestId, safeErrorResponse } = require('./common/utils/gateway-errors');
 const { triggerIntelRefresh } = require('./common/utils/intel-refresh');
 const { isDateStr, clampInt, isRiskEventTypeKey, normalizeRiskFlag, parseFiniteNumber } = require('./common/utils/request-validate');
-// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约
-const { buildHealthTruth, buildCanaryLedger, buildEtfGen1 } = require('./common/utils/gen1-ui-view-model');
+// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约 + legacy 声明
+const {
+  buildHealthTruth, buildCanaryLedger, buildEtfGen1, buildLegacyNotice, counterfactualInactiveReason
+} = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -41,8 +43,11 @@ function beijingDateStr() { return new Date(Date.now() + 8 * 3600 * 1000).toISOS
  *   decision_result    每标的最新决策（Safety 许可 / 模型候选 / 反事实账本字段）
  *
  * 返回：Health 四字段（status/gate/source/safety_source，禁止合并）+ Canary Ledger 五字段
- * + authority + 每标的信号表行。legacy 顶层字段（advisory_enabled 等）保留一轮兼容，
- * 但不再承载权限语义 —— 权限真相只看 authority 块。
+ * + authority + canary 权限链三真值（authorized / health_allowed / active，P1-1）
+ * + 每标的信号表行（三种 stage 分列：stage_signal / stage_baseline / stage_effective）。
+ * legacy 顶层字段（advisory_enabled / fast_path_enabled）保留一轮兼容，同时下发
+ * 机器可读的 legacy.deprecated / legacy.do_not_use_for_authority（P1-2），
+ * 权限真相只看 authority 与 canary.authorized / canary.health_allowed。
  */
 async function getGen1Health() {
   const [{ params }, etfs, runtimeRows, healthRows] = await Promise.all([
@@ -90,7 +95,12 @@ async function getGen1Health() {
       fast_path_candidate: !!(decision && decision.gen1_model_candidate === true),
       // 新契约字段（Control Center Main5 Signal Table 消费）
       gen1_status: gen1.status,
-      stage: gen1.signal.stage,
+      // PR-UI-01 review-fix（P0）：三种 stage 分开下发，禁止互相冒充。
+      // stage 保留一轮兼容 = stage_signal（模型评估时的 EOD stage），不再等于 effective。
+      stage: gen1.stages.signal,
+      stage_signal: gen1.stages.signal,
+      stage_baseline: gen1.stages.baseline,
+      stage_effective: gen1.stages.effective,
       threshold: gen1.signal.threshold,
       model_candidate: gen1.signal.model_candidate,
       data_health_status: gen1.data.health_status,
@@ -99,6 +109,9 @@ async function getGen1Health() {
       domain_status: gen1.applicability.domain_status,
       domain_permission: gen1.applicability.domain_permission,
       safety_permission: gen1.safety.permission,
+      // Safety 实际评估所用的 stage 及其来源（EOD_STAGE_PRECHECK / SAFETY_CORE）
+      safety_evaluated_stage: gen1.safety.evaluated_stage,
+      safety_stage_source: gen1.safety.stage_source,
       canary_eligible: !!(decision && decision.gen1_canary_eligible === true),
       baseline_suggested_pct: decision && decision.suggested_position != null ? decision.suggested_position : null,
       counterfactual_suggested_pct: gen1.counterfactual.suggested_pct,
@@ -111,7 +124,8 @@ async function getGen1Health() {
   return {
     model_id: (runtime && runtime.ml_model_id) || p.ml_challenger_model_id || 'HVT-A-ET-20260830',
     frozen: (runtime ? runtime.ml_gen1_frozen !== false : p.ml_gen1_frozen !== false),
-    // legacy 兼容字段（一轮保留；不得再被解读为真实运行权限 —— 权限真相看 authority）
+    // legacy 兼容字段（一轮保留；不得再被解读为真实运行权限 —— 权限真相看 authority /
+    // canary.authorized / canary.health_allowed；下方 legacy 块给出机器可读的禁用声明）
     advisory_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true,
     fast_path_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true && p.ml_fast_path_enabled === true,
     legacy_params_note: '兼容/历史配置；真实运行权限请看 runtime_status',
@@ -134,16 +148,28 @@ async function getGen1Health() {
       economic_health: healthState.economic_health || null,
       runtime_data_health: healthState.runtime_data_health || null
     } : null,
-    canary: {
-      counterfactual_active: runtime ? runtime.gen1_counterfactual_canary_active === true : false,
-      counterfactual_invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
-        ? runtime.gen1_counterfactual_canary_invocations : 0,
-      production_write: false,
-      production_fast_path_enabled: false,
-      auto_execution: false
-    },
+    canary: (() => {
+      // PR-UI-01 review-fix（P1-1）：权限链三真值独立下发，
+      // active=false 时可回答到底是 Authority 没授权 / Health 不允许 / 其它条件未过。
+      const authorized = runtime ? runtime.gen1_counterfactual_canary_authorized === true : false;
+      const healthAllowed = runtime ? runtime.gen1_counterfactual_canary_health_allowed === true : false;
+      const active = runtime ? runtime.gen1_counterfactual_canary_active === true : false;
+      return {
+        authorized,
+        health_allowed: healthAllowed,
+        active,
+        inactive_reason: counterfactualInactiveReason(authorized, healthAllowed, active),
+        invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
+          ? runtime.gen1_counterfactual_canary_invocations : 0,
+        production_write: false,
+        production_fast_path_enabled: false,
+        auto_execution: false
+      };
+    })(),
     // Canary Ledger（cap 合规证据只看 intended；target_sum 仅 info）
     ledger,
+    // PR-UI-01 review-fix（P1-2）：legacy 块显式声明 deprecated
+    legacy: buildLegacyNotice(),
     rows
   };
 }

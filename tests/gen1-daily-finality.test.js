@@ -116,6 +116,17 @@ function load(opt) {
     require: (p) => {
       if (p === './common/utils/db') return db;
       if (p === './common/utils/datasource') return datasource;
+      if (p === './common/utils/fetch-guard') {
+        // 夹具确定性（2026-09-11 修复）：isFinalizedDailyBar(row) 不传 opts 时隐含用
+        // 「真实当天」，而本测试把「现在」冻结在 TODAY。跨 VM 边界时真实时钟会泄漏进来
+        // （昨天 TODAY==真实当天 → 判今日行需 is_final；今天 → 09-10 行被当成历史 bar 天然定稿），
+        // 同一份逻辑会随运行日期翻转结果。这里把冻结日期显式注入，测试只验证语义不验证日历。
+        const guard = require(path.join(SRC_COMMON, 'utils', 'fetch-guard.js'));
+        return Object.assign({}, guard, {
+          isFinalizedDailyBar: (row, opts) =>
+            guard.isFinalizedDailyBar(row, Object.assign({ today: TODAY }, opts || {}))
+        });
+      }
       if (p === '@cloudbase/node-sdk') {
         return {
           init: () => ({ callFunction: async () => ({ ok: true }), database: () => ({ collection: () => ({}) }) }),
@@ -259,7 +270,8 @@ async function main() {
     const rows = MAIN5.map((c) => poisonedRow(c, TODAY)).concat([finalizedRow(BENCH, TODAY)]);
     const planAtNoon = planDailyFetch({
       decisionCodes: MAIN5, benchmarkCodes: [BENCH], existingRows: rows, dateStr: TODAY,
-      isFinalized: isFinalizedDailyBar
+      // 显式注入冻结日期（同 load() 内的夹具约定），避免隐含真实时钟导致跨日翻转
+      isFinalized: (row) => isFinalizedDailyBar(row, { today: TODAY })
     });
     assert.strictEqual(planAtNoon.production.pending.join(','), MAIN5.join(','),
       '★ U6：盘中误写入的当日行不得算就绪（必须全部视为待抓）');

@@ -18,7 +18,7 @@ const { computeCooldownDays } = require('./common/utils/cooldown');
 const fund = require('./common/utils/fundamental');
 const { buildPortfolioMlShadow, buildEtfMlShadow, slimCardMlShadow } = require('./common/utils/ml-shadow');
 // PR-UI-01：三层契约 ViewModel（production / gen1 counterfactual / system_runtime）
-const { buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1 } = require('./common/utils/gen1-ui-view-model');
+const { buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1, buildLegacyNotice } = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -294,6 +294,8 @@ async function getDashboard() {
     // PR-UI-01：系统级三层契约（production ACTIVE / gen1 CANARY / gen2 SHADOW）
     system_runtime: buildSystemRuntime(runtime),
     ml_shadow,
+    // PR-UI-01 review-fix：legacy 块显式声明 deprecated —— 权限/阶段判定禁止使用下列字段
+    legacy: buildLegacyNotice(),
     three_questions: {
       market_status: marketStatus,
       most_worth: mostWorth ? { code: mostWorth.code, name: mostWorth.name } : null,
@@ -445,6 +447,8 @@ async function getEtfDetail(code) {
     // 冷静期实时化：决策快照里的 cooldown_days 是生成时的历史值，展示用「北京今天」重算的当前剩余
     decision: liveDecision,
     ml_shadow,
+    // PR-UI-01 review-fix：legacy 块显式声明 deprecated（权限/阶段判定只看上面三块）
+    legacy: buildLegacyNotice(),
     production: uiVm.production,
     gen1: uiVm.gen1,
     system_runtime: buildSystemRuntime(runtime),
@@ -619,17 +623,33 @@ async function getReview(from, to) {
 
   // 安全：复盘为公网无鉴权接口，不返回成交明细（仅聚合统计与决策链），成交明细走后台 adminGateway
   const target = d => (d.final_target != null ? d.final_target : d.target_position);
-  const decisionsSafe = decisions.map((d) => ({
-    decision_date: d.decision_date, code: d.code, final_action: d.final_action,
-    action_label: resolveActionLabel(d.final_action, d.action_label), opportunity_score: d.opportunity_score,
-    opportunity_grade: d.opportunity_grade,
-    final_target: target(d),
-    target_position: target(d),
-    suggested_position: d.suggested_position,
-    current_position: actualHeldPosition(d.code, d.decision_date, snapshots, heldTrades),
-    engine: productionEngine,
-    gen1: buildReviewGen1(d)
-  }));
+  // PR-UI-01 review-fix：Review 行改为「production 块 + gen1 块」分层，
+  // 使复盘页可直接渲染「生产决策 | Gen-1 反事实 | 实际操作」，不必再从旧字段拼装；
+  // 旧平铺字段（final_action/final_target/suggested_position/engine）保留一轮兼容。
+  const decisionsSafe = decisions.map((d) => {
+    const held = actualHeldPosition(d.code, d.decision_date, snapshots, heldTrades);
+    return {
+      decision_date: d.decision_date, code: d.code, final_action: d.final_action,
+      action_label: resolveActionLabel(d.final_action, d.action_label), opportunity_score: d.opportunity_score,
+      opportunity_grade: d.opportunity_grade,
+      final_target: target(d),
+      target_position: target(d),
+      suggested_position: d.suggested_position,
+      current_position: held,
+      engine: productionEngine,
+      // 生产（V3.6.1）唯一决策口径
+      production: {
+        engine: productionEngine,
+        action: d.final_action,
+        action_label: resolveActionLabel(d.final_action, d.action_label),
+        target: target(d),
+        suggested: d.suggested_position,
+        current_position: held
+      },
+      // Gen-1 反事实（独立于最终建议；不得作为 Review 的建议来源）
+      gen1: buildReviewGen1(d)
+    };
+  });
 
   // 实际操作（去敏：不含股数/金额，公网接口安全约束）——登记的操作立即可见，附匹配到的最近系统建议（决策日≤操作日）
   const tradesSafe = (heldTrades || []).map((t) => {

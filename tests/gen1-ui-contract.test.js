@@ -23,6 +23,8 @@ const {
   buildCanaryLedger,
   buildEtfUiViewModel,
   buildReviewGen1,
+  buildLegacyNotice,
+  LEGACY_DEPRECATED_FIELDS,
   SIGNAL_STATUS
 } = require('../src/common/utils/gen1-ui-view-model');
 
@@ -280,4 +282,167 @@ const POSITION = { code: '513310', current_position: 9.1 };
   console.log('[PASS] 静态守卫：gateway 接线与兼容字段符合 PR-UI-01');
 }
 
-console.log('\n全部 UI-G1-01..09 + 静态守卫 PASS');
+/* ---------- UI-G1-10（review-fix P0）：stage 三拆，signal 不得冒充 effective ---------- */
+{
+  // 真实反例（513310 / 2026-09-10）：模型在 S0 评估并被 EOD 预检拦住，
+  // 而 baseline / effective 都是 S1 —— 旧实现会让 signal.stage 显示成 S1，
+  // 与紧邻的 Safety 文案「当前阶段 S0 不属于 S2/S3」自相矛盾。
+  const vm = buildEtfUiViewModel({
+    code: '513310', sector: 'storage',
+    decision: makeDecision({
+      v361_baseline_stage: 'S1',
+      gen1_effective_stage: 'S1',
+      ml_rule_permission: 'BLOCK',
+      ml_rule_permission_reason_code: 'EOD_STAGE_NOT_ELIGIBLE',
+      ml_rule_permission_reason: 'EOD 阶段预检：当前阶段 S0 不属于 S2/S3观察许可范围',
+      ml_rule_permission_source: 'SAFETY_CORE'
+    }),
+    position: POSITION,
+    signal: makeSignal({ stage: 'S0', rule_permission_source: 'EOD_STAGE_PRECHECK' }),
+    runtime: makeRuntime()
+  });
+  assert.strictEqual(vm.gen1.stages.signal, 'S0', 'stages.signal 必须来自 ml_shadow_signal.stage');
+  assert.strictEqual(vm.gen1.stages.baseline, 'S1', 'stages.baseline 必须来自 v361_baseline_stage');
+  assert.strictEqual(vm.gen1.stages.effective, 'S1', 'stages.effective 必须来自 gen1_effective_stage');
+  assert.strictEqual(vm.gen1.signal.stage, vm.gen1.stages.signal,
+    '兼容字段 signal.stage 必须严格等于 stages.signal');
+  assert.notStrictEqual(vm.gen1.signal.stage, vm.gen1.stages.effective,
+    'signal.stage 绝不允许冒充 effective stage（本反例 signal=S0 / effective=S1）');
+  assert.strictEqual(vm.gen1.safety.evaluated_stage, 'S0', 'Safety 实际评估阶段必须单独输出');
+  assert.strictEqual(vm.gen1.safety.stage_source, 'EOD_STAGE_PRECHECK', 'Safety stage 来源必须可追溯');
+  // 三 stage 缺数据时不得互相顶替
+  const bare = buildEtfUiViewModel({
+    code: '513310', sector: 'storage', decision: makeDecision(), position: POSITION,
+    signal: null, runtime: makeRuntime()
+  });
+  assert.strictEqual(bare.gen1.stages.signal, null, '无信号行时 stages.signal 必须为 null，不得用其它 stage 顶替');
+  console.log('[PASS] UI-G1-10 stage 三拆：signal / baseline / effective 不串位');
+}
+
+/* ---------- UI-G1-11（review-fix P1-1）：canary 权限链可归因 ---------- */
+{
+  // authority 未授权
+  const a = buildSystemRuntime(makeRuntime({
+    gen1_counterfactual_canary_authorized: false,
+    gen1_counterfactual_canary_health_allowed: true,
+    gen1_counterfactual_canary_active: false
+  }));
+  assert.strictEqual(a.gen1.counterfactual_authorized, false);
+  assert.strictEqual(a.gen1.counterfactual_health_allowed, true);
+  assert.strictEqual(a.gen1.counterfactual_inactive_reason, 'NOT_AUTHORIZED');
+  // health gate 不允许
+  const b = buildSystemRuntime(makeRuntime({
+    gen1_counterfactual_canary_authorized: true,
+    gen1_counterfactual_canary_health_allowed: false,
+    gen1_counterfactual_canary_active: false
+  }));
+  assert.strictEqual(b.gen1.counterfactual_inactive_reason, 'HEALTH_NOT_ALLOWED');
+  // 都允许但未激活 → 其它条件
+  const c = buildSystemRuntime(makeRuntime({
+    gen1_counterfactual_canary_authorized: true,
+    gen1_counterfactual_canary_health_allowed: true,
+    gen1_counterfactual_canary_active: false
+  }));
+  assert.strictEqual(c.gen1.counterfactual_inactive_reason, 'OTHER_CONDITIONS');
+  // 已激活 → 无归因
+  const d = buildSystemRuntime(makeRuntime({
+    gen1_counterfactual_canary_authorized: true,
+    gen1_counterfactual_canary_health_allowed: true,
+    gen1_counterfactual_canary_active: true
+  }));
+  assert.strictEqual(d.gen1.counterfactual_inactive_reason, null);
+  assert.strictEqual(d.gen1.counterfactual_active, true);
+  // 缺字段 → 一律 false（不猜测、不从 legacy 兜底）
+  const e = buildSystemRuntime({});
+  assert.strictEqual(e.gen1.counterfactual_authorized, false);
+  assert.strictEqual(e.gen1.counterfactual_health_allowed, false);
+  assert.strictEqual(e.gen1.counterfactual_active, false);
+  assert.strictEqual(e.gen1.counterfactual_inactive_reason, 'NOT_AUTHORIZED');
+  console.log('[PASS] UI-G1-11 canary authorized / health_allowed / active 三真值可归因');
+}
+
+/* ---------- UI-G1-12（review-fix P1-2）：legacy 双真相隔离 ---------- */
+{
+  const notice = buildLegacyNotice();
+  assert.strictEqual(notice.deprecated, true);
+  assert.strictEqual(notice.do_not_use_for_authority, true);
+  assert.deepStrictEqual(notice.fields.slice().sort(), LEGACY_DEPRECATED_FIELDS.slice().sort(),
+    'legacy.fields 必须与契约常量逐项一致');
+  for (const f of ['ml_shadow', 'ml_shadow.ui_phase', 'ml_shadow.production_permission',
+    'ml_shadow.fast_path_enabled', 'advisory_enabled', 'fast_path_enabled']) {
+    assert.ok(notice.fields.indexOf(f) >= 0, `legacy.fields 必须包含 ${f}`);
+  }
+
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const vmSrc = strip(fs.readFileSync(path.join(REPO, 'src/common/utils/gen1-ui-view-model.js'), 'utf8'));
+  // 契约模块不得依赖 ml-shadow 构建器（legacy 语义的唯一来源）
+  assert.ok(!/require\(.*ml-shadow/.test(vmSrc), '契约模块禁止引用 ml-shadow 模块');
+  // authority 只认 runtime_status.gen1_authority
+  assert.ok(/runtime\.gen1_authority|rt\.gen1_authority/.test(vmSrc), 'authority 必须取自 runtime_status');
+  assert.ok(!/authority[\s\S]{0,80}(ui_phase|production_permission|advisory_enabled|fast_path_enabled)/.test(vmSrc),
+    'authority 推导不得引用 legacy 字段');
+
+  const api = strip(fs.readFileSync(path.join(REPO, 'cloudfunctions/apiGateway/index.js'), 'utf8'));
+  const admin = strip(fs.readFileSync(path.join(REPO, 'cloudfunctions/adminGateway/index.js'), 'utf8'));
+  assert.ok(/legacy:\s*buildLegacyNotice\(\)/.test(api), 'dashboard/detail 必须下发 legacy 禁用声明');
+  assert.ok(/legacy:\s*buildLegacyNotice\(\)/.test(admin), 'admin health 必须下发 legacy 禁用声明');
+
+  // production / gen1 块内不得出现 legacy 语义键（结构守卫：真实样例 + 契约输出）
+  const vm = buildEtfUiViewModel({
+    code: '513310', sector: 'storage', decision: makeDecision({ v361_baseline_stage: 'S1', gen1_effective_stage: 'S2' }),
+    position: POSITION, signal: makeSignal(), runtime: makeRuntime()
+  });
+  const FORBIDDEN = /^(ml_shadow|advisory_enabled|fast_path_enabled|ui_phase|production_permission|advisory)$/;
+  const walk = (obj, path) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const [k, v] of Object.entries(obj)) {
+      assert.ok(!FORBIDDEN.test(k), `production/gen1 块出现 legacy 字段 ${path}.${k}`);
+      walk(v, `${path}.${k}`);
+    }
+  };
+  walk(vm.production, 'production');
+  walk(vm.gen1, 'gen1');
+  console.log('[PASS] UI-G1-12 legacy deprecated 声明 + production/gen1 无 legacy 语义字段');
+}
+
+/* ---------- UI-G1-13（review-fix）：Review 行分层，可直出「生产 | 反事实 | 实操」 ---------- */
+{
+  const d = makeDecision({
+    suggested_position: 8.1,
+    v361_baseline_stage: 'S1', gen1_effective_stage: 'S1',
+    gen1_counterfactual_suggested_position: 12.3,
+    gen1_counterfactual_delta: 4.2,
+    gen1_model_probability: 0.71,
+    gen1_model_candidate: true,
+    gen1_canary_effective: true   // CANDIDATE 判定条件之一（candidate ∧ canary_effective）
+  });
+  const g = buildReviewGen1(d);
+  assert.strictEqual(g.authority, 'CANARY');
+  assert.strictEqual(g.status, 'CANDIDATE');
+  assert.strictEqual(g.signal_status, g.status, 'signal_status 兼容别名必须严格等于 status');
+  assert.strictEqual(g.counterfactual.suggested_pct, 12.3);
+  assert.strictEqual(g.counterfactual.delta_pct, 4.2);
+  assert.strictEqual(g.counterfactual_suggested_pct, g.counterfactual.suggested_pct, '平铺别名必须一致');
+  assert.strictEqual(g.delta_pct, g.counterfactual.delta_pct);
+  assert.strictEqual(g.baseline_suggested_pct, 8.1, 'baseline 必须来自生产 suggested_position');
+  assert.strictEqual(g.stages.signal, null, 'Review 无信号联表，stages.signal 必须显式 null');
+  assert.strictEqual(g.stages.baseline, 'S1');
+  assert.strictEqual(g.stages.effective, 'S1');
+  for (const k of Object.keys(g)) {
+    assert.ok(!/final|action_code/.test(k), `Review gen1 块出现最终建议字段 ${k}`);
+  }
+  console.log('[PASS] UI-G1-13 Review 行 production/gen1 分层，gen1 不冒充最终建议');
+}
+
+/* ---------- 静态守卫：review 行下发 production 块（review-fix） ---------- */
+{
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const api = strip(fs.readFileSync(path.join(REPO, 'cloudfunctions/apiGateway/index.js'), 'utf8'));
+  assert.ok(/production:\s*\{[\s\S]{0,200}?action:\s*d\.final_action/.test(api),
+    'review 行必须下发 production 块（action 来自 final_action）');
+  assert.ok(/production:\s*\{[\s\S]{0,200}?suggested:\s*d\.suggested_position/.test(api),
+    'review 行 production.suggested 必须来自 suggested_position');
+  console.log('[PASS] 静态守卫：review 行 production 块来源正确');
+}
+
+console.log('\n全部 UI-G1-01..13 + 静态守卫 PASS');
