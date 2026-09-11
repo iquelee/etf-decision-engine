@@ -21,9 +21,10 @@ const { hashPassword, verifyPassword } = require('./common/utils/admin-auth');
 const { requestId, safeErrorResponse } = require('./common/utils/gateway-errors');
 const { triggerIntelRefresh } = require('./common/utils/intel-refresh');
 const { isDateStr, clampInt, isRiskEventTypeKey, normalizeRiskFlag, parseFiniteNumber } = require('./common/utils/request-validate');
-// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约 + legacy 声明
+// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约 + legacy 声明 + runtime 三态真值
 const {
-  buildHealthTruth, buildCanaryLedger, buildEtfGen1, buildLegacyNotice, counterfactualInactiveReason
+  buildHealthTruth, buildCanaryLedger, buildEtfGen1, buildLegacyNotice,
+  counterfactualInactiveReason, runtimeBool, safetyInvariant
 } = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
@@ -132,6 +133,9 @@ async function getGen1Health() {
     fast_path_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true && p.ml_fast_path_enabled === true,
     legacy_params_note: '兼容/历史配置；真实运行权限请看 runtime_status',
     auto_trading: '关闭',
+    // 观测真值可用性（PR-UI-01 final-fix）：false 时 UI 必须显示 UNKNOWN ——
+    // 「读不到 runtime_status」与「确认安全」是两件事，不得显示绿色
+    runtime_status_available: !!runtime,
     today,
     // 新契约（PR-UI-01）
     authority: {
@@ -153,25 +157,26 @@ async function getGen1Health() {
     canary: (() => {
       // PR-UI-01 review-fix（P1-1）：权限链三真值独立下发，
       // active=false 时可回答到底是 Authority 没授权 / Health 不允许 / 其它条件未过。
-      const authorized = runtime ? runtime.gen1_counterfactual_canary_authorized === true : false;
-      const healthAllowed = runtime ? runtime.gen1_counterfactual_canary_health_allowed === true : false;
-      const active = runtime ? runtime.gen1_counterfactual_canary_active === true : false;
-      // PR-UI-01 review-fix（P0-2）：三条安全边界透传 runtime 真值，禁止硬编码 false
-      const productionWrite = runtime ? runtime.gen1_production_write === true : false;
-      const fastPathEnabled = runtime ? runtime.gen1_production_fast_path_enabled === true : false;
-      const autoExecution = runtime ? runtime.gen1_auto_execution === true : false;
+      // PR-UI-01 final-fix（P0）：全部改为**三态**（true / false / null=UNKNOWN）——
+      // 读不到 runtime_status 时必须是 null，不得当成「确认 false」伪造安全状态。
+      const authorized = runtimeBool(runtime, 'gen1_counterfactual_canary_authorized');
+      const healthAllowed = runtimeBool(runtime, 'gen1_counterfactual_canary_health_allowed');
+      const active = runtimeBool(runtime, 'gen1_counterfactual_canary_active');
+      const productionWrite = runtimeBool(runtime, 'gen1_production_write');
+      const fastPathEnabled = runtimeBool(runtime, 'gen1_production_fast_path_enabled');
+      const autoExecution = runtimeBool(runtime, 'gen1_auto_execution');
       return {
         authorized,
         health_allowed: healthAllowed,
         active,
         inactive_reason: counterfactualInactiveReason(authorized, healthAllowed, active),
         invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
-          ? runtime.gen1_counterfactual_canary_invocations : 0,
+          ? runtime.gen1_counterfactual_canary_invocations : null,
         production_write: productionWrite,
         production_fast_path_enabled: fastPathEnabled,
         auto_execution: autoExecution,
-        // 不变量期望全部 false；任一为 true 即 UI 报警（而不是被藏掉）
-        safety_invariant_ok: !productionWrite && !fastPathEnabled && !autoExecution
+        // 不变量期望全部为 false；任一 true → false（报警）；任一 UNKNOWN → null（不得显示绿色）
+        safety_invariant_ok: safetyInvariant(productionWrite, fastPathEnabled, autoExecution)
       };
     })(),
     // Canary Ledger（cap 合规证据只看 intended；target_sum 仅 info）

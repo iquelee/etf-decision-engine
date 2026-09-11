@@ -22,9 +22,11 @@
  *   - canary 权限链三真值：authorized / health_allowed / active 独立下发（P1-1）；
  *   - Safety 阶段门（review-fix P0）：eod_stage / baseline_stage / binding_stage /
  *     binding_stage_source 四件套，禁止用一个模糊 stage 兜住 EOD 门与基线门；
- *   - 安全边界（review-fix P0-2）：production_write / production_fast_path_enabled /
- *     auto_execution **透传 runtime_status 真值**（缺失才 false），另给
- *     safety_invariant_ok 自检；禁止硬编码 false 把线上的违规藏起来；
+ *   - 安全边界（review-fix P0-2 / final-fix P0）：production_write /
+ *     production_fast_path_enabled / auto_execution 等 runtime 真值一律**三态**
+ *     true / false / null(UNKNOWN)；读不到 runtime_status 不得当成 false，
+ *     safety_invariant_ok 在任一未知时返回 null，
+ *     production.status 在未知时为 UNKNOWN，并给出 runtime_status_available；
  *   - engine 审计（review-fix P1-3）：production.engine = decision.engine_version
  *     （这条决策真实的产生者）；当前生产引擎只在 system_runtime.production.engine；
  *   - Gen-2 目前是静态契约，必须带 source=STATIC_CURRENT_CONTRACT，不得伪装 runtime 真相；
@@ -83,6 +85,8 @@ function buildLegacyNotice() {
 
 /** 反事实 canary 未激活时的归因（只读 runtime_status 三布尔，不反推 ml_* 配置） */
 function counterfactualInactiveReason(authorized, healthAllowed, active) {
+  // 三态：任一未知 → 归因同样是「未知」（不得报告一个猜出来的原因）
+  if (authorized == null || healthAllowed == null || active == null) return null;
   if (active) return null;
   if (!authorized) return 'NOT_AUTHORIZED';
   if (!healthAllowed) return 'HEALTH_NOT_ALLOWED';
@@ -101,13 +105,14 @@ function counterfactualInactiveReason(authorized, healthAllowed, active) {
  * Safety 实际因 BASELINE_STAGE_NOT_ELIGIBLE 在基线门被拦 —— 若把 binding stage 写成 S3，
  * 页面就会出现「因 baseline S0 拦截」与「评估阶段 S3」并存的矛盾。
  */
-function resolveSafetyStageBinding(decision, signal, stages) {
+function resolveSafetyStageBinding(decision, stages) {
   const st = stages || {};
   const code = String((decision && decision.ml_rule_permission_reason_code) || '').toUpperCase();
   if (code.indexOf('EOD_') === 0) {
     return {
       binding_stage: st.signal == null ? null : st.signal,
-      binding_stage_source: (signal && strOrNull(signal.rule_permission_source)) || 'EOD_STAGE_PRECHECK'
+      // 固定为 Gate 名（不是原始 reason 来源）：防止将来原始字段漂移污染审计语义
+      binding_stage_source: 'EOD_STAGE_PRECHECK'
     };
   }
   if (code === 'BASELINE_STAGE_NOT_ELIGIBLE') {
@@ -138,6 +143,37 @@ function strOrNull(v) {
   return v == null || String(v).trim() === '' ? null : String(v).trim();
 }
 
+/**
+ * runtime_status 派生布尔：**三态** true / false / null。
+ *
+ * PR-UI-01 final-fix（P0）：`null` = UNKNOWN（读不到 runtime_status，或该字段缺失/null），
+ * 绝不等于「确认 false」。安全不变量「期望」为 false，但 UI 必须展示事实：
+ * 读不到就要显示 UNKNOWN，而不是伪造一个绿色的安全状态。
+ *
+ * @param {object|null} rt  runtime_status 单文档（null = 根本没读到）
+ * @param {string} key      字段名
+ * @returns {boolean|null}
+ */
+function runtimeBool(rt, key) {
+  if (!rt || typeof rt !== 'object' || !Object.prototype.hasOwnProperty.call(rt, key)) return null;
+  const v = rt[key];
+  if (v == null) return null;      // 显式 null / undefined 同样是「不知道」
+  return v === true;
+}
+
+/**
+ * 安全不变量：三条硬边界必须**全部已知**且全部 false 才算 ok。
+ *   全部明确 false → true；任一 UNKNOWN → null；全部已知且含 true → false。
+ *
+ * 注意：null 只表示「证据不全」，**不代表安全**；已知的违规不会因此被掩盖 ——
+ * 三个字段本身（production_write / production_fast_path_enabled / auto_execution）
+ * 仍各自如实显示 true，UI 报警应以字段值为准。
+ */
+function safetyInvariant(productionWrite, fastPathEnabled, autoExecution) {
+  if (productionWrite == null || fastPathEnabled == null || autoExecution == null) return null;
+  return !productionWrite && !fastPathEnabled && !autoExecution;
+}
+
 /** runtime_status 行 → authority（唯一合法来源；读不到 = null，绝不反推） */
 function authorityFromRuntime(runtime) {
   if (!runtime || typeof runtime !== 'object') return null;
@@ -154,26 +190,30 @@ function authorityLabelOf(authority) {
  */
 function buildSystemRuntime(runtime) {
   const rt = runtime && typeof runtime === 'object' ? runtime : null;
+  const available = !!rt;
   const authority = authorityFromRuntime(rt);
-  // PR-UI-01 review-fix（P1-1）：canary 权限链三项独立真值 —— 激活原因可归因
-  const canaryAuthorized = rt ? rt.gen1_counterfactual_canary_authorized === true : false;
-  const canaryHealthAllowed = rt ? rt.gen1_counterfactual_canary_health_allowed === true : false;
-  const canaryActive = rt ? rt.gen1_counterfactual_canary_active === true : false;
-  // PR-UI-01 review-fix（P0-2）：三条安全边界**必须透传 runtime_status 真值**，
-  // 禁止硬编码 false —— 否则线上真的出现 production_write=true 时，UI 反而会把违规隐藏掉。
-  // 安全不变量「期望」为 false，但展示必须说真话。
-  const productionWrite = rt ? rt.gen1_production_write === true : false;
-  const fastPathEnabled = rt ? rt.gen1_production_fast_path_enabled === true : false;
-  const autoExecution = rt ? rt.gen1_auto_execution === true : false;
+  // PR-UI-01 final-fix（P0）：全部 runtime 真值改为三态 true / false / null(UNKNOWN)
+  const canaryAuthorized = runtimeBool(rt, 'gen1_counterfactual_canary_authorized');
+  const canaryHealthAllowed = runtimeBool(rt, 'gen1_counterfactual_canary_health_allowed');
+  const canaryActive = runtimeBool(rt, 'gen1_counterfactual_canary_active');
+  const ledgerOk = runtimeBool(rt, 'gen1_counterfactual_ledger_ok');
+  // 三条安全边界：透传 runtime 真值；读不到就是 null（UNKNOWN），绝不当成 false
+  const productionWrite = runtimeBool(rt, 'gen1_production_write');
+  const fastPathEnabled = runtimeBool(rt, 'gen1_production_fast_path_enabled');
+  const autoExecution = runtimeBool(rt, 'gen1_auto_execution');
   // Gen-2：runtime_status 目前没有 Gen-2 Authority 字段，静态定义必须标明来源，
   // 不得让读者误以为 SHADOW 是从数据库读出的实时真值（Gen-2 Production 工作包再补 gen2_*）
   const gen2Mode = rt ? strOrNull(rt.gen2_mode) : null;
   return {
+    // 观测真值可用性：UI 应直接展示 ONLINE / UNKNOWN，而不是在未知时显示绿色
+    runtime_status_available: available,
     production: {
       // 当前生产引擎（runtime_status 真值；读不到就是 null，不猜某个版本）
       engine: rt ? strOrNull(rt.production_engine) : null,
       engine_source: rt && strOrNull(rt.production_engine) ? 'RUNTIME_STATUS' : 'UNKNOWN',
-      status: 'ACTIVE'
+      // 「有 runtime_status → ACTIVE」≠「V3.6.1 停止生产」：
+      // 读不到时只能说「本接口此刻无法证明生产 runtime 状态」→ UNKNOWN
+      status: available ? 'ACTIVE' : 'UNKNOWN'
     },
     gen1: {
       authority,
@@ -187,21 +227,20 @@ function buildSystemRuntime(runtime) {
       counterfactual_health_allowed: canaryHealthAllowed,
       counterfactual_active: canaryActive,
       counterfactual_inactive_reason: counterfactualInactiveReason(canaryAuthorized, canaryHealthAllowed, canaryActive),
-      counterfactual_invocations: rt && numberOrNull(rt.gen1_counterfactual_canary_invocations) != null
-        ? numberOrNull(rt.gen1_counterfactual_canary_invocations) : 0,
-      ledger_ok: rt ? rt.gen1_counterfactual_ledger_ok === true : false,
-      // 三条硬边界的 runtime 真值（不是常量）
+      counterfactual_invocations: rt ? numberOrNull(rt.gen1_counterfactual_canary_invocations) : null,
+      ledger_ok: ledgerOk,
+      // 三条硬边界的 runtime 真值（三态，不是常量）
       production_write: productionWrite,
       production_fast_path_enabled: fastPathEnabled,
       auto_execution: autoExecution,
-      // 不变量自检：三者必须同时为 false，任一为 true 即报警（值为 false 时才是「正常」）
-      safety_invariant_ok: !productionWrite && !fastPathEnabled && !autoExecution
+      // 不变量自检：全部已知且全为 false 才是 true；任一 true → false；任一 UNKNOWN → null
+      safety_invariant_ok: safetyInvariant(productionWrite, fastPathEnabled, autoExecution)
     },
     gen2: {
       mode: gen2Mode || 'SHADOW',
       // 明确来源：当前契约里 SHADOW 是静态定义，不是 runtime 真相
       source: gen2Mode ? 'RUNTIME_STATUS' : 'STATIC_CURRENT_CONTRACT',
-      production_write: rt && rt.gen2_production_write === true,
+      production_write: runtimeBool(rt, 'gen2_production_write'),
       production_write_source: rt && rt.gen2_production_write != null
         ? 'RUNTIME_STATUS' : 'STATIC_CURRENT_CONTRACT'
     }
@@ -227,7 +266,8 @@ function buildCanaryLedger(runtime) {
     gen1_counterfactual_intended_tech_position: rt
       ? numberOrNull(rt.gen1_counterfactual_intended_tech_position) : null,
     gen1_counterfactual_tech_cap: rt ? numberOrNull(rt.gen1_counterfactual_tech_cap) : null,
-    gen1_counterfactual_ledger_ok: rt ? rt.gen1_counterfactual_ledger_ok === true : false,
+    // 三态：读不到 runtime 或字段缺失 → null(UNKNOWN)，不得当作「账本 OK」
+    gen1_counterfactual_ledger_ok: runtimeBool(rt, 'gen1_counterfactual_ledger_ok'),
     gen1_counterfactual_target_sum: rt ? numberOrNull(rt.gen1_counterfactual_target_sum) : null // info only
   };
 }
@@ -307,7 +347,7 @@ function buildEtfGen1({ code, sector, decision, signal, runtime } = {}) {
     effective: d ? strOrNull(d.gen1_effective_stage) : null
   };
   // Safety 的「阶段门」归属（review-fix P0）：EOD 门 / 基线门 / 非阶段门 三态
-  const binding = resolveSafetyStageBinding(d, sig, stages);
+  const binding = resolveSafetyStageBinding(d, stages);
 
   return {
     authority,
@@ -429,5 +469,7 @@ module.exports = {
   counterfactualInactiveReason,
   engineFromDecision,
   resolveSafetyStageBinding,
+  runtimeBool,
+  safetyInvariant,
   deriveSignalStatus
 };

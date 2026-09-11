@@ -120,6 +120,14 @@ async function computeDashboardPnl(etfs) {
 
 /** 三问 + 账户总览 + 5 ETF 状态卡 */
 /** 运行状态单一真相（runtime_status 单文档）；读不到返回 null，调用方按 fail-open 展示兜底 */
+/**
+ * 读运行时真相（runtime_status 单文档）。
+ *
+ * 读不到 / 查询失败 → 返回 null，**不是**「安全状态」而是「UNKNOWN」：
+ * 下游契约（gen1-ui-view-model）会把 null 表达成三态里的 null（UNKNOWN），
+ * 并给出 runtime_status_available=false / production.status=UNKNOWN，
+ * 绝不用 false 冒充「确认安全」。
+ */
 async function getRuntimeStatus() {
   try {
     const rows = await db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 });

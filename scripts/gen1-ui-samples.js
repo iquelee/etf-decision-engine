@@ -198,15 +198,19 @@ async function main() {
   assert.strictEqual(ai.gen1.safety.binding_stage_source, 'SAFETY_CORE_BASELINE_GATE');
   assert.strictEqual(ai.gen1.safety.reason_code, 'BASELINE_STAGE_NOT_ELIGIBLE');
 
-  /* review-fix P0-2：安全边界透传 runtime 真值 + invariant 自检 */
+  /* review-fix P0-2 / final-fix P0：安全边界透传 runtime 真值 + 三态 + invariant 自检 */
   const c1 = dash.system_runtime.gen1;
+  assert.strictEqual(dash.system_runtime.runtime_status_available, true, 'runtime_status 必须可读（否则为 UNKNOWN）');
+  assert.strictEqual(dash.system_runtime.production.status, 'ACTIVE');
   assert.strictEqual(typeof c1.production_write, 'boolean');
   assert.strictEqual(typeof c1.production_fast_path_enabled, 'boolean');
   assert.strictEqual(typeof c1.auto_execution, 'boolean');
   assert.strictEqual(c1.production_write, false, '线上真值当前为 false（若线上为 true 这里必须变红）');
   assert.strictEqual(c1.production_fast_path_enabled, false);
   assert.strictEqual(c1.auto_execution, false);
-  assert.strictEqual(c1.safety_invariant_ok, true, '不变量自检必须为 true（全部为 false）');
+  assert.strictEqual(c1.safety_invariant_ok, true, '不变量自检必须为 true（全部明确为 false）');
+  assert.ok(['counterfactual_authorized', 'counterfactual_health_allowed', 'counterfactual_active', 'ledger_ok']
+    .every((k) => typeof c1[k] === 'boolean'), '权限链与账本字段必须是明确布尔（三态中非 UNKNOWN）');
   assert.strictEqual(dash.system_runtime.gen2.source, 'STATIC_CURRENT_CONTRACT',
     'Gen-2 SHADOW 必须标明是静态契约');
   assert.strictEqual(dash.system_runtime.production.engine_source, 'RUNTIME_STATUS');
@@ -269,7 +273,8 @@ async function main() {
   assert.strictEqual(health.canary.active, true);
   assert.strictEqual(health.canary.inactive_reason, null);
   assert.strictEqual(health.canary.invocations, 0);
-  /* review-fix P0-2：admin canary 三边界也必须是 runtime 真值 + invariant 自检 */
+  /* review-fix P0-2 / final-fix P0：admin canary 三边界也必须是 runtime 真值 + 三态 + invariant */
+  assert.strictEqual(health.runtime_status_available, true, 'admin 必须下发 runtime_status_available');
   assert.strictEqual(health.canary.production_write, false);
   assert.strictEqual(health.canary.production_fast_path_enabled, false);
   assert.strictEqual(health.canary.auto_execution, false);
