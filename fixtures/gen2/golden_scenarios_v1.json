@@ -1,7 +1,7 @@
 {
   "meta": {
     "fixture_id": "gen2-golden-scenarios-v1",
-    "work_package": "WP-G2-01",
+    "work_package": "WP-G2-03",
     "created": "2026-09-11",
     "rule_bundle": "gen2-rule-v2.0",
     "universe_version": "universe_v1",
@@ -24,21 +24,181 @@
     "PENDING_RULING": "两端都实现了同一语义但结果不同 → 需要业务裁决（本包不修，下一包决定）",
     "EXCLUDED_BY_DESIGN": "某一端按设计不实现该概念（必须写明原因与位置）"
   },
+  "seam_contracts": {
+    "roles_panel": {
+      "purpose": "roles 状态机（晋升连续性 / NO_CORE / 角色最终约束）的共同输入契约；G2S-07 依赖本契约的可执行适配器。",
+      "canonical_input": {
+        "panel_rows": "每行 = (trade_date, code, 特征列)；完整特征集见 fixtures/gen2/parity_fixture.json",
+        "required_features": [
+          "trade_date",
+          "code",
+          "close / px_ma60 / px_ma20",
+          "ret_1d / ret_20d / ret_60d",
+          "benchmark_px_ma20 / benchmark_px_ma60"
+        ],
+        "initial_roles": "起始角色表（code → CORE/CHALLENGER/SATELLITE/RESERVE/HEDGE）",
+        "config": "max_core_count / max_core_per_cluster / promotion_persistence_days / demotion_persistence_days / min_replacement_edge（来源：GEN2_RULE_V2_BUNDLE）"
+      },
+      "side_adapters": {
+        "js": "computeLeadershipScore(panel) → rankFeatures(panel) → buildDailyRoles(panel)；配置由 bundle 内联解析",
+        "python": "compute_leadership_score(df) → compute_alpha_score_v2(df) → build_v2_roles(features, rankings, config)；rankings 为 (trade_date, code) 索引，config 由 load_gen2_config()"
+      },
+      "gap_to_close": [
+        "Python 需 rankings 与 config 两个额外入参 → 适配器需从 canonical panel 派生 rankings 并显式加载 config",
+        "两侧 rank/percentile 与 trend_gate 的派生必须来自同一 canonical 输入，禁止各自造数",
+        "解锁后方可运行 G2S-07（晋升连续性 / NO_CORE）"
+      ],
+      "status": "SPEC_ONLY（契约已定义；可执行适配器为 WP-G2-03 剩余切片）"
+    },
+    "run_status_gate": {
+      "purpose": "Gen-2 run 状态四态契约（G2S-06）。两端共用同一 canonical run panel（RUN_V1 展开规则逐字一致，panel_sha256 跨端校验）。",
+      "states": {
+        "running": "已开始、尚未发布完整横截面（消费者不得读取）",
+        "completed": "唯一可消费状态；必须满足唯一 code / universe_count=30 / 输出哈希校验",
+        "blocked": "数据、资格、约束、发布完整性不通过 → 今日没有可信 Gen-2 结果（可预期业务结果；前台只展示 V3.6.1）",
+        "failed": "代码、网络、数据库等运行异常 → 系统未正常完成"
+      },
+      "gate_order": [
+        "NAN_OR_MISSING_FIELD（字段完整性：trade_date 必须存在；OHLCV 必须为有限数值）",
+        "DUPLICATE_TRADE_DATE（同一 code 唯一交易日）",
+        "BENCHMARK_MISSING",
+        "BENCHMARK_INSUFFICIENT_HISTORY（benchmark 唯一交易日 < 60）",
+        "STALE_BATCH（LIVE：benchmark 落后于应到交易日）",
+        "NO_ELIGIBLE_TODAY（全部候选不合格）",
+        "UNIVERSE_INCOMPLETE（0 < 合格数 < 30；规划 §A2「非 30 资产 → blocked」）",
+        "PUBLISH_VALIDATION_FAILED（唯一 code / 非有限 alpha / 写入 0 行）"
+      ],
+      "rules": [
+        "blocked 与 failed 不得合并，文案与告警必须区分",
+        "前六类数据闸门 + 发布完整性失败 → blocked（status_reason=DATA_OR_ELIGIBILITY_GATE / PUBLISH_VALIDATION_FAILED）",
+        "未捕获异常（代码 / 网络 / DB）→ failed（status_reason=SYSTEM_ERROR）",
+        "任何非 completed 状态都不得被前台消费为建议",
+        "Python 侧不发布：completed 表示「全部闸门通过、可发布」，等价于 JS 完成发布后的 completed"
+      ],
+      "status": "IMPLEMENTED_AND_VERIFIED（runGen2ShadowEod main() 注入式驱动 + gen2.data.run_gate 等价入口；G2S-06 12 个用例双端逐字段一致）"
+    },
+    "python_roles_implementations": {
+      "finding": "Python 存在两套 roles 实现，语义不同；本包选定 rule_v2_ab.build_v2_roles 作为 canonical seam（B1 账本 / B3 OOS / 360 行 parity 使用者，且是唯一含 NO_CORE 硬门槛与 Selection Permission 的实现）。",
+      "implementations": {
+        "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles": "SEAM（本包使用）— 含 NO_CORE_TREND_GATE / PROMOTION_BLOCKED_BY_PERMISSION；reason 无 LEADERSHIP_* 区间码与 _WAIT·_KEEP 后缀，且未记录 CLUSTER_CAP_DEMOTED",
+        "ml/gen2/portfolio/role_engine.py::build_daily_roles": "DISABLED / fail-fast（调用即抛 RuntimeError）— legacy 独立状态机已删除实现体（仅保留守卫），仓库内零消费者。角色语义一律走 rule_v2_ab.build_v2_roles。"
+      },
+      "measured_evidence": [
+        "面板 no_core 情形：513310 第 3 天跌破 MA60 → JS=CHALLENGER(NO_CORE_TREND_GATE)，role_engine=CORE（无 NO_CORE 门槛）",
+        "面板 risk_off 情形：159770 在 RISK_OFF 下 → JS=PROMOTION_BLOCKED_BY_PERMISSION，role_engine=PROMOTION_HYSTERESIS_WAIT（无权限门；角色结果仍为 CHALLENGER）",
+        "面板 risk_on 第 1-4 天：现任 159570/159582 → JS=CHALLENGER/RESERVE，role_engine=CORE（降级语义不同）"
+      ],
+      "action": "已裁决并执行完毕（用户 2026-09-11 收紧版）：V2 唯一权威角色实现 = rule_v2_ab.build_v2_roles；legacy 独立状态机已停用（fail-fast、零消费者）；研究脚本改走 gen2.baseline.v2_role_view.build_v2_role_view（角色语义来自权威实现，仅补 rank / rank_percentile / leadership_score / persistence_days 展示列）。见 seam_contracts.role_engine_migration。"
+    },
+    "reason_normalization": {
+      "purpose": "reason_codes 的**语义**对比口径：剥离纯标签差异后比较，原始串仍完整保留供审计。",
+      "rules": [
+        "去掉 LEADERSHIP_TOP_QUINTILE / LEADERSHIP_CHALLENGER_ZONE / LEADERSHIP_SATELLITE_ZONE / LEADERSHIP_BELOW_SATELLITE 这四个区间标签码（JS 记录、Python 不记录）",
+        "去掉 _WAIT / _KEEP 后缀：PROMOTION_HYSTERESIS_WAIT→PROMOTION_HYSTERESIS，DEMOTION_HYSTERESIS_KEEP→DEMOTION_HYSTERESIS"
+      ],
+      "not_normalized": [
+        "CLUSTER_CAP_DEMOTED（属审计码，不剥离；差异登记为 D-004 待裁决）"
+      ]
+    },
+    "role_engine_migration": {
+      "work_item": "WP-G2-05",
+      "authoritative": "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles",
+      "authority_constant": "gen2.portfolio.role_engine.V2_AUTHORITATIVE_ROLE_IMPL",
+      "decision": "用户裁决 2026-09-11（收紧版）：rule_v2_ab.build_v2_roles 为当前 V2 唯一权威角色语义；role_engine.build_daily_roles 禁止被 V2 回测、敏感性分析、归因、parity 调用。",
+      "legacy": {
+        "module": "ml/gen2/portfolio/role_engine.py",
+        "status": "DISABLED_FAIL_FAST",
+        "behavior": "调用即抛 RuntimeError（错误信息指向 build_v2_roles 与 v2_role_view）；实现体已删除，仅保留守卫；纯工具函数 _cap_core_roles / _consecutive_by_code 保留（权威实现依赖）",
+        "consumers": []
+      },
+      "research_view": "ml/gen2/baseline/v2_role_view.py::build_v2_role_view（角色语义 100% 委托权威实现；仅补展示/派生列 rank / rank_percentile / leadership_score / persistence_days）",
+      "migrated_callers": [
+        "ml/gen2/baseline/rule_rotation.py",
+        "ml/gen2/baseline/sensitivity_matrix.py",
+        "ml/gen2/evaluation/attribution.py"
+      ],
+      "blocked_v2_paths": [
+        "ml/gen2/baseline/rule_v2_ab.py",
+        "ml/gen2/baseline/rule_v21_ab.py",
+        "ml/gen2/baseline/rule_rotation.py",
+        "ml/gen2/baseline/sensitivity_matrix.py",
+        "ml/gen2/evaluation/attribution.py",
+        "scripts/parity/run_gen2_scenarios.py"
+      ],
+      "future_option": "若确需保留 build_daily_roles 这个名字，只能改造为调用权威实现的兼容包装层（不得重新实现角色决策），再显式加入 LEGACY_V1_CONSUMER_ALLOWLIST —— 该白名单当前为空，直接加入而不改造会被守卫测试拦下。",
+      "semantic_change_notice": "rule_rotation / sensitivity_matrix / attribution 的产物（换手、归因、敏感性数字）现在反映 V2 语义（含 NO_CORE 与权限门），与历史报告不再逐位可比；这些产物需在 WP-G2-02（B1 账本重算）一并重算。",
+      "tests": [
+        "ml/gen2/tests/test_role_impl_authority.py",
+        "ml/gen2/tests/test_gen2_foundation.py::test_legacy_role_impl_is_blocked"
+      ],
+      "verified_on_real_data": "真实 universe 面板（features 38083 行 / rankings 30992 行）跑通：视图 14 项下游列无缺失、role 分布正常（CORE 3703 / HEDGE 691）、真实数据已出现 CLUSTER_CAP_DEMOTED 审计码；build_portfolio_candidates / build_rotation_events(1183) / apply_regime_defense / build_cluster_exposure / cluster_concentration / core_residence_days 全部通过"
+    }
+  },
   "known_differences": [
     {
+      "id": "D-003",
+      "scenario": "G2S-07",
+      "case": null,
+      "fields": [
+        "reasons.*"
+      ],
+      "status": "EXPLAINED",
+      "location": "cloudfunctions/runGen2ShadowEod/index.js buildDailyRoles（写入 LEADERSHIP_* 区间码与 _WAIT/_KEEP 后缀）vs ml/gen2/baseline/rule_v2_ab.py build_v2_roles（只写机状态码）",
+      "reason": "reason_codes 的**标签词表**差异：JS 额外写 LEADERSHIP_* 区间码与 _WAIT/_KEEP 后缀，Python V2 规则只写机状态码。决策、角色、审计码（CLUSTER_CAP_DEMOTED / FINAL_*）完全一致；归一化口径见 seam_contracts.reason_normalization（reasons_norm 两端 0 差异）。词表统一（可选）登记为后续工作项，不在本包内改动 Python 审计串。",
+      "evidence": "G2S-07 三个 case：roles 差异 0；reasons 原始串 14 种组合差异，全部只在区间码前缀与 _WAIT/_KEEP 后缀"
+    }
+  ],
+  "resolved_differences": [
+    {
       "id": "D-001",
+      "status": "RESOLVED",
       "scenario": "G2S-03",
       "case": "gate_call",
-      "fields": [
-        "roles.*",
-        "reason_codes.*",
-        "core_count",
-        "per_cluster_core.*"
+      "ruling": "任何角色生成路径结束前必须无条件执行一次终局约束检查；applyReplacementGate 只负责替换事务，buildDailyRoles 在所有角色变化完成后统一调用 assertFinalRoleConstraints。终局检查不得藏在替换门内部（否则新增早退分支又会绕过约束）。",
+      "ruling_source": "用户裁决 2026-09-11",
+      "fixed_in": [
+        "cloudfunctions/runGen2ShadowEod/index.js（新增 finalizeRoles；applyReplacementGate 去掉内部断言与早退绕过；buildDailyRoles 出口改为 finalizeRoles）",
+        "ml/gen2/baseline/rule_v2_ab.py（新增对称出口 finalize_roles；build_v2_roles 改用 finalize_roles）"
       ],
-      "status": "PENDING_RULING",
-      "location": "cloudfunctions/runGen2ShadowEod/index.js:715 (`if (!capDemoted.length) return;` 早退，跳过终局断言) vs ml/gen2/baseline/rule_v2_ab.py:134-136（`if cap_demoted.empty:` 仍先执行 `_assert_final_constraints(...)` 再返回）",
-      "reason": "同一 day（software_ai 有 3 个 CORE、无 cap 降级现任）下：替换门路径 JS 保留 3 CORE、Python 收敛到 2。同场景 assert_call 路径两端完全一致（roles/reason_codes/core_count 全 ALIGNED），说明约束逻辑本身一致，差异只在「无 cap 降级时是否仍执行终局断言」。需裁决：终局约束是否必须在 gate 路径上无条件执行（若是，需在某端补一次断言；不得两端口径并存）。",
-      "evidence": "G2S-03 gate_call: roles.159852 js=CORE/py=CHALLENGER; core_count js=3/py=2"
+      "regression_invariants": [
+        "I-03-08",
+        "I-03-09",
+        "I-03-10",
+        "I-03-11"
+      ],
+      "semantic_change": "本次修复改变 JS 的实际角色结果（即使未改阈值），属规则**实现**语义变更：Rule V2 不再沿用「已封版」的资格表述；bundle/lock 需重新生成并重跑 B3 OOS（WP-G2-04）。"
+    },
+    {
+      "id": "D-002",
+      "status": "RESOLVED",
+      "scenario": "G2S-03",
+      "case": "gate_call",
+      "ruling": "替换门只负责替换事务；终局约束检查统一在角色生成出口执行。两端在「裸 gate」与「统一出口」两个 seam 上职责必须一致，不得长期保留职责解释差异。",
+      "ruling_source": "用户裁决 2026-09-11（WP-G2-03 剩余切片）",
+      "fixed_in": [
+        "ml/gen2/baseline/rule_v2_ab.py::_apply_replacement_gate（移除内部终局断言；finalize_roles = 替换事务 + 断言）"
+      ],
+      "regression_invariants": [
+        "I-03-12",
+        "I-03-13"
+      ],
+      "semantic_change": "行为等价（Python 出口仍会断言，位置从 gate 内移到 finalize_roles）；不改角色结果。"
+    },
+    {
+      "id": "D-004",
+      "status": "RESOLVED",
+      "scenario": "G2S-07",
+      "case": "risk_on",
+      "ruling": "被 cluster/CORE cap 降级的行必须在 reason_codes 追加 CLUSTER_CAP_DEMOTED（追加而非覆盖，顺序与分隔符与 JS 完全一致：状态机原因 → CLUSTER_CAP_DEMOTED → FINAL_*）。这是审计原因与最终角色的一致性问题，不是策略参数或角色决策变化。",
+      "ruling_source": "用户裁决 2026-09-11（WP-G2-03 剩余切片，批准 D-004）",
+      "fixed_in": [
+        "ml/gen2/baseline/rule_v2_ab.py::build_v2_roles（_cap_core_roles 后追加 CLUSTER_CAP_DEMOTED，条件 role_before_cap==CORE & role!=CORE，与 JS buildDailyRoles:907 同判）"
+      ],
+      "regression_invariants": [
+        "I-07-15",
+        "I-07-16"
+      ],
+      "semantic_change": "仅 reason_codes 审计串变化；角色结果不变（回归不变量同时钉住 159852 两端 role=SATELLITE）。因触及 reason 词表，随 D-001 一并计入规则实现修正，bundle/lock 需在 WP-G2-04 重建。"
     }
   ],
   "scenarios": [
@@ -55,34 +215,175 @@
       "input": {
         "base_max_core": 5,
         "cases": [
-          { "id": "s44", "market_score": 44 },
-          { "id": "s45", "market_score": 45 },
-          { "id": "s46", "market_score": 46 },
-          { "id": "s54", "market_score": 54 },
-          { "id": "s55", "market_score": 55 },
-          { "id": "s56", "market_score": 56 },
-          { "id": "s_null", "market_score": null }
+          {
+            "id": "s44",
+            "market_score": 44
+          },
+          {
+            "id": "s45",
+            "market_score": 45
+          },
+          {
+            "id": "s46",
+            "market_score": 46
+          },
+          {
+            "id": "s54",
+            "market_score": 54
+          },
+          {
+            "id": "s55",
+            "market_score": 55
+          },
+          {
+            "id": "s56",
+            "market_score": 56
+          },
+          {
+            "id": "s_null",
+            "market_score": null
+          }
         ]
       },
       "invariants": [
-        { "id": "I-01-01", "applies_to": "both", "case": "s45", "field": "regime", "op": "eq", "value": "RISK_OFF" },
-        { "id": "I-01-02", "applies_to": "both", "case": "s44", "field": "regime", "op": "eq", "value": "RISK_OFF" },
-        { "id": "I-01-03", "applies_to": "both", "case": "s55", "field": "regime", "op": "eq", "value": "RISK_ON" },
-        { "id": "I-01-04", "applies_to": "both", "case": "s46", "field": "regime", "op": "eq", "value": "RANGE" },
-        { "id": "I-01-05", "applies_to": "both", "case": "s_null", "field": "regime", "op": "eq", "value": "RANGE" },
-        { "id": "I-01-06", "applies_to": "both", "case": "s45", "field": "promotion_allowed", "op": "is_false" },
-        { "id": "I-01-07", "applies_to": "both", "case": "s44", "field": "promotion_allowed", "op": "is_false" },
-        { "id": "I-01-08", "applies_to": "both", "case": "s46", "field": "promotion_allowed", "op": "is_true" },
-        { "id": "I-01-09", "applies_to": "both", "case": "s55", "field": "promotion_allowed", "op": "is_true" },
-        { "id": "I-01-10", "applies_to": "both", "case": "s45", "field": "selection_mode", "op": "eq", "value": "DISABLED" },
-        { "id": "I-01-11", "applies_to": "both", "case": "s46", "field": "selection_mode", "op": "eq", "value": "REDUCED" },
-        { "id": "I-01-12", "applies_to": "both", "case": "s55", "field": "selection_mode", "op": "eq", "value": "ACTIVE" },
-        { "id": "I-01-13", "applies_to": "both", "case": "s46", "field": "max_core_count", "op": "eq", "value": 3 },
-        { "id": "I-01-14", "applies_to": "both", "case": "s55", "field": "max_core_count", "op": "eq", "value": 5 },
-        { "id": "I-01-15", "applies_to": "both", "case": "s45", "field": "max_core_count", "op": "is_null" },
-        { "id": "I-01-16", "applies_to": "both", "case": "s_null", "field": "selection_mode", "op": "eq", "value": "REDUCED" },
-        { "id": "I-01-17", "applies_to": "both", "case": "s_null", "field": "max_core_count", "op": "eq", "value": 3 },
-        { "id": "I-01-18", "applies_to": "both", "case": "s_null", "field": "promotion_allowed", "op": "is_true" }
+        {
+          "id": "I-01-01",
+          "applies_to": "both",
+          "case": "s45",
+          "field": "regime",
+          "op": "eq",
+          "value": "RISK_OFF"
+        },
+        {
+          "id": "I-01-02",
+          "applies_to": "both",
+          "case": "s44",
+          "field": "regime",
+          "op": "eq",
+          "value": "RISK_OFF"
+        },
+        {
+          "id": "I-01-03",
+          "applies_to": "both",
+          "case": "s55",
+          "field": "regime",
+          "op": "eq",
+          "value": "RISK_ON"
+        },
+        {
+          "id": "I-01-04",
+          "applies_to": "both",
+          "case": "s46",
+          "field": "regime",
+          "op": "eq",
+          "value": "RANGE"
+        },
+        {
+          "id": "I-01-05",
+          "applies_to": "both",
+          "case": "s_null",
+          "field": "regime",
+          "op": "eq",
+          "value": "RANGE"
+        },
+        {
+          "id": "I-01-06",
+          "applies_to": "both",
+          "case": "s45",
+          "field": "promotion_allowed",
+          "op": "is_false"
+        },
+        {
+          "id": "I-01-07",
+          "applies_to": "both",
+          "case": "s44",
+          "field": "promotion_allowed",
+          "op": "is_false"
+        },
+        {
+          "id": "I-01-08",
+          "applies_to": "both",
+          "case": "s46",
+          "field": "promotion_allowed",
+          "op": "is_true"
+        },
+        {
+          "id": "I-01-09",
+          "applies_to": "both",
+          "case": "s55",
+          "field": "promotion_allowed",
+          "op": "is_true"
+        },
+        {
+          "id": "I-01-10",
+          "applies_to": "both",
+          "case": "s45",
+          "field": "selection_mode",
+          "op": "eq",
+          "value": "DISABLED"
+        },
+        {
+          "id": "I-01-11",
+          "applies_to": "both",
+          "case": "s46",
+          "field": "selection_mode",
+          "op": "eq",
+          "value": "REDUCED"
+        },
+        {
+          "id": "I-01-12",
+          "applies_to": "both",
+          "case": "s55",
+          "field": "selection_mode",
+          "op": "eq",
+          "value": "ACTIVE"
+        },
+        {
+          "id": "I-01-13",
+          "applies_to": "both",
+          "case": "s46",
+          "field": "max_core_count",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "id": "I-01-14",
+          "applies_to": "both",
+          "case": "s55",
+          "field": "max_core_count",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "id": "I-01-15",
+          "applies_to": "both",
+          "case": "s45",
+          "field": "max_core_count",
+          "op": "is_null"
+        },
+        {
+          "id": "I-01-16",
+          "applies_to": "both",
+          "case": "s_null",
+          "field": "selection_mode",
+          "op": "eq",
+          "value": "REDUCED"
+        },
+        {
+          "id": "I-01-17",
+          "applies_to": "both",
+          "case": "s_null",
+          "field": "max_core_count",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "id": "I-01-18",
+          "applies_to": "both",
+          "case": "s_null",
+          "field": "promotion_allowed",
+          "op": "is_true"
+        }
       ]
     },
     {
@@ -97,49 +398,221 @@
       },
       "input": {
         "cases": [
-          { "id": "e_eq", "challenger_alpha": 13.0, "incumbent_alpha": 0.0 },
-          { "id": "e_below", "challenger_alpha": 12.9, "incumbent_alpha": 0.0 },
-          { "id": "e_above", "challenger_alpha": 30.0, "incumbent_alpha": 10.0 },
-          { "id": "e_far_below", "challenger_alpha": 20.0, "incumbent_alpha": 10.0 }
+          {
+            "id": "e_eq",
+            "challenger_alpha": 13.0,
+            "incumbent_alpha": 0.0
+          },
+          {
+            "id": "e_below",
+            "challenger_alpha": 12.9,
+            "incumbent_alpha": 0.0
+          },
+          {
+            "id": "e_above",
+            "challenger_alpha": 30.0,
+            "incumbent_alpha": 10.0
+          },
+          {
+            "id": "e_far_below",
+            "challenger_alpha": 20.0,
+            "incumbent_alpha": 10.0
+          }
         ]
       },
       "invariants": [
-        { "id": "I-02-01", "applies_to": "both", "case": "e_eq", "field": "edge", "op": "eq", "value": 8.0 },
-        { "id": "I-02-02", "applies_to": "both", "case": "e_below", "field": "edge", "op": "eq", "value": 7.9 },
-        { "id": "I-02-03", "applies_to": "both", "case": "e_eq", "field": "should_replace", "op": "is_true" },
-        { "id": "I-02-04", "applies_to": "both", "case": "e_below", "field": "should_replace", "op": "is_false" },
-        { "id": "I-02-05", "applies_to": "both", "case": "e_above", "field": "should_replace", "op": "is_true" },
-        { "id": "I-02-06", "applies_to": "both", "case": "e_far_below", "field": "should_replace", "op": "is_false" }
+        {
+          "id": "I-02-01",
+          "applies_to": "both",
+          "case": "e_eq",
+          "field": "edge",
+          "op": "eq",
+          "value": 8.0
+        },
+        {
+          "id": "I-02-02",
+          "applies_to": "both",
+          "case": "e_below",
+          "field": "edge",
+          "op": "eq",
+          "value": 7.9
+        },
+        {
+          "id": "I-02-03",
+          "applies_to": "both",
+          "case": "e_eq",
+          "field": "should_replace",
+          "op": "is_true"
+        },
+        {
+          "id": "I-02-04",
+          "applies_to": "both",
+          "case": "e_below",
+          "field": "should_replace",
+          "op": "is_false"
+        },
+        {
+          "id": "I-02-05",
+          "applies_to": "both",
+          "case": "e_above",
+          "field": "should_replace",
+          "op": "is_true"
+        },
+        {
+          "id": "I-02-06",
+          "applies_to": "both",
+          "case": "e_far_below",
+          "field": "should_replace",
+          "op": "is_false"
+        }
       ]
     },
     {
       "id": "G2S-03",
-      "title": "cluster cap（software_ai 3 个 CORE → 收敛到 2）：替换门路径 vs 直接终局断言",
+      "title": "cluster cap（software_ai 3 个 CORE → 2）：替换门路径 vs 直接终局断言 vs 统一出口",
       "tier": "STRUCTURED_SEAM",
       "status": "RUNNABLE",
       "handler": "cluster_cap",
       "seam": {
-        "python": "gen2.baseline.rule_v2_ab._apply_replacement_gate / _assert_final_constraints",
-        "js": "applyReplacementGate / assertFinalRoleConstraints (runGen2ShadowEod/index.js:712-788)"
+        "python": "gen2.baseline.rule_v2_ab.{_apply_replacement_gate, _assert_final_constraints, finalize_roles}",
+        "js": "applyReplacementGate / assertFinalRoleConstraints / finalizeRoles (runGen2ShadowEod/index.js)"
       },
       "input": {
         "base_max_core": 5,
         "max_core_per_cluster": 2,
-        "prev_roles": { "159770": "CORE", "159819": "CORE" },
+        "prev_roles": {
+          "159770": "CORE",
+          "159819": "CORE"
+        },
         "day": [
-          { "code": "159770", "role": "CORE", "role_before_cap": "CORE", "alpha_score_v2": 20.0, "cluster": "software_ai" },
-          { "code": "159819", "role": "CORE", "role_before_cap": "CORE", "alpha_score_v2": 10.0, "cluster": "software_ai" },
-          { "code": "159852", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 5.0, "cluster": "software_ai" }
+          {
+            "code": "159770",
+            "role": "CORE",
+            "role_before_cap": "CORE",
+            "alpha_score_v2": 20.0,
+            "cluster": "software_ai"
+          },
+          {
+            "code": "159819",
+            "role": "CORE",
+            "role_before_cap": "CORE",
+            "alpha_score_v2": 10.0,
+            "cluster": "software_ai"
+          },
+          {
+            "code": "159852",
+            "role": "CORE",
+            "role_before_cap": "CHALLENGER",
+            "alpha_score_v2": 5.0,
+            "cluster": "software_ai"
+          }
         ]
       },
       "invariants": [
-        { "id": "I-03-01", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "eq", "value": 2 },
-        { "id": "I-03-02", "applies_to": "both", "case": "assert_call", "field": "roles.159852", "op": "eq", "value": "CHALLENGER" },
-        { "id": "I-03-03", "applies_to": "both", "case": "assert_call", "field": "roles.159770", "op": "eq", "value": "CORE" },
-        { "id": "I-03-04", "applies_to": "both", "case": "assert_call", "field": "roles.159819", "op": "eq", "value": "CORE" },
-        { "id": "I-03-05", "applies_to": "js", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
-        { "id": "I-03-06", "applies_to": "python", "case": "assert_call", "field": "reason_codes.159852", "op": "contains", "value": "FINAL_CLUSTER_CAP" },
-        { "id": "I-03-07", "applies_to": "both", "case": "gate_call", "field": "core_count", "op": "lte", "value": 3 }
+        {
+          "id": "I-03-01",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "core_count",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "id": "I-03-02",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.159852",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-03-03",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.159770",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-03-04",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.159819",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-03-05",
+          "applies_to": "js",
+          "case": "assert_call",
+          "field": "reason_codes.159852",
+          "op": "contains",
+          "value": "FINAL_CLUSTER_CAP"
+        },
+        {
+          "id": "I-03-06",
+          "applies_to": "python",
+          "case": "assert_call",
+          "field": "reason_codes.159852",
+          "op": "contains",
+          "value": "FINAL_CLUSTER_CAP"
+        },
+        {
+          "id": "I-03-07",
+          "applies_to": "both",
+          "case": "gate_call",
+          "field": "core_count",
+          "op": "lte",
+          "value": 3
+        },
+        {
+          "id": "I-03-08",
+          "applies_to": "both",
+          "case": "exit_call",
+          "field": "core_count",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "id": "I-03-09",
+          "applies_to": "both",
+          "case": "exit_call",
+          "field": "roles.159852",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-03-10",
+          "applies_to": "both",
+          "case": "exit_call",
+          "field": "roles.159770",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-03-11",
+          "applies_to": "both",
+          "case": "exit_call",
+          "field": "reason_codes.159852",
+          "op": "contains",
+          "value": "FINAL_CLUSTER_CAP"
+        },
+        {
+          "id": "I-03-12",
+          "applies_to": "both",
+          "case": "gate_call",
+          "field": "core_count",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "id": "I-03-13",
+          "applies_to": "both",
+          "case": "gate_call",
+          "field": "roles.159852",
+          "op": "eq",
+          "value": "CORE"
+        }
       ]
     },
     {
@@ -155,22 +628,93 @@
       "input": {
         "base_max_core": 5,
         "max_core_per_cluster": 2,
-        "prev_roles": { "159770": "CORE", "159819": "CORE", "159570": "CORE", "159992": "CORE", "510880": "CORE" },
+        "prev_roles": {
+          "159770": "CORE",
+          "159819": "CORE",
+          "159570": "CORE",
+          "159992": "CORE",
+          "510880": "CORE"
+        },
         "day": [
-          { "code": "159770", "role": "CORE", "alpha_score_v2": 30.0, "cluster": "software_ai" },
-          { "code": "159819", "role": "CORE", "alpha_score_v2": 28.0, "cluster": "software_ai" },
-          { "code": "159570", "role": "CORE", "alpha_score_v2": 26.0, "cluster": "healthcare" },
-          { "code": "159992", "role": "CORE", "alpha_score_v2": 24.0, "cluster": "healthcare" },
-          { "code": "510880", "role": "CORE", "alpha_score_v2": 22.0, "cluster": "defensive_dividend" },
-          { "code": "159582", "role": "CORE", "alpha_score_v2": 1.0, "cluster": "tech_hardware" }
+          {
+            "code": "159770",
+            "role": "CORE",
+            "alpha_score_v2": 30.0,
+            "cluster": "software_ai"
+          },
+          {
+            "code": "159819",
+            "role": "CORE",
+            "alpha_score_v2": 28.0,
+            "cluster": "software_ai"
+          },
+          {
+            "code": "159570",
+            "role": "CORE",
+            "alpha_score_v2": 26.0,
+            "cluster": "healthcare"
+          },
+          {
+            "code": "159992",
+            "role": "CORE",
+            "alpha_score_v2": 24.0,
+            "cluster": "healthcare"
+          },
+          {
+            "code": "510880",
+            "role": "CORE",
+            "alpha_score_v2": 22.0,
+            "cluster": "defensive_dividend"
+          },
+          {
+            "code": "159582",
+            "role": "CORE",
+            "alpha_score_v2": 1.0,
+            "cluster": "tech_hardware"
+          }
         ]
       },
       "invariants": [
-        { "id": "I-04-01", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "eq", "value": 5 },
-        { "id": "I-04-02", "applies_to": "both", "case": "assert_call", "field": "roles.159582", "op": "eq", "value": "CHALLENGER" },
-        { "id": "I-04-03", "applies_to": "both", "case": "assert_call", "field": "roles.510880", "op": "eq", "value": "CORE" },
-        { "id": "I-04-04", "applies_to": "both", "case": "assert_call", "field": "roles.159770", "op": "eq", "value": "CORE" },
-        { "id": "I-04-05", "applies_to": "both", "case": "assert_call", "field": "core_count", "op": "lte", "value": 5 }
+        {
+          "id": "I-04-01",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "core_count",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "id": "I-04-02",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.159582",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-04-03",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.510880",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-04-04",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "roles.159770",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-04-05",
+          "applies_to": "both",
+          "case": "assert_call",
+          "field": "core_count",
+          "op": "lte",
+          "value": 5
+        }
       ]
     },
     {
@@ -189,74 +733,749 @@
         "cases": [
           {
             "id": "revoke",
-            "prev_roles": { "159582": "CORE" },
+            "prev_roles": {
+              "159582": "CORE"
+            },
             "day": [
-              { "code": "159582", "role": "CHALLENGER", "role_before_cap": "CORE", "alpha_score_v2": 30.0, "cluster": "tech_hardware" },
-              { "code": "159995", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 35.0, "cluster": "tech_hardware" }
+              {
+                "code": "159582",
+                "role": "CHALLENGER",
+                "role_before_cap": "CORE",
+                "alpha_score_v2": 30.0,
+                "cluster": "tech_hardware"
+              },
+              {
+                "code": "159995",
+                "role": "CORE",
+                "role_before_cap": "CHALLENGER",
+                "alpha_score_v2": 35.0,
+                "cluster": "tech_hardware"
+              }
             ]
           },
           {
             "id": "accept",
-            "prev_roles": { "159582": "CORE" },
+            "prev_roles": {
+              "159582": "CORE"
+            },
             "day": [
-              { "code": "159582", "role": "CHALLENGER", "role_before_cap": "CORE", "alpha_score_v2": 10.0, "cluster": "tech_hardware" },
-              { "code": "159995", "role": "CORE", "role_before_cap": "CHALLENGER", "alpha_score_v2": 30.0, "cluster": "tech_hardware" }
+              {
+                "code": "159582",
+                "role": "CHALLENGER",
+                "role_before_cap": "CORE",
+                "alpha_score_v2": 10.0,
+                "cluster": "tech_hardware"
+              },
+              {
+                "code": "159995",
+                "role": "CORE",
+                "role_before_cap": "CHALLENGER",
+                "alpha_score_v2": 30.0,
+                "cluster": "tech_hardware"
+              }
             ]
           }
         ]
       },
       "invariants": [
-        { "id": "I-05-01", "applies_to": "both", "case": "revoke", "field": "roles.159582", "op": "eq", "value": "CORE" },
-        { "id": "I-05-02", "applies_to": "both", "case": "revoke", "field": "roles.159995", "op": "eq", "value": "CHALLENGER" },
-        { "id": "I-05-03", "applies_to": "both", "case": "accept", "field": "roles.159582", "op": "eq", "value": "CHALLENGER" },
-        { "id": "I-05-04", "applies_to": "both", "case": "accept", "field": "roles.159995", "op": "eq", "value": "CORE" }
+        {
+          "id": "I-05-01",
+          "applies_to": "both",
+          "case": "revoke",
+          "field": "roles.159582",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-05-02",
+          "applies_to": "both",
+          "case": "revoke",
+          "field": "roles.159995",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-05-03",
+          "applies_to": "both",
+          "case": "accept",
+          "field": "roles.159582",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-05-04",
+          "applies_to": "both",
+          "case": "accept",
+          "field": "roles.159995",
+          "op": "eq",
+          "value": "CORE"
+        }
       ]
     },
     {
       "id": "G2S-06",
-      "title": "逐日 eligibility / 数据闸门 → run 状态（四态模型待裁决）",
+      "title": "run 状态四态：数据质量闸门（陈旧/重复/缺基准/短历史/NaN/非30）+ 系统异常 + 发布完整性",
       "tier": "RUN_LEVEL",
-      "status": "PENDING_SEAM",
-      "handler": null,
+      "status": "RUNNABLE",
+      "handler": "run_status_gate",
       "seam": {
-        "python": "gen2.data.quality（函数级：逐日质量检查）",
-        "js": "runGen2ShadowEod main() 内的 failGate 路径（run 级，index.js:1078-1150）"
+        "python": "gen2.data.run_gate.evaluate_run_gate（Python 等价数据质量入口）+ validate_publish_results（纯函数）",
+        "js": "runGen2ShadowEod main() 数据闸门（注入式 db 驱动真实 main）+ validatePublishResults（纯函数）"
       },
       "input": {
-        "dimensions": [
-          "Expected Date / As-Of 不一致（陈旧）",
-          "重复日期（同一 trade_date 多行）",
-          "缺 benchmark（510300 无数据）",
-          "有效历史不足（< min_history_days）",
-          "字段完整性（NaN / 缺列）",
-          "非 30 资产（universe_count != 30）"
+        "note": "run 级 seam：JS 侧注入 DB 驱动真实 main()（不旁路、不预置结果）；Python 侧调用等价数据质量入口。两端共用同一份 canonical run panel（RUN_V1 展开规则逐字一致，panel_sha256 跨端校验）。",
+        "panel": {
+          "expansion": "RUN_V1",
+          "base_date": "2020-01-01",
+          "days": 130,
+          "price_base": 100,
+          "volume": 1000000,
+          "benchmark_code": "510300",
+          "target_size": 30,
+          "eligible_count": 30,
+          "codes": [
+            "513310",
+            "515880",
+            "159582",
+            "518880",
+            "159570",
+            "588000",
+            "588080",
+            "512480",
+            "159995",
+            "512760",
+            "515050",
+            "159819",
+            "159915",
+            "159992",
+            "159770",
+            "159852",
+            "512010",
+            "512690",
+            "159928",
+            "510880",
+            "512800",
+            "512000",
+            "512660",
+            "515030",
+            "515790",
+            "512400",
+            "515220",
+            "513180",
+            "159941",
+            "513500"
+          ]
+        },
+        "data_cases": [
+          {
+            "id": "stale_batch",
+            "title": "陈旧批次：LIVE 应到日 2020-05-11 > benchmark 最新日",
+            "event": {
+              "mode": "LIVE",
+              "expected_trade_date": "2020-05-11"
+            },
+            "mutations": []
+          },
+          {
+            "id": "duplicate_trade_date",
+            "title": "同一 code 重复交易日",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "duplicate_last",
+                "codes": "eligible"
+              }
+            ]
+          },
+          {
+            "id": "benchmark_missing",
+            "title": "缺 benchmark 510300",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "drop_code",
+                "code": "510300"
+              }
+            ]
+          },
+          {
+            "id": "benchmark_short_history",
+            "title": "benchmark 唯一交易日 59 < 60",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "slice_last",
+                "codes": "510300",
+                "n": 59
+              }
+            ]
+          },
+          {
+            "id": "asset_short_history",
+            "title": "全部候选唯一交易日 119 < 120 → 无合格标的",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "slice_last",
+                "codes": "eligible",
+                "n": 119
+              }
+            ]
+          },
+          {
+            "id": "nan_field",
+            "title": "关键字段缺失（close = null）",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "nan_field",
+                "code": "159915",
+                "field": "close",
+                "row": -1
+              }
+            ]
+          },
+          {
+            "id": "universe_incomplete",
+            "title": "非 30 资产：1 只候选落后 30 日 → 29/30",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [
+              {
+                "op": "stale_shift",
+                "codes": [
+                  "159570"
+                ],
+                "days": 30
+              }
+            ]
+          },
+          {
+            "id": "all_ok",
+            "title": "全部闸门通过（REPLAY 完整横截面）",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": []
+          },
+          {
+            "id": "system_error",
+            "title": "系统异常（DB 查询抛错）→ failed",
+            "event": {
+              "mode": "REPLAY"
+            },
+            "mutations": [],
+            "simulate_system_error": true
+          }
+        ],
+        "publish_cases": [
+          {
+            "id": "publish_duplicate_code",
+            "title": "发布前唯一 code 校验失败",
+            "codes": [
+              "513310",
+              "513310"
+            ],
+            "alphas": [
+              0.5,
+              0.4
+            ],
+            "written": 2
+          },
+          {
+            "id": "publish_non_finite_alpha",
+            "title": "发布前非有限 alpha 校验失败",
+            "codes": [
+              "513310"
+            ],
+            "alphas": [
+              null
+            ],
+            "written": 1
+          },
+          {
+            "id": "publish_written_zero",
+            "title": "发布前写入 0 行校验失败",
+            "codes": [
+              "513310"
+            ],
+            "alphas": [
+              0.5
+            ],
+            "written": 0
+          }
         ]
       },
-      "invariants": [],
-      "deferred_to": "WP-G2-03",
-      "deferred_reason": "两端 seam 不对称（Python 为函数级质量检查、JS 为 run 级 main() 闸门），无法在同一输入下直接比对；且状态模型将由四态（running / blocked / failed / completed）替换当前 running/failed/completed，需先定状态契约再写场景。"
+      "invariants": [
+        {
+          "id": "I-06-01",
+          "applies_to": "both",
+          "case": "stale_batch",
+          "field": "status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "id": "I-06-02",
+          "applies_to": "both",
+          "case": "stale_batch",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "DATA_OR_ELIGIBILITY_GATE"
+        },
+        {
+          "id": "I-06-03",
+          "applies_to": "both",
+          "case": "stale_batch",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "STALE_BATCH"
+        },
+        {
+          "id": "I-06-04",
+          "applies_to": "both",
+          "case": "duplicate_trade_date",
+          "field": "status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "id": "I-06-05",
+          "applies_to": "both",
+          "case": "duplicate_trade_date",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "DUPLICATE_TRADE_DATE"
+        },
+        {
+          "id": "I-06-06",
+          "applies_to": "both",
+          "case": "benchmark_missing",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "BENCHMARK_MISSING"
+        },
+        {
+          "id": "I-06-07",
+          "applies_to": "both",
+          "case": "benchmark_short_history",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "BENCHMARK_INSUFFICIENT_HISTORY"
+        },
+        {
+          "id": "I-06-08",
+          "applies_to": "both",
+          "case": "asset_short_history",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "NO_ELIGIBLE_TODAY"
+        },
+        {
+          "id": "I-06-09",
+          "applies_to": "both",
+          "case": "nan_field",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "NAN_OR_MISSING_FIELD"
+        },
+        {
+          "id": "I-06-10",
+          "applies_to": "both",
+          "case": "universe_incomplete",
+          "field": "status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "id": "I-06-11",
+          "applies_to": "both",
+          "case": "universe_incomplete",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "UNIVERSE_INCOMPLETE"
+        },
+        {
+          "id": "I-06-12",
+          "applies_to": "both",
+          "case": "all_ok",
+          "field": "status",
+          "op": "eq",
+          "value": "completed"
+        },
+        {
+          "id": "I-06-13",
+          "applies_to": "both",
+          "case": "all_ok",
+          "field": "data_gate",
+          "op": "is_null"
+        },
+        {
+          "id": "I-06-14",
+          "applies_to": "both",
+          "case": "system_error",
+          "field": "status",
+          "op": "eq",
+          "value": "failed"
+        },
+        {
+          "id": "I-06-15",
+          "applies_to": "both",
+          "case": "system_error",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "SYSTEM_ERROR"
+        },
+        {
+          "id": "I-06-16",
+          "applies_to": "both",
+          "case": "system_error",
+          "field": "data_gate",
+          "op": "is_null"
+        },
+        {
+          "id": "I-06-17",
+          "applies_to": "both",
+          "case": "publish_duplicate_code",
+          "field": "status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "id": "I-06-18",
+          "applies_to": "both",
+          "case": "publish_duplicate_code",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "PUBLISH_VALIDATION_FAILED"
+        },
+        {
+          "id": "I-06-19",
+          "applies_to": "both",
+          "case": "publish_non_finite_alpha",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "PUBLISH_VALIDATION_FAILED"
+        },
+        {
+          "id": "I-06-20",
+          "applies_to": "both",
+          "case": "publish_written_zero",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "PUBLISH_VALIDATION_FAILED"
+        },
+        {
+          "id": "I-06-21",
+          "applies_to": "both",
+          "case": "duplicate_trade_date",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "DATA_OR_ELIGIBILITY_GATE"
+        },
+        {
+          "id": "I-06-22",
+          "applies_to": "both",
+          "case": "stale_batch",
+          "field": "universe_matches_fixture",
+          "op": "is_true"
+        },
+        {
+          "id": "I-06-23",
+          "applies_to": "both",
+          "case": "stale_batch",
+          "field": "target_size_matches_fixture",
+          "op": "is_true"
+        }
+      ]
     },
     {
       "id": "G2S-07",
-      "title": "晋升连续性（persistence 5 日）与 NO_CORE 硬门槛",
-      "tier": "ROLES_STATE_MACHINE",
-      "status": "PENDING_SEAM",
-      "handler": null,
+      "title": "roles 状态机：晋升连续性 / NO_CORE 不可恢复 / RISK_OFF 禁晋升 / cluster 终局约束",
+      "tier": "ROLES_PANEL",
+      "status": "RUNNABLE",
+      "handler": "roles_panel",
+      "parity_scope": "both",
       "seam": {
-        "python": "gen2.baseline.rule_v2_ab.build_v2_roles(features, rankings, config)（另需 universe records + config）",
-        "js": "buildDailyRoles(features)（配置读自 bundle/param 内联常量）"
+        "python": "canonical panel → DataFrame(加 eligibility/market_score) + rankings(trade_date,code) + load_gen2_config() → rule_v2_ab.build_v2_roles(features, rankings, config)",
+        "js": "canonical panel → computeLeadershipScore → rankFeatures → buildDailyRoles（配置来自 bundle 内联）"
       },
       "input": {
-        "dimensions": [
-          "above_core_days 第 4 / 5 / 6 日（promotion_persistence_days=5）",
-          "NO_CORE 硬门槛触发后不得恢复为 CORE",
-          "RISK_OFF 期间不得新晋升（与 G2S-01 的权限层一致）",
-          "tech cap 与 cluster cap 对最终角色的影响"
-        ]
+        "panel": {
+          "expansion": "V1",
+          "expansion_note": "两端各自用同一份 V1 规则展开（rank_order 决定 8 个 alpha 驱动列的相对大小 → trend/rs/breakout 百分位 → alpha 排序）；展开后必须计算 panel_sha256 并由 cross_equal 校验，确保两端吃的是同一份输入",
+          "codes": [
+            {
+              "code": "513310",
+              "cluster": "tech_hardware",
+              "incumbent": true
+            },
+            {
+              "code": "159582",
+              "cluster": "tech_hardware",
+              "incumbent": true
+            },
+            {
+              "code": "159570",
+              "cluster": "healthcare",
+              "incumbent": true
+            },
+            {
+              "code": "159770",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159819",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159852",
+              "cluster": "software_ai",
+              "incumbent": false
+            },
+            {
+              "code": "159995",
+              "cluster": "tech_hardware",
+              "incumbent": false
+            },
+            {
+              "code": "159992",
+              "cluster": "healthcare",
+              "incumbent": false
+            },
+            {
+              "code": "510880",
+              "cluster": "defensive_dividend",
+              "incumbent": false
+            },
+            {
+              "code": "159915",
+              "cluster": "growth_broad",
+              "incumbent": false
+            }
+          ],
+          "rank_order_note": "rank_order[k] = 第 k+1 高 alpha；n=10 时 rank1..3 的百分位为 1.0/0.9/0.8（≥ core_pct 0.8 → above core），rank4 为 0.7",
+          "cases": [
+            {
+              "id": "risk_on",
+              "days": 6,
+              "benchmark": {
+                "px_ma20": 0.03,
+                "px_ma60": 0.02
+              },
+              "rank_order": [
+                "159770",
+                "159819",
+                "159852",
+                "159995",
+                "159992",
+                "510880",
+                "159915",
+                "513310",
+                "159582",
+                "159570"
+              ],
+              "trend_break": {}
+            },
+            {
+              "id": "risk_off",
+              "days": 4,
+              "benchmark": {
+                "px_ma20": -0.012,
+                "px_ma60": -0.01
+              },
+              "rank_order": [
+                "159770",
+                "159819",
+                "159852",
+                "513310",
+                "159582",
+                "159570",
+                "159995",
+                "159992",
+                "510880",
+                "159915"
+              ],
+              "trend_break": {}
+            },
+            {
+              "id": "no_core",
+              "days": 6,
+              "benchmark": {
+                "px_ma20": 0.03,
+                "px_ma60": 0.02
+              },
+              "rank_order": [
+                "513310",
+                "159770",
+                "159819",
+                "159852",
+                "159582",
+                "159570",
+                "159995",
+                "159992",
+                "510880",
+                "159915"
+              ],
+              "trend_break": {
+                "513310": [
+                  3
+                ]
+              }
+            }
+          ]
+        }
       },
-      "invariants": [],
-      "deferred_to": "WP-G2-03",
-      "deferred_reason": "输入契约不同：JS buildDailyRoles(features) 单参数，Python build_v2_roles(features, rankings, config) 需 rankings + 配置 + universe records。需先统一 roles seam 的输入契约（含 config 来源），否则无法构造「同一输入」。"
+      "invariants": [
+        {
+          "id": "I-07-01",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "panel_sha256",
+          "op": "not_null"
+        },
+        {
+          "id": "I-07-02",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "days.4.159770",
+          "op": "eq",
+          "value": "CHALLENGER"
+        },
+        {
+          "id": "I-07-03",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "days.5.159770",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-04",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "reasons_norm.4.159770",
+          "op": "contains",
+          "value": "PROMOTION_HYSTERESIS"
+        },
+        {
+          "id": "I-07-05",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "reasons_norm.5.159770",
+          "op": "contains",
+          "value": "PROMOTION_CONFIRMED"
+        },
+        {
+          "id": "I-07-06",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "cluster_core_count.6.software_ai",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "id": "I-07-07",
+          "applies_to": "both",
+          "case": "risk_off",
+          "field": "reasons_norm.4.159770",
+          "op": "contains",
+          "value": "PROMOTION_BLOCKED_BY_PERMISSION"
+        },
+        {
+          "id": "I-07-08",
+          "applies_to": "both",
+          "case": "risk_off",
+          "field": "days.4.159770",
+          "op": "ne",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-09",
+          "applies_to": "both",
+          "case": "risk_off",
+          "field": "days.4.513310",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-10",
+          "applies_to": "both",
+          "case": "no_core",
+          "field": "days.2.513310",
+          "op": "eq",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-11",
+          "applies_to": "both",
+          "case": "no_core",
+          "field": "reasons_norm.3.513310",
+          "op": "contains",
+          "value": "NO_CORE_TREND_GATE"
+        },
+        {
+          "id": "I-07-12",
+          "applies_to": "both",
+          "case": "no_core",
+          "field": "days.3.513310",
+          "op": "ne",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-13",
+          "applies_to": "both",
+          "case": "no_core",
+          "field": "days.4.513310",
+          "op": "ne",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-14",
+          "applies_to": "both",
+          "case": "no_core",
+          "field": "days.5.513310",
+          "op": "ne",
+          "value": "CORE"
+        },
+        {
+          "id": "I-07-15",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "reasons_norm.5.159852",
+          "op": "contains",
+          "value": "CLUSTER_CAP_DEMOTED"
+        },
+        {
+          "id": "I-07-16",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "reasons_norm.6.159852",
+          "op": "contains",
+          "value": "CLUSTER_CAP_DEMOTED"
+        },
+        {
+          "id": "I-07-17",
+          "applies_to": "both",
+          "case": "risk_on",
+          "field": "days.5.159852",
+          "op": "eq",
+          "value": "SATELLITE"
+        }
+      ]
     }
   ]
 }

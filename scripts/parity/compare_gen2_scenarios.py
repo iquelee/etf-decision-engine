@@ -171,7 +171,7 @@ def main() -> int:
     gate_ok = not inv_failed and not unlocated
 
     report = {
-        "work_package": "WP-G2-01",
+        "work_package": fixture.get("meta", {}).get("work_package", "WP-G2-01"),
         "fixture": Path(args.fixture).name,
         "js_source": js.get("source"),
         "py_source": py.get("source"),
@@ -198,7 +198,7 @@ def main() -> int:
     (out_dir / "diff-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     lines = [
-        "# WP-G2-01 Gen-2 场景双端比对报告",
+        f"# {report['work_package']} Gen-2 场景双端比对报告",
         "",
         f"- 夹具：`{report['fixture']}`",
         f"- 双端：JS `{report['js_source']}` / Python `{report['py_source']}`",
@@ -215,15 +215,18 @@ def main() -> int:
     for sid, st in scenario_status.items():
         lines.append(f"| {sid} | {st} |")
 
-    lines += ["", "## 差异明细（必须全部已登记并定位）", "", "| 场景 | case | 字段 | JS | Python | 分类 | 位置 |", "|---|---|---|---|---|---|---|"]
-    if not diffs:
-        lines.append("| — | — | — | — | — | 无差异 | — |")
+    lines += ["", "## 差异汇总（按登记项聚合；全量逐条见 diff-report.json）", "",
+              "| 登记项 | 分类 | 场景 | case | 字段数 | 示例 |", "|---|---|---|---|---|---|"]
+    groups = {}
     for d in diffs:
-        loc = (d.get("location") or "").replace("|", "\\|")
-        lines.append(
-            f"| {d['scenario']} | {d.get('case')} | {d['field']} | `{d['js']}` | `{d['python']}` | "
-            f"{d['status']}{(' (' + d['difference_id'] + ')') if d.get('difference_id') else ''} | {loc} |"
-        )
+        key = (d.get("difference_id") or "UNLOCATED", d["status"], d["scenario"], d.get("case"))
+        groups.setdefault(key, []).append(d)
+    if not diffs:
+        lines.append("| — | — | — | — | 0 | 无差异 |")
+    for (did, status, sc_id, case), items in groups.items():
+        ex = items[0]
+        example = f"`{ex['field']}` js={ex['js']!r} / py={ex['python']!r}"
+        lines.append(f"| {did} | {status} | {sc_id} | {case} | {len(items)} | {example} |")
 
     if inv_failed:
         lines += ["", "## ❌ 不变量失败", ""]

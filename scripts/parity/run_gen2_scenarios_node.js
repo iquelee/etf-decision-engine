@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FN_DIR = path.join(ROOT, 'cloudfunctions', 'runGen2ShadowEod');
@@ -26,16 +27,21 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
 const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
-  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints };\n';
+  + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
+  + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
+  + ' inspectBarsIntegrity, validatePublishResults };\n';
 
-function loadAudit() {
+/** 空 db（纯函数场景用；run 级场景另见 makeRunDb） */
+const EMPTY_DB = { query: async () => [], upsert: async () => {} };
+
+function loadEntry(dbImpl) {
   const box = {
     exports: {},
     require: (p) => {
       if (p === 'fs') return require('fs');
       if (p === 'path') return require('path');
       if (p === 'crypto') return require('crypto');
-      if (p === './common/utils/db') return { query: async () => [], upsert: async () => {} };
+      if (p === './common/utils/db') return dbImpl || EMPTY_DB;
       if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
       return require(path.join(FN_DIR, p));
     },
@@ -43,10 +49,10 @@ function loadAudit() {
     console
   };
   vm.runInNewContext(SOURCE + AUDIT_EXPORT, box);
-  return box.exports.audit;
+  return box.exports;
 }
 
-const A = loadAudit();
+const A = loadEntry(EMPTY_DB).audit;
 const r4 = (v) => (v == null ? null : Math.round(v * 1e4) / 1e4);
 const num = (v) => (v == null || v === '' ? null : Number(v));
 
@@ -83,6 +89,206 @@ function snapshot(day) {
     per_cluster_core: perCluster,
     // adapter 自证：本端实际使用的 cluster 映射（供比对器核对与夹具声明是否一致）
     cluster_used: clusterUsed
+  };
+}
+
+/* ---------- canonical roles panel 展开（V1；与 Python 端逐字一致） ---------- */
+
+const PANEL_BASE_DATE = '2026-06-';
+const PANEL_CONST = {
+  sideway_days: 20, sideway_range: 0.05, volume_ratio_5_20: 1.0,
+  momentum_accel_5_20: 0.01, atr20_pct: 0.02, realized_vol20: 0.25,
+  max_drawdown_20d: -0.1, corr_to_portfolio_60d: 0.3, corr_to_cluster_60d: 0.4,
+  avg_amount_20d: 100000000.0, ret_1d: 0.0, ret_20d: 0.02, ret_60d: 0.05, close: 1.0
+};
+const R4 = (v) => Math.round(v * 1e4) / 1e4;
+
+function expandPanel(panel, c) {
+  const rows = [];
+  for (let d = 1; d <= c.days; d += 1) {
+    c.rank_order.forEach((code, idx) => {
+      const k = idx + 1; // 1 = 最高 alpha
+      const broken = (c.trend_break[code] || []).indexOf(d) >= 0;
+      const row = Object.assign({}, PANEL_CONST, {
+        trade_date: `${PANEL_BASE_DATE}${String(d).padStart(2, '0')}`,
+        code,
+        px_ma20: R4(0.10 - 0.01 * (k - 1)),
+        px_ma60: broken ? -0.02 : R4(0.08 - 0.01 * (k - 1)),
+        ma20_slope_5d: R4(0.05 - 0.005 * (k - 1)),
+        ma60_slope_10d: R4(0.04 - 0.004 * (k - 1)),
+        rs20_vs_benchmark: R4(0.06 - 0.006 * (k - 1)),
+        rs60_vs_benchmark: R4(0.05 - 0.005 * (k - 1)),
+        rs_accel_5d: R4(0.02 - 0.002 * (k - 1)),
+        breakout_distance: R4(0.03 - 0.003 * (k - 1)),
+        benchmark_px_ma20: R4(c.benchmark.px_ma20),
+        benchmark_px_ma60: R4(c.benchmark.px_ma60),
+        eligibility: 'ELIGIBLE'
+      });
+      rows.push(row);
+    });
+  }
+  return rows;
+}
+
+/** panel_sha256：对「规范化元组」做 sha256（两端字符串必须逐字相同） */
+function panelHash(rows) {
+  const lines = rows.map((r) => [
+    r.trade_date, r.code, r.px_ma20, r.px_ma60, r.ma20_slope_5d, r.ma60_slope_10d,
+    r.rs20_vs_benchmark, r.rs60_vs_benchmark, r.rs_accel_5d, r.breakout_distance,
+    r.benchmark_px_ma20, r.benchmark_px_ma60
+  ].map((v) => (typeof v === 'number' ? v.toFixed(4) : String(v))).join(','));
+  return crypto.createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
+}
+
+/** reason 归一化（契约见夹具 seam_contracts.reason_normalization）：剥离纯标签差异 */
+const ZONE_CODES = ['LEADERSHIP_TOP_QUINTILE', 'LEADERSHIP_CHALLENGER_ZONE',
+  'LEADERSHIP_SATELLITE_ZONE', 'LEADERSHIP_BELOW_SATELLITE'];
+function normalizeReasons(raw) {
+  return String(raw || '')
+    .split('|')
+    .map((x) => x.replace(/_WAIT$/, '').replace(/_KEEP$/, ''))
+    .filter((x) => x && ZONE_CODES.indexOf(x) < 0)
+    .join('|');
+}
+
+function rolesSnapshot(dayRows, panelCodes) {
+  const days = {};
+  const reasons = {};
+  const reasonsNorm = {};
+  const clusterCore = {};
+  const clusterUsed = {};
+  for (const r of dayRows) {
+    const d = String(Number(String(r.trade_date).slice(8, 10)));
+    (days[d] = days[d] || {})[r.code] = r.role;
+    (reasons[d] = reasons[d] || {})[r.code] = r.reason_codes || '';
+    (reasonsNorm[d] = reasonsNorm[d] || {})[r.code] = normalizeReasons(r.reason_codes);
+    if (r.role === 'CORE') {
+      const cl = A.UNIVERSE.cluster[r.code] || 'other';
+      (clusterCore[d] = clusterCore[d] || {})[cl] = ((clusterCore[d] || {})[cl] || 0) + 1;
+    }
+  }
+  for (const c of panelCodes) clusterUsed[c.code] = A.UNIVERSE.cluster[c.code] || 'other';
+  return { days, reasons, reasons_norm: reasonsNorm, cluster_core_count: clusterCore, cluster_used: clusterUsed };
+}
+
+/* ---------- canonical run panel 展开（RUN_V1；与 Python 端逐字一致） ---------- */
+
+function runPanelCodes(panel) {
+  return panel.codes.concat([panel.benchmark_code]);
+}
+
+/** 生成 run 级日线面板：全整数运算，保证两端逐位一致 */
+function runPanelBase(panel) {
+  const rows = [];
+  const base = Date.parse(panel.base_date + 'T00:00:00Z');
+  const codes = runPanelCodes(panel);
+  for (let i = 0; i < panel.days; i += 1) {
+    const d = new Date(base + i * 86400000).toISOString().slice(0, 10);
+    codes.forEach((code, j) => {
+      const stepQ = 100 + 5 * j; // 每只标的不同斜率（百分比×100，整数）
+      const close = panel.price_base + Math.floor((i * stepQ) / 100);
+      const volume = panel.volume + 1000 * j;
+      rows.push({
+        code, trade_date: d,
+        open: close - 1, high: close + 2, low: close - 2, close,
+        volume, amount: volume * close
+      });
+    });
+  }
+  return rows;
+}
+
+function groupByCode(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!m.has(r.code)) m.set(r.code, []);
+    m.get(r.code).push(r);
+  }
+  return m;
+}
+
+/** 变异算子（与 Python 端逐字一致）：制造陈旧 / 重复 / 缺基准 / 短历史 / NaN 等场景 */
+function applyRunMutations(rows, mutations, panel) {
+  const groups = groupByCode(rows);
+  const sel = (spec) => {
+    if (spec === 'eligible') return panel.codes.slice();
+    if (spec === 'all') return runPanelCodes(panel);
+    return Array.isArray(spec) ? spec.slice() : [spec];
+  };
+  for (const m of mutations || []) {
+    const codes = sel(m.codes != null ? m.codes : m.code);
+    if (m.op === 'slice_last') {
+      for (const c of codes) if (groups.has(c)) groups.set(c, groups.get(c).slice(-m.n));
+    } else if (m.op === 'drop_code') {
+      for (const c of codes) groups.delete(c);
+    } else if (m.op === 'stale_shift') {
+      for (const c of codes) if (groups.has(c)) groups.set(c, groups.get(c).slice(0, groups.get(c).length - m.days));
+    } else if (m.op === 'duplicate_last') {
+      for (const c of codes) {
+        if (!groups.has(c)) continue;
+        const g = groups.get(c);
+        g.push(Object.assign({}, g[g.length - 1]));
+      }
+    } else if (m.op === 'nan_field') {
+      for (const c of codes) {
+        const g = groups.get(c);
+        if (!g) continue;
+        const idx = m.row < 0 ? g.length + m.row : m.row;
+        g[idx] = Object.assign({}, g[idx]);
+        g[idx][m.field] = null;
+      }
+    } else {
+      throw new Error(`unknown run mutation op ${m.op}`);
+    }
+  }
+  const out = [];
+  for (const g of groups.values()) out.push(...g);
+  out.sort((a, b) => (a.trade_date < b.trade_date ? -1 : a.trade_date > b.trade_date ? 1
+    : (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)));
+  return out;
+}
+
+const fmtCell = (v) => (v == null ? 'null' : (typeof v === 'number' ? v.toFixed(4) : String(v)));
+
+function runPanelHash(rows) {
+  const lines = rows.map((r) => [r.code, r.trade_date, r.open, r.high, r.low, r.close, r.volume, r.amount]
+    .map(fmtCell).join(','));
+  return crypto.createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
+}
+
+function runPublishHash(codes, alphas, written) {
+  const line = codes.join('|') + ';' + alphas.map(fmtCell).join('|') + ';' + String(written);
+  return crypto.createHash('sha256').update(line, 'utf8').digest('hex');
+}
+
+/** 注入式 db：query 返回面板数据；simulate_system_error 时抛异常以触发 failed 路径 */
+function makeRunDb(groups, opts) {
+  const writes = [];
+  const db = {
+    query: async (collection, where) => {
+      if (opts && opts.failQuery) throw new Error('injected db query failure (SYSTEM_ERROR simulation)');
+      const code = where && where.code;
+      return (groups.get(code) || []).slice();
+    },
+    upsert: async (collection, doc) => { writes.push({ collection, doc }); }
+  };
+  return { db, writes };
+}
+
+/** 驱动真实 main()：注入 db + 事件，取「最后一次 gen2_run 写入 / 返回值」的规范化状态 */
+async function runMainCase(panel, caseSpec) {
+  const rows = applyRunMutations(runPanelBase(panel), caseSpec.mutations, panel);
+  const { db, writes } = makeRunDb(groupByCode(rows), { failQuery: !!caseSpec.simulate_system_error });
+  const entry = loadEntry(db);
+  const out = await entry.main(Object.assign({}, caseSpec.event || {}));
+  const runs = writes.filter((w) => w.doc && w.doc.type === 'gen2_run');
+  const last = runs.length ? runs[runs.length - 1].doc : null;
+  const pick = (a, b) => (a === undefined || a === null ? (b === undefined ? null : b) : a);
+  return {
+    status: pick(out && out.status, last && last.status),
+    status_reason: pick(out && out.status_reason, last && last.status_reason),
+    data_gate: pick(out && out.data_gate, last && last.data_gate),
+    panel_sha256: runPanelHash(rows)
   };
 }
 
@@ -126,6 +332,11 @@ const HANDLERS = {
     const dayGate = mk();
     A.applyReplacementGate(dayGate, Object.assign({}, prev));
     out.gate_call = snapshot(dayGate);
+
+    // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）
+    const dayExit = mk();
+    A.finalizeRoles(dayExit, Object.assign({}, prev));
+    out.exit_call = snapshot(dayExit);
     return out;
   },
 
@@ -143,10 +354,58 @@ const HANDLERS = {
       out[c.id] = snapshot(day);
     }
     return out;
+  },
+
+  async run_status_gate(sc) {
+    const panel = sc.input.panel;
+    const declared = runPanelCodes(panel).slice().sort().join(',');
+    const ownUniverse = A.UNIVERSE.eligible_codes.concat([A.UNIVERSE.benchmark_code]).slice().sort().join(',');
+    const selfCheck = {
+      universe_matches_fixture: declared === ownUniverse,
+      target_size_matches_fixture: A.UNIVERSE.target_size === panel.target_size
+    };
+    const out = {};
+    for (const c of sc.input.data_cases) {
+      // run 级 seam：注入 db 驱动真实 main()，观察 run 文档状态（不作弊、不旁路）
+      const obs = await runMainCase(panel, c);
+      out[c.id] = Object.assign(obs, selfCheck);
+    }
+    for (const c of sc.input.publish_cases) {
+      // 发布完整性 seam：直调纯函数（唯一 code / 非有限 alpha / 写入 0 行）
+      const rows = c.codes.map((code, i) => ({
+        code, alpha_score_v2: c.alphas[i] == null ? null : Number(c.alphas[i])
+      }));
+      const res = A.validatePublishResults(rows, c.written);
+      out[c.id] = Object.assign({
+        status: res.status, status_reason: res.status_reason, data_gate: res.data_gate,
+        panel_sha256: runPublishHash(c.codes, c.alphas, c.written)
+      }, selfCheck);
+    }
+    return out;
+  },
+
+  roles_panel(sc) {
+    const panel = sc.input.panel;
+    const out = {};
+    for (const c of panel.cases) {
+      const rows = expandPanel(panel, c);
+      const feat = rows.map((r) => Object.assign({}, r));
+      A.computeLeadershipScore(feat);
+      A.rankFeatures(feat);
+      const roles = A.buildDailyRoles(feat);
+      const snap = rolesSnapshot(roles, panel.codes);
+      snap.panel_sha256 = panelHash(rows);
+      snap.panel_rows = rows.length;
+      // 自证：本端 cluster 映射与夹具声明一致（不一致说明 adapter/宇宙漂移）
+      snap.cluster_map_matches_fixture = panel.codes.every(
+        (x) => (A.UNIVERSE.cluster[x.code] || 'other') === x.cluster);
+      out[c.id] = snap;
+    }
+    return out;
   }
 };
 
-function main() {
+async function main() {
   const results = {
     engine: 'js',
     source: 'cloudfunctions/runGen2ShadowEod/index.js',
@@ -167,11 +426,11 @@ function main() {
     }
     const handler = HANDLERS[sc.handler];
     if (!handler) throw new Error(`unknown handler ${sc.handler} for ${sc.id}`);
-    results.scenarios[sc.id] = handler(sc);
+    results.scenarios[sc.id] = await handler(sc);
   }
   const text = JSON.stringify(results, null, 2);
   if (outPath) fs.writeFileSync(outPath, text);
   else process.stdout.write(text + '\n');
 }
 
-main();
+main().catch((e) => { console.error(e); process.exit(1); });

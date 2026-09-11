@@ -11,7 +11,7 @@ from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_
 from gen2.features.build_features import build_feature_matrix
 from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.portfolio_builder import build_portfolio_candidates
-from gen2.portfolio.role_engine import build_daily_roles
+from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
 
 TECH_CLUSTERS = {"tech_hardware", "software_ai"}
@@ -32,7 +32,7 @@ def run_attribution(output_dir: str | Path | None = None) -> dict:
     records = load_universe_records()
     features = build_feature_matrix(bars=bars, records=records, config=cfg)
     rankings = run_rank_engine(features)
-    roles = build_daily_roles(rankings, config=cfg)
+    roles = build_v2_role_view(features, rankings, cfg)
     candidates = build_portfolio_candidates(roles)                        # undefended
     defended = apply_regime_defense(candidates, features, config=cfg)     # defended（含真实 defense_state）
 

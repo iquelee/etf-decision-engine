@@ -37,7 +37,7 @@ function load(data, failRankingAt = 0) {
     if (p.startsWith('./common/')) return require(path.join(SRC_COMMON, p.replace(/^\.\/common\//, '')));
     return require(path.join(ROOT, p));
   }, Date, console };
-  vm.runInNewContext(SOURCE + '\nexports.audit = {UNIVERSE, buildDailyRoles, buildPortfolioCandidates, applyReplacementGate, assertFinalRoleConstraints};', box);
+  vm.runInNewContext(SOURCE + '\nexports.audit = {UNIVERSE, buildDailyRoles, buildPortfolioCandidates, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles, inspectBarsIntegrity, validatePublishResults};', box);
   return { entry: box.exports, writes };
 }
 
@@ -95,6 +95,60 @@ async function main() {
     const out = await e.main({ mode: 'REPLAY' });
     const docs = writes.filter((w) => w.doc.type === 'gen2_ranking');
     assert('重复日期不产生 3600 行', docs.length === 0, { written: out.written });
+    assert('重复日期 → DUPLICATE_TRADE_DATE(blocked)',
+      out.status === 'blocked' && out.data_gate === 'DUPLICATE_TRADE_DATE', out);
+  }
+
+  // WP-G2-03（A2 剩余切片）：字段完整性 / 非 30 资产 / 完整通过 三类新增场景
+  {
+    const data = fullData();
+    const i = data['159915'].length - 1;
+    data['159915'][i] = { ...data['159915'][i], close: null };
+    const { entry: e } = load(data);
+    const out = await e.main({ mode: 'REPLAY' });
+    assert('关键字段缺失 → NAN_OR_MISSING_FIELD(blocked)',
+      out.status === 'blocked' && out.data_gate === 'NAN_OR_MISSING_FIELD', out);
+  }
+  {
+    const data = fullData();
+    data['159915'] = data['159915'].concat([{ ...data['159915'].at(-1) }]);
+    const { entry: e } = load(data);
+    const out = await e.main({ mode: 'REPLAY' });
+    assert('单只重复交易日 → DUPLICATE_TRADE_DATE(blocked)',
+      out.status === 'blocked' && out.data_gate === 'DUPLICATE_TRADE_DATE', out);
+  }
+  {
+    // 非 30 资产：1 只候选落后 → 29/30，禁止发布不完整横截面
+    const data = fullData();
+    data['159570'] = data['159570'].slice(0, data['159570'].length - 30);
+    const { entry: e, writes } = load(data);
+    const out = await e.main({ mode: 'REPLAY' });
+    assert('非 30 资产 → UNIVERSE_INCOMPLETE(blocked)',
+      out.status === 'blocked' && out.data_gate === 'UNIVERSE_INCOMPLETE', out);
+    assert('非 30 资产不写 ranking', writes.filter((w) => w.doc.type === 'gen2_ranking').length === 0);
+  }
+  {
+    const { entry: e, writes } = load(fullData());
+    const out = await e.main({ mode: 'REPLAY' });
+    const runs = writes.filter((w) => w.doc.type === 'gen2_run');
+    assert('完整横截面 30/30 → completed', out.ok === true && out.status === 'completed' && out.eligible_count === 30, out);
+    assert('completed 是唯一可被消费状态（恰一条 completed）',
+      runs.filter((w) => w.doc.status === 'completed').length === 1, runs.map((w) => w.doc.status));
+  }
+  // 发布完整性校验（A3 seam 纯函数）
+  {
+    const { entry: e } = load({});
+    const V = e.audit.validatePublishResults;
+    assert('导出 inspectBarsIntegrity / validatePublishResults',
+      typeof e.audit.inspectBarsIntegrity === 'function' && typeof V === 'function');
+    assert('唯一 code 重复 → PUBLISH_VALIDATION_FAILED',
+      V([{ code: 'a', alpha_score_v2: 1 }, { code: 'a', alpha_score_v2: 2 }], 2).data_gate === 'PUBLISH_VALIDATION_FAILED');
+    assert('非有限 alpha → PUBLISH_VALIDATION_FAILED',
+      V([{ code: 'a', alpha_score_v2: NaN }], 1).data_gate === 'PUBLISH_VALIDATION_FAILED');
+    assert('写入 0 行 → PUBLISH_VALIDATION_FAILED',
+      V([{ code: 'a', alpha_score_v2: 1 }], 0).data_gate === 'PUBLISH_VALIDATION_FAILED');
+    const ok = V([{ code: 'a', alpha_score_v2: 1 }], 1);
+    assert('全部通过 → completed / data_gate=null', ok.status === 'completed' && ok.data_gate === null, ok);
   }
 
   // 已生效项：benchmark 完全缺失 → BENCHMARK_MISSING
@@ -115,14 +169,43 @@ async function main() {
     assert('候选 119 行阻断', out.ok === false && out.data_gate === 'NO_ELIGIBLE_TODAY', out);
   }
 
-  // 失败必须写 failed 运行记录、不写 completed
+  // WP-G2-03 四态：数据/资格闸门未通过 → blocked（可预期业务结果），且绝不写 completed
   {
     const data = fullData();
     const { entry: e, writes } = load(data);
     await e.main({ mode: 'LIVE', expected_trade_date: '2026-09-07' });
     const runs = writes.filter((w) => w.doc.type === 'gen2_run');
-    assert('失败写 failed 记录', runs.some((w) => w.doc.status === 'failed'));
-    assert('失败不写 completed', !runs.some((w) => w.doc.status === 'completed'));
+    assert('数据闸门写 blocked 记录', runs.some((w) => w.doc.status === 'blocked'));
+    assert('数据闸门不写 failed（blocked 与 failed 不合并）', !runs.some((w) => w.doc.status === 'failed'));
+    assert('数据闸门不写 completed', !runs.some((w) => w.doc.status === 'completed'));
+    assert('blocked 带 status_reason', runs.some((w) => w.doc.status === 'blocked' && w.doc.status_reason === 'DATA_OR_ELIGIBILITY_GATE'));
+  }
+
+  // WP-G2-03（D-001 裁决回归）：任何角色生成路径在返回前都必须无条件执行终局约束检查。
+  // 无 cap 降级现任时，software_ai 有 3 个 CORE，统一出口必须收敛到 2。
+  {
+    const { entry: e } = load(fullData());
+    const day = [
+      { code: '159770', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 20, reason_codes: '' },
+      { code: '159819', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 10, reason_codes: '' },
+      { code: '159852', role: 'CORE', role_before_cap: 'CHALLENGER', alpha_score_v2: 5, reason_codes: '' }
+    ];
+    const prev = { '159770': 'CORE', '159819': 'CORE' };
+    const capped = e.audit.finalizeRoles(day, Object.assign({}, prev));
+    const cores = capped.filter((r) => r.role === 'CORE');
+    assert('统一出口无条件收敛（3 → 2 个 software_ai CORE）', cores.length === 2, capped);
+    assert('降级的是非现任晋升者', capped.find((r) => r.code === '159852').role === 'CHALLENGER', capped);
+    assert('现任 CORE 未被降级', capped.find((r) => r.code === '159770').role === 'CORE'
+      && capped.find((r) => r.code === '159819').role === 'CORE', capped);
+
+    // 替换门本身只做事务，不再承担终局检查（防止未来新增早退分支绕过约束）
+    const day2 = [
+      { code: '159770', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 20, reason_codes: '' },
+      { code: '159819', role: 'CORE', role_before_cap: 'CORE', alpha_score_v2: 10, reason_codes: '' },
+      { code: '159852', role: 'CORE', role_before_cap: 'CHALLENGER', alpha_score_v2: 5, reason_codes: '' }
+    ];
+    e.audit.applyReplacementGate(day2, Object.assign({}, prev));
+    assert('替换门不再内含终局断言（职责单一）', day2.filter((r) => r.role === 'CORE').length === 3, day2);
   }
 
   console.log('== P0-5 replacement 不破坏 cluster cap ==');
@@ -152,6 +235,16 @@ async function main() {
     assert('科技 cluster CORE ≤2', techCores.length <= UNIVERSE.PORTFOLIO_CFG ? techCores.length <= 2 : techCores.length <= 2, { tech_cores: techCores.length });
     const totalCores = last.filter((r) => r.role === 'CORE');
     assert('CORE 总数 ≤ max_core_count', totalCores.length <= 5, { total: totalCores.length });
+    // D-004（WP-G2-03 裁决）：被 cap 降级的行必须留下审计码，审计串与最终角色一致。
+    // 注意：审计码是 append-only 历史 —— 被替换门撤销（REPLACEMENT_REVOKED）而恢复 CORE 的行
+    // 仍保留 CLUSTER_CAP_DEMOTED，必须同时带恢复码，不得出现「无解释的 CORE + 降级码」。
+    const demoted = last.filter((r) => (r.reason_codes || '').indexOf('CLUSTER_CAP_DEMOTED') >= 0);
+    assert('cap 降级行带 CLUSTER_CAP_DEMOTED 审计码', demoted.length >= 1,
+      last.map((r) => `${r.code}:${r.role}:${r.reason_codes}`));
+    assert('降级码与角色自洽（非 CORE，或已带 REPLACEMENT_REVOKED 恢复码）',
+      demoted.every((r) => r.role !== 'CORE'
+        || (r.reason_codes || '').indexOf('REPLACEMENT_REVOKED') >= 0),
+      demoted.map((r) => `${r.code}:${r.role}:${r.reason_codes}`));
   }
 
   console.log('== P0-2 RISK_OFF 不清现任 + NO_CORE 硬退出 ==');

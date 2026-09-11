@@ -127,11 +127,13 @@ def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: 
     被 cap 降级的「现任 CORE」（上一日 CORE 且 cap 前仍 CORE、cap 后非 CORE）需有
     alpha 边际达标的同 cluster 新晋升者才接受替换；否则撤销（恢复现任、退回最弱晋升者）。
     硬退出（NO_CORE）已在前置状态机降为非 CORE，不经过此校验。
+
+    WP-G2-03（D-002 裁决）：本函数**只负责替换事务**，不再承担终局约束检查；
+    终局检查统一由 `finalize_roles()` 在角色生成出口无条件执行（与 Node finalizeRoles 对称）。
     """
     prev_s = _prev_role_series(day["code"], prev_roles)
     cap_demoted = day[(prev_s == "CORE") & (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")]
     if cap_demoted.empty:
-        _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
         return
 
     promoted_indices = list(day[(prev_s != "CORE") & (day["role"] == "CORE")].index)
@@ -156,6 +158,18 @@ def _apply_replacement_gate(day: pd.DataFrame, prev_roles: dict, base_max_core: 
         day.loc[weakest_idx, "reason_codes"] = str(day.loc[weakest_idx, "reason_codes"]) + "|REPLACEMENT_BLOCKED"
         promoted_indices.remove(weakest_idx)
 
+
+def finalize_roles(
+    day: pd.DataFrame, prev_roles: dict, base_max_core: int, max_core_per_cluster: int
+) -> None:
+    """角色生成的**统一出口**（WP-G2-03 / D-001 裁决，与 Node `finalizeRoles` 对称）。
+
+    替换事务（`_apply_replacement_gate`）→ **无条件**终局约束检查（`_assert_final_constraints`）。
+
+    不变量：任何角色生成路径在返回前都必须执行一次终局约束检查 ——
+    与当天是否存在 cap 降级现任、是否有替换、是否提前返回无关。
+    """
+    _apply_replacement_gate(day, prev_roles, base_max_core, max_core_per_cluster)
     _assert_final_constraints(day, prev_roles, base_max_core, max_core_per_cluster)
 
 
@@ -257,8 +271,17 @@ def build_v2_roles(features, rankings, config) -> pd.DataFrame:
         # F03 修复：显式传 V2 的 alpha 排序，禁止读旧 leadership_score。
         day["role_before_cap"] = day["role"]
         day["role"] = _cap_core_roles(day, max_core, max_core_per_cluster, priority_col="alpha_score_v2", priority_rank_col="alpha_rank")
-        # F09：自愿替换校验 + 组合约束最终断言（与 Node applyReplacementGate/assertFinalRoleConstraints 一致）
-        _apply_replacement_gate(day, current_roles, base_max_core, max_core_per_cluster)
+        # D-004（WP-G2-03 裁决）：被 cap 降级的行必须留下审计码。
+        # 否则 reason_codes 仍写 PROMOTION_CONFIRMED 而 role 已是 SATELLITE —— 审计串与最终角色矛盾。
+        # 追加顺序与 JS 逐字一致：状态机原因 → CLUSTER_CAP_DEMOTED →（finalize_roles 内）FINAL_*。
+        cap_demoted = (day["role_before_cap"] == "CORE") & (day["role"] != "CORE")
+        if cap_demoted.any():
+            day.loc[cap_demoted, "reason_codes"] = (
+                day.loc[cap_demoted, "reason_codes"].astype(str) + "|CLUSTER_CAP_DEMOTED"
+            )
+        # F09：自愿替换校验 + 组合约束最终断言。WP-G2-03（D-001）起统一走 finalize_roles 出口，
+        # 保证「任何角色生成路径返回前都无条件执行一次终局约束检查」。
+        finalize_roles(day, current_roles, base_max_core, max_core_per_cluster)
 
         for row in day.itertuples():
             current_roles[row.code] = row.role
