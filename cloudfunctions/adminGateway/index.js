@@ -109,9 +109,11 @@ async function getGen1Health() {
       domain_status: gen1.applicability.domain_status,
       domain_permission: gen1.applicability.domain_permission,
       safety_permission: gen1.safety.permission,
-      // Safety 实际评估所用的 stage 及其来源（EOD_STAGE_PRECHECK / SAFETY_CORE）
-      safety_evaluated_stage: gen1.safety.evaluated_stage,
-      safety_stage_source: gen1.safety.stage_source,
+      // PR-UI-01 review-fix（P0-1）：阶段门四件套 —— EOD 门 / 基线门分开，不再是单一模糊 stage
+      safety_eod_stage: gen1.safety.eod_stage,
+      safety_baseline_stage: gen1.safety.baseline_stage,
+      safety_binding_stage: gen1.safety.binding_stage,
+      safety_binding_stage_source: gen1.safety.binding_stage_source,
       canary_eligible: !!(decision && decision.gen1_canary_eligible === true),
       baseline_suggested_pct: decision && decision.suggested_position != null ? decision.suggested_position : null,
       counterfactual_suggested_pct: gen1.counterfactual.suggested_pct,
@@ -154,6 +156,10 @@ async function getGen1Health() {
       const authorized = runtime ? runtime.gen1_counterfactual_canary_authorized === true : false;
       const healthAllowed = runtime ? runtime.gen1_counterfactual_canary_health_allowed === true : false;
       const active = runtime ? runtime.gen1_counterfactual_canary_active === true : false;
+      // PR-UI-01 review-fix（P0-2）：三条安全边界透传 runtime 真值，禁止硬编码 false
+      const productionWrite = runtime ? runtime.gen1_production_write === true : false;
+      const fastPathEnabled = runtime ? runtime.gen1_production_fast_path_enabled === true : false;
+      const autoExecution = runtime ? runtime.gen1_auto_execution === true : false;
       return {
         authorized,
         health_allowed: healthAllowed,
@@ -161,9 +167,11 @@ async function getGen1Health() {
         inactive_reason: counterfactualInactiveReason(authorized, healthAllowed, active),
         invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
           ? runtime.gen1_counterfactual_canary_invocations : 0,
-        production_write: false,
-        production_fast_path_enabled: false,
-        auto_execution: false
+        production_write: productionWrite,
+        production_fast_path_enabled: fastPathEnabled,
+        auto_execution: autoExecution,
+        // 不变量期望全部 false；任一为 true 即 UI 报警（而不是被藏掉）
+        safety_invariant_ok: !productionWrite && !fastPathEnabled && !autoExecution
       };
     })(),
     // Canary Ledger（cap 合规证据只看 intended；target_sum 仅 info）

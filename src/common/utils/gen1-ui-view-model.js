@@ -20,9 +20,16 @@
  *     decision.gen1_effective_stage；兼容字段 gen1.signal.stage 严格等于
  *     stages.signal，绝不冒充 effective；
  *   - canary 权限链三真值：authorized / health_allowed / active 独立下发（P1-1）；
+ *   - Safety 阶段门（review-fix P0）：eod_stage / baseline_stage / binding_stage /
+ *     binding_stage_source 四件套，禁止用一个模糊 stage 兜住 EOD 门与基线门；
+ *   - 安全边界（review-fix P0-2）：production_write / production_fast_path_enabled /
+ *     auto_execution **透传 runtime_status 真值**（缺失才 false），另给
+ *     safety_invariant_ok 自检；禁止硬编码 false 把线上的违规藏起来；
+ *   - engine 审计（review-fix P1-3）：production.engine = decision.engine_version
+ *     （这条决策真实的产生者）；当前生产引擎只在 system_runtime.production.engine；
+ *   - Gen-2 目前是静态契约，必须带 source=STATIC_CURRENT_CONTRACT，不得伪装 runtime 真相；
  *   - legacy 字段（ml_shadow / advisory_enabled / fast_path_enabled 等）一律
- *     deprecated，仅可展示，禁止用于权限判定（P1-2）；
- *   - production_write / production_fast_path_enabled / auto_execution 恒 false。
+ *     deprecated，仅可展示，禁止用于权限判定（P1-2）。
  *
  * 纯函数、无 DB、无副作用：便于 Node 单测（tests/gen1-ui-contract.test.js）。
  *
@@ -32,8 +39,6 @@
 
 const { AUTHORITY_LABEL } = require('./gen1-authority');
 const { evaluateDomainPermission } = require('./gen1-domain-permission');
-
-const PRODUCTION_ENGINE_FALLBACK = 'v3.6.1';
 
 /** Gen-1 信号状态码（与前端既有枚举对齐） */
 const SIGNAL_STATUS = Object.freeze({
@@ -84,6 +89,42 @@ function counterfactualInactiveReason(authorized, healthAllowed, active) {
   return 'OTHER_CONDITIONS';
 }
 
+/**
+ * Safety 的「阶段门」归属（PR-UI-01 review-fix P0）。
+ *
+ * Safety 链里有两个**独立**的阶段门，必须分开表达，禁止用单一 signal stage 兜住全部：
+ *   EOD Gate        → reason_code 以 `EOD_` 开头 → 卡在 EOD 预检阶段（= stages.signal）
+ *   Baseline Gate   → `BASELINE_STAGE_NOT_ELIGIBLE` → 卡在 V3.6.1 基线阶段（= stages.baseline）
+ *   其它非阶段门（风险 / 基本面 / 结构 / 数据 / 域 / 健康 / 权限 / 模型候选）→ null
+ *
+ * 真实反例（515880 / 2026-09-10）：signal=S3（EOD 预检 PERMIT）、baseline=S0，
+ * Safety 实际因 BASELINE_STAGE_NOT_ELIGIBLE 在基线门被拦 —— 若把 binding stage 写成 S3，
+ * 页面就会出现「因 baseline S0 拦截」与「评估阶段 S3」并存的矛盾。
+ */
+function resolveSafetyStageBinding(decision, signal, stages) {
+  const st = stages || {};
+  const code = String((decision && decision.ml_rule_permission_reason_code) || '').toUpperCase();
+  if (code.indexOf('EOD_') === 0) {
+    return {
+      binding_stage: st.signal == null ? null : st.signal,
+      binding_stage_source: (signal && strOrNull(signal.rule_permission_source)) || 'EOD_STAGE_PRECHECK'
+    };
+  }
+  if (code === 'BASELINE_STAGE_NOT_ELIGIBLE') {
+    return {
+      binding_stage: st.baseline == null ? null : st.baseline,
+      binding_stage_source: 'SAFETY_CORE_BASELINE_GATE'
+    };
+  }
+  return { binding_stage: null, binding_stage_source: null };
+}
+
+/** 该决策真正的产生者（审计口径：历史决策不得显示当前生产引擎） */
+function engineFromDecision(decision) {
+  const v = decision ? strOrNull(decision.engine_version) : null;
+  return { engine: v, engine_source: v ? 'DECISION_RESULT_ENGINE_VERSION' : 'UNKNOWN' };
+}
+
 function numberOrNull(v) {
   return v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
 }
@@ -118,9 +159,20 @@ function buildSystemRuntime(runtime) {
   const canaryAuthorized = rt ? rt.gen1_counterfactual_canary_authorized === true : false;
   const canaryHealthAllowed = rt ? rt.gen1_counterfactual_canary_health_allowed === true : false;
   const canaryActive = rt ? rt.gen1_counterfactual_canary_active === true : false;
+  // PR-UI-01 review-fix（P0-2）：三条安全边界**必须透传 runtime_status 真值**，
+  // 禁止硬编码 false —— 否则线上真的出现 production_write=true 时，UI 反而会把违规隐藏掉。
+  // 安全不变量「期望」为 false，但展示必须说真话。
+  const productionWrite = rt ? rt.gen1_production_write === true : false;
+  const fastPathEnabled = rt ? rt.gen1_production_fast_path_enabled === true : false;
+  const autoExecution = rt ? rt.gen1_auto_execution === true : false;
+  // Gen-2：runtime_status 目前没有 Gen-2 Authority 字段，静态定义必须标明来源，
+  // 不得让读者误以为 SHADOW 是从数据库读出的实时真值（Gen-2 Production 工作包再补 gen2_*）
+  const gen2Mode = rt ? strOrNull(rt.gen2_mode) : null;
   return {
     production: {
-      engine: (rt && strOrNull(rt.production_engine)) || PRODUCTION_ENGINE_FALLBACK,
+      // 当前生产引擎（runtime_status 真值；读不到就是 null，不猜某个版本）
+      engine: rt ? strOrNull(rt.production_engine) : null,
+      engine_source: rt && strOrNull(rt.production_engine) ? 'RUNTIME_STATUS' : 'UNKNOWN',
       status: 'ACTIVE'
     },
     gen1: {
@@ -138,14 +190,20 @@ function buildSystemRuntime(runtime) {
       counterfactual_invocations: rt && numberOrNull(rt.gen1_counterfactual_canary_invocations) != null
         ? numberOrNull(rt.gen1_counterfactual_canary_invocations) : 0,
       ledger_ok: rt ? rt.gen1_counterfactual_ledger_ok === true : false,
-      // 三条硬边界恒 false（Gen-1 永不写生产 / 永不开生产 Fast Path / 永不自动交易）
-      production_write: false,
-      production_fast_path_enabled: false,
-      auto_execution: false
+      // 三条硬边界的 runtime 真值（不是常量）
+      production_write: productionWrite,
+      production_fast_path_enabled: fastPathEnabled,
+      auto_execution: autoExecution,
+      // 不变量自检：三者必须同时为 false，任一为 true 即报警（值为 false 时才是「正常」）
+      safety_invariant_ok: !productionWrite && !fastPathEnabled && !autoExecution
     },
     gen2: {
-      mode: 'SHADOW',
-      production_write: false
+      mode: gen2Mode || 'SHADOW',
+      // 明确来源：当前契约里 SHADOW 是静态定义，不是 runtime 真相
+      source: gen2Mode ? 'RUNTIME_STATUS' : 'STATIC_CURRENT_CONTRACT',
+      production_write: rt && rt.gen2_production_write === true,
+      production_write_source: rt && rt.gen2_production_write != null
+        ? 'RUNTIME_STATUS' : 'STATIC_CURRENT_CONTRACT'
     }
   };
 }
@@ -195,12 +253,18 @@ function deriveSignalStatus(decision, signal) {
 
 /**
  * B. 每 ETF 生产层 ViewModel（production.* 唯一来源 = V3.6.1 decision_result）。
+ *
+ * engine 审计口径（review-fix）：production.engine = 这条决策**自己的** engine_version，
+ * 不是「当前生产引擎」（后者只在 system_runtime.production.engine）。
+ * 这样引擎升级到 v4 之后回看 2026-09-10 的历史决策，仍显示 v3.6.1。
  */
 function buildEtfProduction({ decision, position, runtime, actionLabel } = {}) {
   const d = decision || null;
   const pos = position || null;
+  const eng = engineFromDecision(d);
   return {
-    engine: (runtime && strOrNull(runtime.production_engine)) || PRODUCTION_ENGINE_FALLBACK,
+    engine: eng.engine,
+    engine_source: eng.engine_source,
     action_code: d ? strOrNull(d.final_action) : null,
     action_label: actionLabel != null ? actionLabel : null,
     current_pct: pos ? pct(pos.current_position) : null,
@@ -242,10 +306,8 @@ function buildEtfGen1({ code, sector, decision, signal, runtime } = {}) {
     baseline: d ? strOrNull(d.v361_baseline_stage) : null,
     effective: d ? strOrNull(d.gen1_effective_stage) : null
   };
-  // Safety 的阶段输入与 gen1-safety-permission.js 的 signalStage 取法一致：
-  // signal.stage → signal.stage_t → baseline stage（唯一真相仍是已有落库字段）
-  const safetyEvaluatedStage = (sig && (strOrNull(sig.stage) || strOrNull(sig.stage_t)))
-    || stages.baseline;
+  // Safety 的「阶段门」归属（review-fix P0）：EOD 门 / 基线门 / 非阶段门 三态
+  const binding = resolveSafetyStageBinding(d, sig, stages);
 
   return {
     authority,
@@ -277,10 +339,11 @@ function buildEtfGen1({ code, sector, decision, signal, runtime } = {}) {
       reason_code: d ? strOrNull(d.ml_rule_permission_reason_code) : null,
       reason: d ? strOrNull(d.ml_rule_permission_reason) : null,
       source: (d && strOrNull(d.ml_rule_permission_source)) || 'SAFETY_CORE',
-      // Safety 实际评估所用的 stage + 该 stage 的判定来源（将来 S2→S4 反事实可整链表达）
-      evaluated_stage: safetyEvaluatedStage,
-      stage_source: (sig && strOrNull(sig.rule_permission_source))
-        || (d && strOrNull(d.ml_rule_permission_source)) || null
+      // 阶段门明细（review-fix P0）：哪个门拦的、用的是哪个 stage，一次说清
+      eod_stage: stages.signal,
+      baseline_stage: stages.baseline,
+      binding_stage: binding.binding_stage,
+      binding_stage_source: binding.binding_stage_source
     },
     counterfactual: {
       target_pct: d ? pct(d.gen1_counterfactual_target) : null,
@@ -351,7 +414,6 @@ function buildReviewGen1(decision) {
 }
 
 module.exports = {
-  PRODUCTION_ENGINE_FALLBACK,
   SIGNAL_STATUS,
   LEGACY_DEPRECATED_FIELDS,
   LEGACY_NOTICE,
@@ -365,5 +427,7 @@ module.exports = {
   buildEtfUiViewModel,
   buildReviewGen1,
   counterfactualInactiveReason,
+  engineFromDecision,
+  resolveSafetyStageBinding,
   deriveSignalStatus
 };

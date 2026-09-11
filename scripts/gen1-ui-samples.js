@@ -177,18 +177,46 @@ async function main() {
   assert.strictEqual(detail.legacy.deprecated, true, 'detail 必须下发 legacy.deprecated');
   assert.strictEqual(detail.legacy.do_not_use_for_authority, true, 'detail 必须下发 legacy.do_not_use_for_authority');
 
-  /* review-fix P0：stage 三拆必须用真实反例守住（513310 当日 signal=S0 / baseline=effective=S1） */
+  /* review-fix P0-1：Safety 阶段门 —— 513310 走 EOD 门、515880 走基线门（真实反例） */
   assert.strictEqual(detail.gen1.stages.signal, 'S0', 'stages.signal = ml_shadow_signal.stage = S0');
   assert.strictEqual(detail.gen1.stages.baseline, 'S1', 'stages.baseline = v361_baseline_stage = S1');
   assert.strictEqual(detail.gen1.stages.effective, 'S1', 'stages.effective = gen1_effective_stage = S1');
   assert.strictEqual(detail.gen1.signal.stage, detail.gen1.stages.signal, '兼容字段 signal.stage === stages.signal');
   assert.notStrictEqual(detail.gen1.signal.stage, detail.gen1.stages.effective,
     'signal.stage 不得冒充 effective stage');
-  assert.strictEqual(detail.gen1.safety.evaluated_stage, 'S0', 'Safety 实际评估阶段 = S0（与其文案一致）');
-  assert.strictEqual(detail.gen1.safety.stage_source, 'EOD_STAGE_PRECHECK', 'Safety stage 来源可追溯');
+  assert.strictEqual(detail.gen1.safety.eod_stage, 'S0');
+  assert.strictEqual(detail.gen1.safety.baseline_stage, 'S1');
+  assert.strictEqual(detail.gen1.safety.binding_stage, 'S0', '513310 被 EOD 门拦住');
+  assert.strictEqual(detail.gen1.safety.binding_stage_source, 'EOD_STAGE_PRECHECK');
+
+  const ai = dash.cards.find((c) => c.code === '515880');
+  assert.ok(ai, 'dashboard cards 必须含 515880');
+  assert.strictEqual(ai.gen1.stages.signal, 'S3', '515880 signal stage = S3（EOD 预检放行）');
+  assert.strictEqual(ai.gen1.stages.baseline, 'S0', '515880 baseline = S0');
+  assert.strictEqual(ai.gen1.stages.effective, 'S0');
+  assert.strictEqual(ai.gen1.safety.binding_stage, 'S0', '★ 515880 必须 binding_stage=S0（基线门）');
+  assert.strictEqual(ai.gen1.safety.binding_stage_source, 'SAFETY_CORE_BASELINE_GATE');
+  assert.strictEqual(ai.gen1.safety.reason_code, 'BASELINE_STAGE_NOT_ELIGIBLE');
+
+  /* review-fix P0-2：安全边界透传 runtime 真值 + invariant 自检 */
+  const c1 = dash.system_runtime.gen1;
+  assert.strictEqual(typeof c1.production_write, 'boolean');
+  assert.strictEqual(typeof c1.production_fast_path_enabled, 'boolean');
+  assert.strictEqual(typeof c1.auto_execution, 'boolean');
+  assert.strictEqual(c1.production_write, false, '线上真值当前为 false（若线上为 true 这里必须变红）');
+  assert.strictEqual(c1.production_fast_path_enabled, false);
+  assert.strictEqual(c1.auto_execution, false);
+  assert.strictEqual(c1.safety_invariant_ok, true, '不变量自检必须为 true（全部为 false）');
+  assert.strictEqual(dash.system_runtime.gen2.source, 'STATIC_CURRENT_CONTRACT',
+    'Gen-2 SHADOW 必须标明是静态契约');
+  assert.strictEqual(dash.system_runtime.production.engine_source, 'RUNTIME_STATUS');
+
+  /* review-fix P1-3：审计不串代 —— 每条 review 行显示它自己的 engine_version */
+  assert.strictEqual(detail.production.engine, detail.decision.engine_version,
+    'detail production.engine = 该决策自己的 engine_version');
+  assert.strictEqual(detail.production.engine_source, 'DECISION_RESULT_ENGINE_VERSION');
 
   /* review-fix P1-1：canary 权限链三真值 */
-  const c1 = dash.system_runtime.gen1;
   assert.strictEqual(typeof c1.counterfactual_authorized, 'boolean', 'system_runtime.gen1 必须含 counterfactual_authorized');
   assert.strictEqual(typeof c1.counterfactual_health_allowed, 'boolean', 'system_runtime.gen1 必须含 counterfactual_health_allowed');
   assert.strictEqual(c1.counterfactual_authorized, true);
@@ -211,7 +239,16 @@ async function main() {
   assert.ok(rv.production, 'review 行必须含 production 块');
   assert.strictEqual(rv.production.action, rv.final_action, 'review production.action === final_action');
   assert.strictEqual(rv.production.suggested, rv.suggested_position, 'review production.suggested === suggested_position');
-  assert.strictEqual(rv.production.engine, 'v3.6.1', 'review 生产引擎恒 V3.6.1');
+  assert.ok(['DECISION_RESULT_ENGINE_VERSION', 'UNKNOWN'].indexOf(rv.production.engine_source) >= 0,
+    'review production.engine_source 必须标明来源');
+  // 审计不串代：有 engine_version 的行显示自己的版本；旧精简行（未记录）必须 null，不得拿当前版本顶替
+  const withEngine = reviewPayload.data.decisions.filter((x) => x.production.engine_source === 'DECISION_RESULT_ENGINE_VERSION');
+  const withoutEngine = reviewPayload.data.decisions.filter((x) => x.production.engine_source === 'UNKNOWN');
+  assert.ok(withEngine.length > 0, '必须有记录了 engine_version 的历史决策行');
+  assert.ok(withEngine.every((x) => x.production.engine === 'v3.6.1'),
+    'v3.6.1 时代的历史决策必须显示 v3.6.1');
+  assert.ok(withoutEngine.every((x) => x.production.engine === null),
+    '未记录 engine_version 的旧行必须 null，不得用当前生产引擎顶替');
   assert.ok(rv.gen1, 'review 行必须含 gen1 块');
   assert.ok(rv.gen1.counterfactual && 'suggested_pct' in rv.gen1.counterfactual, 'gen1.counterfactual.suggested_pct 必须存在');
   assert.ok('delta_pct' in rv.gen1.counterfactual, 'gen1.counterfactual.delta_pct 必须存在');
@@ -232,23 +269,35 @@ async function main() {
   assert.strictEqual(health.canary.active, true);
   assert.strictEqual(health.canary.inactive_reason, null);
   assert.strictEqual(health.canary.invocations, 0);
+  /* review-fix P0-2：admin canary 三边界也必须是 runtime 真值 + invariant 自检 */
   assert.strictEqual(health.canary.production_write, false);
   assert.strictEqual(health.canary.production_fast_path_enabled, false);
   assert.strictEqual(health.canary.auto_execution, false);
+  assert.strictEqual(health.canary.safety_invariant_ok, true);
   /* review-fix P1-2：admin legacy 声明 */
   assert.strictEqual(health.legacy.deprecated, true);
   assert.strictEqual(health.legacy.do_not_use_for_authority, true);
-  /* review-fix P0：admin 行三种 stage 分列（513310：S0 / S1 / S1） */
+  /* review-fix P0-1：admin 行阶段门四件套（513310 EOD 门 / 515880 基线门） */
   const row513 = health.rows.find((r) => r.code === '513310');
   assert.ok(row513, 'admin rows 必须含 513310');
   assert.strictEqual(row513.stage_signal, 'S0');
   assert.strictEqual(row513.stage_baseline, 'S1');
   assert.strictEqual(row513.stage_effective, 'S1');
   assert.strictEqual(row513.stage, row513.stage_signal, '兼容字段 stage === stage_signal');
-  assert.strictEqual(row513.safety_evaluated_stage, 'S0');
-  assert.strictEqual(row513.safety_stage_source, 'EOD_STAGE_PRECHECK');
+  assert.strictEqual(row513.safety_eod_stage, 'S0');
+  assert.strictEqual(row513.safety_baseline_stage, 'S1');
+  assert.strictEqual(row513.safety_binding_stage, 'S0');
+  assert.strictEqual(row513.safety_binding_stage_source, 'EOD_STAGE_PRECHECK');
+  const row515 = health.rows.find((r) => r.code === '515880');
+  assert.ok(row515, 'admin rows 必须含 515880');
+  assert.strictEqual(row515.stage_signal, 'S3');
+  assert.strictEqual(row515.stage_baseline, 'S0');
+  assert.strictEqual(row515.safety_eod_stage, 'S3');
+  assert.strictEqual(row515.safety_binding_stage, 'S0', '★ 515880 基线门 binding = S0');
+  assert.strictEqual(row515.safety_binding_stage_source, 'SAFETY_CORE_BASELINE_GATE');
 
-  console.log('\n[self-check] 四份样例自检 PASS（三层 runtime / production / gen1 无串位，stage 三拆与 legacy 声明到位）');
+  console.log('\n[self-check] 四份样例自检 PASS（三层 runtime / production / gen1 无串位，'
+    + 'stage 三拆 + Safety 阶段门 + 安全真值透传 + engine 不串代 + legacy 声明 全部到位）');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

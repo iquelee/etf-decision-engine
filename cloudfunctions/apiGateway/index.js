@@ -18,7 +18,9 @@ const { computeCooldownDays } = require('./common/utils/cooldown');
 const fund = require('./common/utils/fundamental');
 const { buildPortfolioMlShadow, buildEtfMlShadow, slimCardMlShadow } = require('./common/utils/ml-shadow');
 // PR-UI-01：三层契约 ViewModel（production / gen1 counterfactual / system_runtime）
-const { buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1, buildLegacyNotice } = require('./common/utils/gen1-ui-view-model');
+const {
+  buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1, buildLegacyNotice, engineFromDecision
+} = require('./common/utils/gen1-ui-view-model');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -616,10 +618,10 @@ async function getReview(from, to) {
 
   const review = computeReviewStats(decisions, heldTrades);
 
-  // PR-UI-01：复盘生产字段固定来自 final_action/final_target/suggested_position，
-  // 生产来源引擎恒为 V3.6.1（runtime_status.production_engine）；Gen-1 仅作独立反事实块下发。
-  const runtime = await getRuntimeStatus();
-  const productionEngine = buildSystemRuntime(runtime).production.engine;
+  // PR-UI-01 review-fix（P1-3 审计口径）：复盘里每条历史决策的 production.engine
+  // 必须等于**该条 decision_result 自己的** engine_version，而不是「当前」生产引擎
+  // —— 否则引擎升级到 v4 后回看今天的历史决策会显示 v4，破坏审计。
+  // 当前生产引擎只在 system_runtime.production.engine 表达。
 
   // 安全：复盘为公网无鉴权接口，不返回成交明细（仅聚合统计与决策链），成交明细走后台 adminGateway
   const target = d => (d.final_target != null ? d.final_target : d.target_position);
@@ -628,6 +630,7 @@ async function getReview(from, to) {
   // 旧平铺字段（final_action/final_target/suggested_position/engine）保留一轮兼容。
   const decisionsSafe = decisions.map((d) => {
     const held = actualHeldPosition(d.code, d.decision_date, snapshots, heldTrades);
+    const eng = engineFromDecision(d);
     return {
       decision_date: d.decision_date, code: d.code, final_action: d.final_action,
       action_label: resolveActionLabel(d.final_action, d.action_label), opportunity_score: d.opportunity_score,
@@ -636,10 +639,11 @@ async function getReview(from, to) {
       target_position: target(d),
       suggested_position: d.suggested_position,
       current_position: held,
-      engine: productionEngine,
-      // 生产（V3.6.1）唯一决策口径
+      engine: eng.engine,
+      // 生产（该条决策真实的产生者）唯一决策口径
       production: {
-        engine: productionEngine,
+        engine: eng.engine,
+        engine_source: eng.engine_source,
         action: d.final_action,
         action_label: resolveActionLabel(d.final_action, d.action_label),
         target: target(d),
