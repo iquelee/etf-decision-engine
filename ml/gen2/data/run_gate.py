@@ -5,6 +5,9 @@
 
 闸门顺序（两端必须逐条一致，顺序即优先级）::
 
+    -1. RULE_BUNDLE_INCOMPLETE         规则 bundle 缺显式必需配置（selection.role_thresholds）
+                                       → gate RULE_BUNDLE_ROLE_THRESHOLDS_MISSING / _INVALID
+                                       （WP-G2-05R：禁止运行时 fallback 到旧 top_quantile）
     0. NAN_OR_MISSING_FIELD          字段完整性：trade_date 必须存在；OHLCV 必须为有限数值
     1. DUPLICATE_TRADE_DATE          同一 code 不允许重复 trade_date
     2. BENCHMARK_MISSING             benchmark 无数据
@@ -14,9 +17,12 @@
     6. UNIVERSE_INCOMPLETE           0 < 合格数 < target_size（缺任一即禁止发布完整横截面）
     7. PUBLISH_VALIDATION_FAILED     发布前完整性：唯一 code / 非有限 alpha / 写入 0 行
 
+规则 bundle 闸门**最先**：规则不完整时连数据都不必读（不产出任何候选），
+与 JS ``main()`` 中的 ``RULE_BUNDLE_GATE`` 早退严格同序同判。
+
 状态语义（四态契约，见夹具 ``seam_contracts.run_status_gate``）::
 
-    blocked    数据 / 资格 / 约束不通过 → 今日没有可信结果（可预期业务结果）
+    blocked    数据 / 资格 / 约束 / 规则不通过 → 今日没有可信结果（可预期业务结果）
     failed     代码 / 网络 / 数据库等运行异常（本模块内不产生；由调用方捕获异常后置位）
     completed  全部闸门通过。**Python 侧不发布**；completed 表示「闸门通过、可发布」，
                等价于 JS 完成发布后的 completed。
@@ -39,6 +45,11 @@ DATA_GATE_REASON = "DATA_OR_ELIGIBILITY_GATE"
 PUBLISH_REASON = "PUBLISH_VALIDATION_FAILED"
 SYSTEM_REASON = "SYSTEM_ERROR"
 
+#: WP-G2-05R：规则 bundle 不完整（缺显式 selection.role_thresholds 或提供但非法）。
+RULE_BUNDLE_REASON = "RULE_BUNDLE_INCOMPLETE"
+RULE_BUNDLE_GATE_MISSING = "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING"
+RULE_BUNDLE_GATE_INVALID = "RULE_BUNDLE_ROLE_THRESHOLDS_INVALID"
+
 
 def _date_key(v) -> str:
     return "" if v is None else str(v)[:10]
@@ -53,10 +64,10 @@ def _is_finite_number(v) -> bool:
         return False
 
 
-def _blocked(gate: str, detail: str, **extra) -> dict:
+def _blocked(gate: str, detail: str, reason: str = DATA_GATE_REASON, **extra) -> dict:
     out = {
         "status": STATUS_BLOCKED,
-        "status_reason": DATA_GATE_REASON,
+        "status_reason": reason,
         "data_gate": gate,
         "detail": detail,
     }
@@ -107,6 +118,58 @@ def unique_trade_dates(rows: list) -> list:
     return out
 
 
+def evaluate_rule_bundle_gate(config) -> dict:
+    """规则 bundle 闸门（WP-G2-05R；与 JS ``RULE_BUNDLE_GATE`` 同序同判）。
+
+    契约：运行路径**必须**从配置里读到显式 ``role_thresholds``（先看
+    ``config["portfolio"]["role_thresholds"]``，再看 ``config["selection"]["role_thresholds"]``）。
+
+      * 读不到        → ``blocked`` / ``status_reason=RULE_BUNDLE_INCOMPLETE`` /
+                        ``data_gate=RULE_BUNDLE_ROLE_THRESHOLDS_MISSING``
+      * 读到但非法    → ``blocked`` / 同上 reason / ``data_gate=RULE_BUNDLE_ROLE_THRESHOLDS_INVALID``
+      * 读到且合法    → ``completed``（附 role_thresholds 的派生切点，供 run 记录 provenance）
+
+    旧字段 ``top_quantile`` **一律不读**（只允许离线迁移 bundle 时换算），因此「只有旧字段」的
+    配置同样判 MISSING —— 这正是「禁止静默 fallback」的可执行形态。
+    """
+    from gen2.portfolio.role_thresholds import (
+        ROLE_THRESHOLD_FIELDS,
+        load_role_thresholds,
+        RoleThresholdError,
+    )
+
+    cfg = config if isinstance(config, dict) else {}
+    raw = None
+    for section in ("portfolio", "selection"):
+        node = cfg.get(section)
+        if isinstance(node, dict) and isinstance(node.get("role_thresholds"), dict):
+            raw = node["role_thresholds"]
+            break
+
+    if raw is None:
+        return _blocked(
+            RULE_BUNDLE_GATE_MISSING,
+            "规则 bundle 缺 selection.role_thresholds；禁止运行路径 fallback 到旧 top_quantile"
+            "（旧字段只允许离线迁移 bundle 时读取）",
+            reason=RULE_BUNDLE_REASON,
+            rule_bundle_status="INCOMPLETE",
+        )
+    try:
+        thresholds = load_role_thresholds(cfg)
+    except RoleThresholdError as exc:
+        return _blocked(
+            RULE_BUNDLE_GATE_INVALID,
+            str(exc),
+            reason=RULE_BUNDLE_REASON,
+            rule_bundle_status="INCOMPLETE",
+        )
+    return _completed(
+        rule_bundle_status="COMPLETE",
+        role_thresholds={f: getattr(thresholds, f) for f in ROLE_THRESHOLD_FIELDS},
+        role_thresholds_source=thresholds.source,
+    )
+
+
 def evaluate_run_gate(
     bars_by_code: dict,
     *,
@@ -117,8 +180,18 @@ def evaluate_run_gate(
     mode: str = "REPLAY",
     min_history_days: int = 120,
     benchmark_min_days: int = 60,
+    rule_bundle_config=None,
 ) -> dict:
-    """run 级数据闸门（与 JS main() 逐条对齐）。返回含 status / status_reason / data_gate 的 dict。"""
+    """run 级数据闸门（与 JS main() 逐条对齐）。返回含 status / status_reason / data_gate 的 dict。
+
+    ``rule_bundle_config`` 非 None 时先跑规则 bundle 闸门（优先级最高）；未通过直接返回 blocked，
+    **不进入任何数据判定** —— 与 JS ``main()`` 的早退顺序一致。
+    """
+    if rule_bundle_config is not None:
+        rb = evaluate_rule_bundle_gate(rule_bundle_config)
+        if rb["status"] == STATUS_BLOCKED:
+            return rb
+
     codes_all = list(eligible_codes) + [benchmark_code]
 
     # 0) 输入完整性

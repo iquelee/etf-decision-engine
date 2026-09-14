@@ -25,7 +25,7 @@ const fixturePath = process.argv[2] || path.join(ROOT, 'fixtures', 'gen2', 'gold
 const outPath = process.argv[3] || null;
 const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
-const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
+const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG, ROLE_THRESHOLDS, resolveRoleThresholds, RULE_BUNDLE_GATE, RULE_BUNDLE_REASON, deriveRoleThresholdsFromLegacy, SELECTION_SCORE_WEIGHTS, SELECTION_SCORE_SOURCE, combineSelectionScore, applySelectionScores, selectionScoreHash,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
   + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
   + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
@@ -34,11 +34,42 @@ const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG,'
 /** 空 db（纯函数场景用；run 级场景另见 makeRunDb） */
 const EMPTY_DB = { query: async () => [], upsert: async () => {} };
 
-function loadEntry(dbImpl) {
+// WP-G2-05R：运行路径不再有 role_thresholds fallback（缺 → blocked/RULE_BUNDLE_INCOMPLETE）。
+// 因此 parity 必须**显式注入**运行 bundle：冻结 manifest + 运行配置 role_thresholds。
+const MANIFEST_PATH = path.join(ROOT, 'ml', 'gen2', 'manifests', 'GEN2_RULE_V2_BUNDLE.json');
+const MANIFEST_BUNDLE = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+const RUNNING_ROLE_THRESHOLDS = { core_top_fraction: 0.20, challenger_top_fraction: 0.30, satellite_top_fraction: 0.40 };
+
+/** 复制 bundle 并设置/删除 selection.role_thresholds（不污染 MANIFEST_BUNDLE） */
+function withRoleThresholds(bundle, roleThresholds) {
+  const b = JSON.parse(JSON.stringify(bundle));
+  b.selection = Object.assign({}, b.selection);
+  if (roleThresholds) b.selection.role_thresholds = roleThresholds;
+  else delete b.selection.role_thresholds;
+  return b;
+}
+const DEFAULT_BUNDLE = withRoleThresholds(MANIFEST_BUNDLE, RUNNING_ROLE_THRESHOLDS);
+
+/**
+ * 加载生产代码到 vm。
+ *
+ * 生产代码用 `path.join(__dirname, 'GEN2_RULE_V2_BUNDLE.json')` 读 bundle，所以这里
+ * ①提供 `__dirname`；②用 fs shim 把 bundle 文件读取替换为**注入的 bundle 对象**
+ *    （bundle === undefined → DEFAULT_BUNDLE；null → 无 bundle 文件，模拟未 build）。
+ */
+function loadEntry(dbImpl, bundle) {
+  const bundleJson = JSON.stringify(bundle === undefined ? DEFAULT_BUNDLE : bundle);
+  const realFs = require('fs');
+  const fsShim = Object.assign({}, realFs, {
+    readFileSync: (p, ...rest) => (String(p).endsWith('GEN2_RULE_V2_BUNDLE.json')
+      ? bundleJson
+      : realFs.readFileSync(p, ...rest))
+  });
   const box = {
     exports: {},
+    __dirname: FN_DIR,
     require: (p) => {
-      if (p === 'fs') return require('fs');
+      if (p === 'fs') return fsShim;
       if (p === 'path') return require('path');
       if (p === 'crypto') return require('crypto');
       if (p === './common/utils/db') return dbImpl || EMPTY_DB;
@@ -119,7 +150,7 @@ function expandPanel(panel, c) {
         rs20_vs_benchmark: R4(0.06 - 0.006 * (k - 1)),
         rs60_vs_benchmark: R4(0.05 - 0.005 * (k - 1)),
         rs_accel_5d: R4(0.02 - 0.002 * (k - 1)),
-        breakout_distance: R4(0.03 - 0.003 * (k - 1)),
+        breakout_distance: c.breakout_ascending ? R4(0.003 * k) : R4(0.03 - 0.003 * (k - 1)),
         benchmark_px_ma20: R4(c.benchmark.px_ma20),
         benchmark_px_ma60: R4(c.benchmark.px_ma60),
         eligibility: 'ELIGIBLE'
@@ -292,6 +323,15 @@ async function runMainCase(panel, caseSpec) {
   };
 }
 
+/** 跨端可比的评分摘要（3 位小数；与 Python selection_digest 逐字一致） */
+function selectionDigest(features, places = 3) {
+  const rows = features
+    .filter((f) => f.alpha_score_v2 != null && isFinite(f.alpha_score_v2))
+    .map((f) => `${f.trade_date}~${f.code}~${Number(f.alpha_score_v2).toFixed(places)}`)
+    .sort();
+  return crypto.createHash('sha256').update(rows.join('|')).digest('hex');
+}
+
 const HANDLERS = {
   regime_selection(sc) {
     const out = {};
@@ -402,8 +442,149 @@ const HANDLERS = {
       out[c.id] = snap;
     }
     return out;
+  },
+  /** G2S-08：显式 Selection Score 注入 + 角色阈值（F1/F2 跨语言 parity） */
+  selection_injection(sc) {
+    const panel = sc.input.panel;
+    const out = {};
+    let canon = null;
+    for (const rawCase of sc.input.cases) {
+      // panel 级 days / rank_order 作为默认值合入 case（cases 只声明差异旋钮）
+      const c = Object.assign({}, rawCase, {
+        days: rawCase.days || panel.days,
+        rank_order: rawCase.rank_order || panel.rank_order_default
+      });
+      const rows = expandPanel(panel, c);
+      const feat = rows.map((r) => Object.assign({}, r));
+      A.computeLeadershipScore(feat);
+
+      let meta;
+      if (c.explicit_rank_order) {
+        const order = c.explicit_rank_order;
+        const inj = {};
+        for (const f of feat) {
+          const idx = order.indexOf(f.code);
+          const v = order.length - idx;
+          (inj[f.trade_date] = inj[f.trade_date] || {})[f.code] = v;
+        }
+        meta = A.applySelectionScores(feat, inj, 'EXPLICIT_ORDER');
+      } else if (c.selection) {
+        const inj = {};
+        for (const f of feat) {
+          (inj[f.trade_date] = inj[f.trade_date] || {})[f.code] = A.combineSelectionScore(f, c.selection);
+        }
+        meta = A.applySelectionScores(feat, inj, 'SCENARIO_ALPHA');
+      } else {
+        meta = A.applySelectionScores(feat, null);
+      }
+
+      A.rankFeatures(feat);
+      // WP-G2-05R：运行配置阈值必须由夹具**显式声明**并注入；不再依赖「bundle 缺 role_thresholds
+      // 时回退旧 top_quantile」这条已删除的隐式路径。
+      const thresholds = A.resolveRoleThresholds({
+        role_thresholds: c.role_thresholds || panel.role_thresholds_running_config
+      });
+      if (!thresholds.ok) throw new Error(`G2S-08 需要显式 role_thresholds：${thresholds.detail}`);
+      const roles = A.buildDailyRoles(feat, thresholds);
+      // 显式构造与 Python 端逐字一致的字段集（不使用 rolesSnapshot 的 reasons 等额外字段）
+      const days = {};
+      const coreCount = {};
+      const clusterCore = {};
+      for (const r of roles) {
+        const d = String(Number(String(r.trade_date).slice(8, 10)));
+        (days[d] = days[d] || {})[r.code] = r.role;
+        coreCount[d] = (coreCount[d] || 0) + (r.role === 'CORE' ? 1 : 0);
+        if (r.role === 'CORE') {
+          const cl = A.UNIVERSE.cluster[r.code] || 'other';
+          (clusterCore[d] = clusterCore[d] || {})[cl] = ((clusterCore[d] || {})[cl] || 0) + 1;
+        }
+      }
+      const clusterUsed = {};
+      for (const x of panel.codes) clusterUsed[x.code] = A.UNIVERSE.cluster[x.code] || 'other';
+      const snap = { days, core_count: coreCount, cluster_core_count: clusterCore, cluster_used: clusterUsed };
+      snap.panel_sha256 = panelHash(rows);
+      snap.panel_rows = rows.length;
+      snap.score_source = meta.score_source;
+      snap.score_digest = selectionDigest(feat);
+      snap.role_thresholds_effective = {
+        core_pct: thresholds.core_pct,
+        challenger_pct: thresholds.challenger_pct,
+        satellite_pct: thresholds.satellite_pct
+      };
+      snap.role_thresholds_source_class = c.role_thresholds ? 'EXPLICIT' : 'RUNNING_CONFIG';
+      if (c.id === 'canonical') canon = snap;
+      const isCanon = c.id === 'canonical';
+      snap.score_digest_distinct_from_canonical = (canon && !isCanon)
+        ? snap.score_digest !== canon.score_digest : null;
+      snap.roles_differ_from_canonical = (canon && !isCanon)
+        ? JSON.stringify(snap.days) !== JSON.stringify(canon.days) : null;
+      snap.core_count_differs_from_canonical = (canon && !isCanon)
+        ? JSON.stringify(snap.core_count) !== JSON.stringify(canon.core_count) : null;
+      if (c.explicit_rank_order) {
+        const lastDay = Object.keys(snap.days).sort().pop();
+        snap.role_order_matches_injection = snap.days[lastDay][c.explicit_rank_order[0]] === 'CORE';
+      }
+      out[c.id] = snap;
+    }
+    return out;
+  },
+
+  /**
+   * G2S-09：规则 bundle 闸门（WP-G2-05R）。
+   *
+   * 逐 case 用「冻结 manifest 的 selection 段 + 覆盖项」拼出注入 bundle，驱动真实 `main()`：
+   *   * blocked 用例走**空 db** —— 若规则闸门没抢在数据闸门之前，会先撞 BENCHMARK_MISSING；
+   *     拿到 RULE_BUNDLE_* 本身就是「规则闸门优先级最高」的证据；
+   *   * complete 用例走**完整面板** —— 正对照，证明只补 role_thresholds 即恢复 completed。
+   */
+  async rule_bundle_gate(sc) {
+    const panel = sc.input.panel;
+    const base = sc.input.bundle_selection_base;
+    const out = {};
+    // 驱动真实 main()：注入 bundle + 数据行，取「返回值 / 最后一次 gen2_run 写入」的规范化状态
+    const runCase = async (bundle, rows) => {
+      const { db: rdb, writes } = makeRunDb(groupByCode(rows), {});
+      const entry = loadEntry(rdb, bundle);
+      const res = await entry.main({ mode: 'REPLAY' });
+      const runs = writes.filter((w) => w.doc && w.doc.type === 'gen2_run');
+      const last = runs.length ? runs[runs.length - 1].doc : null;
+      const pick = (a, b) => (a === undefined || a === null ? (b === undefined ? null : b) : a);
+      return {
+        status: pick(res && res.status, last && last.status),
+        status_reason: pick(res && res.status_reason, last && last.status_reason),
+        data_gate: pick(res && res.data_gate, last && last.data_gate)
+      };
+    };
+    for (const c of sc.input.cases) {
+      const selection = Object.assign({}, base, c.bundle_selection_overrides || {});
+      const bundle = Object.assign({}, MANIFEST_BUNDLE, { selection });
+      const rows = c.data === 'full_panel'
+        ? applyRunMutations(runPanelBase(panel), [], panel)
+        : [];
+      const primary = await runCase(bundle, rows);
+      // 顺序证据：同一 bundle 在**空数据**下的状态。规则闸门若未抢在数据闸门之前，
+      // 这里会得到 BENCHMARK_MISSING 而不是 RULE_BUNDLE_*。
+      const early = await runCase(bundle, []);
+      const direct = loadEntry(EMPTY_DB, bundle).audit.resolveRoleThresholds(selection);
+      out[c.id] = {
+        status: primary.status,
+        status_reason: primary.status_reason,
+        data_gate: primary.data_gate,
+        rule_bundle_status: direct.ok ? 'COMPLETE' : 'INCOMPLETE',
+        role_thresholds_effective: direct.ok ? {
+          core_pct: direct.core_pct,
+          challenger_pct: direct.challenger_pct,
+          satellite_pct: direct.satellite_pct
+        } : null,
+        panel_sha256: runPanelHash(rows),
+        early_gate_data_gate: early.data_gate,
+        early_gate_status_reason: early.status_reason
+      };
+    }
+    return out;
   }
 };
+
 
 async function main() {
   const results = {

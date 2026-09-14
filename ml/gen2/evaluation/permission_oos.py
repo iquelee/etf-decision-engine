@@ -72,9 +72,11 @@ def _summarize(day_scores: dict, day_excess: dict, day_regimes: dict) -> dict:
 
 def run_permission_oos(features, rankings, labels, cfg: WalkForwardConfig | None = None) -> pd.DataFrame:
     """主入口：对 OOS 日做 regime / permission / promotion / year×regime 切片。"""
-    from gen2.baseline.alpha_score import compute_alpha_score_v2
+    # WP-G2-05：改用统一的 canonical 评分入口（不再各自重算 Alpha，避免第二套定义）
+    from gen2.baseline.selection_scores import canonical_selection_scores
 
-    alpha = compute_alpha_score_v2(features, eligible_only=True)
+    scores = canonical_selection_scores(features)
+    alpha = features.merge(scores.merge_frame(), on=["trade_date", "code"], how="inner")
 
     # ---- 晋升候选日（系统可实际提议 CORE 晋升的日子）----
     # 用 rankings×alpha 集合算 alpha_pct（与 build_v2_roles 一致：alpha 前 20% 且 px_ma60>0）

@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "ml"))
 from gen2.baseline.alpha_score import compute_alpha_score_v2
 from gen2.baseline.leadership_score import compute_leadership_score
 from gen2.baseline.rule_v2_ab import build_v2_roles
+from gen2.baseline.selection_scores import canonical_selection_scores
 from gen2.data.loader import load_gen2_config
 from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.regime import classify_regime, market_score as regime_market_score
@@ -59,7 +60,8 @@ def main() -> None:
     # 3. 角色状态机 + 权重（build_v2_roles 内部按 alpha 重排名，与 Node rankFeatures 一致）
     config = load_gen2_config()
     rankings = scored[["trade_date", "code", "name", "correlation_cluster"]].copy()
-    roles = build_v2_roles(scored, rankings, config)
+    roles = build_v2_roles(scored, rankings, config,
+                           selection_scores=canonical_selection_scores(scored))
 
     # 4. 防守（benchmark 510300 行供 _benchmark_series 读取）
     candidates = roles[["trade_date", "code", "role", "target_weight", "name", "correlation_cluster"]].copy()

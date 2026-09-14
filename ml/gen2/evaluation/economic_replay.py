@@ -25,6 +25,7 @@ import pandas as pd
 from gen2.backtest.benchmark import build_benchmark_weights
 from gen2.backtest.ledger import run_ledger
 from gen2.baseline.rule_v2_ab import build_v2_roles
+from gen2.baseline.selection_scores import SelectionScores, canonical_selection_scores
 from gen2.data.loader import load_gen2_config, load_universe_definition
 from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.selection_permission import DISABLED
@@ -136,12 +137,15 @@ def _risk_off_demotion_test(roles: pd.DataFrame, labels: pd.DataFrame) -> pd.Dat
     return pd.DataFrame(out)
 
 
-def run_economic_replay(features, rankings, labels, cost_bps: float = 10.0):
+def run_economic_replay(features, rankings, labels, cost_bps: float = 10.0,
+                        *, selection_scores: SelectionScores | None = None):
     cfg = load_gen2_config()
     universe = load_universe_definition()
     main5 = universe["incumbent_main5"]
 
-    roles = build_v2_roles(features, rankings, cfg)
+    if selection_scores is None:
+        selection_scores = canonical_selection_scores(features)
+    roles = build_v2_roles(features, rankings, cfg, selection_scores=selection_scores)
     candidates = roles[["trade_date", "code", "role", "target_weight", "name", "correlation_cluster",
                         "reason_codes", "perm_mode"]].copy()
     candidates["priority"] = 1

@@ -16,6 +16,7 @@ from gen2.labels.build_labels import build_labels
 from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.portfolio_builder import build_cluster_exposure, build_portfolio_candidates
 from gen2.portfolio.replacement_engine import build_rotation_events
+from gen2.baseline.selection_scores import canonical_selection_scores
 from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
 from gen2.ranking.rank_postprocess import validate_rankings
@@ -90,7 +91,9 @@ def run_rule_baseline(output_dir: str | Path | None = None, *, report_path: str 
     features = build_feature_matrix(bars=bars, records=records, config=cfg)
     rankings = run_rank_engine(features)
     validate_rankings(rankings)
-    roles = build_v2_role_view(features, rankings, cfg)
+    # WP-G2-05：Alpha 显式注入（canonical；替代 Alpha 实验请显式传入）
+    selection = canonical_selection_scores(features)
+    roles = build_v2_role_view(features, rankings, cfg, selection_scores=selection)
     events = build_rotation_events(roles, config=cfg)
     candidates = build_portfolio_candidates(roles)
     defended = apply_regime_defense(candidates, features, config=cfg)

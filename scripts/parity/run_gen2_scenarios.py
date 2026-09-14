@@ -26,11 +26,17 @@ from gen2.baseline.rule_v2_ab import (  # noqa: E402
     _replacement_edge,
     _should_replace,
     build_v2_roles,
+    canonical_selection_scores,
     finalize_roles,
 )
 from gen2.baseline.leadership_score import compute_leadership_score  # noqa: E402
 from gen2.baseline.alpha_score import compute_alpha_score_v2  # noqa: E402
-from gen2.data.run_gate import evaluate_run_gate, validate_publish_results  # noqa: E402
+from gen2.data.run_gate import (  # noqa: E402
+    STATUS_COMPLETED,
+    evaluate_rule_bundle_gate,
+    evaluate_run_gate,
+    validate_publish_results,
+)
 from gen2.portfolio.regime import classify_regime, market_score as regime_market_score  # noqa: E402
 from gen2.portfolio.selection_permission import (  # noqa: E402
     max_core_count,
@@ -187,7 +193,7 @@ def expand_panel(panel, case):
                 "rs20_vs_benchmark": r4(0.06 - 0.006 * (k - 1)),
                 "rs60_vs_benchmark": r4(0.05 - 0.005 * (k - 1)),
                 "rs_accel_5d": r4(0.02 - 0.002 * (k - 1)),
-                "breakout_distance": r4(0.03 - 0.003 * (k - 1)),
+                "breakout_distance": r4(0.003 * k) if case.get("breakout_ascending") else r4(0.03 - 0.003 * (k - 1)),
                 "benchmark_px_ma20": r4(case["benchmark"]["px_ma20"]),
                 "benchmark_px_ma60": r4(case["benchmark"]["px_ma60"]),
                 "eligibility": "ELIGIBLE",
@@ -244,7 +250,8 @@ def h_roles_panel(sc):
         scored = compute_leadership_score(df)
         scored = compute_alpha_score_v2(scored)
         rankings = scored[["trade_date", "code", "name", "correlation_cluster"]].copy()
-        res = build_v2_roles(scored, rankings, cfg)
+        res = build_v2_roles(scored, rankings, cfg,
+                         selection_scores=canonical_selection_scores(scored))
 
         days, reasons, reasons_norm, cluster_core = {}, {}, {}, {}
         for _, row in res.iterrows():
@@ -417,6 +424,162 @@ def h_run_status_gate(sc):
     return out
 
 
+def selection_digest(frame, places=3):
+    """跨端可比的评分摘要（3 位小数；与 Node 端 selectionDigest 逐字一致）。"""
+    from gen2.baseline.selection_scores import SELECTION_SCORE_COL
+
+    rows = []
+    for _, r in frame.iterrows():
+        rows.append("%s~%s~%.*f" % (str(r["trade_date"]), str(r["code"]), places, float(r[SELECTION_SCORE_COL])))
+    return hashlib.sha256("|".join(sorted(rows)).encode("utf-8")).hexdigest()
+
+
+def h_selection_injection(sc):
+    """G2S-08：显式 Selection Score 注入 + 角色阈值（F1/F2 跨语言 parity）。"""
+    from gen2.baseline.rule_v2_ab import build_v2_roles
+    from gen2.data.loader import load_gen2_config
+    from gen2.baseline.selection_scores import (
+        SELECTION_SCORE_COL, SelectionScores, build_selection_scores, canonical_selection_scores,
+    )
+    from gen2.portfolio.role_thresholds import load_role_thresholds
+
+    panel = sc["input"]["panel"]
+    cluster_map = {c["code"]: c["cluster"] for c in panel["codes"]}
+    base_cfg = load_gen2_config()
+    # WP-G2-05R：JS 端已删除 role_thresholds fallback，运行配置由夹具显式声明
+    # （panel.role_thresholds_running_config）并在 runner 中注入。这里校验 gen2.yaml 与夹具
+    # 声明一致 —— 两端吃的必须是同一份「运行配置」，不能靠默认值碰巧相等。
+    yaml_thresholds = load_role_thresholds(base_cfg)
+    declared = panel["role_thresholds_running_config"]
+    for k in ("core_top_fraction", "challenger_top_fraction", "satellite_top_fraction"):
+        if abs(getattr(yaml_thresholds, k) - declared[k]) > 1e-12:
+            raise SystemExit(
+                "role_thresholds 漂移：gen2.yaml %s=%r != 夹具声明 %r"
+                % (k, getattr(yaml_thresholds, k), declared[k])
+            )
+
+    out = {}
+    canon = None
+    for raw_case in sc["input"]["cases"]:
+        # panel 级 days / rank_order 作为默认值合入 case（cases 只声明差异旋钮）
+        c = dict(raw_case)
+        c.setdefault("days", panel["days"])
+        c.setdefault("rank_order", panel["rank_order_default"])
+        rows = expand_panel(panel, c)
+        df = pd.DataFrame(rows)
+        df["market_score"] = regime_market_score(df["benchmark_px_ma20"], df["benchmark_px_ma60"])
+        df["name"] = df["code"]
+        df["correlation_cluster"] = df["code"].map(cluster_map)
+
+        order = c.get("explicit_rank_order")
+        if order:
+            n = len(order)
+            frame = df[["trade_date", "code"]].copy()
+            frame[SELECTION_SCORE_COL] = frame["code"].map({code: float(n - i) for i, code in enumerate(order)})
+            scores = SelectionScores(frame=frame, score_version="explicit-order",
+                                     score_source="EXPLICIT_ORDER",
+                                     content_hash=selection_digest(frame), weights={})
+        elif c.get("selection"):
+            scores = build_selection_scores(df, c["selection"], score_version="scenario-" + c["id"],
+                                            score_source="SCENARIO_ALPHA")
+        else:
+            scores = canonical_selection_scores(df)
+
+        cfg = dict(base_cfg)
+        cfg["portfolio"] = dict(base_cfg["portfolio"])
+        if c.get("role_thresholds"):
+            cfg["portfolio"]["role_thresholds"] = c["role_thresholds"]
+        thresholds = load_role_thresholds(cfg)
+
+        rankings = df[["trade_date", "code", "name", "correlation_cluster"]].copy()
+        res = build_v2_roles(df, rankings, cfg, selection_scores=scores)
+
+        days, core_count, cluster_core = {}, {}, {}
+        for _, row in res.iterrows():
+            d = str(int(str(row["trade_date"]).split("-")[-1]))
+            days.setdefault(d, {})[row["code"]] = row["role"]
+            core_count[d] = core_count.get(d, 0) + (1 if row["role"] == "CORE" else 0)
+            if row["role"] == "CORE":
+                cl = cluster_map.get(row["code"], "other")
+                cluster_core.setdefault(d, {})[cl] = cluster_core.get(d, {}).get(cl, 0) + 1
+
+        snap = {
+            "panel_sha256": panel_hash(rows),
+            "panel_rows": len(rows),
+            "score_source": scores.score_source,
+            "score_digest": selection_digest(scores.frame),
+            "role_thresholds_effective": {
+                "core_pct": thresholds.core_pct,
+                "challenger_pct": thresholds.challenger_pct,
+                "satellite_pct": thresholds.satellite_pct,
+            },
+            "role_thresholds_source_class": "EXPLICIT" if c.get("role_thresholds") else "RUNNING_CONFIG",
+            "days": days,
+            "core_count": core_count,
+            "cluster_core_count": cluster_core,
+            "cluster_used": dict(cluster_map),
+        }
+        if canon is None and c["id"] == "canonical":
+            canon = snap
+        snap["score_digest_distinct_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else snap["score_digest"] != canon["score_digest"]
+        snap["roles_differ_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else json.dumps(snap["days"], sort_keys=True) != json.dumps(canon["days"], sort_keys=True)
+        snap["core_count_differs_from_canonical"] = None if canon is None or c["id"] == "canonical" \
+            else json.dumps(snap["core_count"], sort_keys=True) != json.dumps(canon["core_count"], sort_keys=True)
+        if order:
+            last_day = sorted(days)[-1]
+            snap["role_order_matches_injection"] = days[last_day].get(order[0]) == "CORE"
+        out[c["id"]] = snap
+    return out
+
+
+def h_rule_bundle_gate(sc):
+    """G2S-09：规则 bundle 闸门（WP-G2-05R）。
+
+    两端基于**同一份**冻结 bundle 的 selection 段逐 case 覆盖，观察 run 状态：
+      * blocked 用例（空数据）→ 必须拿到 RULE_BUNDLE_*；若规则闸门不是最先，会先撞 BENCHMARK_MISSING；
+      * complete 用例（完整横截面）→ 必须走到 completed（正对照）。
+    """
+    panel = sc["input"]["panel"]
+    base = sc["input"]["bundle_selection_base"]
+    out = {}
+    for c in sc["input"]["cases"]:
+        selection = dict(base)
+        selection.update(c.get("bundle_selection_overrides") or {})
+        cfg = {"selection": selection}
+        # blocked 用例走空数据、complete 用例走完整面板（与 JS handler 逐字同形）
+        rows = apply_run_mutations(run_panel_base(panel), [], panel) if c.get("data") == "full_panel" else []
+        rb = evaluate_rule_bundle_gate(cfg)
+        # 顺序证据：同一 cfg 在**空数据**下的状态（与 JS 的 early 逐字同形）。
+        # 规则闸门若未抢在数据闸门之前，这里会得到 BENCHMARK_MISSING 而不是 RULE_BUNDLE_*。
+        early = evaluate_run_gate(
+            {},
+            eligible_codes=panel["codes"],
+            benchmark_code=panel["benchmark_code"],
+            target_size=panel["target_size"],
+            mode="REPLAY",
+            rule_bundle_config=cfg,
+        )
+        done = rb["status"] == STATUS_COMPLETED
+        rt = rb.get("role_thresholds") or {}
+        out[c["id"]] = {
+            "status": rb["status"],
+            "status_reason": rb["status_reason"],
+            "data_gate": rb["data_gate"],
+            "rule_bundle_status": rb.get("rule_bundle_status"),
+            "role_thresholds_effective": ({
+                "core_pct": 1.0 - rt["core_top_fraction"],
+                "challenger_pct": 1.0 - rt["challenger_top_fraction"],
+                "satellite_pct": 1.0 - rt["satellite_top_fraction"],
+            } if done else None),
+            "panel_sha256": run_panel_hash(rows),
+            "early_gate_data_gate": early["data_gate"],
+            "early_gate_status_reason": early["status_reason"],
+        }
+    return out
+
+
 HANDLERS = {
     "regime_selection": h_regime_selection,
     "replacement_edge": h_replacement_edge,
@@ -425,6 +588,8 @@ HANDLERS = {
     "replacement_transaction": h_replacement_transaction,
     "roles_panel": h_roles_panel,
     "run_status_gate": h_run_status_gate,
+    "selection_injection": h_selection_injection,
+    "rule_bundle_gate": h_rule_bundle_gate,
 }
 
 
