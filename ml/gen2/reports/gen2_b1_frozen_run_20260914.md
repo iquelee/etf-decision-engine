@@ -18,7 +18,7 @@ canonical Alpha 等权）逐一核对通过；资金守恒误差 **0.000e+00**�
 >
 > **状态口径（本次复核结论）**：在 **① 冻结 PR 合并 → ② B1 PR 自动改基后合并 → ③ 独立的
 > 接受记录 PR 合并** 这三步完成之前，本产出的正确表述是「**待合并冻结运行**」，**不是**项目
-> 最终 Frozen B1；也因此**不得**据此启动 B3。接受条件、三项前置校验与流程见 **§12**。
+> 最终 Frozen B1；也因此**不得**据此启动 B3。接受条件、四项校验与流程见 **§12**。
 >
 > **与旧 B1 读数差异很大？先看 §9「差异归因」** —— 那里给出**可审计的数值对照表**
 > （0/5/10/20bps × 逐策略 × 净值/CAGR/Sharpe/换手/成本/差异），并逐项标注
@@ -52,7 +52,7 @@ canonical Alpha 等权）逐一核对通过；资金守恒误差 **0.000e+00**�
 
 | id | 文件 | 角色 | SHA |
 |---|---|---|---|
-| `b1_frozen_run` | `ml/gen2/baseline/b1_frozen_run.py` | B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配 | `ef2b1d31a7f3…` |
+| `b1_frozen_run` | `ml/gen2/baseline/b1_frozen_run.py` | B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配 | `4aeb19dedadc…` |
 | `baseline_builder` | `ml/gen2/baseline/rebuild_baselines.py` | B1 基线构建：build_unified_baselines（特征→排名→角色→权重→账本） | `f4197e28a433…` |
 | `ledger` | `ml/gen2/backtest/ledger.py` | 唯一权威账本：run_ledger / LEDGER_CONTRACT（费用 = turnover × bps / 1e4） | `d4fe7907741b…` |
 | `cost_impl` | `ml/gen2/backtest/costs.py` | 费用兼容层：apply_turnover_cost（委托 ledger.run_ledger，非自带实现） | `535b16cf85f0…` |
@@ -174,7 +174,7 @@ canonical Alpha 等权）逐一核对通过；资金守恒误差 **0.000e+00**�
 |---|---|---|
 | `ledger_daily.csv` | 4951772 | `c6ff697b36c84e6b…` |
 | `ledger_summary.csv` | 4105 | `1bb10a755cad5120…` |
-| `calendar_meta.json` | 3347 | `b55391362b9cfa4d…` |
+| `calendar_meta.json` | 3347 | `baebaf18d010300c…` |
 | `gen2_b1_ledger_baseline_20260914_frozen_v201.md` | 5011 | `c9e8d6e0f4e99fc1…` |
 
 - **本报告自身哈希**：见 manifest `outputs.committed_report`（报告不含自身哈希，避免自引用）
@@ -364,7 +364,7 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --date 20260914
 # 只读验锁（不改盘）
 python scripts/ml/freeze-gen2-rule-bundle.py --check
 node scripts/verify-immutable.js
-# B1 PR 合并后：在独立分支建接受记录（三项前置校验全过才写入；内容哈希不变则无需重跑）
+# B1 PR 合并后：在独立分支建接受记录（四项校验全过才写入；内容哈希不变则无需重跑）
 git switch -c chore/gen2-b1-accept-v201 origin/master
 PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>
 ```
@@ -381,12 +381,17 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-comm
    自动把 base 改为 `master`）；
 3. 从**新的 master** 建 `chore/gen2-b1-accept-v201`，运行接受命令：
    `python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <B1 合并提交完整 SHA>`；
-4. 该命令**额外校验**（任一不过即拒绝写入）：
-   - `<SHA>` 是 `origin/master` 的**祖先**；
-   - `<SHA>^{tree}` **严格等于** manifest 记录的 `source_tree_sha`；若不等，则**差异只允许**
-     是本次运行自身的产物（入库 manifest / 报告）—— 与「报告不含自身哈希」同构的自引用；
-     **任何其它路径**的差异即拒绝（说明 PR 掺入了别的改动）；
-   - 当前**组件 / 输入 / 输出摘要**全部与 B1 manifest 逐位一致。
+4. 该命令**校验**（任一不过即拒绝写入并要求重跑，`FrozenAttestationError`）：
+   - ⓪ **工作树干净**（接受时 + 取证时两态）；
+   - ① **执行提交** `source_state.git_head_commit` 是 `<B1 merge SHA>` 的**祖先**
+     （证明「接受的就是这次执行所依据的源码」）；
+   - ② **锁定组件 / B1 工具链 / 输入摘要 / 输出摘要**与 manifest **逐项**逐位一致
+     （逐项才能指出**哪一条锁定路径**变了，不只比折叠摘要）；
+   - ③ `<B1 merge SHA>` 的**树中包含**已承诺的**报告 / manifest / 审计快照**，且**哈希匹配**
+     （取**提交里的 blob** 算哈希，不是取磁盘文件 —— 后者证明不了「合并进去的是这样」）。
+   > ⚠️ **不再要求** `accepted_master_tree_sha == execution_source_tree_sha`：报告 / manifest /
+   > 审计快照是**执行之后**才提交的 ⇒ 两个 tree **必然不同**。前者是「接受时仓库快照」、
+   > 后者是「执行时语义源码快照」，两者的关联由 ② 的摘要族与 ③ 的已承诺证据哈希建立。
 5. 开并合并**这一个很小的接受记录 PR**（`chore/gen2-b1-accept-v201` → `master`）。
 
 > **为什么必须是独立 PR**：`--accept-merge` **会修改受版本控制**的 manifest / 报告；
@@ -399,7 +404,7 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-comm
 | 项 | 值 |
 |---|---|
 | `run_status` | `PENDING_MERGE` |
-| `source_tree_sha`（**取证时**的源码树，接受时须 == `<SHA>^{tree}`） | `50920f858a52e7b03e73cb41b790e4d25f4fd180` |
+| `execution_source_tree_sha`（**执行时**语义源码快照；**不要求** == `<SHA>^{tree}`） | `2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7` |
 | 待绑定的**组件摘要**（lock 8 项折叠） | `86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c` |
 | 待绑定的**输入摘要** | `7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191` |
 | 待绑定的**输出摘要** | 见 manifest `outputs.committed_report.sha256`（报告不含自身哈希） |
@@ -407,7 +412,7 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-comm
 > **在接受记录写入之前**：不进入 B3 Frozen OOS、不提升 authority、不部署、不写正式仓位；
 > 本报告全部净值 / Sharpe 只作**研发证据**。
 
-> 接受记录命令（B1 PR 合并后，在**独立分支** `chore/gen2-b1-accept-v201` 上执行；会先做三项前置校验，
+> 接受记录命令（B1 PR 合并后，在**独立分支** `chore/gen2-b1-accept-v201` 上执行；会先做四项校验，
 > 任一不过即**拒绝**并要求重跑；随后开并合并该接受记录 PR）：
 >
 > ```bash
