@@ -42,9 +42,12 @@ from gen2.baseline.selection_scores import SelectionScores, canonical_selection_
 from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_universe_definition, load_universe_records
 from gen2.features.build_features import build_feature_matrix
-from gen2.portfolio.defense_gate import apply_regime_defense
 from gen2.portfolio.role_thresholds import load_role_thresholds
-from gen2.portfolio.portfolio_builder import build_portfolio_candidates
+from gen2.portfolio.portfolio_builder import (
+    build_portfolio_candidates,
+    ledger_signals,
+    priority_from_roles,
+)
 from gen2.ranking.rank_engine import run_rank_engine
 
 BASELINE_ID = "b1_ledger_baseline_20260911"
@@ -75,8 +78,11 @@ def build_weight_frames(features: pd.DataFrame, rankings: pd.DataFrame, cfg: dic
     if selection_scores is None:
         selection_scores = canonical_selection_scores(features)
     roles = build_v2_role_view(features, rankings, cfg, selection_scores=selection_scores)
-    candidates = build_portfolio_candidates(roles)
-    defended = apply_regime_defense(candidates, features, config=cfg)
+    # WP-G2-06（F4）：统一候选组合构建（priority 来自注入 score；权威权重不重算；含现金/防守腿）
+    _prio = priority_from_roles(roles)
+    candidates = build_portfolio_candidates(roles, priority=_prio, config=cfg)
+    defended = build_portfolio_candidates(
+        roles, priority=_prio, config=cfg, features=features, apply_defense=True)
     bench = build_benchmark_weights(rankings, main5)
 
     bench_code = str(cfg["data"].get("benchmark_code", "510300")).zfill(6)
@@ -84,7 +90,7 @@ def build_weight_frames(features: pd.DataFrame, rankings: pd.DataFrame, cfg: dic
     market = pd.DataFrame([{"trade_date": d, "code": bench_code, "target_weight": 1.0} for d in market_dates])
 
     def w(df: pd.DataFrame) -> pd.DataFrame:
-        return df[["trade_date", "code", "target_weight"]].copy()
+        return ledger_signals(df)
 
     return {
         "gen2_v2_defended": w(defended),
