@@ -14,6 +14,7 @@
 | `gen2_scenario_parity_20260911.md` | 双端场景比对报告（G2S-01..07 不变量与差异分类） |
 | `gen2_pr26_rule_bundle_gate_20260914.md` | **PR #26 修订（WP-G2-05R）**：撤除 JS 运行时 `role_thresholds` fallback → 规则 bundle 闸门（`blocked` / `RULE_BUNDLE_INCOMPLETE`）+ G2S-09 双端 blocked 回归。合并后 Gen-2 Shadow 将持续 blocked 直到 WP-G2-04 补齐 bundle。**追加**：G2S-09 新增「数据源一读就抛错」陷阱 case（主控 + 正控），把「结果优先」升级为「**顺序**证明」（闸门位于所有数据读取之前） |
 | `gen2_wp_g2_06_plan_20260914.md` | **WP-G2-06（F4）实施计划**：候选组合构建统一（保留权威单只/cluster/科技上限、`priority` 来自显式注入 score、补现金腿与防守腿）。四+三项验收边界与文件级步骤。**红基线测试不进主干**：故意为红的 pinning test 只存在于工作分支 `feat/gen2-wp-g2-06-tree`，实现全绿后才移入 `ml/gen2/tests/` 随实现一并提 PR |
+| `gen2_wp_g2_06_impl_20260914.md` | **WP-G2-06（F4）实现报告**：统一候选组合构建（B1 权威权重沿用 / B2 注入 priority / B3 现金+防守腿 / B4 同口径 / B5 priority 完备性+hash / B6 账本 sleeve 归属 / B7 G2S-10 跨端逐日对表）。测试入正式目录 29/29；跨端 G2S-10 **0 差异** |
 
 ## 旧角色语义审计基线（**不可逐位比较**）
 
