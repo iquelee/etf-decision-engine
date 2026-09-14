@@ -415,7 +415,29 @@ class B6_CashDefenseLedgerSleeveTest(unittest.TestCase):
 
 
 class B7_G2S10CaliberTest(unittest.TestCase):
-    """B7：G2S-10 逐日对表必须覆盖权重 / 权重和 / 上限 / 优先级 / score / config / hash。"""
+    """B7：G2S-10 逐日对表必须覆盖权重 / 权重和 / 上限 / 优先级 / score / config / hash。
+
+    裁决 2026-09-14：case 由 2 扩到 13 —— **2 正例 + 11 负例**。
+    负例断言**稳定错误码**（跨端 seam 只比对错误码，不比对自由文本），
+    其中 `hedge_oversize_post_defense` 是「缺口 ②：防守后复核」的直接证据。
+    """
+
+    # 成功 case：逐日对表在此集合上做（负例会提前抛错，无 days）
+    SUCCESS_CASES = ("undefended", "regime_path")
+    # 负例 → 期望稳定错误码（字面量，用于卡住 seam 契约不被静默改名）
+    NEGATIVE_CASES = {
+        "priority_extra_code": "CANDIDATE_PRIORITY_EXTRA_CODE",
+        "priority_missing_code": "CANDIDATE_PRIORITY_MISSING_CODE",
+        "priority_extra_date": "CANDIDATE_PRIORITY_EXTRA_DATE",
+        "priority_missing_date": "CANDIDATE_PRIORITY_MISSING_DATE",
+        "priority_not_finite": "CANDIDATE_PRIORITY_NOT_FINITE",
+        "priority_absent": "CANDIDATE_PRIORITY_MISSING",
+        "roles_duplicate_key": "CANDIDATE_ROLES_DUPLICATE",
+        "cap_single_breach": "CANDIDATE_CAP_SINGLE_BREACHED",
+        "cap_cluster_breach": "CANDIDATE_CAP_CLUSTER_BREACHED",
+        "cap_tech_breach": "CANDIDATE_CAP_TECH_BREACHED",
+        "hedge_oversize_post_defense": "CANDIDATE_CAP_SINGLE_BREACHED",
+    }
 
     @classmethod
     def setUpClass(cls):
@@ -431,9 +453,14 @@ class B7_G2S10CaliberTest(unittest.TestCase):
         cls.sc = sc
         cls.obs = h_portfolio_build(sc)
 
-    def test_cases_and_daily_observation_complete(self):
-        self.assertEqual(set(self.obs), {"undefended", "regime_path"})
-        for cid, o in self.obs.items():
+    def test_case_set_is_two_positive_plus_eleven_negative(self):
+        expected = set(self.SUCCESS_CASES) | set(self.NEGATIVE_CASES)
+        self.assertEqual(set(self.obs), expected,
+                         "G2S-10 case 集合与夹具不一致（改动夹具须同步本表）")
+
+    def test_success_cases_daily_observation_complete(self):
+        for cid in self.SUCCESS_CASES:
+            o = self.obs[cid]
             self.assertIsNone(o["error"], f"{cid} 构建失败：{o['error']}")
             days = {str(k): v for k, v in o["days"].items()}
             self.assertEqual(sorted(days), ["2026-03-02", "2026-03-03"], "未逐日对表")
@@ -444,14 +471,23 @@ class B7_G2S10CaliberTest(unittest.TestCase):
                 for key in ("cash_weight", "defense_weight", "weight_sum", "priority"):
                     self.assertIn(key, day, f"{cid}/{d} 缺 {key}")
 
+    def test_negative_cases_return_stable_error_codes(self):
+        """裁决缺口 ①/②/③ 的直接证据：每条非法输入都以**稳定错误码**失败。"""
+        for cid, want in self.NEGATIVE_CASES.items():
+            got = self.obs[cid].get("error")
+            self.assertEqual(got, want, f"{cid} 期望 {want}，实得 {got}")
+            # 负例不得留下任何可用观测（提前抛错 → 无 days / 无 sleeve）
+            self.assertNotIn("days", self.obs[cid], f"{cid} 失败却仍写出候选腿观测")
+
     def test_weight_sums_conserve_to_one(self):
-        for cid, o in self.obs.items():
-            for d, day in o["days"].items():
+        for cid in self.SUCCESS_CASES:
+            for d, day in self.obs[cid]["days"].items():
                 self.assertAlmostEqual(float(day["weight_sum"]), 1.0, places=9,
                                        msg=f"{cid}/{d} 权重和不为 1：{day['weight_sum']}")
 
     def test_caps_reported_and_within_limits(self):
-        for cid, o in self.obs.items():
+        for cid in self.SUCCESS_CASES:
+            o = self.obs[cid]
             self.assertLessEqual(float(o["max_single_seen"]), MAX_SINGLE + 1e-9)
             self.assertLessEqual(float(o["max_cluster_seen"]), MAX_CLUSTER + 1e-9)
             self.assertLessEqual(float(o["max_tech_seen"]), MAX_TECH + 1e-9)
@@ -465,7 +501,8 @@ class B7_G2S10CaliberTest(unittest.TestCase):
         self.assertEqual(sorted(day["priority"].values()), [1, 2, 3, 4, 5, 6])
 
     def test_authoritative_weights_preserved_and_sleeve_tagged(self):
-        for cid, o in self.obs.items():
+        for cid in self.SUCCESS_CASES:
+            o = self.obs[cid]
             self.assertEqual(o["sleeve"], SLEEVE)
             self.assertFalse(o["final_target_present"], "不得写入 V3.6.1 final_target")
             self.assertTrue(o["priority_source_all_injected"])
@@ -482,6 +519,55 @@ class B7_G2S10CaliberTest(unittest.TestCase):
                          "0.0000000000")
         self.assertEqual(self.obs["regime_path"]["days"]["2026-03-03"]["defense_weight"],
                          "0.1500000000")
+
+    def test_post_defense_cap_check_is_wired(self):
+        """缺口 ② 的**对称**证据：防守前合规、防守腿 0.90 越界 → POST_DEFENSE 复核必须抓到。
+
+        `hedge_oversize_post_defense` 的 PRE_DEFENSE 权重全部合规（≤ 上限），
+        只有防守腿注入 0.90（> 单只上限 0.25）后才越界 —— 若只在防守前查一次，
+        本 case 会**静默通过**、把越界权重写进账本。
+        """
+        self.assertEqual(self.obs["hedge_oversize_post_defense"]["error"],
+                         "CANDIDATE_CAP_SINGLE_BREACHED")
+
+
+class B8_DefenseBenchmarkNameAdapterTest(unittest.TestCase):
+    """缺口 ⑤（裁决 2026-09-14 自证，端到端回归发现）：防守 regime 的 benchmark 字段名适配。
+
+    防守契约（与 JS `buildDefenseSignals` **一致**）读**公开名** ``benchmark_px_ma20/ma60``；
+    但原始特征帧（``computeTimeSeriesFeatures`` / 部分 backtest 输入）只有**内部名**
+    ``px_ma20`` / ``px_ma60``。不做适配 → 公开名缺失 → ``risk_off`` 恒 False
+    → **防守腿永不触发**（静默失效；JS 端 ``main()`` 曾整条防守失效，因为 parity 夹具
+    自带公开名而「蒙对」）。本类固化适配契约（与 JS ``toBenchmarkRows`` 同契约）。
+    """
+
+    @staticmethod
+    def _hedge_row(out: pd.DataFrame):
+        return out[out["code"].astype(str).str.zfill(6) == HEDGE_CODE]
+
+    def test_public_names_still_work(self):
+        """基线：公开名输入照常触发 RISK_OFF（不得因适配而改变行为）。"""
+        out = _build(features=_bench_features(risk_off=True), apply_defense=True)
+        self.assertTrue((self._hedge_row(out)["defense_state"] == "RISK_OFF").all())
+
+    def test_internal_px_names_are_adapted(self):
+        """内部名 ``px_ma20/px_ma60`` 必须被适配成公开名 —— 否则防守腿静默失效。"""
+        bench = _bench_features(risk_off=True).rename(
+            columns={"benchmark_px_ma20": "px_ma20", "benchmark_px_ma60": "px_ma60"})
+        out = _build(features=bench, apply_defense=True)
+        hedge = self._hedge_row(out)
+        self.assertTrue((hedge["defense_state"] == "RISK_OFF").all(),
+                        "内部名 px_ma20/px_ma60 未被适配 → 防守腿静默失效")
+        self.assertAlmostEqual(float(hedge["target_weight"].iloc[0]), 0.15, places=10)
+
+    def test_public_name_wins_when_both_present(self):
+        """两者同时存在时，**公开名优先**（内部名不得覆盖显式声明的 regime 输入）。"""
+        bench = _bench_features(risk_off=True)
+        bench["px_ma20"] = 0.5   # 内部名给相反信号（RISK_ON）
+        bench["px_ma60"] = 0.5
+        out = _build(features=bench, apply_defense=True)
+        self.assertTrue((self._hedge_row(out)["defense_state"] == "RISK_OFF").all(),
+                        "公开名必须优先于内部名")
 
 
 if __name__ == "__main__":

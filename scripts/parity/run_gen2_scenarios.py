@@ -689,11 +689,21 @@ def _caps_obs_py(rows: list) -> dict:
     }
 
 
+def _candidate_error_code(exc: BaseException) -> str:
+    """从异常提取**稳定错误码**（跨端 seam 只比对错误码，不比对自由文本）。"""
+    code = getattr(exc, "code", None)
+    if code:
+        return str(code)
+    msg = str(exc)
+    return msg.split(" :: ", 1)[0] if " :: " in msg else msg
+
+
 def h_portfolio_build(sc):
     """G2S-10：统一候选组合构建（WP-G2-06 / F4）—— Python 回测端 vs JS 影子端**逐日**对表。
 
     对表内容（不只比「有无腿」）：每只 ETF / 现金腿 / 防守腿的权重、权重和、上限、
     priority、score/priority hash、config hash、sleeve 归属与「无 final_target」。
+    负例（裁决 2026-09-14 追加）比对**稳定错误码**。
     """
     from gen2.portfolio.portfolio_builder import (
         CASH_CODE,
@@ -702,25 +712,32 @@ def h_portfolio_build(sc):
     )
 
     panel = sc["input"]["panel"]
-    pcfg = panel.get("portfolio_config") or {}
-    dcfg = panel.get("defense_config") or {}
-    roles = pd.DataFrame(panel["roles"])
+    roles_base = pd.DataFrame(panel["roles"])
     bench_rows = panel.get("benchmark") or []
-    features = pd.DataFrame(bench_rows) if bench_rows else None
     out = {}
     for c in sc["input"]["cases"]:
+        # per-case 覆写（与 JS handler 逐字同形）
+        pcfg = {**(panel.get("portfolio_config") or {}), **(c.get("portfolio_config") or {})}
+        dcfg = {**(panel.get("defense_config") or {}), **(c.get("defense_config") or {})}
+        roles = pd.DataFrame(c["roles"]) if c.get("roles") else roles_base
+        if c.get("drop_priority"):
+            priority = None
+        else:
+            priority = c.get("priority") or panel["priority"]
+        features = pd.DataFrame(bench_rows) if bench_rows else None
         obs = {"error": None, "final_target_present": False}
         try:
             cand = build_portfolio_candidates(
                 roles,
-                priority=panel["priority"],
+                priority=priority,
                 portfolio_config=pcfg,
+                defense_config=dcfg,
                 features=features,
                 apply_defense=bool(c.get("apply_defense")),
             )
             rows = cand.to_dict("records")
         except Exception as e:  # noqa: BLE001 —— 与 JS 端一致：失败本身也是可观测量
-            obs["error"] = str(e)
+            obs["error"] = _candidate_error_code(e)
             out[c["id"]] = obs
             continue
         if not rows:

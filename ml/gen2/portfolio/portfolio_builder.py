@@ -51,9 +51,51 @@ DEFAULT_SCORE_COL = "alpha_score_v2"
 
 _EPS = 1e-9
 
+#: 候选组合构建的**稳定错误码**（与 JS `CANDIDATE_ERR` 逐一对应）。
+#: 跨端 seam 只比对错误码，**不比对自由文本**；两端检查**顺序也必须一致**，
+#: 否则同一非法输入会得到不同错误码，跨端比对将产生「未定位差异」。
+CANDIDATE_ERR = {
+    "ROLES_EMPTY": "CANDIDATE_ROLES_EMPTY",
+    "ROLES_MISSING_FIELD": "CANDIDATE_ROLES_MISSING_FIELD",
+    "ROLES_DUPLICATE": "CANDIDATE_ROLES_DUPLICATE",
+    "PRIORITY_MISSING": "CANDIDATE_PRIORITY_MISSING",
+    "PRIORITY_EXTRA_DATE": "CANDIDATE_PRIORITY_EXTRA_DATE",
+    "PRIORITY_MISSING_DATE": "CANDIDATE_PRIORITY_MISSING_DATE",
+    "PRIORITY_EXTRA_CODE": "CANDIDATE_PRIORITY_EXTRA_CODE",
+    "PRIORITY_MISSING_CODE": "CANDIDATE_PRIORITY_MISSING_CODE",
+    "PRIORITY_NOT_FINITE": "CANDIDATE_PRIORITY_NOT_FINITE",
+    "WEIGHT_NOT_FINITE": "CANDIDATE_WEIGHT_NOT_FINITE",
+    "CAP_NON_FINITE": "CANDIDATE_CAP_NON_FINITE_WEIGHT",
+    "CAP_SINGLE": "CANDIDATE_CAP_SINGLE_BREACHED",
+    "CAP_CLUSTER": "CANDIDATE_CAP_CLUSTER_BREACHED",
+    "CAP_TECH": "CANDIDATE_CAP_TECH_BREACHED",
+    "CAP_DAY_SUM": "CANDIDATE_CAP_DAY_SUM_BREACHED",
+}
+
 
 class PortfolioBuildError(RuntimeError):
-    """候选组合构建的**显式失败**（禁止任何静默 fallback）。"""
+    """候选组合构建的**显式失败**（禁止任何静默 fallback）。
+
+    消息格式固定为 ``<CODE> :: <detail>`` —— CODE 取自 `CANDIDATE_ERR`，
+    是跨端可比对的稳定标识。
+    """
+
+    @property
+    def code(self) -> str:
+        return str(self).split(" :: ", 1)[0]
+
+
+def _err(code: str, detail: str) -> PortfolioBuildError:
+    """构造带稳定错误码的异常。"""
+    return PortfolioBuildError(f"{code} :: {detail}")
+
+
+def _to_float(x) -> float:
+    """宽松数值化：不可解析 → NaN（与 JS `Number(x)` 语义一致）。"""
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 # --------------------------------------------------------------------------- #
@@ -67,25 +109,31 @@ def priority_from_roles(roles: pd.DataFrame, score_col: str = DEFAULT_SCORE_COL)
     roles 缺评分列 → 抛错（**禁止**退化成 legacy `rank`）。
     """
     if score_col not in roles.columns:
-        raise PortfolioBuildError(
-            f"roles 缺显式评分列 {score_col}：priority 只能来自注入的 selection score（B2）")
+        raise _err(CANDIDATE_ERR["ROLES_MISSING_FIELD"],
+                   f"roles 缺显式评分列 {score_col}：priority 只能来自注入的 selection score（B2）")
     out: dict = {}
     for d, g in roles.groupby("trade_date", sort=True):
-        out[d] = {str(c): float(s) for c, s in zip(g["code"], g[score_col])}
+        out[d] = {str(c): _to_float(s) for c, s in zip(g["code"], g[score_col])}
     return out
 
 
 def _canonical_score_map(priority: Mapping) -> dict:
-    """把注入的 score 映射规范化为 `{str(date): {str(code): float}}`（跨端可复现）。"""
+    """把注入的 score 映射规范化为 `{str(date): {str(code): float}}`（跨端可复现）。
+
+    数值化用 `_to_float`（不可解析 → NaN，与 JS `Number(x)` 一致）——**不在此处抛错**，
+    因为「非有限」必须与 JS 在**同一位置**（逐行有限性校验）失败，否则跨端错误码会错位。
+    """
     if priority is None:
-        raise PortfolioBuildError("缺显式 priority：研究路径禁止回退 legacy rank（B2）")
+        raise _err(CANDIDATE_ERR["PRIORITY_MISSING"],
+                   "缺显式 priority：研究路径禁止回退 legacy rank（B2）")
     if not isinstance(priority, Mapping) or len(priority) == 0:
-        raise PortfolioBuildError("priority 必须是非空映射 {trade_date: {code: score}}")
+        raise _err(CANDIDATE_ERR["PRIORITY_MISSING"],
+                   "priority 必须是非空映射 {trade_date: {code: score}}")
     out: dict = {}
     for d, m in priority.items():
         if not isinstance(m, Mapping) or len(m) == 0:
-            raise PortfolioBuildError(f"priority[{d}] 必须是非空映射 {{code: score}}")
-        out[str(d)] = {str(c): float(s) for c, s in m.items()}
+            raise _err(CANDIDATE_ERR["PRIORITY_MISSING"], f"priority[{d}] 必须是非空映射 {{code: score}}")
+        out[str(d)] = {str(c): _to_float(s) for c, s in m.items()}
     return out
 
 
@@ -124,25 +172,59 @@ def portfolio_config_hash(pcfg: Mapping | None = None, defense_cfg: Mapping | No
     return hashlib.sha256("|".join(tokens).encode("utf-8")).hexdigest()
 
 
+def _validate_priority_exact_coverage(roles: pd.DataFrame, pmap: dict) -> None:
+    """priority 必须**严格等于**角色面板的 `(trade_date, code)` 集合。
+
+    **缺、多、重复均失败**（裁决 2026-09-14 缺口 ③）。本函数在 `priority_hash()` **之前**调用，
+    因此「多余且未被消费的分数」根本进不了哈希 —— 杜绝不可见输入影响 provenance。
+    """
+    role_keys: dict = {}
+    for d, c in zip(roles["trade_date"], roles["code"]):
+        role_keys.setdefault(str(d), []).append(str(c))
+    for d, codes in role_keys.items():
+        if len(set(codes)) != len(codes):
+            raise _err(CANDIDATE_ERR["ROLES_DUPLICATE"], f"角色面板存在重复 (trade_date, code)：{d}")
+
+    extra_dates = sorted(set(pmap) - set(role_keys))
+    if extra_dates:
+        raise _err(CANDIDATE_ERR["PRIORITY_EXTRA_DATE"],
+                   f"priority 含角色面板之外的交易日：{extra_dates}（B5）")
+    missing_dates = sorted(set(role_keys) - set(pmap))
+    if missing_dates:
+        raise _err(CANDIDATE_ERR["PRIORITY_MISSING_DATE"],
+                   f"priority 缺交易日：{missing_dates}（B5）")
+
+    for d, codes in role_keys.items():
+        m = pmap[d]
+        extra = sorted(set(m) - set(codes))
+        if extra:
+            raise _err(CANDIDATE_ERR["PRIORITY_EXTRA_CODE"],
+                       f"priority[{d}] 含角色面板之外的 code：{extra}（B5）")
+        missing = sorted(set(codes) - set(m))
+        if missing:
+            raise _err(CANDIDATE_ERR["PRIORITY_MISSING_CODE"],
+                       f"priority[{d}] 缺 code：{missing}（B5）")
+
+
 def _priority_frame(roles: pd.DataFrame, priority: Mapping) -> tuple[pd.DataFrame, str]:
     """逐 `(date, code)` 校验完备性 / 有限性，并按 score 降序 + code 升序给 dense rank。"""
     pmap = _canonical_score_map(priority)
+    # 严格集合校验**先于**哈希（缺口 ③）
+    _validate_priority_exact_coverage(roles, pmap)
     phash = priority_hash(pmap)
-    seen: set = set()
     rows = []
     for r in roles.itertuples():
         d, c = str(r.trade_date), str(r.code)
-        if (d, c) in seen:
-            raise PortfolioBuildError(f"roles 存在重复 (trade_date, code)：{d}/{c}")
-        seen.add((d, c))
-        m = pmap.get(d)
-        if m is None:
-            raise PortfolioBuildError(f"priority 缺交易日 {d}（{c}）：必须全覆盖（B5）")
-        if c not in m:
-            raise PortfolioBuildError(f"priority 缺 {d}/{c}：必须全覆盖（B5）")
-        s = float(m[c])
+        m = pmap[d]
+        s = _to_float(m[c])
+        # 顺序与 JS 逐字一致：先「score 非有限」再「权重非有限」
         if not math.isfinite(s):
-            raise PortfolioBuildError(f"priority 非有限值：{d}/{c} = {m[c]!r}（B5）")
+            raise _err(CANDIDATE_ERR["PRIORITY_NOT_FINITE"], f"priority 非有限值：{d}/{c} = {m[c]!r}（B5）")
+        w = _to_float(r.target_weight)
+        if not math.isfinite(w):
+            raise _err(CANDIDATE_ERR["WEIGHT_NOT_FINITE"],
+                       f"角色面板 target_weight 非有限：{d}/{c} = {r.target_weight!r}"
+                       "（B1：候选组合必须直接沿用角色面板权威权重）")
         rows.append({"trade_date": r.trade_date, "code": c, "priority_score": s})
 
     df = pd.DataFrame(rows)
@@ -167,8 +249,11 @@ def _portfolio_cfg(config: dict | None) -> dict:
     return dict(load_gen2_config().get("portfolio", {}) or {})
 
 
-def _assert_caps(out: pd.DataFrame, pcfg: dict) -> None:
-    """上限**复核**（B1/B4）：权威权重越界即抛错，绝不静默缩、绝不重置为等权。"""
+def _assert_caps(out: pd.DataFrame, pcfg: dict, phase: str = "PRE_DEFENSE") -> None:
+    """上限**复核**（B1/B4）：权威权重越界即抛错，绝不静默缩、绝不重置为等权。
+
+    `phase` 只用于错误信息定位（防守前 / 防守后必须**各跑一次**）。
+    """
     max_single = float(pcfg.get("max_single_weight", 0.25))
     max_cluster = float(pcfg.get("max_cluster_weight", 0.40))
     max_tech = float(pcfg.get("max_tech_weight", 0.65))
@@ -176,26 +261,36 @@ def _assert_caps(out: pd.DataFrame, pcfg: dict) -> None:
 
     w = out["target_weight"].astype(float)
     if not bool(w.map(math.isfinite).all()):
-        raise PortfolioBuildError("target_weight 存在非有限值")
+        raise _err(CANDIDATE_ERR["CAP_NON_FINITE"], f"target_weight 存在非有限值（{phase}）")
     if bool((w < -_EPS).any()):
-        raise PortfolioBuildError("target_weight 出现负值")
+        raise _err(CANDIDATE_ERR["CAP_NON_FINITE"], f"target_weight 出现负值（{phase}）")
     if float(w.max()) > max_single + _EPS:
-        raise PortfolioBuildError(
-            f"单只上限被突破：max={float(w.max()):.6f} > {max_single}（B1）")
+        raise _err(CANDIDATE_ERR["CAP_SINGLE"],
+                   f"单只上限被突破：max={float(w.max()):.6f} > {max_single}（B1/{phase}）")
 
     core = out[out["role"] == "CORE"]
     if not core.empty:
         by_cluster = core.groupby(["trade_date", "correlation_cluster"])["target_weight"].sum()
         if len(by_cluster) and float(by_cluster.max()) > max_cluster + _EPS:
             bad = by_cluster[by_cluster > max_cluster + _EPS]
-            raise PortfolioBuildError(f"cluster 上限被突破：{bad.to_dict()}（B1）")
+            raise _err(CANDIDATE_ERR["CAP_CLUSTER"], f"cluster 上限被突破：{bad.to_dict()}（B1/{phase}）")
+        # 裁决 2026-09-14 缺口 ①：广义科技合计必须**实际检查**（原先只取了 tech_clusters
+        # 却从未校验），否则「科技敞口上限」在生产恒为失效配置。
+        tech = core[core["correlation_cluster"].isin(tech_clusters)]
+        if not tech.empty:
+            by_tech = tech.groupby("trade_date")["target_weight"].sum()
+            if len(by_tech) and float(by_tech.max()) > max_tech + _EPS:
+                bad_tech = by_tech[by_tech > max_tech + _EPS]
+                raise _err(CANDIDATE_ERR["CAP_TECH"],
+                           f"广义科技上限被突破：{bad_tech.to_dict()} > {max_tech}（B1/{phase}）")
         by_day = core.groupby("trade_date")["target_weight"].sum()
         if len(by_day) and float(by_day.max()) > 1.0 + _EPS:
-            raise PortfolioBuildError("CORE 权重合计超过 1")
+            raise _err(CANDIDATE_ERR["CAP_DAY_SUM"], f"CORE 权重合计超过 1（{phase}）")
 
     day_total = out.groupby("trade_date")["target_weight"].sum()
     if len(day_total) and float(day_total.max()) > 1.0 + _EPS:
-        raise PortfolioBuildError(f"持仓合计超过 1：{float(day_total.max()):.6f}")
+        raise _err(CANDIDATE_ERR["CAP_DAY_SUM"],
+                   f"持仓合计超过 1：{float(day_total.max()):.6f}（{phase}）")
 
 
 def _append_cash_leg(out: pd.DataFrame, cash_code: str) -> pd.DataFrame:
@@ -209,7 +304,7 @@ def _append_cash_leg(out: pd.DataFrame, cash_code: str) -> pd.DataFrame:
         g = g.sort_values("code", kind="mergesort")
         invested = float(sum(float(x) for x in g["target_weight"]))
         if invested > 1.0 + _EPS:
-            raise PortfolioBuildError(f"持仓合计 {invested:.6f} > 1 @ {trade_date}")
+            raise _err(CANDIDATE_ERR["CAP_DAY_SUM"], f"持仓合计 {invested:.6f} > 1 @ {trade_date}")
         cash = max(0.0, 1.0 - invested)
         n = int(len(g))
         template = g.iloc[0]
@@ -244,6 +339,7 @@ def build_portfolio_candidates(
     *,
     priority: Mapping | None = None,
     portfolio_config: dict | None = None,
+    defense_config: dict | None = None,
     config: dict | None = None,
     features: pd.DataFrame | None = None,
     apply_defense: bool = False,
@@ -256,6 +352,9 @@ def build_portfolio_candidates(
       priority         : `{trade_date: {code: score}}`，来自显式注入的 selection score
                          —— 用 `priority_from_roles(roles)` 生成。**必填**（B2）
       portfolio_config : 上限配置（None → 读 `gen2.yaml` 的 `portfolio` 段）
+      defense_config   : 防守参数覆盖（与 JS `buildCandidatePortfolio(opts.defense_config)` 对应）。
+                         **必须显式透传到 `apply_regime_defense`** —— 否则注入的防守配置会被
+                         静默忽略、退化成读 `gen2.yaml`，使「同一输入两端同口径」失效。
       features         : `apply_defense=True` 时必填（benchmark regime / vol 目标）
       apply_defense    : 是否套用 regime 防守（RISK_OFF 缩仓 + hedge 腿）
 
@@ -263,12 +362,12 @@ def build_portfolio_candidates(
     `priority_source` / `priority_hash` / `sleeve`，以及现金腿与（可选）`defense_state`。
     """
     if roles is None or len(roles) == 0:
-        raise PortfolioBuildError("roles 为空，无法构建候选组合")
+        raise _err(CANDIDATE_ERR["ROLES_EMPTY"], "roles 为空，无法构建候选组合")
     for col in ("trade_date", "code", "role", "target_weight"):
         if col not in roles.columns:
-            raise PortfolioBuildError(
-                f"roles 缺列 {col}：候选组合必须直接沿用角色层权威 target_weight（B1/B4），"
-                "研究路径不得自行重算权重")
+            raise _err(CANDIDATE_ERR["ROLES_MISSING_FIELD"],
+                       f"roles 缺列 {col}：候选组合必须直接沿用角色层权威 target_weight（B1/B4），"
+                       "研究路径不得自行重算权重")
 
     pcfg = portfolio_config if portfolio_config is not None else _portfolio_cfg(config)
     pframe, phash = _priority_frame(roles, priority)
@@ -279,20 +378,37 @@ def build_portfolio_candidates(
     out = out.merge(pframe[["trade_date", "code", "priority", "priority_score"]],
                     on=["trade_date", "code"], how="left")
     if bool(out["priority"].isna().any()):
-        raise PortfolioBuildError("priority 覆盖不全（merge 后出现空值）")
+        raise _err(CANDIDATE_ERR["PRIORITY_MISSING_CODE"], "priority 覆盖不全（merge 后出现空值）")
     out["priority"] = out["priority"].astype(int)
     out["priority_source"] = PRIORITY_SOURCE
     out["priority_hash"] = phash
     out["sleeve"] = SLEEVE
 
-    _assert_caps(out, pcfg)
+    _assert_caps(out, pcfg, phase="PRE_DEFENSE")
 
     if apply_defense:
         if features is None:
-            raise PortfolioBuildError("apply_defense=True 必须提供 features（benchmark regime 输入）")
+            raise _err("CANDIDATE_DEFENSE_FEATURES_MISSING",
+                       "apply_defense=True 必须提供 features（benchmark regime 输入）")
+        import copy as _copy
+
+        from gen2.data.loader import load_gen2_config
         from gen2.portfolio.defense_gate import apply_regime_defense
 
-        out = apply_regime_defense(out, features, config=config)
+        dcfg_override = dict(defense_config or {})
+        if dcfg_override:
+            # 显式透传：把注入的防守参数写进 `config["portfolio"]["defense"]`
+            base = _copy.deepcopy(config) if config is not None else _copy.deepcopy(load_gen2_config())
+            base.setdefault("portfolio", {})
+            base["portfolio"]["defense"] = {
+                **(base["portfolio"].get("defense") or {}), **dcfg_override}
+            out = apply_regime_defense(out, features, config=base)
+        else:
+            out = apply_regime_defense(out, features, config=config)
+        # 裁决 2026-09-14 缺口 ②：**防守处理后必须再次跑完整上限校验**。
+        # 只在防守前查一次不够 —— `risk_off_hedge_weight` / `risk_off_exposure_scale`
+        # 配置过大时，防守腿（绝对权重）与缩仓后的腿都可能越界。
+        _assert_caps(out, pcfg, phase="POST_DEFENSE")
 
     out = _append_cash_leg(out, cash_code)
     return out.sort_values(["trade_date", "priority"], kind="mergesort").reset_index(drop=True)

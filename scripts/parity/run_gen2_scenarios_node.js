@@ -28,7 +28,9 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG, ROLE_THRESHOLDS, resolveRoleThresholds, RULE_BUNDLE_GATE, RULE_BUNDLE_REASON, deriveRoleThresholdsFromLegacy, SELECTION_SCORE_WEIGHTS, SELECTION_SCORE_SOURCE, combineSelectionScore, applySelectionScores, selectionScoreHash,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
   + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
-  + ' buildCandidatePortfolio, candidatePriorityHash, candidateConfigHash,'
+  + ' buildCandidatePortfolio, candidatePriorityHash, candidateConfigHash, candidateErrorCode,'
+  + ' attachAuthoritativeWeights, priorityFromUnroundedScore, CANDIDATE_SLEEVE, CANDIDATE_CASH_CODE,'
+  + ' validateCandidateLegPublish,'
   + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
   + ' inspectBarsIntegrity, validatePublishResults };\n';
 
@@ -630,22 +632,26 @@ const HANDLERS = {
   /** G2S-10：统一候选组合构建（WP-G2-06 / F4）—— JS 影子端 vs Python 回测逐日对表 */
   portfolio_build(sc) {
     const panel = sc.input.panel;
-    const pcfg = panel.portfolio_config || {};
-    const dcfg = panel.defense_config || {};
     const out = {};
     for (const c of sc.input.cases) {
+      // per-case 覆写（裁决 2026-09-14：负例必须能逐 case 注入非法输入）
+      const pcfg = Object.assign({}, panel.portfolio_config || {}, c.portfolio_config || {});
+      const dcfg = Object.assign({}, panel.defense_config || {}, c.defense_config || {});
+      const roles = c.roles || panel.roles;
+      const priority = c.drop_priority ? undefined : (c.priority || panel.priority);
       let rows = null;
       let error = null;
       try {
-        rows = A.buildCandidatePortfolio(panel.roles, {
-          priority: panel.priority,
+        rows = A.buildCandidatePortfolio(roles, {
+          priority: priority,
           portfolio_config: pcfg,
           defense_config: dcfg,
           benchmark: panel.benchmark,
           apply_defense: !!c.apply_defense
         });
       } catch (e) {
-        error = String(e && e.message ? e.message : e);
+        // 跨端 seam 只比对**稳定错误码**，不比对自由文本
+        error = A.candidateErrorCode(e);
       }
       const obs = { error: error, final_target_present: false };
       if (rows) {

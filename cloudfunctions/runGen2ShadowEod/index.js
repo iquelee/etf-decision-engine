@@ -663,6 +663,118 @@ function validatePublishResults(rows, written) {
   };
 }
 
+/**
+ * **候选腿发布校验**（纯函数；WP-G2-06，裁决 2026-09-14）。
+ *
+ * 与 `validatePublishResults`（ETF 排名：唯一 code + 有限 alpha）**并列但独立**：
+ * 现金腿没有 alpha，塞进排名校验必被判失败，因此单列 `gen2_candidate_leg` 记录类型。
+ * 两类记录**都**通过校验后，run 才允许标 `completed`。
+ *
+ * 校验项：
+ *  ① 逐日守恒 `Σ所有腿（含现金） == 1`
+ *  ② 单只 / cluster / 广义科技上限（复用 `checkCandidateCaps`）
+ *  ③ 防守腿存在性与上限（RISK_OFF 日 hedge 腿权重 == 配置值）
+ *  ④ priority 为证券腿 1..n 稠密排名 + 现金腿 n+1
+ *  ⑤ priority_hash / config_hash 齐备且唯一
+ *  ⑥ sleeve 全为 GEN2_CANDIDATE、绝不携带 final_target
+ * 任一不满足 → blocked + CANDIDATE_LEG_PUBLISH_FAILED（今日没有可信候选组合，不是系统故障）。
+ */
+function validateCandidateLegPublish(legs, opts) {
+  const o = opts || {};
+  const pcfg = o.portfolio_config || {};
+  const list = Array.isArray(legs) ? legs : [];
+  const date = o.trade_date != null ? String(o.trade_date) : null;
+  const day = date === null ? list.slice() : list.filter((r) => String(r.trade_date) === date);
+  const fail = (gate, detail, extra) => Object.assign({
+    ok: false, status: 'blocked', status_reason: 'CANDIDATE_LEG_PUBLISH_FAILED',
+    data_gate: gate, detail: String(detail)
+  }, extra || {});
+
+  if (!day.length) return fail('CANDIDATE_LEG_EMPTY', '候选腿为空（' + String(date) + '）');
+  const codes = day.map((r) => String(r.code));
+  if (new Set(codes).size !== codes.length) {
+    return fail('CANDIDATE_LEG_DUPLICATED', '候选腿 code 重复');
+  }
+  const cashRows = day.filter((r) => String(r.code) === CANDIDATE_CASH_CODE);
+  if (cashRows.length !== 1) {
+    return fail('CANDIDATE_LEG_CASH_MISSING', '候选腿必须且只能含 1 条现金腿，实得 ' + cashRows.length);
+  }
+  const sec = day.filter((r) => String(r.code) !== CANDIDATE_CASH_CODE);
+
+  // ① 逐日守恒（累加顺序固定 code 升序 —— 与 Python 端逐位一致）
+  let sum = 0;
+  for (const r of day.slice().sort(byCodeAsc)) sum += Number(r.target_weight);
+  if (!isFinite(sum) || Math.abs(sum - 1) > 1e-6) {
+    return fail('CANDIDATE_LEG_NOT_CONSERVED', '权重和（含现金）!= 1：' + sum);
+  }
+
+  // ② 上限（单只 / cluster / 广义科技）—— 与构建期同一实现、同一配置
+  const capBad = checkCandidateCaps(sec, pcfg);
+  if (capBad) return fail(capBad.gate, capBad.detail);
+
+  // ③ 防守腿：RISK_OFF 日 hedge 腿权重必须等于配置值
+  const hedgeCode = String(o.defense_config && o.defense_config.hedge_code
+    ? o.defense_config.hedge_code : '518880');
+  const hedgeWeight = o.defense_config && o.defense_config.risk_off_hedge_weight != null
+    ? Number(o.defense_config.risk_off_hedge_weight) : 0.15;
+  const hedgeRows = sec.filter((r) => String(r.code) === hedgeCode);
+  const hedgeDay = sec.filter((r) => String(r.code) === hedgeCode
+    && String(r.defense_state) === 'RISK_OFF');
+  if (hedgeDay.length) {
+    const hw = Number(hedgeDay[0].target_weight);
+    if (!isFinite(hw) || Math.abs(hw - hedgeWeight) > 1e-9) {
+      return fail('CANDIDATE_LEG_HEDGE_WEIGHT_MISMATCH',
+        'RISK_OFF 防守腿权重 ' + hw + ' != 配置 ' + hedgeWeight);
+    }
+  }
+  if (o.expect_defense_leg === true && hedgeRows.length === 0) {
+    return fail('CANDIDATE_LEG_DEFENSE_LEG_MISSING', '候选腿缺防守腿（hedge_code ' + hedgeCode + '）');
+  }
+
+  // ④ priority：证券腿 1..n 稠密 + 现金腿 n+1
+  const prios = sec.map((r) => Number(r.priority)).sort((a, b) => a - b);
+  const want = sec.map((_, i) => i + 1);
+  if (prios.length !== want.length || prios.some((v, i) => v !== want[i])) {
+    return fail('CANDIDATE_LEG_PRIORITY_INVALID',
+      'priority 必须是证券腿的 1..n 稠密排名，实得 ' + JSON.stringify(prios));
+  }
+  if (Number(cashRows[0].priority) !== sec.length + 1) {
+    return fail('CANDIDATE_LEG_PRIORITY_INVALID',
+      '现金腿 priority 应为 ' + (sec.length + 1) + '，实得 ' + cashRows[0].priority);
+  }
+
+  // ⑤ priority_hash / config_hash 齐备且唯一
+  const hashes = new Set(day.map((r) => r.priority_hash));
+  if (hashes.size !== 1 || ![...hashes][0]) {
+    return fail('CANDIDATE_LEG_PRIORITY_HASH_INVALID', 'priority_hash 缺失或不唯一');
+  }
+  if (!o.config_hash) {
+    return fail('CANDIDATE_LEG_CONFIG_HASH_MISSING', '缺 config_hash（无法证明配置口径）');
+  }
+
+  // ⑥ sleeve 归属 + 绝不携带 final_target
+  if (!day.every((r) => r.sleeve === CANDIDATE_SLEEVE)) {
+    return fail('CANDIDATE_LEG_SLEEVE_INVALID', 'sleeve 必须全为 ' + CANDIDATE_SLEEVE);
+  }
+  if (day.some((r) => Object.prototype.hasOwnProperty.call(r, 'final_target'))) {
+    return fail('CANDIDATE_LEG_FINAL_TARGET_LEAK', 'Gen-2 candidate sleeve 不得携带 final_target');
+  }
+
+  // ⑦ 写入完整性
+  const writtenCount = Number.isFinite(Number(o.written)) ? Number(o.written) : 0;
+  if (writtenCount !== day.length) {
+    return fail('CANDIDATE_LEG_WRITE_INCOMPLETE',
+      '写入条数 ' + writtenCount + ' != 期望 ' + day.length);
+  }
+
+  return {
+    ok: true, status: 'completed', status_reason: null, data_gate: null,
+    leg_code_count: sec.length, cash_count: cashRows.length,
+    weight_sum: sum, written: writtenCount,
+    priority_hash: [...hashes][0], config_hash: o.config_hash
+  };
+}
+
 /** 过滤出有限值索引与值（供横截面排名排除 null/NaN） */
 function finiteIndexValues(values) {
   const idx = [];
@@ -1254,81 +1366,122 @@ function scaleGroupToCap(items, groupFn, cap) {
   }
 }
 
-/** F05：广义科技约束（tech_clusters 合计 <= max_tech_weight），只缩科技、不动非科技 */
-function scaleTechToCap(items) {
-  const isTech = (r) => PORTFOLIO_CFG.tech_clusters.includes(UNIVERSE.cluster[r.code]);
+/** F05：广义科技约束（tech_clusters 合计 <= max_tech_weight），只缩科技、不动非科技。
+ *  WP-G2-06：上限与集群集合显式传入（不再读模块级 PORTFOLIO_CFG），使同一函数可服务
+ *  研究与场景注入配置；求和沿用**输入顺序**（= 当日 alpha 排名顺序），与 Python
+ *  `rule_v2_ab.build_v2_roles` 的 groupby 求和顺序一致，保证浮点结果逐位可比。 */
+function scaleTechToCap(items, techClusters, maxTech) {
+  const clusters = techClusters || PORTFOLIO_CFG.tech_clusters;
+  const cap = maxTech != null ? maxTech : PORTFOLIO_CFG.max_tech_weight;
+  const isTech = (r) => clusters.indexOf(r.correlation_cluster) >= 0;
   const techTotal = items.reduce((s, r) => s + (isTech(r) ? r.target_weight : 0), 0);
-  if (techTotal > PORTFOLIO_CFG.max_tech_weight) {
-    const k = PORTFOLIO_CFG.max_tech_weight / techTotal;
+  if (techTotal > cap) {
+    const k = cap / techTotal;
     for (const r of items) {
       if (isTech(r)) r.target_weight = r.target_weight * k;
     }
   }
 }
 
-function buildPortfolioCandidates(roles) {
+/* ---------------- 权威权重（唯一算法，WP-G2-06） ---------------- */
+
+/**
+ * 角色面板 → **权威权重**（全仓唯一算法；与 Python `rule_v2_ab.build_v2_roles` F05 段同式）：
+ *   ① CORE 相对份额 `1/n` → 单只上限 `min(1/n, max_single_weight)`；
+ *   ② cluster 上限：同 (date, correlation_cluster) 的 CORE 权重和 > `max_cluster_weight` 时按比例缩；
+ *   ③ 广义科技上限：同 date 的 `tech_clusters` CORE 权重和 > `max_tech_weight` 时**只缩科技**；
+ *   ④ 非 CORE 权重 = 0（剩余留现金，**不归一化到 100%**）。
+ *
+ * **不做四舍五入**：与 Python 端逐位可比是本函数的存在理由（G2S-10 对表以 10 位小数比较）。
+ */
+function attachAuthoritativeWeights(roles, pcfg) {
+  const cfg = pcfg || PORTFOLIO_CFG;
   const byDate = {};
   for (const r of roles) (byDate[r.trade_date] = byDate[r.trade_date] || []).push(r);
   const out = [];
-  for (const d in byDate) {
-    const day = byDate[d];
+  for (const d of Object.keys(byDate).sort()) {
+    const day = byDate[d].map((r) => Object.assign({}, r));
     const cores = day.filter((r) => r.role === 'CORE');
-    // 1. 等权相对份额 → 单只 cap
     const w0 = cores.length ? 1.0 / cores.length : 0;
-    for (const r of cores) r.target_weight = Math.min(w0, PORTFOLIO_CFG.max_single_weight);
-    // 2. cluster cap（同 cluster 合计 <= max_cluster_weight）
-    scaleGroupToCap(cores, (r) => UNIVERSE.cluster[r.code] || 'other', PORTFOLIO_CFG.max_cluster_weight);
-    // 3. 广义科技 cap（tech_clusters 合计 <= max_tech_weight）
-    scaleTechToCap(cores);
+    for (const r of cores) {
+      r.relative_share = w0;
+      r.target_weight = Math.min(w0, cfg.max_single_weight);
+    }
+    scaleGroupToCap(cores, (r) => r.correlation_cluster, cfg.max_cluster_weight);
+    scaleTechToCap(cores, cfg.tech_clusters, cfg.max_tech_weight);
     for (const r of day) {
-      out.push({ ...r, target_weight: r.role === 'CORE' ? Math.round((r.target_weight || 0) * 10000) / 10000 : 0.0 });
+      out.push(Object.assign({}, r, {
+        relative_share: r.role === 'CORE' ? w0 : 0.0,
+        target_weight: r.role === 'CORE' ? Number(r.target_weight) : 0.0
+      }));
     }
   }
   return out;
 }
 
-function applyDefense(candidates, features, benchmarkFeatures) {
-  // 每日防守信号：benchmark(510300) regime（market_score 55/45）+ vol target
-  const benchByDate = {};
-  for (const f of features) {
-    if (!benchByDate[f.trade_date]) {
-      benchByDate[f.trade_date] = { benchmark_px_ma20: f.benchmark_px_ma20, benchmark_px_ma60: f.benchmark_px_ma60, realized_vol20: null };
-    }
-  }
-  // realized_vol20 用 benchmark(510300) 的真实波动率（与 Python 版一致）
-  for (const b of benchmarkFeatures) {
-    if (benchByDate[b.trade_date]) benchByDate[b.trade_date].realized_vol20 = b.realized_vol20;
-  }
+/** @deprecated（WP-G2-06）**生产 run 不再消费**：`main()` 已改为
+ *  「buildDailyRoles → attachAuthoritativeWeights → buildCandidatePortfolio」。
+ *  本函数仅为 WP-G2-01 旧跨语言 parity 链（`scripts/parity/run_node.js`）保留，
+ *  并且**只做委托**，保证全仓只有一套权重算法（`attachAuthoritativeWeights`）。 */
+function buildPortfolioCandidates(roles) {
+  return attachAuthoritativeWeights(roles);
+}
 
-  const out = candidates.map((r) => {
-    const sig = benchByDate[r.trade_date] || {};
+/** 每日防守信号（market_score regime + vol target，与 Python
+ *  `defense_gate._build_defense_signal` 同式）→ `{date: {state, coreScale, hedgeWeight}}`。**不四舍五入**。 */
+function buildDefenseSignals(benchByDate, dcfg) {
+  const out = {};
+  for (const d of Object.keys(benchByDate)) {
+    const sig = benchByDate[d] || {};
     let state = 'NORMAL';
     let coreScale = 1.0;
     let hedgeWeight = 0.0;
-
-    // F02：统一 regime 契约（market_score 55/45，与 Python regime.py 一致），替代 MA60<-2% 硬编码
-    const ms = (sig.benchmark_px_ma20 != null && sig.benchmark_px_ma60 != null)
-      ? marketScore(sig.benchmark_px_ma20, sig.benchmark_px_ma60) : null;
-    const regime = classifyRegime(ms);
-
-    if (regime === 'RISK_OFF') {
+    const hasMa = sig.benchmark_px_ma20 != null && sig.benchmark_px_ma60 != null;
+    const ms = hasMa ? marketScore(sig.benchmark_px_ma20, sig.benchmark_px_ma60) : null;
+    if (classifyRegime(ms) === 'RISK_OFF') {
       state = 'RISK_OFF';
-      coreScale = Math.max(0, DEFENSE_CFG.risk_off_exposure_scale - DEFENSE_CFG.risk_off_hedge_weight);
-      hedgeWeight = DEFENSE_CFG.risk_off_hedge_weight;
-    } else if (DEFENSE_CFG.vol_target_enabled && sig.realized_vol20 && sig.realized_vol20 > 0) {
-      coreScale = Math.min(1.0, DEFENSE_CFG.vol_target_annualized / sig.realized_vol20);
+      coreScale = Math.max(0, dcfg.risk_off_exposure_scale - dcfg.risk_off_hedge_weight);
+      hedgeWeight = dcfg.risk_off_hedge_weight;
+    } else if (dcfg.vol_target_enabled && sig.realized_vol20 && sig.realized_vol20 > 0) {
+      coreScale = Math.min(1.0, dcfg.vol_target_annualized / sig.realized_vol20);
     }
-
-    const isHedge = r.code === DEFENSE_CFG.hedge_code;
-    let tw = r.target_weight;
-    if (state === 'RISK_OFF') {
-      tw = isHedge ? hedgeWeight : r.target_weight * coreScale;
-    } else {
-      tw = r.target_weight * coreScale;
-    }
-    return { ...r, target_weight: Math.round(tw * 10000) / 10000, defense_state: state };
-  });
+    out[String(d)] = { state: state, coreScale: coreScale, hedgeWeight: hedgeWeight };
+  }
   return out;
+}
+
+/** 把防守信号套到组合腿上（只改 target_weight，不动 role / rank）。**不四舍五入**。 */
+function applyDefenseToItems(items, benchByDate, dcfg) {
+  if (dcfg && dcfg.enabled === false) return items.map((r) => Object.assign({}, r));
+  const signals = buildDefenseSignals(benchByDate, dcfg);
+  const hedgeCode = String(dcfg.hedge_code);
+  return items.map((r) => {
+    const s = signals[String(r.trade_date)] || { state: 'NORMAL', coreScale: 1.0, hedgeWeight: 0.0 };
+    const isHedge = String(r.code) === hedgeCode;
+    const tw = (s.state === 'RISK_OFF')
+      ? (isHedge ? s.hedgeWeight : r.target_weight * s.coreScale)
+      : r.target_weight * s.coreScale;
+    return Object.assign({}, r, { target_weight: tw, defense_state: s.state });
+  });
+}
+
+/** @deprecated（WP-G2-06）同 `buildPortfolioCandidates`：仅为 WP-G2-01 旧 parity 链保留，
+ *  内部委托到唯一防守实现 `applyDefenseToItems`（旧签名 features + benchmarkFeatures 兼容）。 */
+function applyDefense(candidates, features, benchmarkFeatures) {
+  const benchByDate = {};
+  for (const f of features) {
+    if (!benchByDate[f.trade_date]) {
+      benchByDate[f.trade_date] = {
+        benchmark_px_ma20: f.benchmark_px_ma20,
+        benchmark_px_ma60: f.benchmark_px_ma60,
+        realized_vol20: null
+      };
+    }
+  }
+  for (const b of benchmarkFeatures) {
+    if (benchByDate[b.trade_date]) benchByDate[b.trade_date].realized_vol20 = b.realized_vol20;
+  }
+  return applyDefenseToItems(candidates, benchByDate, DEFENSE_CFG);
 }
 
 /* ---------------- WP-G2-06（F4）：统一候选组合构建（跨端 parity seam） ----------------
@@ -1344,6 +1497,43 @@ const CANDIDATE_SLEEVE = 'GEN2_CANDIDATE';
 const CANDIDATE_CASH_CODE = 'CASH';
 const CANDIDATE_PRIORITY_SOURCE = 'INJECTED_SELECTION_SCORE';
 const CANDIDATE_PRIORITY_SOURCE_RESIDUAL = 'RESIDUAL_CASH_LEG';
+
+/**
+ * 候选组合构建的**稳定错误码**（跨端 seam 只比对错误码，不比对自由文本）。
+ * 与 Python `portfolio_builder.CANDIDATE_ERR` 逐一对应；两端检查**顺序也必须一致**，
+ * 否则同一非法输入会得到不同错误码，跨端比对就会产生「未定位差异」。
+ */
+const CANDIDATE_ERR = {
+  ROLES_EMPTY: 'CANDIDATE_ROLES_EMPTY',
+  ROLES_MISSING_FIELD: 'CANDIDATE_ROLES_MISSING_FIELD',
+  ROLES_DUPLICATE: 'CANDIDATE_ROLES_DUPLICATE',
+  PRIORITY_MISSING: 'CANDIDATE_PRIORITY_MISSING',
+  PRIORITY_EXTRA_DATE: 'CANDIDATE_PRIORITY_EXTRA_DATE',
+  PRIORITY_MISSING_DATE: 'CANDIDATE_PRIORITY_MISSING_DATE',
+  PRIORITY_EXTRA_CODE: 'CANDIDATE_PRIORITY_EXTRA_CODE',
+  PRIORITY_MISSING_CODE: 'CANDIDATE_PRIORITY_MISSING_CODE',
+  PRIORITY_NOT_FINITE: 'CANDIDATE_PRIORITY_NOT_FINITE',
+  WEIGHT_NOT_FINITE: 'CANDIDATE_WEIGHT_NOT_FINITE',
+  CAP_NON_FINITE: 'CANDIDATE_CAP_NON_FINITE_WEIGHT',
+  CAP_SINGLE: 'CANDIDATE_CAP_SINGLE_BREACHED',
+  CAP_CLUSTER: 'CANDIDATE_CAP_CLUSTER_BREACHED',
+  CAP_TECH: 'CANDIDATE_CAP_TECH_BREACHED',
+  CAP_DAY_SUM: 'CANDIDATE_CAP_DAY_SUM_BREACHED'
+};
+
+/** 构造带稳定错误码的异常：消息固定为 `<CODE> :: <detail>`。 */
+function candError(code, detail) {
+  const e = new Error(code + ' :: ' + detail);
+  e.code = code;
+  return e;
+}
+
+/** 从异常提取稳定错误码（无 code 时退回 `::` 前缀，再退回原始消息）。 */
+function candidateErrorCode(e) {
+  if (e && e.code) return String(e.code);
+  const msg = String((e && e.message) || e);
+  return msg.indexOf(' :: ') > 0 ? msg.split(' :: ')[0] : msg;
+}
 
 function fixed10(x) { return Number(x).toFixed(10); }
 
@@ -1371,6 +1561,141 @@ function candidateConfigHash(pcfg, dcfg) {
 
 const byCodeAsc = (a, b) => (String(a.code) < String(b.code) ? -1 : (String(a.code) > String(b.code) ? 1 : 0));
 
+const CANDIDATE_EPS = 1e-9;
+
+/**
+ * 候选腿上限**体检**（不抛错；返回 `null` 或 `{gate, detail}`）。
+ * 防守前 / 防守后共用同一实现 —— 保证「防守处理不得让任何上限越界」可被同一口径验证。
+ */
+function checkCandidateCaps(items, pcfg) {
+  const maxSingle = pcfg.max_single_weight;
+  const maxCluster = pcfg.max_cluster_weight;
+  const maxTech = pcfg.max_tech_weight;
+  const techClusters = pcfg.tech_clusters || [];
+  let wMax = -Infinity;
+  for (const r of items) {
+    const w = Number(r.target_weight);
+    if (!isFinite(w) || w < -CANDIDATE_EPS) {
+      return { gate: CANDIDATE_ERR.CAP_NON_FINITE,
+        detail: String(r.code) + ' 权重非有限或为负：' + String(r.target_weight) };
+    }
+    if (w > wMax) wMax = w;
+  }
+  if (items.length && wMax > maxSingle + CANDIDATE_EPS) {
+    return { gate: CANDIDATE_ERR.CAP_SINGLE,
+      detail: '单只上限被突破：max=' + wMax + ' > ' + maxSingle };
+  }
+  const clusterSum = {};
+  const techSum = {};
+  const daySum = {};
+  for (const r of items) {
+    const d = String(r.trade_date);
+    daySum[d] = (daySum[d] || 0) + Number(r.target_weight);
+    if (r.role !== 'CORE') continue;
+    const ck = d + '~' + String(r.correlation_cluster);
+    clusterSum[ck] = (clusterSum[ck] || 0) + Number(r.target_weight);
+    if (techClusters.indexOf(r.correlation_cluster) >= 0) {
+      techSum[d] = (techSum[d] || 0) + Number(r.target_weight);
+    }
+  }
+  for (const k in clusterSum) {
+    if (clusterSum[k] > maxCluster + CANDIDATE_EPS) {
+      return { gate: CANDIDATE_ERR.CAP_CLUSTER,
+        detail: 'cluster 上限被突破：' + k + '=' + clusterSum[k] + ' > ' + maxCluster };
+    }
+  }
+  for (const k in techSum) {
+    if (techSum[k] > maxTech + CANDIDATE_EPS) {
+      return { gate: CANDIDATE_ERR.CAP_TECH,
+        detail: '广义科技上限被突破：' + k + '=' + techSum[k] + ' > ' + maxTech };
+    }
+  }
+  for (const k in daySum) {
+    if (daySum[k] > 1 + CANDIDATE_EPS) {
+      return { gate: CANDIDATE_ERR.CAP_DAY_SUM,
+        detail: '持仓合计超过 1：' + k + '=' + daySum[k] };
+    }
+  }
+  return null;
+}
+
+/** 上限复核（越界即抛错，绝不静默缩、绝不重置为等权）。 */
+function assertCandidateCaps(items, pcfg, phase) {
+  const bad = checkCandidateCaps(items, pcfg);
+  if (bad) throw candError(bad.gate, (phase || 'PRE_DEFENSE') + '：' + bad.detail);
+}
+
+/**
+ * priority 必须**严格等于**角色面板的 `(trade_date, code)` 集合：
+ * **缺、多、重复、非有限一律失败**。
+ *
+ * 关键点：本校验在 `candidatePriorityHash()` **之前**执行 —— 因此「多余且未被消费的分数」
+ * 根本进不了哈希，不可能出现「不可见输入影响 provenance」。
+ */
+function assertPriorityExactCoverage(roles, priority) {
+  const byDate = {};
+  for (const r of roles) {
+    const d = String(r.trade_date);
+    (byDate[d] = byDate[d] || []).push(String(r.code));
+  }
+  const rDates = Object.keys(byDate).sort();
+  const pDates = Object.keys(priority).map(String).sort();
+  const extraDates = pDates.filter((d) => rDates.indexOf(d) < 0);
+  const missingDates = rDates.filter((d) => pDates.indexOf(d) < 0);
+  if (extraDates.length) {
+    throw candError(CANDIDATE_ERR.PRIORITY_EXTRA_DATE,
+      'priority 含角色面板之外的交易日：' + JSON.stringify(extraDates));
+  }
+  if (missingDates.length) {
+    throw candError(CANDIDATE_ERR.PRIORITY_MISSING_DATE,
+      'priority 缺交易日：' + JSON.stringify(missingDates));
+  }
+  for (const d of rDates) {
+    const got = byDate[d].slice().sort();
+    if (new Set(got).size !== got.length) {
+      throw candError(CANDIDATE_ERR.ROLES_DUPLICATE, '角色面板存在重复 (trade_date, code)：' + d);
+    }
+    const m = priority[d];
+    if (!m || typeof m !== 'object' || Array.isArray(m) || Object.keys(m).length === 0) {
+      throw candError(CANDIDATE_ERR.PRIORITY_MISSING, 'priority[' + d + '] 必须是非空映射 {code: score}');
+    }
+    const have = Object.keys(m).map(String).sort();
+    const extra = have.filter((c) => got.indexOf(c) < 0);
+    const missing = got.filter((c) => have.indexOf(c) < 0);
+    if (extra.length) {
+      throw candError(CANDIDATE_ERR.PRIORITY_EXTRA_CODE,
+        'priority[' + d + '] 含角色面板之外的 code：' + JSON.stringify(extra));
+    }
+    if (missing.length) {
+      throw candError(CANDIDATE_ERR.PRIORITY_MISSING_CODE,
+        'priority[' + d + '] 缺 code：' + JSON.stringify(missing));
+    }
+  }
+}
+
+/**
+ * 角色面板 → **未四舍五入**的显式 selection score 映射（priority 的唯一合法来源）。
+ *
+ * 取值来自 `features.alpha_score_v2` —— 刻意**绕过** `buildDailyRoles` 输出的 2 位四舍五入，
+ * 使 priority 与权威路径（Python）的分数口径一致。键集合严格等于角色面板 `(trade_date, code)`。
+ */
+function priorityFromUnroundedScore(roles, features) {
+  const byKey = {};
+  for (const f of features) byKey[String(f.trade_date) + '~' + String(f.code)] = f.alpha_score_v2;
+  const out = {};
+  for (const r of roles) {
+    const d = String(r.trade_date);
+    const c = String(r.code);
+    const s = byKey[d + '~' + c];
+    if (s == null || !isFinite(Number(s))) {
+      throw new Error('缺未四舍五入的显式 selection score（priority 唯一合法来源）：' + d + '/' + c);
+    }
+    (out[d] = out[d] || {})[c] = Number(s);
+  }
+  return out;
+}
+
+
 function buildCandidatePortfolio(roles, opts) {
   const o = opts || {};
   const pcfg = Object.assign({
@@ -1382,10 +1707,26 @@ function buildCandidatePortfolio(roles, opts) {
     vol_target_enabled: true, vol_target_annualized: 0.17
   }, o.defense_config || {});
   const priority = o.priority;
-  if (!priority || typeof priority !== 'object') {
-    throw new Error('缺显式 priority：研究路径禁止回退 legacy rank（B2）');
+  // 检查顺序与 Python `build_portfolio_candidates` **逐条对齐**（否则同一非法输入得到不同错误码）
+  if (!Array.isArray(roles) || roles.length === 0) {
+    throw candError(CANDIDATE_ERR.ROLES_EMPTY, 'roles 为空，无法构建候选组合');
+  }
+  for (const f of ['trade_date', 'code', 'role', 'target_weight']) {
+    if (roles[0][f] === undefined || roles[0][f] === null) {
+      throw candError(CANDIDATE_ERR.ROLES_MISSING_FIELD,
+        'roles 缺字段 ' + f + '：候选组合必须直接沿用角色面板权威权重（B1/B4）');
+    }
+  }
+  if (priority === null || priority === undefined
+      || typeof priority !== 'object' || Array.isArray(priority)
+      || Object.keys(priority).length === 0) {
+    throw candError(CANDIDATE_ERR.PRIORITY_MISSING,
+      '缺显式 priority：研究路径禁止回退 legacy rank（B2）');
   }
   const EPS = 1e-9;
+  // 严格集合校验**先于**哈希：多余 / 缺失 / 重复 / 非有限一律失败
+  // → 「多余且未被消费的分数」不可能进入 priority_hash（裁决 2026-09-14 缺口 ③）
+  assertPriorityExactCoverage(roles, priority);
   const ph = candidatePriorityHash(priority);
 
   const byDate = {};
@@ -1394,12 +1735,16 @@ function buildCandidatePortfolio(roles, opts) {
   const out = [];
   for (const d of Object.keys(byDate).sort()) {
     const m = priority[d];
-    if (!m) throw new Error('priority 缺交易日 ' + d);
     const scored = byDate[d].map((r) => {
       const c = String(r.code);
-      if (!(c in m)) throw new Error('priority 缺 ' + d + '/' + c);
       const s = Number(m[c]);
-      if (!isFinite(s)) throw new Error('priority 非有限值 ' + d + '/' + c);
+      if (!isFinite(s)) {
+        throw candError(CANDIDATE_ERR.PRIORITY_NOT_FINITE, 'priority 非有限值 ' + d + '/' + c);
+      }
+      if (!isFinite(Number(r.target_weight))) {
+        throw candError(CANDIDATE_ERR.WEIGHT_NOT_FINITE,
+          '角色面板 target_weight 非有限：' + d + '/' + c + '（B1：候选组合必须直接沿用角色面板权威权重）');
+      }
       return { r, c, s };
     });
     scored.sort((a, b) => (b.s - a.s) || (a.c < b.c ? -1 : (a.c > b.c ? 1 : 0)));
@@ -1416,54 +1761,25 @@ function buildCandidatePortfolio(roles, opts) {
     });
   }
 
-  // B1 上限复核（越界即抛错，绝不静默缩、更不重置为等权）
-  let maxSingle = 0;
-  for (const r of out) maxSingle = Math.max(maxSingle, r.target_weight);
-  if (!isFinite(maxSingle) || maxSingle < -EPS) throw new Error('target_weight 非有限或为负');
-  if (maxSingle > pcfg.max_single_weight + EPS) throw new Error('单只上限被突破（B1）');
+  // B1 防守前上限复核（越界即抛错，绝不静默缩、更不重置为等权）
+  assertCandidateCaps(out, pcfg, 'PRE_DEFENSE');
 
-  const clusterSum = {};
-  const techSum = {};
-  for (const r of out) {
-    if (r.role !== 'CORE') continue;
-    const ck = r.trade_date + '~' + r.correlation_cluster;
-    clusterSum[ck] = (clusterSum[ck] || 0) + r.target_weight;
-    if (pcfg.tech_clusters.indexOf(r.correlation_cluster) >= 0) {
-      techSum[r.trade_date] = (techSum[r.trade_date] || 0) + r.target_weight;
-    }
-  }
-  for (const k in clusterSum) {
-    if (clusterSum[k] > pcfg.max_cluster_weight + EPS) throw new Error('cluster 上限被突破（B1）');
-  }
-  for (const k in techSum) {
-    if (techSum[k] > pcfg.max_tech_weight + EPS) throw new Error('广义科技上限被突破（B1）');
-  }
-
-  // 防守腿（regime + vol target），与 applyDefense / Python apply_regime_defense 同式
+  // 防守腿（regime + vol target）—— 与 Python `apply_regime_defense` 同式，
+  // 复用**同一实现** applyDefenseToItems（不再各自写一份）
   const bench = {};
   for (const b of (o.benchmark || [])) bench[String(b.trade_date)] = b;
-  const applied = out.map((r) => {
-    const sig = bench[String(r.trade_date)] || {};
-    let state = 'NORMAL';
-    let coreScale = 1.0;
-    let hedgeWeight = 0.0;
-    if (o.apply_defense) {
-      const hasMa = sig.benchmark_px_ma20 != null && sig.benchmark_px_ma60 != null;
-      const ms = hasMa ? marketScore(sig.benchmark_px_ma20, sig.benchmark_px_ma60) : null;
-      if (classifyRegime(ms) === 'RISK_OFF') {
-        state = 'RISK_OFF';
-        coreScale = Math.max(0, dcfg.risk_off_exposure_scale - dcfg.risk_off_hedge_weight);
-        hedgeWeight = dcfg.risk_off_hedge_weight;
-      } else if (dcfg.vol_target_enabled && sig.realized_vol20 && sig.realized_vol20 > 0) {
-        coreScale = Math.min(1.0, dcfg.vol_target_annualized / sig.realized_vol20);
-      }
+  let applied = out;
+  if (o.apply_defense) {
+    if (!Array.isArray(o.benchmark)) {
+      throw candError('CANDIDATE_DEFENSE_FEATURES_MISSING',
+        'apply_defense=true 必须提供 benchmark（regime 输入）');
     }
-    const isHedge = String(r.code) === String(dcfg.hedge_code);
-    const tw = (state === 'RISK_OFF')
-      ? (isHedge ? hedgeWeight : r.target_weight * coreScale)
-      : r.target_weight * coreScale;
-    return Object.assign({}, r, { target_weight: tw, defense_state: state });
-  });
+    applied = applyDefenseToItems(out, bench, dcfg);
+    // 裁决（2026-09-14）缺口 ②：**防守处理后必须再次跑完整上限校验**。
+    // 只在防守前查一次是不够的 —— hedge_weight / exposure_scale 配置过大时，
+    // 防守腿（hedge 绝对权重）与缩仓后的腿都可能越界。
+    assertCandidateCaps(applied, pcfg, 'POST_DEFENSE');
+  }
 
   // 现金腿（residual）：累加顺序固定 code 升序 → 与 Python 端 IEEE 结果逐位一致
   const byDay = {};
@@ -1473,7 +1789,9 @@ function buildCandidatePortfolio(roles, opts) {
     const day = byDay[d].slice().sort(byCodeAsc);
     let invested = 0;
     for (const r of day) invested += r.target_weight;
-    if (invested > 1 + EPS) throw new Error('持仓合计超过 1 @ ' + d);
+    if (invested > 1 + EPS) {
+      throw candError(CANDIDATE_ERR.CAP_DAY_SUM, '持仓合计超过 1 @ ' + d + '：' + invested);
+    }
     const t = day[0];
     for (const r of day) result.push(r);
     result.push({
@@ -1490,6 +1808,113 @@ function buildCandidatePortfolio(roles, opts) {
     return a.priority - b.priority;
   });
   return result;
+}
+
+/**
+ * **benchmark 帧字段名适配**（裁决 2026-09-14 缺口 ⑤，端到端回归发现）。
+ *
+ * `computeTimeSeriesFeatures()` 产出的**原始 benchmark 帧**用内部名 `px_ma20` / `px_ma60`
+ * （`addBenchmark()` 只把公开名 `benchmark_px_ma20/ma60` 写到 **ETF 行**上）；而防守 regime
+ * （`buildDefenseSignals`，与 Python `defense_gate._build_defense_signal` **同契约**）读的是**公开名**。
+ *
+ * 若把原始 benchmark 帧直接喂进 seam → `hasMa` 恒为 false → regime 恒 `NORMAL`
+ * → **防守腿永不触发**（线上静默失效；G2S-10 fixture 自带公开名，所以 seam 对表「蒙对」，
+ * parity 全绿也发现不了）。本函数把内部名统一适配为公开名，使线上决策链与 fixture seam
+ * 的输入契约逐字一致；两条链路共用它，不可能再各喂一套。
+ */
+function toBenchmarkRows(benchmarkFeatures) {
+  return (benchmarkFeatures || []).map((b) => Object.assign({}, b, {
+    benchmark_px_ma20: b.benchmark_px_ma20 != null ? b.benchmark_px_ma20 : b.px_ma20,
+    benchmark_px_ma60: b.benchmark_px_ma60 != null ? b.benchmark_px_ma60 : b.px_ma60
+  }));
+}
+
+/**
+ * **特征帧构建**（`barsByCode` → `features`）：与 `main()` 共用同一实现，供端到端回归从原始 bars 重放。
+ *
+ * 抽出的动机同上（`buildCandidatePanel`）：让「线上决策链」与「测试断言」不可能各算一套特征。
+ * 回归测试用本函数 + `buildCandidatePanel()` 从原始 bars **完整重放**整条链路，
+ * 再与 `main()` 实际写入 DB 的 candidate leg 逐字段比对。
+ */
+function computeFeatureFrame(barsByCode, codes) {
+  // 2. 特征（按 code 正序）
+  let features = [];
+  for (const code of codes) {
+    const bars = barsByCode[code].slice().sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1));
+    features = features.concat(computeTimeSeriesFeatures(bars));
+  }
+  // benchmark 510300 特征（单独算，用于 rs 与防守 regime）
+  let benchmarkFeatures = [];
+  const benchBars = barsByCode[UNIVERSE.benchmark_code];
+  if (benchBars && benchBars.length) {
+    benchmarkFeatures = computeTimeSeriesFeatures(benchBars.slice().sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1)));
+  }
+  features = addBenchmark(features, benchmarkFeatures);
+  features = addCorrelations(features);
+  features = computeLeadershipScore(features);
+  // WP-G2-05（F1）：评分 provenance + 校验（canonical 权重来自 bundle.alpha；显式注入时精确覆盖校验）
+  const selectionMeta = applySelectionScores(features, null);
+  features = rankFeatures(features);
+  return { features, benchmarkFeatures, selectionMeta };
+}
+
+/**
+ * **唯一候选面板构建**（WP-G2-06 / 裁决 2026-09-14）：`main()` 与端到端回归**共用同一实现**。
+ *
+ * 抽取动机：用户裁决发现「PR 新增的 `buildCandidatePortfolio()` 只被 `_internal` / G2S-10 调用，
+ * 没有被 `main()` 消费」——300/300 parity 证明的是新 seam，不是线上 Shadow 实际发布的候选组合。
+ * 把整条链路收敛到本函数后，`main()` 与回归断言走**同一段代码**：
+ * 一旦 `main()` 退回旧链路（legacy 1/n 等权 / `applyDefense`），本函数即被绕过，
+ * 端到端回归（tests/gen2-candidate-leg-e2e.test.js）会立刻变红。
+ *
+ * 链路：`features → buildDailyRoles → 当日横截面 → 未四舍五入的显式 selection score（priority）
+ *       → attachAuthoritativeWeights（唯一权重算法）→ buildCandidatePortfolio（含现金腿 + 防守腿）`
+ *
+ * @param {Array} features 合并 benchmark 后的全历史特征（`buildDailyRoles` 需全历史，滞后状态机）
+ * @param {string} latestDate 当日横截面日期（候选面板只取当日快照）
+ * @param {Array} benchmarkFeatures benchmark（510300）特征，供防守 regime / vol target
+ * @returns {{roles,latestRoles,weightedRoles,priority,candidateLegs,latestLegs,latestSecurities,candCfgHash,candPrioHash}}
+ */
+function buildCandidatePanel(features, latestDate, benchmarkFeatures) {
+  // 角色层吃全历史（滞后状态机），但**候选面板只取当日横截面**
+  const roles = buildDailyRoles(features);
+  const latestRoles = roles.filter((r) => r.trade_date === latestDate);
+  let priority;
+  try {
+    priority = priorityFromUnroundedScore(latestRoles, features);
+  } catch (e) {
+    // 角色面板缺「未四舍五入的显式 selection score」= 当日数据不足以构成可信候选 →
+    // 打上稳定码让 main() 判 `blocked`（可预期的业务结果），**不是** failed/SYSTEM_ERROR。
+    const err = new Error(String((e && e.message) || e));
+    err.code = 'CANDIDATE_PRIORITY_INCOMPLETE';
+    throw err;
+  }
+  const weightedRoles = attachAuthoritativeWeights(latestRoles);
+  const candidateLegs = buildCandidatePortfolio(weightedRoles, {
+    priority,
+    portfolio_config: PORTFOLIO_CFG,
+    defense_config: DEFENSE_CFG,
+    benchmark: toBenchmarkRows(benchmarkFeatures),
+    apply_defense: DEFENSE_CFG.enabled !== false
+  });
+  const latestLegs = candidateLegs.filter((r) => r.trade_date === latestDate);
+  const legByCode = {};
+  for (const r of latestLegs) legByCode[String(r.code)] = r;
+  const latestSecurities = weightedRoles.map((r) => legByCode[String(r.code)]);
+  if (latestSecurities.some((x) => !x)) {
+    throw new Error('候选腿未覆盖当日全部角色（buildCandidatePortfolio 输出不完整）');
+  }
+  return {
+    roles,
+    latestRoles,
+    weightedRoles,
+    priority,
+    candidateLegs,
+    latestLegs,
+    latestSecurities,
+    candCfgHash: candidateConfigHash(PORTFOLIO_CFG, DEFENSE_CFG),
+    candPrioHash: candidatePriorityHash(priority)
+  };
 }
 
 /* ---------------- 主流程 ---------------- */
@@ -1511,12 +1936,28 @@ exports._internal = {
   rankFeatures,
   initialRoles,
   buildDailyRoles,
+  // WP-G2-06：权威权重（唯一算法）+ 旧的委托壳（仅 WP-G2-01 parity 链用）
+  attachAuthoritativeWeights,
   buildPortfolioCandidates,
   applyDefense,
+  buildDefenseSignals,
+  applyDefenseToItems,
   // WP-G2-06（F4）：统一候选组合构建（跨端 parity seam）—— 权威权重复核 + 注入 priority + 现金/防守腿
   buildCandidatePortfolio,
+  // WP-G2-06 / 裁决 2026-09-14：**唯一候选面板构建**（main() 与端到端回归共用同一实现）
+  buildCandidatePanel,
+  computeFeatureFrame,
+  toBenchmarkRows,
+  priorityFromUnroundedScore,
+  assertPriorityExactCoverage,
+  checkCandidateCaps,
   candidatePriorityHash,
   candidateConfigHash,
+  CANDIDATE_SLEEVE,
+  CANDIDATE_CASH_CODE,
+  CANDIDATE_ERR,
+  candidateErrorCode,
+  validateCandidateLegPublish,
   // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）与两个组件，供跨语言 parity 读取
   finalizeRoles,
   applyReplacementGate,
@@ -1685,36 +2126,36 @@ exports.main = async (event = {}, context = {}) => {
     }
     await diag('data_gate', 'mode=' + mode + ' asOf=' + asOf + ' loaded=' + loadedCount + ' eligible=' + codes.length + ' excluded=' + excluded.length);
 
-    // 2. 特征（按 code 正序）
-    let features = [];
-    for (const code of codes) {
-      const bars = barsByCode[code].slice().sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1));
-      features = features.concat(computeTimeSeriesFeatures(bars));
-    }
-    // benchmark 510300 特征（单独算，用于 rs 与防守 regime）
-    let benchmarkFeatures = [];
-    const benchBars = barsByCode[UNIVERSE.benchmark_code];
-    if (benchBars && benchBars.length) {
-      benchmarkFeatures = computeTimeSeriesFeatures(benchBars.slice().sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1)));
-    }
-    features = addBenchmark(features, benchmarkFeatures);
-    features = addCorrelations(features);
-    features = computeLeadershipScore(features);
-    // WP-G2-05（F1）：评分 provenance + 校验（canonical 权重来自 bundle.alpha；显式注入时精确覆盖校验）
-    const selectionMeta = applySelectionScores(features, null);
-    features = rankFeatures(features);
+    // 2. 特征（按 code 正序）—— 收敛在 `computeFeatureFrame()`，与端到端回归共用同一实现
+    const { features, benchmarkFeatures, selectionMeta } = computeFeatureFrame(barsByCode, codes);
 
     // 只保留最近一个交易日（落库最新横截面）
     const dates = [...new Set(features.map((f) => f.trade_date))].sort();
     const latestDate = dates[dates.length - 1];
     const latest = features.filter((f) => f.trade_date === latestDate && f.alpha_score_v2 != null);
 
-    // 3. 角色 + 组合 + 防守
-    const roles = buildDailyRoles(features);
-    const candidates = buildPortfolioCandidates(roles);
-    const defended = applyDefense(candidates, features, benchmarkFeatures);
-    const latestDefended = defended.filter((r) => r.trade_date === latestDate);
-    await diag('computed', 'latest=' + latestDate + ' roles=' + roles.length + ' defended=' + latestDefended.length);
+    // 3. **唯一链路**（WP-G2-06 / 裁决 2026-09-14）：
+    //      角色面板 → 权威权重（唯一算法） → 未四舍五入的显式 selection score（priority 唯一来源）
+    //               → buildCandidatePortfolio（含现金腿 + 防守腿）
+    //    整条链路收敛在 `buildCandidatePanel()` —— **main() 与端到端回归共用同一实现**，
+    //    因此「线上发布的候选组合」与「跨端 parity 断言的候选组合」不可能各算一套。
+    //    旧的 `buildPortfolioCandidates()` / `applyDefense()` 在 main() 中**已无消费者**
+    //    （它们只剩 WP-G2-01 旧 parity 链的委托壳，见各自 @deprecated 注释）。
+    let panel;
+    try {
+      panel = buildCandidatePanel(features, latestDate, benchmarkFeatures);
+    } catch (e) {
+      if (e && e.code === 'CANDIDATE_PRIORITY_INCOMPLETE') {
+        return await failGate('CANDIDATE_PRIORITY_INCOMPLETE', String(e.message || e));
+      }
+      throw e; // 真实缺陷（cap 越界等）→ 外层 failed/SYSTEM_ERROR，不得伪装成 blocked
+    }
+    const {
+      roles, latestRoles, weightedRoles, latestLegs, latestSecurities, candCfgHash, candPrioHash
+    } = panel;
+    await diag('computed', 'latest=' + latestDate + ' roles=' + roles.length
+      + ' panel=' + latestRoles.length + ' candidate_legs=' + latestLegs.length
+      + ' priority_hash=' + candPrioHash.slice(0, 12));
 
     // 4. 落库 gen2_shadow（F01：coverage/confidence 用当日合格数；F12：running→completed 发布契约）
     const coveragePct = UNIVERSE.target_size ? Math.round((codes.length / UNIVERSE.target_size) * 1000) / 10 : null;
@@ -1754,16 +2195,24 @@ exports.main = async (event = {}, context = {}) => {
       role_thresholds: ROLE_THRESHOLDS.top_fractions,
       role_thresholds_source: ROLE_THRESHOLDS.source,
       benchmark: UNIVERSE.benchmark_code,
-      status: 'running', // F12：先标 running，全部 ranking 写完后置 completed
+      // WP-G2-06：候选组合（Gen-2 candidate sleeve）provenance —— 可审计、可对表
+      candidate_sleeve: CANDIDATE_SLEEVE,
+      candidate_leg_count: latestLegs.length,
+      candidate_priority_source: CANDIDATE_PRIORITY_SOURCE,
+      candidate_priority_hash: candPrioHash,
+      candidate_config_hash: candCfgHash,
+      status: 'running', // F12：先标 running，全部 ranking + candidate leg 写完后置 completed
       production_write: false,
       auto_execution: false,
       created_at: new Date().toISOString()
     };
     await db.upsert(COLLECTIONS.GEN2_SHADOW, runDoc, { type: 'gen2_run', run_id: runId });
 
+    // 4a. 写 gen2_ranking —— **只承载 ETF 排名**（30 条）。现金腿**不进这里**：
+    //     现金没有 alpha，塞进排名会直接被 validatePublishResults（要求 alpha 有限）判失败。
     let written = 0;
     const writtenCodes = new Set();
-    for (const r of latestDefended) {
+    for (const r of latestSecurities) {
       if (writtenCodes.has(r.code)) continue; // 唯一 code 去重（P1-2）
       await db.upsert(COLLECTIONS.GEN2_SHADOW, {
         type: 'gen2_ranking',
@@ -1798,22 +2247,75 @@ exports.main = async (event = {}, context = {}) => {
       written += 1;
     }
 
-    // P1-2：发布前完整性校验——唯一 code、预期集合、行数、特征有效性。不满足则不发布 completed。
-    // WP-G2-03：校验逻辑抽成纯函数 validatePublishResults（跨语言 parity seam，见 scripts/parity）。
-    const pub = validatePublishResults(latestDefended, written);
-    if (!pub.ok) {
-      // WP-G2-03 四态：输出完整性问题 = 今日没有可信结果 → blocked（不是系统故障）
+    // 4b. 写 gen2_candidate_leg（**30 ETF + CASH**）—— Gen-2 candidate sleeve，
+    //     带 priority / priority_score / priority_hash / config_hash 与 sleeve 归属。
+    //     绝不写入 V3.6.1 的 final_target（那是正式仓位口径，不是研究候选）。
+    let legWritten = 0;
+    for (const r of latestLegs) {
       await db.upsert(COLLECTIONS.GEN2_SHADOW, {
-        ...runDoc, status: 'blocked',
-        status_reason: 'PUBLISH_VALIDATION_FAILED',
-        fail_reason: `Publish validation failed: unique=${pub.unique_code_count}/${pub.row_count} non_finite_alpha=${pub.non_finite_alpha} written=${written}`,
-        completed_at: null
-      }, { type: 'gen2_run', run_id: runId });
-      return { ok: false, status: 'blocked', status_reason: 'PUBLISH_VALIDATION_FAILED', error: 'Gen-2 发布前完整性校验失败，不发布 completed', data_gate: 'PUBLISH_VALIDATION_FAILED', written };
+        type: 'gen2_candidate_leg',
+        run_id: runId,
+        trade_date: r.trade_date,
+        code: r.code,
+        name: r.name,
+        role: r.role,
+        correlation_cluster: r.correlation_cluster,
+        target_weight: r.target_weight,
+        priority: r.priority,
+        priority_score: r.priority_score == null ? null : r.priority_score,
+        priority_source: r.priority_source,
+        priority_hash: r.priority_hash,
+        config_hash: candCfgHash,
+        defense_state: r.defense_state == null ? null : r.defense_state,
+        sleeve: CANDIDATE_SLEEVE,
+        engine_id: ENGINE_ID,
+        universe_version: UNIVERSE.version,
+        production_write: false,
+        created_at: new Date().toISOString()
+      }, { type: 'gen2_candidate_leg', run_id: runId, code: r.code });
+      legWritten += 1;
     }
 
-    // F12：全部 ranking 写完后，原子发布 completed（半途失败则停留在 running，不误读为完整横截面）
-    await db.upsert(COLLECTIONS.GEN2_SHADOW, { ...runDoc, status: 'completed', completed_at: new Date().toISOString(), written }, { type: 'gen2_run', run_id: runId });
+    // P1-2：发布前完整性校验 —— 排名（唯一 code / 有限 alpha）与候选腿（守恒 / 上限 / 腿 / hash）
+    // **两类记录都通过**才允许标 completed（WP-G2-03 四态 + WP-G2-06 裁决）。
+    const pub = validatePublishResults(latestSecurities, written);
+    const pubLeg = validateCandidateLegPublish(latestLegs, {
+      trade_date: latestDate,
+      portfolio_config: PORTFOLIO_CFG,
+      defense_config: DEFENSE_CFG,
+      config_hash: candCfgHash,
+      written: legWritten,
+      expect_defense_leg: latestLegs.some((r) => r.defense_state === 'RISK_OFF')
+    });
+    if (!pub.ok || !pubLeg.ok) {
+      // WP-G2-03 四态：输出完整性问题 = 今日没有可信结果 → blocked（不是系统故障）
+      const reason = !pub.ok ? 'PUBLISH_VALIDATION_FAILED' : 'CANDIDATE_LEG_PUBLISH_FAILED';
+      const failDetail = !pub.ok
+        ? `Publish validation failed: unique=${pub.unique_code_count}/${pub.row_count}`
+          + ` non_finite_alpha=${pub.non_finite_alpha} written=${written}`
+        : `Candidate leg validation failed: ${pubLeg.data_gate} :: ${pubLeg.detail}`;
+      await db.upsert(COLLECTIONS.GEN2_SHADOW, {
+        ...runDoc, status: 'blocked',
+        status_reason: reason,
+        fail_reason: failDetail,
+        completed_at: null
+      }, { type: 'gen2_run', run_id: runId });
+      return {
+        ok: false, status: 'blocked', status_reason: reason,
+        error: !pub.ok
+          ? 'Gen-2 发布前完整性校验失败，不发布 completed'
+          : 'Gen-2 候选腿发布校验失败，不发布 completed',
+        data_gate: !pub.ok ? 'PUBLISH_VALIDATION_FAILED' : pubLeg.data_gate,
+        written, leg_written: legWritten
+      };
+    }
+
+    // F12：全部 ranking + candidate leg 写完后，原子发布 completed（半途失败则停留在 running，
+    // 不误读为完整横截面）
+    await db.upsert(COLLECTIONS.GEN2_SHADOW, {
+      ...runDoc, status: 'completed', completed_at: new Date().toISOString(),
+      written, leg_written: legWritten
+    }, { type: 'gen2_run', run_id: runId });
 
     return {
       ok: true,
@@ -1835,10 +2337,18 @@ exports.main = async (event = {}, context = {}) => {
       role_classification: rcls,
       status: 'completed',
       written,
-      ranking: latestDefended.map((r) => ({
+      leg_written: legWritten,
+      candidate_sleeve: CANDIDATE_SLEEVE,
+      candidate_priority_hash: candPrioHash,
+      candidate_config_hash: candCfgHash,
+      ranking: latestSecurities.map((r) => ({
         code: r.code, name: r.name, rank: r.rank,
         alpha_score_v2: r.alpha_score_v2, role: r.role,
         target_weight: r.target_weight, defense_state: r.defense_state
+      })),
+      candidate_legs: latestLegs.map((r) => ({
+        code: r.code, role: r.role, target_weight: r.target_weight,
+        priority: r.priority, defense_state: r.defense_state
       })),
       production_write: false,
       duration_ms: Date.now() - startedAt

@@ -201,18 +201,39 @@ class TestScenarioParity(unittest.TestCase):
         self.assertIn("bundle_selection_base", sc["input"])
 
     def test_g2s10_portfolio_build_declared(self):
-        """WP-G2-06（F4）：必须存在统一候选组合构建的跨端**逐日**对表场景。"""
+        """WP-G2-06（F4）：必须存在统一候选组合构建的跨端**逐日**对表场景。
+
+        裁决 2026-09-14：case 由 2 扩到 13 —— 2 正例 + 11 负例（缺口 ①/②/③ 的直接证据）。
+        """
         sc = next((s for s in self.fixture["scenarios"] if s["id"] == "G2S-10"), None)
         self.assertIsNotNone(sc, "缺 G2S-10（统一候选组合构建跨端对表）")
         self.assertEqual(sc["handler"], "portfolio_build")
         self.assertEqual(sc["status"], "RUNNABLE")
-        self.assertEqual({c["id"] for c in sc["input"]["cases"]}, {"undefended", "regime_path"})
+        expected_negative = {
+            "priority_extra_code", "priority_missing_code",
+            "priority_extra_date", "priority_missing_date",
+            "priority_not_finite", "priority_absent", "roles_duplicate_key",
+            "cap_single_breach", "cap_cluster_breach", "cap_tech_breach",
+            "hedge_oversize_post_defense",
+        }
+        self.assertEqual({c["id"] for c in sc["input"]["cases"]},
+                         {"undefended", "regime_path"} | expected_negative,
+                         "G2S-10 必须声明 2 正例 + 11 负例")
         panel = sc["input"]["panel"]
         for key in ("roles", "priority", "benchmark", "portfolio_config", "defense_config"):
             self.assertIn(key, panel, "G2S-10 panel 缺 " + key)
         # priority 必须显式注入，且夹具**不含 rank 列**（无法回退 legacy rank）
         self.assertTrue(panel["priority"], "G2S-10 必须显式声明注入 score")
         self.assertFalse(any("rank" in r for r in panel["roles"]), "roles 不得携带 legacy rank")
+        # 每个负例都要有一条 `error == <稳定错误码>` 的不变量（跨端只比对错误码）
+        err_invs = [inv for inv in sc["invariants"] if inv.get("field") == "error"]
+        self.assertGreaterEqual(len(err_invs), len(expected_negative),
+                               "每个负例必须各有一条 error 不变量")
+        codes = {inv.get("value") for inv in err_invs if inv.get("value")}
+        for code in ("CANDIDATE_CAP_TECH_BREACHED", "CANDIDATE_CAP_SINGLE_BREACHED",
+                     "CANDIDATE_PRIORITY_EXTRA_CODE", "CANDIDATE_PRIORITY_MISSING_CODE",
+                     "CANDIDATE_ROLES_DUPLICATE"):
+            self.assertIn(code, codes, "缺稳定错误码不变量：" + code)
 
         fields = {inv["field"] for inv in sc["invariants"]}
         # 对表不只比「有无腿」：每只 ETF / 现金 / 防守腿的权重、权重和、上限、priority、hash
