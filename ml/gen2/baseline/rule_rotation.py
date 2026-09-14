@@ -13,8 +13,12 @@ from gen2.evaluation.portfolio_metrics import cluster_concentration, core_reside
 from gen2.evaluation.rank_metrics import quantile_forward_returns, rank_ic_by_date, top_bottom_spread
 from gen2.features.build_features import build_feature_matrix
 from gen2.labels.build_labels import build_labels
-from gen2.portfolio.defense_gate import apply_regime_defense
-from gen2.portfolio.portfolio_builder import build_cluster_exposure, build_portfolio_candidates
+from gen2.portfolio.portfolio_builder import (
+    build_cluster_exposure,
+    build_portfolio_candidates,
+    ledger_signals,
+    priority_from_roles,
+)
 from gen2.portfolio.replacement_engine import build_rotation_events
 from gen2.baseline.selection_scores import canonical_selection_scores
 from gen2.baseline.v2_role_view import build_v2_role_view
@@ -95,15 +99,18 @@ def run_rule_baseline(output_dir: str | Path | None = None, *, report_path: str 
     selection = canonical_selection_scores(features)
     roles = build_v2_role_view(features, rankings, cfg, selection_scores=selection)
     events = build_rotation_events(roles, config=cfg)
-    candidates = build_portfolio_candidates(roles)
-    defended = apply_regime_defense(candidates, features, config=cfg)
+    # WP-G2-06（F4）：统一候选组合构建（priority 来自注入 score；权威权重不重算；含现金/防守腿）
+    _prio = priority_from_roles(roles)
+    candidates = build_portfolio_candidates(roles, priority=_prio, config=cfg)
+    defended = build_portfolio_candidates(
+        roles, priority=_prio, config=cfg, features=features, apply_defense=True)
     labels = build_labels(features)
     rank_ic = rank_ic_by_date(rankings, labels)
     spreads = top_bottom_spread(rankings, labels)
     quantiles = quantile_forward_returns(rankings, labels)
     backtest_summary, _ = run_rotation_backtest(
-        features, rankings, candidates, output_dir=out_dir,
-        extra_weights={"rule_leadership_rotation_defended": defended[["trade_date", "code", "target_weight"]]},
+        features, rankings, ledger_signals(candidates), output_dir=out_dir,
+        extra_weights={"rule_leadership_rotation_defended": ledger_signals(defended)},
     )
     cluster_exp = build_cluster_exposure(candidates)
     concentration = cluster_concentration(candidates)

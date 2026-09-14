@@ -664,6 +664,128 @@ def h_rule_bundle_gate(sc):
     return out
 
 
+def _f10(x) -> str:
+    """固定 10 位小数 —— 与 JS `toFixed(10)` 逐字一致（跨端位级可比）。"""
+    return f"{float(x):.10f}"
+
+
+def _caps_obs_py(rows: list) -> dict:
+    """与 JS `candidateCapsObs` 逐字同形：code 升序累积，保证 IEEE 浮点结果一致。"""
+    non_cash = sorted([r for r in rows if str(r["code"]) != "CASH"], key=lambda r: str(r["code"]))
+    max_single = 0.0
+    by_cluster: dict = {}
+    by_day_tech: dict = {}
+    for r in non_cash:
+        max_single = max(max_single, float(r["target_weight"]))
+        ck = str(r["trade_date"]) + "~" + str(r["correlation_cluster"])
+        by_cluster[ck] = by_cluster.get(ck, 0.0) + float(r["target_weight"])
+        if r["correlation_cluster"] in ("software_ai", "tech_hardware"):
+            dk = str(r["trade_date"])
+            by_day_tech[dk] = by_day_tech.get(dk, 0.0) + float(r["target_weight"])
+    return {
+        "maxSingle": max_single,
+        "maxCluster": max([0.0] + list(by_cluster.values())),
+        "maxTech": max([0.0] + list(by_day_tech.values())),
+    }
+
+
+def _candidate_error_code(exc: BaseException) -> str:
+    """从异常提取**稳定错误码**（跨端 seam 只比对错误码，不比对自由文本）。"""
+    code = getattr(exc, "code", None)
+    if code:
+        return str(code)
+    msg = str(exc)
+    return msg.split(" :: ", 1)[0] if " :: " in msg else msg
+
+
+def h_portfolio_build(sc):
+    """G2S-10：统一候选组合构建（WP-G2-06 / F4）—— Python 回测端 vs JS 影子端**逐日**对表。
+
+    对表内容（不只比「有无腿」）：每只 ETF / 现金腿 / 防守腿的权重、权重和、上限、
+    priority、score/priority hash、config hash、sleeve 归属与「无 final_target」。
+    负例（裁决 2026-09-14 追加）比对**稳定错误码**。
+    """
+    from gen2.portfolio.portfolio_builder import (
+        CASH_CODE,
+        build_portfolio_candidates,
+        portfolio_config_hash,
+    )
+
+    panel = sc["input"]["panel"]
+    roles_base = pd.DataFrame(panel["roles"])
+    bench_rows = panel.get("benchmark") or []
+    out = {}
+    for c in sc["input"]["cases"]:
+        # per-case 覆写（与 JS handler 逐字同形）
+        pcfg = {**(panel.get("portfolio_config") or {}), **(c.get("portfolio_config") or {})}
+        dcfg = {**(panel.get("defense_config") or {}), **(c.get("defense_config") or {})}
+        roles = pd.DataFrame(c["roles"]) if c.get("roles") else roles_base
+        if c.get("drop_priority"):
+            priority = None
+        else:
+            priority = c.get("priority") or panel["priority"]
+        features = pd.DataFrame(bench_rows) if bench_rows else None
+        obs = {"error": None, "final_target_present": False}
+        try:
+            cand = build_portfolio_candidates(
+                roles,
+                priority=priority,
+                portfolio_config=pcfg,
+                defense_config=dcfg,
+                features=features,
+                apply_defense=bool(c.get("apply_defense")),
+            )
+            rows = cand.to_dict("records")
+        except Exception as e:  # noqa: BLE001 —— 与 JS 端一致：失败本身也是可观测量
+            obs["error"] = _candidate_error_code(e)
+            out[c["id"]] = obs
+            continue
+        if not rows:
+            out[c["id"]] = obs
+            continue
+        non_cash = [r for r in rows if str(r["code"]) != CASH_CODE]
+        obs["sleeve"] = rows[0]["sleeve"]
+        obs["priority_hash"] = rows[0]["priority_hash"]
+        obs["config_hash"] = portfolio_config_hash(pcfg, dcfg)
+        obs["priority_source_all_injected"] = all(
+            r["priority_source"] == "INJECTED_SELECTION_SCORE" for r in non_cash)
+        obs["final_target_present"] = any("final_target" in r for r in rows)
+        caps = _caps_obs_py(rows)
+        obs["max_single_seen"] = _f10(caps["maxSingle"])
+        obs["max_cluster_seen"] = _f10(caps["maxCluster"])
+        obs["max_tech_seen"] = _f10(caps["maxTech"])
+        days: dict = {}
+        for r in rows:
+            days.setdefault(str(r["trade_date"]), []).append(r)
+        day_obs = {}
+        for d in sorted(days):
+            day = sorted(days[d], key=lambda r: str(r["code"]))
+            weights: dict = {}
+            priority: dict = {}
+            s = 0.0
+            cash = None
+            defense = 0.0
+            for r in day:
+                priority[str(r["code"])] = int(r["priority"])
+                if str(r["code"]) == CASH_CODE:
+                    cash = float(r["target_weight"])
+                    continue
+                weights[str(r["code"])] = _f10(r["target_weight"])
+                s += float(r["target_weight"])
+                if r["role"] == "HEDGE":
+                    defense += float(r["target_weight"])
+            day_obs[d] = {
+                "weights": weights,
+                "priority": priority,
+                "weight_sum": _f10(s + (0.0 if cash is None else cash)),
+                "cash_weight": _f10(0.0 if cash is None else cash),
+                "defense_weight": _f10(defense),
+            }
+        obs["days"] = day_obs
+        out[c["id"]] = obs
+    return out
+
+
 HANDLERS = {
     "regime_selection": h_regime_selection,
     "replacement_edge": h_replacement_edge,
@@ -674,6 +796,7 @@ HANDLERS = {
     "run_status_gate": h_run_status_gate,
     "selection_injection": h_selection_injection,
     "rule_bundle_gate": h_rule_bundle_gate,
+    "portfolio_build": h_portfolio_build,
 }
 
 

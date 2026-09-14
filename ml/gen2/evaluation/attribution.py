@@ -9,8 +9,11 @@ from gen2.backtest.costs import apply_turnover_cost
 from gen2.backtest.rotation_backtest import shift_weights_next_trade_date
 from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_universe_definition, load_universe_records
 from gen2.features.build_features import build_feature_matrix
-from gen2.portfolio.defense_gate import apply_regime_defense
-from gen2.portfolio.portfolio_builder import build_portfolio_candidates
+from gen2.portfolio.portfolio_builder import (
+    build_portfolio_candidates,
+    ledger_signals,
+    priority_from_roles,
+)
 from gen2.baseline.selection_scores import canonical_selection_scores
 from gen2.baseline.v2_role_view import build_v2_role_view
 from gen2.ranking.rank_engine import run_rank_engine
@@ -36,8 +39,12 @@ def run_attribution(output_dir: str | Path | None = None) -> dict:
     # WP-G2-05：Alpha 显式注入（canonical）
     selection = canonical_selection_scores(features)
     roles = build_v2_role_view(features, rankings, cfg, selection_scores=selection)
-    candidates = build_portfolio_candidates(roles)                        # undefended
-    defended = apply_regime_defense(candidates, features, config=cfg)     # defended（含真实 defense_state）
+    # WP-G2-06（F4）：统一候选组合构建 —— priority 来自显式注入 selection score；
+    # 权威权重沿用角色层（不重算）；现金腿 + 防守腿进入组合与账本。
+    _prio = priority_from_roles(roles)
+    candidates = build_portfolio_candidates(roles, priority=_prio, config=cfg)          # undefended
+    defended = build_portfolio_candidates(                                             # defended
+        roles, priority=_prio, config=cfg, features=features, apply_defense=True)       # 含真实 defense_state
 
     # T+1 收盘执行假设：收益 = close[T+1]→close[T+2]，用 ret_1d 滞后一天，消除隔夜 lookahead。
     returns = features[["trade_date", "code", "ret_1d"]].copy()
@@ -48,8 +55,8 @@ def run_attribution(output_dir: str | Path | None = None) -> dict:
     main5 = universe["incumbent_main5"]
     bench = build_benchmark_weights(rankings, main5)
     main5_w = shift_weights_next_trade_date(bench["main5_equal_weight"], calendar)
-    rule_w = shift_weights_next_trade_date(candidates[["trade_date", "code", "target_weight"]], calendar)
-    def_w = shift_weights_next_trade_date(defended[["trade_date", "code", "target_weight"]], calendar)
+    rule_w = shift_weights_next_trade_date(ledger_signals(candidates), calendar)
+    def_w = shift_weights_next_trade_date(ledger_signals(defended), calendar)
 
     rule_ret = apply_turnover_cost(rule_w, returns, cost_bps=10.0, return_col="ret_1d_next").rename(
         columns={"net_return": "rule_net", "turnover": "rule_turnover"})[["trade_date", "rule_net", "rule_turnover"]]

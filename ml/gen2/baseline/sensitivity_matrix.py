@@ -11,7 +11,11 @@ from gen2.data.loader import GEN2_ROOT, load_daily_bars, load_gen2_config, load_
 from gen2.evaluation.rank_metrics import rank_ic_by_date
 from gen2.features.build_features import build_feature_matrix
 from gen2.labels.build_labels import build_labels
-from gen2.portfolio.portfolio_builder import build_portfolio_candidates
+from gen2.portfolio.portfolio_builder import (
+    build_portfolio_candidates,
+    ledger_signals,
+    priority_from_roles,
+)
 from gen2.portfolio.role_thresholds import DEFAULT_ROLE_THRESHOLDS
 from gen2.ranking.rank_engine import run_rank_engine
 
@@ -101,10 +105,11 @@ def evaluate_scenario(features, labels, weights, portfolio, cost_bps=10.0, outpu
             scores.frame, on=["trade_date", "code"], how="left"),
         labels, score_col="selection_score")
     roles = build_v2_role_view(features, rankings, cfg, selection_scores=scores)
-    candidates = build_portfolio_candidates(roles)
+    # WP-G2-06（F4）：统一候选组合构建（priority 来自注入 score；权威权重不重算）
+    candidates = build_portfolio_candidates(roles, priority=priority_from_roles(roles), config=cfg)
     # 本场景只关心 cost_bps 这一档：显式传入，避免内层回测白跑配置的全部费用档
-    summary, _ = run_rotation_backtest(features, rankings, candidates, output_dir=output_dir,
-                                       cost_levels=[cost_bps])
+    summary, _ = run_rotation_backtest(features, rankings, ledger_signals(candidates),
+                                       output_dir=output_dir, cost_levels=[cost_bps])
     bt = summary[(summary["strategy"] == "rule_leadership_rotation") & (summary["cost_bps"] == cost_bps)]
     row = {
         "scenario": scenario,

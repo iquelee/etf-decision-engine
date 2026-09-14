@@ -18,7 +18,14 @@ DEFAULT_DEFENSE = {
 
 def _benchmark_series(features: pd.DataFrame) -> pd.DataFrame:
     codes = features["code"].astype(str).str.zfill(6)
-    bench = features[codes == "510300"]
+    bench = features[codes == "510300"].copy()
+    # 字段名适配（裁决 2026-09-14 缺口 ⑤，与 JS `toBenchmarkRows` **同契约**）：
+    # 原始特征帧（`computeTimeSeriesFeatures` / 部分 backtest 输入）用内部名 `px_ma20` / `px_ma60`，
+    # 而防守契约（与 JS 端一致）读公开名 `benchmark_px_ma20` / `benchmark_px_ma60`。
+    # 不做适配 → 公开名缺失 → `risk_off` 恒 False → **防守腿永不触发**（静默失效）。
+    for _pub, _internal in (("benchmark_px_ma20", "px_ma20"), ("benchmark_px_ma60", "px_ma60")):
+        if _pub not in bench.columns and _internal in bench.columns:
+            bench[_pub] = bench[_internal]
     cols = [c for c in ["trade_date", "benchmark_px_ma20", "benchmark_px_ma60", "realized_vol20"] if c in bench.columns]
     return bench[cols].drop_duplicates("trade_date").set_index("trade_date")
 
