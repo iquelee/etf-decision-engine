@@ -5,7 +5,9 @@
   1. **离线迁移**：旧字段（``core_pct`` / ``challenger_pct`` / ``satellite_pct`` / ``top_quantile``）
      一次性换算为显式 ``selection.role_thresholds``，语义等价（不是调参）；
   2. **重建 bundle 与 lock**：``bundle_version`` 升为 ``gen2-rule-v2.0.1``，新 lock 与 bundle 同版；
-  3. **lock 覆盖范围**：bundle SHA + JS 实现哈希 + Python 规则/候选/防守实现哈希 + 构建产物哈希；
+  3. **lock 覆盖范围**（``lock_revision 2``，共 6 项）：bundle SHA + JS 实现哈希 +
+     Python 规则/候选/防守实现哈希 + **阈值加载校验契约**（``role_thresholds.py``）
+     + 构建产物哈希；
   4. **构建产物与锁逐位一致**：由 ``scripts/verify-gen2-build-artifacts.js``（Stage F）负责，
      本文件只断言 lock 的声明自洽（每条产物的 ``must_equal`` 指向存在的冻结条目）。
 
@@ -15,6 +17,9 @@
     —— 即 WP-G2-04 确实解除了 ``blocked / RULE_BUNDLE_INCOMPLETE``（fail-closed 中间态的出口）；
   * ``scripts/verify-immutable.js`` 的 ROOT_ANCHORS 中该 lock 的 SHA 必须与磁盘锁**同步**
     —— 否则「重新封印」会因自锚失配而全量 FAIL（这是有意的审批动作，不是可忘的细节）。
+
+以及一条「旁路」断言：被锁的 ``role_thresholds.py`` 必须**就是**运行时真正 import 的那个模块
+（路径同一），否则「锁住了 A、运行时读 B」会让锁定失去意义。
 
 运行::
 
@@ -43,6 +48,7 @@ from gen2.portfolio.role_thresholds import (  # noqa: E402
 BUNDLE_REL = "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json"
 LOCK_REL = "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json"
 VERIFIER_REL = "scripts/verify-immutable.js"
+ROLE_THRESHOLDS_REL = "ml/gen2/portfolio/role_thresholds.py"
 
 LEGACY_FIELDS = ("core_pct", "challenger_pct", "satellite_pct", "top_quantile")
 
@@ -156,12 +162,46 @@ class WpG204FreezeTest(unittest.TestCase):
 
     # ---------------- 4. lock 覆盖范围 ----------------
 
-    def test_immutable_set_covers_five_required_files(self):
+    def test_immutable_set_covers_six_required_files(self):
         entries = self.lock.get("immutable_set") or []
-        self.assertEqual(len(entries), 5, "lock 必须覆盖 bundle + JS 实现 + Python 规则/候选/防守")
+        self.assertEqual(
+            len(entries), 6,
+            "lock 必须覆盖 bundle + JS 实现 + Python 规则/候选/防守 + 阈值加载校验契约（role_thresholds.py）")
         self.assertEqual(
             sorted(e["id"] for e in entries),
-            ["bundle", "js_implementation", "python_candidate", "python_defense", "python_rule"])
+            ["bundle", "js_implementation", "python_candidate", "python_defense",
+             "python_role_thresholds", "python_rule"])
+
+    def test_role_thresholds_contract_is_frozen(self):
+        """扩围的目的：阈值加载/校验契约必须被锁住。
+
+        未锁定的旁路形态是「bundle 字节未变、运行语义已变」——
+        改 ``load_role_thresholds`` / ``validate_role_thresholds`` 即可在 bundle 不动的前提下
+        改掉线上阈值来源与合法性判据。因此它必须出现在 immutable_set 里。
+        """
+        by_id = {e["id"]: e for e in self.lock["immutable_set"]}
+        self.assertIn("python_role_thresholds", by_id, "role_thresholds.py 未被冻结")
+        self.assertEqual(by_id["python_role_thresholds"]["file"], ROLE_THRESHOLDS_REL)
+
+    def test_frozen_role_thresholds_file_is_the_module_runtime_imports(self):
+        """反「锁 A 读 B」：被锁的文件必须就是运行时 import 的那个模块（路径同一）。"""
+        import gen2.portfolio.role_thresholds as rt_module  # noqa: PLC0415
+
+        self.assertEqual(Path(rt_module.__file__).resolve(), (ROOT / ROLE_THRESHOLDS_REL).resolve(),
+                         "运行时 import 的 role_thresholds 模块与冻结文件不是同一个 → 锁定失效")
+
+    def test_lock_amendment_records_scope_expansion(self):
+        """扩围必须留痕，且明确「bundle 字节/版本均未变」——避免被误读成改规则。"""
+        self.assertEqual(self.lock.get("lock_revision"), 2)
+        amendments = self.lock.get("lock_amendments") or []
+        self.assertTrue(amendments, "锁扩围必须写 lock_amendments")
+        last = amendments[-1]
+        self.assertEqual(last.get("revision"), 2)
+        self.assertIn("python_role_thresholds", last.get("action", ""))
+        self.assertIs(last.get("bundle_bytes_changed"), False)
+        self.assertIs(last.get("bundle_version_changed"), False)
+        self.assertEqual(self.bundle["bundle_version"], "gen2-rule-v2.0.1",
+                         "扩围不得改 bundle_version（bundle 字节未变）")
 
     def test_immutable_set_shas_match_disk(self):
         for e in self.lock["immutable_set"]:

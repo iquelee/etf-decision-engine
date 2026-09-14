@@ -5,7 +5,8 @@
  * 本回归回答三个问题：
  *
  *   ① **锁是不是真的锁住了**：`GEN2_RULE_V2_LOCK.json` 覆盖的每一项（bundle / JS 实现 /
- *      Python 规则·候选·防守实现）SHA 是否与磁盘实际一致；条目数是否被静默删减。
+ *      Python 规则·候选·防守实现 / Python 阈值加载校验契约）SHA 是否与磁盘实际一致；
+ *      条目数与 id 集合是否被静默删减/顶替。
  *   ② **冻结后规则闸门是否解除**：冻结 bundle 必须自带 `selection.role_thresholds`
  *      ⇒ 用**真实冻结文件**驱动真实 `main()` 时必须 `completed`（而不是
  *      `blocked / RULE_BUNDLE_INCOMPLETE`）。这条是 WP-G2-04 的目的本身。
@@ -113,11 +114,17 @@ async function main() {
 
   const entries = LOCK.immutable_set || [];
   const ids = entries.map((e) => e.id).sort();
-  assert('immutable_set 覆盖 bundle + JS 实现 + Python 规则/候选/防守（5 项，不多不少）',
-    entries.length === 5
+  assert('immutable_set 覆盖 bundle + JS 实现 + Python 规则/候选/防守/阈值契约（6 项，不多不少）',
+    entries.length === 6
     && JSON.stringify(ids) === JSON.stringify(
-      ['bundle', 'js_implementation', 'python_candidate', 'python_defense', 'python_rule']),
+      ['bundle', 'js_implementation', 'python_candidate', 'python_defense',
+        'python_role_thresholds', 'python_rule']),
     ids);
+  // 扩围的**目的**：阈值加载/校验契约必须被锁住（否则改它即可在 bundle 字节不变时改语义）。
+  const rtEntry = entries.find((e) => e.id === 'python_role_thresholds');
+  assert('python_role_thresholds 锁定 ml/gen2/portfolio/role_thresholds.py',
+    rtEntry && rtEntry.file === 'ml/gen2/portfolio/role_thresholds.py',
+    rtEntry);
   for (const e of entries) {
     const actual = sha256Norm(e.file);
     assert(`[${e.id}] ${e.file} SHA == 磁盘实际`, actual === e.sha256,

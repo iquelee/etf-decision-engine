@@ -41,7 +41,16 @@
     python3 scripts/ml/freeze-gen2-rule-bundle.py --check          # 只校验
     python3 scripts/ml/freeze-gen2-rule-bundle.py --dry-run        # 打印将写入的内容
     python3 scripts/ml/freeze-gen2-rule-bundle.py                  # 执行迁移 + 写 bundle/lock
+    python3 scripts/ml/freeze-gen2-rule-bundle.py --rebuild-lock    # 只重建 lock（immutable_set 扩围）
     python3 scripts/ml/freeze-gen2-rule-bundle.py --print-root-anchor   # 打印 ROOT_ANCHORS 行
+
+锁范围（``immutable_set``，共 6 项）::
+
+    bundle / js_implementation / python_rule / python_candidate / python_defense
+    / python_role_thresholds          # 2026-09-14 审查裁决扩围（lock_revision 2）
+
+扩围只追加条目、不改规则：``--rebuild-lock`` 会断言 bundle 字节与 ``bundle_version`` 均未变。
+本脚本自身**不入锁**（它不是运行时依赖，只在冻结时被人工执行）。
 """
 from __future__ import annotations
 
@@ -66,6 +75,7 @@ LEGACY_SELECTION_FIELDS = ("core_pct", "challenger_pct", "satellite_pct", "top_q
 DEFAULT_LEGACY = {"top_quantile": 0.2, "challenger_pct": 0.70, "satellite_pct": 0.60}
 
 #: 冻结实现集合（裁决要求：bundle SHA + JS 实现哈希 + Python 规则/候选/防守实现哈希）
+#: 注：python_role_thresholds 为 2026-09-14 审查裁决**扩围**新增（lock_revision 2）。
 IMMUTABLE_SET = [
     ("bundle", "规则单一真相源（Python 回测 + Node Shadow 共用）",
      "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json"),
@@ -77,6 +87,8 @@ IMMUTABLE_SET = [
      "ml/gen2/portfolio/portfolio_builder.py"),
     ("python_defense", "Python 防守实现：apply_regime_defense",
      "ml/gen2/portfolio/defense_gate.py"),
+    ("python_role_thresholds", "Python 阈值加载/校验契约：load_role_thresholds / validate_role_thresholds",
+     "ml/gen2/portfolio/role_thresholds.py"),
 ]
 
 #: 构建产物（须与 immutable_set 中对应条目**逐位一致**）
@@ -89,7 +101,34 @@ RULE_TEXT = (
     "GEN2_RULE_V2_BUNDLE 为 Rule V2 单一真相源，禁止静默修改；升级须新 bundle_version + 新 lock"
     "（Rule V2.1 另立）。LOCK 自 v2.0.1 起同时锚定 JS/Python **实现**哈希与构建产物哈希："
     "改任一实现文件必须重新封印（新 bundle_version + 新 lock + 同步 verify-immutable.js 的 ROOT_ANCHORS）。"
+    "扩围 immutable_set（纳入新的运行期依赖文件）同样必须新 lock + 同步 ROOT_ANCHORS；bundle 字节不变时"
+    "bundle_version 保持不变，扩围动作留痕于 lock_amendments。"
 )
+
+#: lock 版本号（结构性扩围 +1；变更需同步 verify-immutable.js 的期望条目数）
+LOCK_REVISION = 2
+
+#: lock 修订留痕（每次扩围/重新封印追加一条，不允许改写历史条目）
+LOCK_AMENDMENTS = [
+    {
+        "at": "2026-09-14",
+        "revision": 1,
+        "action": "初始 v2.0.1 封印：bundle SHA + JS 实现 + Python 规则/候选/防守实现 + 构建产物",
+        "reason": "PR #29 后冻结对象不再只是参数，还必须包含实现语义。",
+    },
+    {
+        "at": "2026-09-14",
+        "revision": 2,
+        "action": "immutable_set 扩围：新增 [python_role_thresholds] ml/gen2/portfolio/role_thresholds.py",
+        "reason": (
+            "审查裁决：该模块直接定义线上阈值加载与校验（load_role_thresholds / "
+            "validate_role_thresholds）；未锁定时，改它即可在 bundle 字节不变的前提下改变运行语义，"
+            "形成旁路。迁移脚本 freeze-gen2-rule-bundle.py 不入锁（非运行时依赖）。"
+        ),
+        "bundle_bytes_changed": False,
+        "bundle_version_changed": False,
+    },
+]
 
 MIGRATION_NOTE = (
     "WP-G2-04（2026-09-14）：bundle_version 升为 gen2-rule-v2.0.1。selection 段新增显式 "
@@ -293,18 +332,66 @@ def build_lock(new_bundle_text: str) -> dict:
         })
 
     bundle_sha = by_id["bundle"]
+    assert len(entries) == len(IMMUTABLE_SET), "冻结集合条目数与声明不一致"
     return {
         "engine_id": "gen2-rule-v2",
         "bundle_version": NEW_BUNDLE_VERSION,
         "bundle_sha256": bundle_sha,
         "sealed_at": SEALED_AT,
+        "lock_revision": LOCK_REVISION,
         "rule": RULE_TEXT,
+        "lock_amendments": LOCK_AMENDMENTS,
         "immutable_set": entries,
         "build_artifacts": artifacts,
     }
 
 
 # ---------------------------------------------------------------- 校验
+
+def rebuild_lock_only() -> int:
+    """**只重建 lock**（bundle 字节不变）—— 用于 immutable_set 扩围。
+
+    为什么需要独立入口：扩围（把新的运行期依赖文件纳入锁定）**不应**顺手改动规则。
+    迁移入口 ``main()`` 见到「已迁移」会直接报错；本入口只重算哈希并追加 lock 元数据。
+
+    前置断言（扩锁不得顺带改规则）：
+      * bundle 已迁移（自带 ``selection.role_thresholds``，旧字段只在 ``legacy_migration_audit``）；
+      * ``bundle_version`` 与已封印版本一致（扩锁不改版本号，bundle 字节也不变）。
+    """
+    print("== WP-G2-04：immutable_set 扩围，重建 lock（bundle 字节保持不变）==")
+    before = normalized_sha256(BUNDLE_PATH)
+    bundle = json.loads(BUNDLE_PATH.read_text(encoding="utf-8"))
+    sel = bundle.get("selection") or {}
+
+    if not isinstance(sel.get("role_thresholds"), dict):
+        raise RuntimeError("bundle 尚未迁移（缺 selection.role_thresholds）；请先跑迁移入口")
+    if bundle.get("bundle_version") != NEW_BUNDLE_VERSION:
+        raise RuntimeError(
+            f"bundle_version={bundle.get('bundle_version')!r} != {NEW_BUNDLE_VERSION!r}；"
+            "扩围只允许在已封印版本上追加条目，不改变版本号")
+    leaked = [k for k in LEGACY_SELECTION_FIELDS if k in sel]
+    if leaked:
+        raise RuntimeError(f"旧字段仍在运行 selection 段 {leaked}，拒绝扩锁")
+
+    if LOCK_PATH.exists():
+        old_lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+        print(f"  旧 lock : revision={old_lock.get('lock_revision', 1)}、"
+              f"immutable_set={len(old_lock.get('immutable_set') or [])} 项")
+
+    lock = build_lock(bundle["bundle_version"])
+    LOCK_PATH.write_bytes((json.dumps(lock, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+
+    after = normalized_sha256(BUNDLE_PATH)
+    if before != after:
+        raise RuntimeError("扩围过程中 bundle 字节发生变化（不允许）")
+    print(f"  新 lock : revision={lock['lock_revision']}、"
+          f"immutable_set={len(lock['immutable_set'])} 项 + 构建产物={len(lock['build_artifacts'])} 项")
+    print(f"  扩围新增 : {[eid for eid, _, _ in IMMUTABLE_SET][-1]}（{IMMUTABLE_SET[-1][2]}）")
+    print(f"  bundle   : 字节未变（sha256 {after}），bundle_version 保持 {lock['bundle_version']}")
+    print("\n  下一步（必须）：把 verify-immutable.js 的 ROOT_ANCHORS 更新为下列值，否则它会拦下：")
+    print_root_anchor()
+    return check()
+
 
 def check() -> int:
     """只读校验：lock ↔ 磁盘（含实现哈希与构建产物声明）。"""
@@ -341,6 +428,18 @@ def check() -> int:
         if not ok:
             failures.append(e["id"])
 
+    entries = lock.get("immutable_set") or []
+    ok = len(entries) == len(IMMUTABLE_SET)
+    print(f"  [{'PASS' if ok else 'FAIL'}] immutable_set 条目数 == {len(IMMUTABLE_SET)}"
+          f"（实际 {len(entries)}；少条目也算未锁全）")
+    if not ok:
+        failures.append("immutable_set_count")
+    locked_ids = sorted(e["id"] for e in entries)
+    ok = locked_ids == sorted(eid for eid, _, _ in IMMUTABLE_SET)
+    print(f"  [{'PASS' if ok else 'FAIL'}] immutable_set 条目 id 集合与声明一致（{locked_ids}）")
+    if not ok:
+        failures.append("immutable_set_ids")
+
     sel = bundle.get("selection") or {}
     has_rt = isinstance(sel.get("role_thresholds"), dict)
     print(f"  [{'PASS' if has_rt else 'FAIL'}] bundle.selection.role_thresholds 存在"
@@ -373,12 +472,16 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="只读校验（lock ↔ 磁盘），不写任何文件")
     ap.add_argument("--dry-run", action="store_true", help="打印将写入的 bundle/lock，不落盘")
     ap.add_argument("--print-root-anchor", action="store_true", help="打印 verify-immutable.js ROOT_ANCHORS 行")
+    ap.add_argument("--rebuild-lock", action="store_true",
+                    help="只重建 lock（immutable_set 扩围用；bundle 字节不变、不改 bundle_version）")
     args = ap.parse_args()
 
     if args.check:
         return check()
     if args.print_root_anchor:
         return print_root_anchor()
+    if args.rebuild_lock:
+        return rebuild_lock_only()
 
     print("== WP-G2-04：离线迁移 selection.role_thresholds ==")
     text, old, new = build_migrated_bundle_text()
