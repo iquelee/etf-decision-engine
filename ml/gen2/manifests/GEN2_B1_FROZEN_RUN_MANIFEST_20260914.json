@@ -1,7 +1,9 @@
 {
   "manifest_type": "GEN2_B1_FROZEN_RUN",
   "run_id": "b1_ledger_baseline_20260914_frozen_v201",
-  "created_at": "2026-09-14T07:06:47.185832+00:00",
+  "created_at": "2026-09-14T07:46:34.417897+00:00",
+  "run_status": "PENDING_MERGE",
+  "run_status_note": "**待合并冻结运行**：本运行已完成全部取证，但在冻结 PR + B1 PR 合并并写入接受记录（`acceptance_record.accepted_master_commit` / `source_tree_sha`）之前，**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。",
   "boundaries": {
     "stage": "SHADOW/CANARY",
     "deployed": false,
@@ -138,7 +140,7 @@
       "role": "B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配",
       "file": "ml/gen2/baseline/b1_frozen_run.py",
       "exists": true,
-      "sha256": "29f980e031a6ae74115815b9501ae4db5adf98de9b0019eeeb33b06bab2eec6b"
+      "sha256": "9c58e7be92e2b58a2b8eb19704633e36a8b7e69b912870444aa7b4e31cb38e93"
     },
     {
       "id": "baseline_builder",
@@ -705,7 +707,7 @@
     {
       "file": "calendar_meta.json",
       "exists": true,
-      "sha256": "5be4e3f7f78b0d5b364c6d2f3dd411184e635cf5a399b3e69c6fbf4cac240301",
+      "sha256": "9e15112f33a595a05c9c3262560b0e758a8d062502cd0be25530ecdceb7f1986",
       "bytes": 3347
     },
     {
@@ -715,9 +717,822 @@
       "bytes": 5011
     }
   ],
+  "attribution": {
+    "audit_baseline": {
+      "run_id": "b1_ledger_baseline_20260911",
+      "snapshot_file": "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json",
+      "snapshot_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+      "captured_from": "ml/gen2/outputs/b1_ledger_baseline_20260911/ledger_summary.csv",
+      "captured_from_sha256": "53327be86701460b34f6dff8fde354fc7b593b956f86c8eb3965f3f10bbd0780",
+      "window": {
+        "date_from": "2020-03-10",
+        "date_to": "2026-09-04",
+        "days": 1577,
+        "source": "ml/gen2/outputs/b1_ledger_baseline_20260911/calendar_meta.json + ledger_summary.csv"
+      },
+      "cost_levels": [
+        0.0,
+        5.0,
+        10.0,
+        20.0
+      ],
+      "code_state_timeline": {
+        "note": "旧基线产出时间 = 2026-09-11 14:21（ledger_summary.csv 文件 mtime）。据此判定四项已登记变更是否落在该基线之内。commit 时间取 git author date（+08:00）。",
+        "d001": {
+          "commit": "2349353",
+          "at": "2026-09-11T11:06:26+08:00",
+          "in_this_baseline": true,
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "D-001 裁决落地早于旧基线产出（11:06 < 14:21）⇒ 无条件终局约束检查已在旧基线内。"
+        },
+        "ledger_unified": {
+          "commit": "03cf814",
+          "at": "2026-09-11T14:58:45+08:00",
+          "in_this_baseline": true,
+          "files": [
+            "ml/gen2/backtest/ledger.py",
+            "ml/gen2/backtest/costs.py"
+          ],
+          "note": "WP-G2-02 之后 ledger.py / costs.py 再无提交（git log 验证）⇒ 旧基线与本次冻结运行使用**同一账本契约**；再由基准策略（main5 / universe / market_510300）逐位相同（换手比 1.00000、Δ净值 0.000000 @0/5/10/20bps）独立佐证。"
+        },
+        "f1f2": {
+          "commit": "363ad53",
+          "at": "2026-09-11T17:04:59+08:00",
+          "in_this_baseline": false,
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "WP-G2-05 落地晚于旧基线产出（17:04 > 14:21）⇒ 严格说不在旧基线内；但按设计（`role_thresholds` core 0.20/challenger 0.30/satellite 0.40 ≡ 旧默认 core 0.80/challenger 0.70/satellite 0.60，且 canonical Alpha 与旧内部重算逐值等价）对**默认跑法**的数值贡献为 0。"
+        },
+        "f4": {
+          "commits": [
+            "2b425b8",
+            "5ad7555"
+          ],
+          "at": [
+            "2026-09-14T11:52:13+08:00",
+            "2026-09-14T13:15:08+08:00"
+          ],
+          "in_this_baseline": false,
+          "files": [
+            "ml/gen2/portfolio/portfolio_builder.py",
+            "ml/gen2/portfolio/defense_gate.py"
+          ],
+          "note": "WP-G2-06（F4）晚于旧基线 ⇒ 构成本次 Δ 的唯一实现来源。"
+        }
+      },
+      "measured_mechanism": {
+        "old_candidate_weights": {
+          "finding": "旧基线的候选权重是 1/n 等权（丢弃 bundle 的单只/cluster/科技上限）",
+          "evidence": [
+            "ml/gen2/outputs/b1_ledger_baseline_20260911/research/rule_rotation/portfolio_candidates.csv",
+            "2020-05-27: CORE=1 → target_weight=1.0（= 1/1）",
+            "2023-06-30: CORE=3 → 每只 target_weight=0.333333（= 1/3），合计 1.0"
+          ]
+        },
+        "bundle_caps_ignored_by_old": {
+          "portfolio.max_single_weight": 0.25,
+          "portfolio.max_cluster_weight": 0.4,
+          "portfolio.max_tech_weight": 0.65,
+          "selection.max_core_count": 5
+        },
+        "exposure_evidence": {
+          "defended_0bps_old_nonzero_cash_days": 1107,
+          "defended_0bps_new_nonzero_cash_days": 1423,
+          "defended_0bps_old_mean_cash_weight": 0.42874,
+          "defended_0bps_new_mean_cash_weight": 0.58967,
+          "note": "旧基线在 CORE=1 的日子把 100% 押在单只（超 0.25 上限），因此敞口更高、换手更大；新基线受 0.25 单只上限约束 ⇒ 敞口更低、更分散。"
+        }
+      }
+    },
+    "changes": [
+      {
+        "id": "D-001",
+        "name": "规则实现修正：出口无条件终局约束检查",
+        "mechanism": "角色生成路径出口统一走 `finalizeRoles` / `finalize_roles`，**无条件**执行终局约束检查（CORE 数量上限 / 每 cluster CORE 上限 / NO_CORE 不可恢复 / 单资产·cluster·科技·现金约束）；此前「无 cap 降级现任且无替换」的交易日会**跳过**该检查。",
+        "metric_moved": "角色分布 / 降级日 → 换手、防守触发日、净值",
+        "in_audit_baseline": true,
+        "in_this_delta": false,
+        "evidence": {
+          "commit": "2349353",
+          "at": "2026-09-11T11:06:26+08:00",
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "D-001 裁决落地早于旧基线产出（11:06 < 14:21）⇒ 无条件终局约束检查已在旧基线内。"
+        },
+        "numeric_contribution": "none_already_in_audit_baseline"
+      },
+      {
+        "id": "F1/F2",
+        "name": "信号质量修复：Alpha 显式注入 + 角色阈值显式化",
+        "mechanism": "`build_v2_roles` 不再静默重算 Alpha（评分必须显式注入并带覆盖校验与内容哈希）；`top_quantile` 改为显式 `role_thresholds`。",
+        "metric_moved": "修复前「声明了旋钮、组合指标却与 baseline 逐位相同」的假读数消失",
+        "in_audit_baseline": false,
+        "in_this_delta": true,
+        "evidence": {
+          "commit": "363ad53",
+          "at": "2026-09-11T17:04:59+08:00",
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "WP-G2-05 落地晚于旧基线产出（17:04 > 14:21）⇒ 严格说不在旧基线内；但按设计（`role_thresholds` core 0.20/challenger 0.30/satellite 0.40 ≡ 旧默认 core 0.80/challenger 0.70/satellite 0.60，且 canonical Alpha 与旧内部重算逐值等价）对**默认跑法**的数值贡献为 0。"
+        },
+        "numeric_contribution": "none_by_default_equivalence"
+      },
+      {
+        "id": "F4",
+        "name": "统一候选组合（WP-G2-06）",
+        "mechanism": "`build_portfolio_candidates` 不再把 CORE 重置为等权 `1/n`、不再丢弃单只 / cluster / 广义科技上限；`priority` 改为显式注入的未四舍五入 selection score；候选新增现金腿与防守腿；`main()` 接入唯一候选链路。",
+        "metric_moved": "候选权重语义（1/n 等权 → 权威 target_weight + 上限）→ 敞口、换手、费用、净值",
+        "in_audit_baseline": false,
+        "in_this_delta": true,
+        "evidence": {
+          "commits": [
+            "2b425b8",
+            "5ad7555"
+          ],
+          "at": [
+            "2026-09-14T11:52:13+08:00",
+            "2026-09-14T13:15:08+08:00"
+          ],
+          "files": [
+            "ml/gen2/portfolio/portfolio_builder.py",
+            "ml/gen2/portfolio/defense_gate.py"
+          ],
+          "note": "WP-G2-06（F4）晚于旧基线 ⇒ 构成本次 Δ 的唯一实现来源。"
+        },
+        "numeric_contribution": "material"
+      },
+      {
+        "id": "统一账本",
+        "name": "唯一权威账本（WP-G2-02）",
+        "mechanism": "换手 = **单边成交名义额** `Σ_证券|Δ|`（更早的实现在现金腿**重复计费**，最坏把换手与费用高估 2 倍）；公共日历强校验；T+1 执行 + 期初全现金。",
+        "metric_moved": "换手与费用口径（费用偏高 ⇒ 净收益偏低）",
+        "in_audit_baseline": true,
+        "in_this_delta": false,
+        "evidence": {
+          "commit": "03cf814",
+          "at": "2026-09-11T14:58:45+08:00",
+          "files": [
+            "ml/gen2/backtest/ledger.py",
+            "ml/gen2/backtest/costs.py"
+          ],
+          "note": "WP-G2-02 之后 ledger.py / costs.py 再无提交（git log 验证）⇒ 旧基线与本次冻结运行使用**同一账本契约**；再由基准策略（main5 / universe / market_510300）逐位相同（换手比 1.00000、Δ净值 0.000000 @0/5/10/20bps）独立佐证。"
+        },
+        "numeric_contribution": "none_already_in_audit_baseline"
+      }
+    ],
+    "controls": {
+      "comparable": true,
+      "window_mismatch": null,
+      "cost_level_mismatch": null,
+      "audit_baseline_window": {
+        "first_date": "2020-03-10",
+        "last_date": "2026-09-04",
+        "days": 1577
+      },
+      "run_window": {
+        "first_date": "2020-03-10",
+        "last_date": "2026-09-04",
+        "days": 1577
+      },
+      "benchmark_strategies": [
+        "main5_equal_weight",
+        "market_510300",
+        "universe_equal_weight"
+      ],
+      "benchmark_max_abs_cum_return_delta": 0.0,
+      "benchmark_bit_identical": true,
+      "note": "基准策略不经过规则实现 ⇒ 其 Δ 必须恰为 0；为 0 同时证明**账本契约与基准路径未变**（即「统一账本」不构成本次 Δ 的来源）。"
+    },
+    "rows": [
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 2.5777862286081676,
+          "cumulative_return": 1.5777862286081676,
+          "cagr": 0.16336516358417552,
+          "sharpe": 0.7916070970218252,
+          "mdd": -0.2610695356855185,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.8525257462161806,
+          "cumulative_return": 0.8525257462161806,
+          "cagr": 0.10353966165685713,
+          "sharpe": 0.684574992743875,
+          "mdd": -0.21503906781801596,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": -0.7252604824,
+          "cumulative_return": -0.7252604824,
+          "cagr": -0.0598255019,
+          "sharpe": -0.1070321043,
+          "mdd": 0.0460304679,
+          "total_turnover": -92.7872611823,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.9714747582637127,
+          "cumulative_return": 0.9714747582637127,
+          "cagr": 0.1145685317895282,
+          "sharpe": 0.5231303323228726,
+          "mdd": -0.3758261953092238,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.6369890042791717,
+          "cumulative_return": 0.6369890042791717,
+          "cagr": 0.08194177183733298,
+          "sharpe": 0.49557320618067957,
+          "mdd": -0.27696094305201924,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": -0.334485754,
+          "cumulative_return": -0.334485754,
+          "cagr": -0.03262676,
+          "sharpe": -0.0275571261,
+          "mdd": 0.0988652523,
+          "total_turnover": -91.4993008182,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 2.8451859445301264,
+          "cumulative_return": 1.8451859445301264,
+          "cagr": 0.18185870402627202,
+          "sharpe": 0.7479082975542212,
+          "mdd": -0.4581497797356837,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 2.8451859445301264,
+          "cumulative_return": 1.8451859445301264,
+          "cagr": 0.18185870402627202,
+          "sharpe": 0.7479082975542212,
+          "mdd": -0.4581497797356837,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.5934751994861425,
+          "cumulative_return": 0.5934751994861425,
+          "cagr": 0.07729387359350515,
+          "sharpe": 0.4215428527188233,
+          "mdd": -0.49724620311744117,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.5934751994861425,
+          "cumulative_return": 0.5934751994861425,
+          "cagr": 0.07729387359350515,
+          "sharpe": 0.4215428527188233,
+          "mdd": -0.49724620311744117,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.3113636363636354,
+          "cumulative_return": 0.3113636363636354,
+          "cagr": 0.044267624736019195,
+          "sharpe": 0.3159640573133883,
+          "mdd": -0.447475872308835,
+          "total_turnover": 1.0,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.3113636363636354,
+          "cumulative_return": 0.3113636363636354,
+          "cagr": 0.044267624736019195,
+          "sharpe": 0.3159640573133883,
+          "mdd": -0.447475872308835,
+          "total_turnover": 1.0,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 2.294277341624173,
+          "cumulative_return": 1.294277341624173,
+          "cagr": 0.14190550172997285,
+          "sharpe": 0.7078270235366189,
+          "mdd": -0.27916758341106884,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.11655851634886645
+        },
+        "new": {
+          "terminal_nav": 1.7270678738655716,
+          "cumulative_return": 0.7270678738655716,
+          "cagr": 0.09124269838671495,
+          "sharpe": 0.6160584383334142,
+          "mdd": -0.22434480584828742,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.0701648857577245
+        },
+        "delta": {
+          "terminal_nav": -0.5672094678,
+          "cumulative_return": -0.5672094678,
+          "cagr": -0.0506628033,
+          "sharpe": -0.0917685852,
+          "mdd": 0.0548227776,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.0463936306
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.7833703973937487,
+          "cumulative_return": 0.7833703973937487,
+          "cagr": 0.09685108043892998,
+          "sharpe": 0.4667886218460528,
+          "mdd": -0.38861670715393193,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.10024744815764296
+        },
+        "new": {
+          "terminal_nav": 1.550138377827533,
+          "cumulative_return": 0.550138377827533,
+          "cagr": 0.07255765184990604,
+          "sharpe": 0.45169791039896406,
+          "mdd": -0.28314863381984556,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.05449779774854248
+        },
+        "delta": {
+          "terminal_nav": -0.2332320196,
+          "cumulative_return": -0.2332320196,
+          "cagr": -0.0242934286,
+          "sharpe": -0.0150907114,
+          "mdd": 0.1054680733,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.0457496504
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 2.8274115755813045,
+          "cumulative_return": 1.8274115755813045,
+          "cagr": 0.18067576977479938,
+          "sharpe": 0.7442394883795532,
+          "mdd": -0.45814977973568316,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0062627101115196645
+        },
+        "new": {
+          "terminal_nav": 2.8274115755813045,
+          "cumulative_return": 1.8274115755813045,
+          "cagr": 0.18067576977479938,
+          "sharpe": 0.7442394883795532,
+          "mdd": -0.45814977973568316,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0062627101115196645
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.5775513828593668,
+          "cumulative_return": 0.5775513828593668,
+          "cagr": 0.07556630414767973,
+          "sharpe": 0.4151710388829825,
+          "mdd": -0.4986275723193332,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.010060137437188095
+        },
+        "new": {
+          "terminal_nav": 1.5775513828593668,
+          "cumulative_return": 0.5775513828593668,
+          "cagr": 0.07556630414767973,
+          "sharpe": 0.4151710388829825,
+          "mdd": -0.4986275723193332,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.010060137437188095
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.3107079545454567,
+          "cumulative_return": 0.31070795454545674,
+          "cagr": 0.04418417174477507,
+          "sharpe": 0.31556586731775726,
+          "mdd": -0.44747587230883423,
+          "total_turnover": 1.0,
+          "total_cost": 0.0005
+        },
+        "new": {
+          "terminal_nav": 1.3107079545454567,
+          "cumulative_return": 0.31070795454545674,
+          "cagr": 0.04418417174477507,
+          "sharpe": 0.31556586731775726,
+          "mdd": -0.44747587230883423,
+          "total_turnover": 1.0,
+          "total_cost": 0.0005
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 2.041869734115976,
+          "cumulative_return": 1.0418697341159762,
+          "cagr": 0.1208347188698351,
+          "sharpe": 0.6239843903233268,
+          "mdd": -0.2968295184572597,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.2331170326977329
+        },
+        "new": {
+          "terminal_nav": 1.610082635588053,
+          "cumulative_return": 0.6100826355880531,
+          "cagr": 0.07908022446592744,
+          "sharpe": 0.5474842882567503,
+          "mdd": -0.23354213237881372,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.140329771515449
+        },
+        "delta": {
+          "terminal_nav": -0.4317870985,
+          "cumulative_return": -0.4317870985,
+          "cagr": -0.0417544944,
+          "sharpe": -0.0765001021,
+          "mdd": 0.0632873861,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.0927872612
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.6131494819526135,
+          "cumulative_return": 0.6131494819526135,
+          "cagr": 0.07940840980780872,
+          "sharpe": 0.4104313251557551,
+          "mdd": -0.40320449361629596,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.20049489631528591
+        },
+        "new": {
+          "terminal_nav": 1.467878842640957,
+          "cumulative_return": 0.467878842640957,
+          "cagr": 0.06325298212466612,
+          "sharpe": 0.4078153863421239,
+          "mdd": -0.2895711238735348,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.10899559549708496
+        },
+        "delta": {
+          "terminal_nav": -0.1452706393,
+          "cumulative_return": -0.1452706393,
+          "cagr": -0.0161554277,
+          "sharpe": -0.0026159388,
+          "mdd": 0.1136333697,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.0914993008
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 2.8097460929333073,
+          "cumulative_return": 1.8097460929333073,
+          "cagr": 0.17949387509215065,
+          "sharpe": 0.7405696259618294,
+          "mdd": -0.4581497797356826,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.012525420223039329
+        },
+        "new": {
+          "terminal_nav": 2.8097460929333073,
+          "cumulative_return": 1.8097460929333073,
+          "cagr": 0.17949387509215065,
+          "sharpe": 0.7405696259618294,
+          "mdd": -0.4581497797356826,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.012525420223039329
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.5617856982076457,
+          "cumulative_return": 0.5617856982076457,
+          "cagr": 0.07384139553299796,
+          "sharpe": 0.4087981207511964,
+          "mdd": -0.5000051615317853,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.02012027487437619
+        },
+        "new": {
+          "terminal_nav": 1.5617856982076457,
+          "cumulative_return": 0.5617856982076457,
+          "cagr": 0.07384139553299796,
+          "sharpe": 0.4087981207511964,
+          "mdd": -0.5000051615317853,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.02012027487437619
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.3100522727272819,
+          "cumulative_return": 0.31005227272728186,
+          "cagr": 0.04410068366989539,
+          "sharpe": 0.3151673658904457,
+          "mdd": -0.4474758723088327,
+          "total_turnover": 1.0,
+          "total_cost": 0.001
+        },
+        "new": {
+          "terminal_nav": 1.3100522727272819,
+          "cumulative_return": 0.31005227272728186,
+          "cagr": 0.04410068366989539,
+          "sharpe": 0.3151673658904457,
+          "mdd": -0.4474758723088327,
+          "total_turnover": 1.0,
+          "total_cost": 0.001
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.6171172373536646,
+          "cumulative_return": 0.6171172373536646,
+          "cagr": 0.07983222509069976,
+          "sharpe": 0.45621015191280356,
+          "mdd": -0.34047309955367644,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.4662340653954658
+        },
+        "new": {
+          "terminal_nav": 1.399286022613546,
+          "cumulative_return": 0.39928602261354595,
+          "cagr": 0.05515298640690691,
+          "sharpe": 0.41022035459859857,
+          "mdd": -0.25526076385970675,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.280659543030898
+        },
+        "delta": {
+          "terminal_nav": -0.2178312147,
+          "cumulative_return": -0.2178312147,
+          "cagr": -0.0246792387,
+          "sharpe": -0.0459897973,
+          "mdd": 0.0852123357,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.1855745224
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.31974142486822,
+          "cumulative_return": 0.31974142486822,
+          "cagr": 0.045330847636747995,
+          "sharpe": 0.2977144843918053,
+          "mdd": -0.4484097110258912,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.40098979263057183
+        },
+        "new": {
+          "terminal_nav": 1.3161785017650682,
+          "cumulative_return": 0.31617850176506823,
+          "cagr": 0.04487937305091205,
+          "sharpe": 0.32004897536549654,
+          "mdd": -0.30228310829191174,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.21799119099416991
+        },
+        "delta": {
+          "terminal_nav": -0.0035629231,
+          "cumulative_return": -0.0035629231,
+          "cagr": -0.0004514746,
+          "sharpe": 0.022334491,
+          "mdd": 0.1461266027,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.1829986016
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 2.7747391698762898,
+          "cumulative_return": 1.7747391698762898,
+          "cagr": 0.1771332009399864,
+          "sharpe": 0.7332268100831617,
+          "mdd": -0.45814977973568294,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.025050840446078658
+        },
+        "new": {
+          "terminal_nav": 2.7747391698762898,
+          "cumulative_return": 1.7747391698762898,
+          "cagr": 0.1771332009399864,
+          "sharpe": 0.7332268100831617,
+          "mdd": -0.45814977973568294,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.025050840446078658
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.5307224964561998,
+          "cumulative_return": 0.5307224964561998,
+          "cagr": 0.07039954486777766,
+          "sharpe": 0.396049081604843,
+          "mdd": -0.5027490411693222,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.04024054974875238
+        },
+        "new": {
+          "terminal_nav": 1.5307224964561998,
+          "cumulative_return": 0.5307224964561998,
+          "cagr": 0.07039954486777766,
+          "sharpe": 0.396049081604843,
+          "mdd": -0.5027490411693222,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.04024054974875238
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.3087409090909148,
+          "cumulative_return": 0.3087409090909148,
+          "cagr": 0.04393360213990127,
+          "sharpe": 0.3143694334957105,
+          "mdd": -0.44747587230883346,
+          "total_turnover": 1.0,
+          "total_cost": 0.002
+        },
+        "new": {
+          "terminal_nav": 1.3087409090909148,
+          "cumulative_return": 0.3087409090909148,
+          "cagr": 0.04393360213990127,
+          "sharpe": 0.3143694334957105,
+          "mdd": -0.44747587230883346,
+          "total_turnover": 1.0,
+          "total_cost": 0.002
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      }
+    ]
+  },
   "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
   "committed_manifest": "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json",
   "report": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+  "self_check_pre_report": {
+    "checks": 52,
+    "passed": 52,
+    "failed": 0,
+    "all_pass": true,
+    "detail": []
+  },
   "outputs": {
     "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
     "run_dir_artifacts": [
@@ -729,8 +1544,8 @@
     "committed_report": {
       "file": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
       "exists": true,
-      "sha256": "bcd164f6885a65fa19ef8f033b62c5c7688f7a36e25267a22f992aec9af8292a",
-      "bytes": 20186
+      "sha256": "e3e52c32d7fd931dbc3ba37a9ef54d1433b746e884fc0ca8d7e60c14700d6703",
+      "bytes": 31170
     }
   },
   "self_check": {

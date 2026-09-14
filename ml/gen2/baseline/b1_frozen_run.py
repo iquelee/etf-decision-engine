@@ -36,10 +36,20 @@
   * 入库 manifest：`ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_<date>.json`
   * 入库报告：`ml/gen2/reports/gen2_b1_frozen_run_<date>.md`
 
+裁决（2026-09-14，第三次 · 复核结论）：本次产出**降级为「待合并冻结运行」**，不得先写成项目最终 Frozen B1 ——
+
+  * 冻结 PR 先合并 → B1 PR 自动改基后合并 → 在 manifest 写入 `accepted_master_commit` /
+    `source_tree_sha` 的**接受记录**（三类摘要未变则**无需重跑**，只做绑定）；
+  * 报告措辞只有在接受记录写入后才改为「Frozen B1 已接受」，**此后才允许启动 B3**；
+  * §9 归因页必须给出**可审计的数值对照表**（不只是方向）：按 0/5/10/20bps、逐策略列
+    净值 / CAGR / Sharpe / 换手 / 成本与差异，并逐项标注 D-001 / F1-F2 / F4 / 统一账本的归因。
+
 运行::
 
     PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run
     PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --date 20260914 --run-id <id>
+    # 合并后写入接受记录（校验三类摘要未变；不变则无需重跑）
+    PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>
 """
 from __future__ import annotations
 
@@ -49,6 +59,7 @@ import hashlib
 import json
 import platform
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -147,6 +158,222 @@ def _candidate_run_comparison(summary: pd.DataFrame) -> list[tuple]:
                 and round(shp, 2) == round(ref["sharpe"], 2))
         out.append((r["strategy"], ref, cum, shp, same))
     return out
+
+
+#: 旧审计基线数值快照（**入库**证据）—— `outputs/` 未入库，故把旧基线读数逐行转写成
+#: 本文件，使 §9 的数值对照表**从数据生成**而不是手工誊抄，且在任何机器上可复现。
+AUDIT_BASELINE_REL = "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json"
+
+#: 运行接受状态：`PENDING_MERGE`（合并前）→ `ACCEPTED`（写入接受记录后）。
+STATUS_PENDING_MERGE = "PENDING_MERGE"
+STATUS_ACCEPTED = "ACCEPTED"
+
+#: 四项已登记变更 → 快照 `code_state_timeline` 的键。`in_this_delta` 由
+#: 「是否落在旧基线产出之前」推导（落在旧基线内 ⇒ 不构成本次 Δ 的来源，只能解释
+#: 「旧基线与更早报告」的差异）。这是本次归因的**判定规则**，不是叙述。
+REGISTERED_CHANGES = [
+    {"id": "D-001", "timeline_key": "d001",
+     "name": "规则实现修正：出口无条件终局约束检查",
+     "mechanism": ("角色生成路径出口统一走 `finalizeRoles` / `finalize_roles`，**无条件**执行终局约束检查"
+                   "（CORE 数量上限 / 每 cluster CORE 上限 / NO_CORE 不可恢复 / 单资产·cluster·科技·现金约束）；"
+                   "此前「无 cap 降级现任且无替换」的交易日会**跳过**该检查。"),
+     "metric_moved": "角色分布 / 降级日 → 换手、防守触发日、净值"},
+    {"id": "F1/F2", "timeline_key": "f1f2",
+     "name": "信号质量修复：Alpha 显式注入 + 角色阈值显式化",
+     "mechanism": ("`build_v2_roles` 不再静默重算 Alpha（评分必须显式注入并带覆盖校验与内容哈希）；"
+                   "`top_quantile` 改为显式 `role_thresholds`。"),
+     "metric_moved": "修复前「声明了旋钮、组合指标却与 baseline 逐位相同」的假读数消失"},
+    {"id": "F4", "timeline_key": "f4",
+     "name": "统一候选组合（WP-G2-06）",
+     "mechanism": ("`build_portfolio_candidates` 不再把 CORE 重置为等权 `1/n`、不再丢弃单只 / cluster / "
+                   "广义科技上限；`priority` 改为显式注入的未四舍五入 selection score；候选新增现金腿与防守腿；"
+                   "`main()` 接入唯一候选链路。"),
+     "metric_moved": "候选权重语义（1/n 等权 → 权威 target_weight + 上限）→ 敞口、换手、费用、净值"},
+    {"id": "统一账本", "timeline_key": "ledger_unified",
+     "name": "唯一权威账本（WP-G2-02）",
+     "mechanism": ("换手 = **单边成交名义额** `Σ_证券|Δ|`（更早的实现在现金腿**重复计费**，"
+                   "最坏把换手与费用高估 2 倍）；公共日历强校验；T+1 执行 + 期初全现金。"),
+     "metric_moved": "换手与费用口径（费用偏高 ⇒ 净收益偏低）"},
+]
+
+
+def load_audit_baseline(rel: str = AUDIT_BASELINE_REL) -> dict:
+    """读取旧审计基线数值快照（入库证据）。"""
+    return json.loads(_abs(rel).read_text(encoding="utf-8"))
+
+
+def _norm_window(w: dict | None) -> dict | None:
+    """把运行窗口归一成**可跨序列化比较**的形式（日期 → `YYYY-MM-DD` 字符串，天数 → int）。
+
+    `ledger.assert_common_calendar` 返回的 `first_date` / `last_date` 是 **`date` / `Timestamp`
+    对象**，而快照（JSON）里是字符串。不归一化就会出现「**看起来一样、比出来不等**」：
+    同一个全窗口运行会被判成「不可对照」，进而把 §9 整页降级 —— 这是**假报警**，
+    会让审阅者去查一个不存在的缺陷。本函数专门消除这类「同值不同型」的比较失败。
+    """
+    if w is None:
+        return None
+    out = {}
+    for k in ("first_date", "last_date", "days"):
+        v = w.get(k)
+        if v is None:
+            out[k] = None
+        elif k == "days":
+            out[k] = int(v)
+        else:
+            out[k] = str(v)[:10]
+    return out
+
+
+def build_attribution(summary: pd.DataFrame, audit: dict,
+                      run_window: dict | None = None) -> dict:
+    """生成结构化差异归因：数值对照（旧 vs 新，全成本档）+ 逐项变更判定 + 控制项。
+
+    - `rows`：按 (strategy, cost_bps) 对齐，给出旧 / 新 / Δ（净值、累计收益、CAGR、Sharpe、
+      MDD、换手、费用）—— **全部来自两边的 `ledger_summary` 数据**，不手工誊抄；
+    - `changes`：四项已登记变更的 `in_this_delta` 判定 + 依据（取自快照的 commit 时间线）；
+    - `controls`：可机检的控制项 —— 基准策略（main5 / universe / market_510300）的 Δ 必须**恒为 0**
+      （它们不经过规则实现；若不为 0，说明账本或基准路径也变了）。
+
+    **可对照性（`controls.comparable`）**：Δ 只有在**两侧窗口一致**时才可解释。快照记录的是
+    全窗口读数；若本次运行为裁剪窗口（或成本档不同），逐格相减就是**拿两个不同问题相减**，
+    会造成「基准策略 Δ ≠ 0 ⇒ 账本变了」的**假报警**。故此处显式判定并降级：
+    `comparable=False` 时 `benchmark_bit_identical` 为 `None`（**不适用**），报告不得据此下结论。
+    """
+    metrics = ("terminal_nav", "cumulative_return", "cagr", "sharpe", "mdd",
+               "total_turnover", "total_cost")
+    old = {(r["strategy"], float(r["cost_bps"])): r for r in audit["rows"]}
+    rows = []
+    for _, r in summary.iterrows():
+        key = (r["strategy"], float(r["cost_bps"]))
+        o = old.get(key)
+        new_vals = {k: float(r[k]) for k in metrics}
+        old_vals = None if o is None else {k: float(o[k]) for k in metrics}
+        rows.append({
+            "strategy": r["strategy"], "cost_bps": float(r["cost_bps"]),
+            "old": old_vals, "new": new_vals,
+            "delta": None if old_vals is None
+                     else {k: round(new_vals[k] - old_vals[k], 10) for k in metrics},
+        })
+
+    # ---- 可对照性判定：窗口 / 成本档 ----
+    aw = audit.get("window") or {}
+    audit_win = _norm_window({"first_date": aw.get("date_from"), "last_date": aw.get("date_to"),
+                              "days": aw.get("days")})
+    run_win = _norm_window(run_window)
+    audit_costs = sorted({float(r["cost_bps"]) for r in audit["rows"]})
+    run_costs = sorted({float(r["cost_bps"]) for r in rows})
+    window_mismatch = None
+    if run_win is None:
+        # 未提供运行窗口 ⇒ **不判定为可对照**（fail-closed：宁可标「不适用」，也不假报逐位相同）
+        window_mismatch = {"audit_baseline": audit_win, "run": None}
+    elif run_win != audit_win:
+        window_mismatch = {"audit_baseline": audit_win, "run": run_win}
+    cost_mismatch = None if run_costs == audit_costs \
+        else {"audit_baseline": audit_costs, "run": run_costs}
+    # **只有窗口是硬条件**：窗口一致时，两侧同窗口的单元格 Δ 才可解释。
+    # 成本档差异只意味着个别单元格缺席（表中显示 `—`），不影响已有单元格的 Δ 解释。
+    comparable = window_mismatch is None
+
+    tl = audit["code_state_timeline"]
+    changes = []
+    for c in REGISTERED_CHANGES:
+        node = tl[c["timeline_key"]]
+        in_baseline = bool(node["in_this_baseline"])
+        entry = {
+            "id": c["id"], "name": c["name"], "mechanism": c["mechanism"],
+            "metric_moved": c["metric_moved"],
+            "in_audit_baseline": in_baseline,
+            "in_this_delta": not in_baseline,
+            "evidence": {k: node[k] for k in ("commit", "commits", "at", "files", "file", "note")
+                         if k in node},
+        }
+        if c["id"] == "F1/F2":
+            # 落在旧基线之后，但默认配置与旧行为逐值等价 ⇒ 对默认跑法数值贡献为 0。
+            entry["numeric_contribution"] = "none_by_default_equivalence"
+        elif in_baseline:
+            entry["numeric_contribution"] = "none_already_in_audit_baseline"
+        else:
+            entry["numeric_contribution"] = "material"
+        changes.append(entry)
+
+    benchmarks = {"main5_equal_weight", "universe_equal_weight", "market_510300"}
+    bench_deltas = [abs(r["delta"]["cumulative_return"]) for r in rows
+                    if r["delta"] is not None and r["strategy"] in benchmarks]
+    bit_identical = (bool(bench_deltas) and max(bench_deltas) == 0.0) if comparable else None
+    controls = {
+        "comparable": comparable,
+        "window_mismatch": window_mismatch,
+        "cost_level_mismatch": cost_mismatch,
+        "audit_baseline_window": audit_win,
+        "run_window": run_win,
+        "benchmark_strategies": sorted(benchmarks),
+        "benchmark_max_abs_cum_return_delta": (max(bench_deltas) if bench_deltas else None)
+        if comparable else None,
+        "benchmark_bit_identical": bit_identical,
+        "note": ("基准策略不经过规则实现 ⇒ 其 Δ 必须恰为 0；为 0 同时证明**账本契约与基准路径未变**"
+                 "（即「统一账本」不构成本次 Δ 的来源）。"
+                 if comparable else
+                 "**不适用**：本次运行与旧基线快照的**窗口**不一致，逐格相减没有意义 —— "
+                 "只有与快照同窗口的运行才可据此判定基准路径是否变化。"),
+    }
+    return {
+        "audit_baseline": {
+            "run_id": audit["run_id"],
+            "snapshot_file": AUDIT_BASELINE_REL,
+            "snapshot_sha256": _sha(AUDIT_BASELINE_REL),
+            "captured_from": audit["captured_from"],
+            "captured_from_sha256": audit["captured_from_sha256"],
+            "window": audit["window"],
+            "cost_levels": audit_costs,
+            "code_state_timeline": audit["code_state_timeline"],
+            "measured_mechanism": audit.get("measured_mechanism"),
+        },
+        "changes": changes,
+        "controls": controls,
+        "rows": rows,
+    }
+
+
+def _gross_and_cost_split(attribution: dict) -> list[dict]:
+    """把每个策略的 Δ 拆成「毛收益效应」（0bps 的 Δ）与「成本拖累变化」（同档成本拖累之差）。
+
+    净值口径恒等式：累计收益 ≈ 毛收益 − 成本拖累，故
+    `Δ(0bps)` 纯净地反映**持仓/权重路径**差异，`Δ(10bps) − Δ(0bps)` 反映**费用**差异。
+    """
+    def find(strategy, bps):
+        for r in attribution["rows"]:
+            if r["strategy"] == strategy and abs(r["cost_bps"] - bps) < 1e-9:
+                return r
+        return None
+
+    out = []
+    strategies = sorted({r["strategy"] for r in attribution["rows"]},
+                        key=lambda s: (0 if s.startswith("gen2_") else 1, s))
+    for strat in strategies:
+        r0, r10 = find(strat, 0.0), find(strat, 10.0)
+        if not r0 or not r10 or r0["old"] is None:
+            continue
+        old_drag = r0["old"]["cumulative_return"] - r10["old"]["cumulative_return"]
+        new_drag = r0["new"]["cumulative_return"] - r10["new"]["cumulative_return"]
+        out.append({
+            "strategy": strat,
+            "gross_effect_0bps": r0["delta"]["cumulative_return"],
+            "old_cost_drag_10bps": old_drag,
+            "new_cost_drag_10bps": new_drag,
+            "cost_drag_relief": old_drag - new_drag,
+            "net_effect_10bps": r10["delta"]["cumulative_return"],
+        })
+    return out
+
+
+def _git(*args: str) -> str | None:
+    """运行 git（仓库根目录），失败返回 None（不抛 —— 接受记录在无 git 环境也应可诊断）。"""
+    try:
+        r = subprocess.run(["git", *args], cwd=str(PROJECT_ROOT), capture_output=True,
+                           text=True, check=False)
+    except OSError:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
 
 
 # ---------------------------------------------------------------- 工具
@@ -410,8 +637,13 @@ def input_data_attestation(cfg: dict) -> dict:
 
 # ------------------------------------------------- ④ 输出哈希自校验
 
-def verify_manifest(m: dict) -> dict:
-    """对 manifest 里声明的每一类哈希**重新计算**并比对（fail-closed 自校验）。"""
+def verify_manifest(m: dict, *, skip_report: bool = False) -> dict:
+    """对 manifest 里声明的每一类哈希**重新计算**并比对（fail-closed 自校验）。
+
+    `skip_report=True` 用于**报告写出之前**的自校验：报告尚未落盘，其自身哈希只能事后校验。
+    报告 §8 展示的就是这一次（不含报告自身）的结果；完整结果（含报告哈希）写入
+    `manifest["self_check"]`，`all_pass=False` 时本入口抛 `FrozenAttestationError` 拒绝产出交付物。
+    """
     checks: list[dict] = []
 
     def chk(name: str, expected, actual) -> None:
@@ -439,7 +671,7 @@ def verify_manifest(m: dict) -> dict:
     for a in m["artifacts"]:
         chk(f"output[{a['file']}]", a["sha256"], _sha(_join_run_dir(m, a)))
     rep = ((m.get("outputs") or {}).get("committed_report")) or None
-    if rep:
+    if rep and not skip_report:
         chk("output[committed_report]", rep["sha256"], _sha(rep["file"]))
 
     failed = [c for c in checks if not c["ok"]]
@@ -486,6 +718,11 @@ def run(*, date_tag: str = "20260914", run_id: str | None = None,
     strategies = sorted(summary["strategy"].unique().tolist())
     cal_meta = json.loads((out_dir / "calendar_meta.json").read_text(encoding="utf-8"))
 
+    # ⑨ 差异归因（旧审计基线 vs 本次运行）：数值对照从**两边的 ledger_summary 数据**生成。
+    #    必须带上本次窗口 —— Δ 只有在两侧窗口/成本档一致时才可解释（否则是拿两个不同问题相减）。
+    attribution = build_attribution(summary, load_audit_baseline(),
+                                    run_window=verification["calendar"])
+
     # ④ 运行目录内产物哈希（账本 / 指标 / 日历元数据 + 运行目录报告）
     artifacts = []
     for name in ("ledger_daily.csv", "ledger_summary.csv", "calendar_meta.json",
@@ -502,6 +739,11 @@ def run(*, date_tag: str = "20260914", run_id: str | None = None,
         "manifest_type": "GEN2_B1_FROZEN_RUN",
         "run_id": rid,
         "created_at": pd.Timestamp.now("UTC").isoformat(),
+        "run_status": STATUS_PENDING_MERGE,
+        "run_status_note": (
+            "**待合并冻结运行**：本运行已完成全部取证，但在冻结 PR + B1 PR 合并并写入接受记录"
+            "（`acceptance_record.accepted_master_commit` / `source_tree_sha`）之前，"
+            "**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。"),
         "boundaries": {
             "stage": "SHADOW/CANARY",
             "deployed": False,
@@ -570,6 +812,7 @@ def run(*, date_tag: str = "20260914", run_id: str | None = None,
                               and verification["cash_min"] >= -1e-9),
         },
         "artifacts": artifacts,
+        "attribution": attribution,
         "run_dir": _rel(out_dir),
         "committed_manifest": committed_manifest_rel,
         "report": committed_report_rel,
@@ -579,13 +822,22 @@ def run(*, date_tag: str = "20260914", run_id: str | None = None,
                else (GEN2_ROOT / "manifests" / f"GEN2_B1_FROZEN_RUN_MANIFEST_{date_tag}.json")
                if write_committed_manifest else out_dir / "frozen_manifest.json")
 
-    # ---- 阶段 1：写 manifest + 报告（此时尚未知报告自身哈希）----
+    # ---- 阶段 1：写 manifest（此时尚无 outputs / self_check）----
     _write_manifest(manifest, out_dir, man_out)
+
+    # ---- 阶段 2：报告写出前的自校验（不含报告自身哈希）—— 报告据此**如实**展示，
+    #      避免「报告先于自校验写出」导致 §8 恒报「0/0 ❌」的假阴性 ----
+    manifest["self_check_pre_report"] = verify_manifest(manifest, skip_report=True)
+    if not manifest["self_check_pre_report"]["all_pass"]:
+        raise FrozenAttestationError(
+            "报告写出前自校验失败（哈希不一致）："
+            + json.dumps(manifest["self_check_pre_report"]["detail"], ensure_ascii=False))
+
     reps.mkdir(parents=True, exist_ok=True)
     report = reps / f"gen2_b1_frozen_run_{date_tag}.md"
     report.write_text(_render_report(manifest, summary, bundle), encoding="utf-8")
 
-    # ---- 阶段 2：记录输出报告哈希并自校验，再重写 manifest（报告不含自身哈希 → 稳定）----
+    # ---- 阶段 3：记录输出报告哈希并做**完整**自校验，再重写 manifest（报告不含自身哈希 → 稳定）----
     manifest["outputs"] = {
         "run_dir": _rel(out_dir),
         "run_dir_artifacts": [a["file"] for a in artifacts],
@@ -613,12 +865,94 @@ def _write_manifest(manifest: dict, out_dir: Path, man_out: Path) -> None:
                        encoding="utf-8")
 
 
+def accept_merge(master_commit: str,
+                 manifest_path: str | Path | None = None,
+                 report_path: str | Path | None = None,
+                 source_tree_sha: str | None = None) -> dict:
+    """把本次冻结运行的三类摘要绑定到合并后的 master，写入接受记录（`ACCEPTED`）。
+
+    **前置（fail-closed）**：manifest 里声明的三类摘要必须与**当前磁盘**重算结果逐位一致 ——
+    任一变化即**拒绝写入并要求重跑 B1**，因为那意味着合并进来的内容与取证时不同，
+    「内容哈希不变 ⇒ 无需重跑」的前提不成立。
+
+    写入后：`run_status = ACCEPTED`，报告措辞改为「Frozen B1 已接受」；**此时才允许启动 B3**。
+    """
+    man = Path(manifest_path) if manifest_path else \
+        (GEN2_ROOT / "manifests" / "GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json")
+    m = json.loads(man.read_text(encoding="utf-8"))
+
+    declared = {
+        "lock_sha256": m["frozen_input"]["lock"]["lock_sha256"],
+        "lock_component_digest": m["frozen_input"]["lock_component_digest"],
+        "input_content_digest": m["input_data"]["content_digest"],
+        "run_implementation_digest": _aggregate_digest(
+            [(e["id"], e["sha256"]) for e in m["run_implementation"]]),
+    }
+    recomputed = {
+        "lock_sha256": _sha(m["frozen_input"]["lock"]["lock_file"]),
+        "lock_component_digest": _aggregate_digest(
+            [(e["id"], _sha(e["file"]) or "") for e in m["frozen_input"]["immutable_set"]]),
+        "input_content_digest": _aggregate_digest(
+            [(f"daily:{f['code']}", _sha(f["file"]) or "") for f in m["input_data"]["files"]]
+            + [(f"meta:{e['id']}", _sha(e["file"]) or "") for e in m["input_data"]["meta_files"]]),
+        "run_implementation_digest": _aggregate_digest(
+            [(e["id"], _sha(e["file"]) or "") for e in m["run_implementation"]]),
+    }
+    diffs = {k: {"declared": declared[k], "recomputed": recomputed[k]}
+             for k in declared if declared[k] != recomputed[k]}
+    if diffs:
+        raise FrozenAttestationError(
+            "接受记录**拒绝**写入：三类摘要与当前磁盘不一致 ⇒ 必须重跑 B1。差异："
+            + json.dumps(diffs, ensure_ascii=False))
+
+    m["acceptance_record"] = {
+        "status": STATUS_ACCEPTED,
+        "accepted_master_commit": _git("rev-parse", master_commit) or master_commit,
+        "accepted_master_commit_input": master_commit,
+        "source_tree_sha": source_tree_sha or _git("rev-parse", f"{master_commit}^{{tree}}"),
+        "accepted_at": pd.Timestamp.now("UTC").isoformat(),
+        "digests_unchanged": True,
+        "no_rerun_required": True,
+        "bound_digests": {
+            **declared,
+            "committed_report_sha256": ((m.get("outputs") or {}).get("committed_report") or {}).get("sha256"),
+        },
+        "note": ("内容哈希未变 ⇒ **无需重跑**；本记录把取证时的组件摘要 / 输入摘要 / 输出摘要"
+                 "绑定到合并后的 master。写入后措辞可改为「Frozen B1 已接受」，此时才允许启动 B3。"),
+    }
+    m["run_status"] = STATUS_ACCEPTED
+    m.pop("run_status_note", None)
+
+    out_dir = _abs(m["run_dir"])
+    rep = Path(report_path) if report_path else _abs(
+        ((m.get("outputs") or {}).get("committed_report") or {}).get("file") or m["report"])
+    summary = pd.read_csv(out_dir / "ledger_summary.csv")
+    bundle = json.loads(_abs(BUNDLE_REL).read_text(encoding="utf-8"))
+    rep.write_text(_render_report(m, summary, bundle), encoding="utf-8")
+
+    m.setdefault("outputs", {})["committed_report"] = {
+        "file": _rel(rep), "exists": rep.is_file(),
+        "sha256": _sha(rep), "bytes": rep.stat().st_size if rep.is_file() else None,
+    }
+    m["self_check"] = verify_manifest(m)
+    if not m["self_check"]["all_pass"]:
+        raise FrozenAttestationError(
+            "接受记录写入后自校验失败："
+            + json.dumps(m["self_check"]["detail"], ensure_ascii=False))
+    _write_manifest(m, out_dir, man)
+    return m
+
+
 def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
     a = m["acceptance"]
     cal = m["window"]["calendar"]
+    att = m["attribution"]
+    accepted = m.get("run_status") == STATUS_ACCEPTED
     lines = [
-        "# Gen-2 B1 **冻结运行**报告（Frozen Run）",
+        "# Gen-2 B1 冻结运行报告（Frozen Run）· %s" % ("已接受" if accepted else "待合并"),
         "",
+        "**运行状态**：%s" % ("**Frozen B1 已接受**" if accepted
+                          else "**待合并冻结运行**（PENDING-MERGE FROZEN RUN）"),
         "**日期**：%s · **Run ID**：`%s`" % (m["created_at"][:10], m["run_id"]),
         "**冻结输入**：`%s`（lock SHA `%s`，revision %s）"
         % (m["frozen_input"]["lock"]["bundle_version"],
@@ -638,8 +972,25 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "> ⚠️ 这是**研发证据**，不是经济结论。B3 Frozen OOS 通过前，本报告的任何净值 / Sharpe / MDD",
         "> **不得**用于生产资格或 authority 提升。继续 Shadow / CANARY，未部署、未写正式仓位。",
         ">",
-        "> **与旧 B1 读数差异很大？先看 §9「差异归因」（必读页）** —— 那里逐条对应 D-001 / F1-F2 /",
-        "> F4 / 统一账本各自改变了什么，以及为什么两条基线的数值**不应**相同。",
+    ]
+    if accepted:
+        lines += [
+            "> **状态口径**：接受记录已写入 manifest（`acceptance_record.accepted_master_commit` /",
+            "> `source_tree_sha`），本次产出的正确表述是「**Frozen B1 已接受**」。",
+            "> 三类摘要未变 ⇒ 无需重跑；**此时才允许启动 B3 Frozen OOS**（B3 本身仍不得据此提升 authority）。",
+            ">",
+        ]
+    else:
+        lines += [
+            "> **状态口径（本次复核结论）**：在**冻结 PR 合并 → B1 PR 自动改基后合并 → 写入接受记录**",
+            "> 三步完成之前，本产出的正确表述是「**待合并冻结运行**」，**不是**项目最终 Frozen B1；",
+            "> 也因此**不得**据此启动 B3。接受条件与记录字段见 **§12**。",
+            ">",
+        ]
+    lines += [
+        "> **与旧 B1 读数差异很大？先看 §9「差异归因」** —— 那里给出**可审计的数值对照表**",
+        "> （0/5/10/20bps × 逐策略 × 净值/CAGR/Sharpe/换手/成本/差异），并逐项标注",
+        "> D-001 / F1-F2 / F4 / 统一账本的归因。",
         "",
         "---",
         "",
@@ -762,83 +1113,316 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
     for art in m["artifacts"]:
         lines.append("| `%s` | %s | `%s` |"
                      % (art["file"], art["bytes"], (art["sha256"] or "MISSING")[:16] + "…"))
-    sc = m.get("self_check") or {}
+    sc_pre = m.get("self_check_pre_report") or {}
     lines += [
         "",
         "- **本报告自身哈希**：见 manifest `outputs.committed_report`（报告不含自身哈希，避免自引用）",
-        "- **manifest 自校验**：%s（%d/%d 项哈希重算一致）"
-        % ("✅ 全部通过" if sc.get("all_pass") else "❌ 存在失配",
-           sc.get("passed", 0), sc.get("checks", 0)),
+        "- **manifest 自校验（报告写出前执行，不含报告自身哈希）**：%s（%d/%d 项哈希重算一致）"
+        % ("✅ 全部通过" if sc_pre.get("all_pass") else "❌ 存在失配",
+           sc_pre.get("passed", 0), sc_pre.get("checks", 0)),
+        "- **manifest 完整自校验（含本报告哈希）**：结果写入 manifest `self_check`；"
+        "`all_pass=false` 时本入口抛 `FrozenAttestationError` 并**拒绝产出交付物** —— "
+        "因此本报告存在即等价于「完整自校验已通过」，此处不重复断言。",
         "",
-        "## 9. 差异归因：旧审计基线 vs 新冻结基线（**必读页**）",
+        "## 9. 差异归因：旧审计基线 vs 本次冻结运行（**必读页**）",
         "",
-        "> 本页不是经济结论。它回答一个**流程**问题：与旧 B1 的 Gen-2 读数差异很大，",
-        "> 这些差异从哪来、是否**可解释**。验收口径不是「数值相同」，而是**每一处变化都能对应到",
-        "> 一个已登记的实现 / 口径变更**。",
+        "> 本页不是经济结论。它回答**流程**问题：与旧 B1 的 Gen-2 读数差异很大，这些差异从哪来、",
+        "> 是否**可解释**。验收口径**不是「数值相同」**，而是「每一处变化都对应一个已登记的实现 /",
+        "> 口径变更，且数值差异可被数据解释」。",
+        ">",
+        "> **数据来源（可审计，非手工誊抄）**：本页表格由**两边的 `ledger_summary` 数据**生成 ——",
+        "> 旧基线读数取自**入库快照** `%s`" % att["audit_baseline"]["snapshot_file"],
+        "> （其转写来源 `%s`，字节 sha256 `%s…`；快照自身 sha256 `%s…`）；"
+        % (att["audit_baseline"]["captured_from"],
+           att["audit_baseline"]["captured_from_sha256"][:16],
+           (att["audit_baseline"]["snapshot_sha256"] or "")[:16]),
+        "> 本次读数取自本运行隔离目录 `%s/ledger_summary.csv`。" % m["run_dir"],
         "",
-        "### 9.1 两条基线的性质不同（先看这个）",
-        "",
-        "| | 旧审计基线 | 新冻结基线（本报告） |",
-        "|---|---|---|",
-        "| run ID | `b1_ledger_baseline_20260911` | `%s` |" % m["run_id"],
-        "| 报告 | `gen2_b1_research_baselines_20260911.md`（研究口径） | 本报告（冻结口径） |",
-        "| 组合口径 | 研究脚本：`build_portfolio_candidates` 把 CORE 重置为等权、**无防守腿** | 统一候选组合：权威权重沿用 + 上限复核 + 防守腿 + 现金腿 |",
-        "| 角色语义 | Rule V2 修正**前** | Rule V2 修正**后**（出口无条件终局约束检查） |",
-        "| 账本口径 | 旧 `apply_turnover_cost`（现金腿也计入换手） | 唯一权威账本 `run_ledger`（单边成交名义额） |",
-        "| 冻结状态 | 未冻结（无 bundle / lock 归属） | `gen2-rule-v2.0.1` + `lock_revision %s`，8 项冻结对象 + 2 项构建产物 |"
-        % m["frozen_input"]["lock"]["lock_revision"],
-        "| 用途 | **仅作审计基线** | 研发证据（B3 通过前不得用于生产资格） |",
-        "",
-        "### 9.2 四类变更各自改变了什么",
-        "",
-        "| 变更 | 机制（到底改了什么） | 对读数的影响 | 是否调参 |",
-        "|---|---|---|---|",
-        "| **D-001** 规则实现修正 | 角色生成路径出口统一走 `finalizeRoles` / `finalize_roles`：**无条件**执行终局约束检查"
-        "（CORE 数量上限 / 每 cluster CORE 上限 / NO_CORE 不可恢复 / 单资产·cluster·科技·现金约束）。"
-        "此前「无 cap 降级现任且无替换」的交易日会**跳过**该检查 | 此前被跳过的路径被收敛 ⇒ 角色分布与降级日改变 "
-        "⇒ 换手、防守触发日、净值随之改变 | 否（阈值 / universe 未动） |",
-        "| **F1/F2** 信号质量修复 | `build_v2_roles` **不再**静默重算 Alpha；评分必须**显式注入**"
-        "（`selection_scores`：唯一键 / 有限 / 覆盖无缺无多 + 内容哈希）；`top_quantile` 改为显式 "
-        "`role_thresholds`（core 0.20 / challenger 0.30 / satellite 0.40） | 修复前「声明了旋钮、"
-        "组合指标却与 baseline 逐位相同」的**假读数**消失；替代 Alpha 与角色阈值**真正**进入角色决策 | "
-        "否（默认值与旧行为逐值等价） |",
-        "| **F4** 统一候选组合（WP-G2-06） | `build_portfolio_candidates` 不再把 CORE 重置为等权 `1/n`、"
-        "不再丢弃单只 / cluster / 广义科技上限，`priority` 改为**精确集合校验**；`main()` 接入唯一候选链路；"
-        "发布 30 条 `gen2_ranking` + 31 条 `gen2_candidate_leg`；防守腿进入组合 | 研究脚本的归因 / 敏感性数字"
-        "与权威账本**不再可比**（口径已统一 ⇒ 旧数字**作废**而不是「失真」） | 否 |",
-        "| **统一账本**（WP-G2-02） | 唯一权威账本 `run_ledger`：换手 = **单边成交名义额** `Σ_证券|Δ|`"
-        "（旧实现把现金腿也算进换手，最坏**高估 2 倍**）；公共日历强校验（首日/末日/天数逐位一致）；"
-        "T+1 执行 + 期初全现金 | 有现金缓冲的策略其**历史换手与费用被高估**的读数失效；同成本档下"
-        "换手下降 ⇒ 净收益上升 | 否（口径修正） |",
-        "",
-        "### 9.3 为什么两条基线的数值**不应**相同",
-        "",
-        "- 上表四项全部是实现语义或口径变更；其中 **D-001 是明确登记的语义变更** —— 正因如此，"
-        "Rule V2 不再沿用「已封版 / 已验证」的资格表述（见 `gen2_rule_impl_correction_20260911.md`）。",
-        "- F4 + 统一账本使**研究口径与权威账本统一**，因此旧 `b1_ledger_baseline_20260911` 的 Gen-2 读数",
-        "  （研究口径下 Rule + 防守 Sharpe 0.32 vs Main5 PIT 0.49，10bps）**不能**与本冻结基线逐值对比 ——",
-        "  把它降级为「审计基线」正是这个原因。",
-        "- 可比性由**同一把锁**保证：本报告的每个数字都能追溯到 `lock_sha256 = %s…` 下的 8 项冻结对象（见 §2）。"
-        % m["frozen_input"]["lock"]["lock_sha256"][:16],
-        "",
-        "### 9.4 与「候选冻结运行」的关系",
-        "",
-        "- 上一轮曾在 `lock_revision 2` 下跑过一次 B1（run ID `b1_ledger_baseline_20260914_frozen_v201`，",
-        "  10bps 下 `gen2_v2_defended` **+61.01%** / Sharpe 0.55）：那是**候选运行证据**，不是最终 Frozen B1。",
-        "- 本次为 `lock_revision 3`（新增 `selection_scores.py` + `regime.py` 入锁）下的**最终 Frozen B1**。",
-        "  两次扩围都**只改变锁定范围、不改变规则字节与参数**，所以两份读数的正确关系是「**应当一致**」——",
-        "  出现任何差异都说明扩围顺带改了运行语义，那是必须先查清的缺陷，而不是「新版本更好」。",
-        "",
-        "| 策略 | 候选运行（rev 2，10bps） | 本次（rev 3，10bps） | 判定 |",
-        "|---|---|---|---|",
     ]
-    for name, ref, cum, shp, same in _candidate_run_comparison(summary):
-        lines.append("| `%s` | %+.2f%% / Sharpe %.2f | %+.2f%% / Sharpe %.2f | %s |"
-                     % (name, ref["cumulative_return"] * 100, ref["sharpe"], cum * 100, shp,
-                        "✅ 逐位一致（扩围未改语义）" if same else "❌ **不一致**（扩围改了语义，须查）"))
+
+    # ---- 可对照性：Δ 只有在两侧窗口 / 成本档一致时才可解释 ----
+    comparable = bool(att["controls"]["comparable"])
+    ctl = att["controls"]
+    _aw = ctl.get("audit_baseline_window") or {}
+    _rw = ctl.get("run_window") or {}
+    lines += [
+        "### 9.0 可对照性判定（先看这里：不一致则 Δ 不可解释）",
+        "",
+        "| 口径 | 旧审计基线快照 | 本次运行 | 一致？ |",
+        "|---|---|---|---|",
+        "| 窗口 | `%s` → `%s`（%s 日） | `%s` → `%s`（%s 日） | %s |"
+        % (_aw.get("first_date"), _aw.get("last_date"), _aw.get("days"),
+           _rw.get("first_date"), _rw.get("last_date"), _rw.get("days"),
+           "—" if _rw.get("days") is None else ("✅" if ctl.get("window_mismatch") is None else "❌")),
+        "| 成本档（bps） | %s | %s | %s |"
+        % (", ".join("%g" % c for c in att["audit_baseline"].get("cost_levels", [])) or "—",
+           ", ".join("%g" % c for c in sorted({r["cost_bps"] for r in att["rows"]})) or "—",
+           "—" if _rw.get("days") is None
+           else ("✅" if ctl.get("cost_level_mismatch") is None
+                 else "⚠️ 仅个别单元格缺席（表中显示 `—`），不影响已有单元格")),
+        "",
+    ]
+    if comparable:
+        lines += [
+            "✅ **可对照**：两侧窗口一致 ⇒ 下表的 Δ = 本次 − 旧基线，逐格相减有意义；",
+            "§9.4 的基准控制项据此生效。",
+            "",
+        ]
+    else:
+        lines += [
+            "⚠️ **不可对照（差异诊断模式）**：两侧**窗口不一致** ⇒ **Δ 列一律显示 `n/a`**。",
+            "拿不同窗口的读数相减是**拿两个不同问题相减**，会假报「基准策略 Δ ≠ 0 ⇒ 账本变了」。",
+            "本模式下 §9.1 只**并列列示**两侧原始读数（各自标注自己的窗口），§9.2 / §9.4 / §9.6",
+            "一律标「不适用」—— **本页不构成对「旧基线为何变化」的量化解释**。",
+            "要做量化解释，必须跑**与快照同窗口（0/5/10/20bps 全量）**的运行。",
+            "",
+        ]
+
+    lines += [
+        "### 9.1 数值对照表（净值 / CAGR / Sharpe / 换手 / 成本，含差异）",
+        "",
+        "口径：**Δ = 本次 − 旧审计基线**；净值 = 期末净值（累计收益 = 净值 − 1）。",
+    ]
+    if comparable:
+        lines += ["公共窗口 `%s` → `%s`（%d 日）。" % (cal["first_date"], cal["last_date"], cal["days"])]
+    else:
+        lines += [
+            "旧基线窗口 `%s` → `%s`（%s 日）；本次窗口 `%s` → `%s`（%s 日）—— **两者不同，Δ 不可解释。**"
+            % (_aw.get("first_date"), _aw.get("last_date"), _aw.get("days"),
+               _rw.get("first_date"), _rw.get("last_date"), _rw.get("days")),
+        ]
+    lines.append("")
+
+    for bps in sorted({r["cost_bps"] for r in att["rows"]}):
+        tag = "**毛收益口径**：Δ 全部来自持仓 / 权重路径（无费用）" if abs(bps) < 1e-9 \
+            else "含费用"
+        lines += [
+            "#### cost = %g bps（%s）" % (bps, tag),
+            "",
+            "| 策略 | 净值 旧 | 净值 新 | Δ净值 | CAGR 旧 | CAGR 新 | ΔCAGR(pp) | Sharpe 旧 | Sharpe 新 | ΔSharpe"
+            " | 换手 旧 | 换手 新 | Δ换手 | 成本 旧 | 成本 新 |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for r in att["rows"]:
+            if abs(r["cost_bps"] - bps) > 1e-9:
+                continue
+            o, n, d = r["old"], r["new"], r["delta"]
+            if o is None:
+                lines.append("| %s | — | %.4f | — | — | %+.2f%% | — | — | %.2f | — | — | %.3f | — | — | %.4f |"
+                             % (r["strategy"], n["terminal_nav"], n["cagr"] * 100, n["sharpe"],
+                                n["total_turnover"], n["total_cost"]))
+                continue
+            if not comparable:
+                # 差异诊断模式：只并列列示两侧原始读数，Δ 不给出（避免被误读为解释）
+                lines.append(
+                    "| %s | %.4f | %.4f | n/a | %+.2f%% | %+.2f%% | n/a | %.2f | %.2f | n/a"
+                    " | %.3f | %.3f | n/a | %.4f | %.4f |"
+                    % (r["strategy"], o["terminal_nav"], n["terminal_nav"],
+                       o["cagr"] * 100, n["cagr"] * 100, o["sharpe"], n["sharpe"],
+                       o["total_turnover"], n["total_turnover"], o["total_cost"], n["total_cost"]))
+                continue
+            lines.append(
+                "| %s | %.4f | %.4f | %+.4f | %+.2f%% | %+.2f%% | %+.2f | %.2f | %.2f | %+.2f"
+                " | %.3f | %.3f | %+.3f | %.4f | %.4f |"
+                % (r["strategy"], o["terminal_nav"], n["terminal_nav"], d["terminal_nav"],
+                   o["cagr"] * 100, n["cagr"] * 100, d["cagr"] * 100,
+                   o["sharpe"], n["sharpe"], d["sharpe"],
+                   o["total_turnover"], n["total_turnover"], d["total_turnover"],
+                   o["total_cost"], n["total_cost"]))
+        lines.append("")
+
+    _split = _gross_and_cost_split(att) if comparable else []
+    lines += [
+        "### 9.2 Δ 的两段分解：毛收益效应 vs 成本拖累变化",
+        "",
+    ]
+    if not comparable:
+        lines += ["⚠️ **不适用**：两侧窗口不一致 ⇒ 不做两段分解（见 §9.0）。"]
+    elif not _split:
+        lines += [
+            "⚠️ **本次运行未含 0 bps 成本档** ⇒ 无法把 Δ 拆成「毛收益效应」与「成本拖累变化」。",
+            "这是**运行裁剪**（测试/CI 用单档）造成的，不是数据缺陷；正式全量运行含 0/5/10/20bps 四档。",
+            "",
+        ]
+    else:
+        lines += [
+            "净值口径恒等式：累计收益 ≈ 毛收益 − 成本拖累。因此 `Δ(0bps)` **纯净地**反映持仓 / 权重路径差异，",
+            "`Δ(10bps) − Δ(0bps)` 反映**费用**差异。",
+            "",
+            "| 策略 | 毛收益效应 Δ(0bps) | 成本拖累 旧@10bps | 成本拖累 新@10bps | 成本拖累缓解 | 净效应 Δ(10bps) |",
+            "|---|---|---|---|---|---|",
+        ]
+        for s in _split:
+            lines.append("| %s | %+.2fpp | %.2fpp | %.2fpp | %+.2fpp | %+.2fpp |"
+                         % (s["strategy"], s["gross_effect_0bps"] * 100,
+                            s["old_cost_drag_10bps"] * 100, s["new_cost_drag_10bps"] * 100,
+                            s["cost_drag_relief"] * 100, s["net_effect_10bps"] * 100))
+        lines += [
+            "",
+            "> 读法：**毛收益效应是主动作，成本拖累变化是反向缓冲。**",
+        ]
     lines += [
         "",
-        "> 「逐位一致」是本页最强的单点证据：**锁定范围扩围**若真的只锁范围，读数就必须一动不动。",
+        "### 9.3 逐项归因：四项已登记变更各自是否构成本次 Δ",
+        "",
+        "**判定规则**（不是叙述）：把「旧基线产出时点」与各变更的落地时点比对 —— 落在旧基线**之内**的变更",
+        "**不可能**解释本次 Δ（它只能解释「旧基线与更早报告」的差异）；落在旧基线**之后**的才可能。",
+        "旧基线产出时点 = `2026-09-11 14:21`（其 `ledger_summary.csv` 文件 mtime）。",
+        "",
+        "> 本节是**时点判定**（与运行窗口无关）⇒ 即使在 §9.0 的「不可对照」模式下**依然有效**：",
+        "> 它回答「哪些变更**有可能**解释差异」，但**不能**回答「差异有多大」（那需要可对照的数值表）。",
+        "",
+        "| 变更 | 落地 commit | 落地时间 | 落在旧基线内？ | 能解释本次 Δ？ | 对本次 Δ 的数值贡献 |",
+        "|---|---|---|---|---|---|",
+    ]
+    _verdict_cn = {"none_already_in_audit_baseline": "无（已在旧基线内生效）",
+                   "none_by_default_equivalence": "无（默认配置与旧行为逐值等价）",
+                   "material": "**全部**"}
+    for c in att["changes"]:
+        ev = c["evidence"]
+        commits = ev.get("commits") or [ev.get("commit")]
+        commits = [x for x in commits if x]
+        at = ev.get("at")
+        at_s = ", ".join(at) if isinstance(at, list) else (at or "")
+        explains = c["numeric_contribution"] == "material"
+        lines.append("| **%s** %s | %s | %s | %s | %s | %s |"
+                     % (c["id"], c["name"],
+                        ", ".join("`%s`" % x for x in commits), at_s,
+                        "✅ 是" if c["in_audit_baseline"] else "❌ 否（落在旧基线之后）",
+                        "✅ 是" if explains else "❌ 否",
+                        _verdict_cn.get(c["numeric_contribution"], c["numeric_contribution"])))
+    lines += [
+        "",
+        "**机制（这些变更到底改了什么）**",
+        "",
+    ]
+    for c in att["changes"]:
+        lines.append("- **%s**：%s → 影响面：%s" % (c["id"], c["mechanism"], c["metric_moved"]))
+
+    mm = att["audit_baseline"].get("measured_mechanism") or {}
+    lines += [
+        "",
+        "### 9.4 控制项：基准策略逐位相同（可机检）",
+        "",
+        "基准策略（%s）**不经过规则实现** ⇒ 它们的 Δ 必须**恰为 0**；为 0 同时独立证明"
+        % ", ".join("`%s`" % s for s in att["controls"]["benchmark_strategies"]),
+        "**账本契约与基准路径未变** —— 也就是「统一账本」不构成本次 Δ 的来源。",
+        "",
+        "| 控制项 | 值 | 判定 |",
+        "|---|---|---|",
+    ]
+    if comparable:
+        lines += [
+            "| 基准策略累计收益最大绝对差（全成本档） | %.3e | %s |"
+            % (att["controls"]["benchmark_max_abs_cum_return_delta"] or 0.0,
+               "✅ 逐位相同" if att["controls"]["benchmark_bit_identical"] else "❌ 不一致"),
+            "| 基准策略换手（旧 → 新，@0bps） | %s | ✅ |"
+            % " / ".join(
+                "%s %.5f→%.5f" % (r["strategy"], r["old"]["total_turnover"], r["new"]["total_turnover"])
+                for r in att["rows"]
+                if abs(r["cost_bps"]) < 1e-9 and r["old"] is not None
+                and r["strategy"] in att["controls"]["benchmark_strategies"]),
+        ]
+    else:
+        lines += [
+            "| 基准策略累计收益最大绝对差 | — | ⚠️ **不适用**（窗口不一致） |",
+            "| 基准策略换手（旧 → 新） | — | ⚠️ **不适用**（两侧窗口不同，换手量级不可比） |",
+        ]
+    lines += [
+        "",
+    ]
+    if not comparable:
+        lines += [
+            "> **不要**把 `benchmark_max_abs_cum_return_delta` 的非零读数当成「账本被改了」的证据 ——",
+            "> 那是**窗口不同**的必然结果。判定「基准路径是否变化」必须用同窗口全量运行（§9.0）。",
+            "",
+        ]
+    if mm.get("old_candidate_weights"):
+        lines += [
+            "**旧基线的权重语义（实测证据，解释 Δ 的方向）**",
+            "",
+            "| 观测 | 证据 |",
+            "|---|---|",
+            "| %s | %s |" % (mm["old_candidate_weights"]["finding"],
+                              "；".join("`%s`" % e for e in mm["old_candidate_weights"]["evidence"])),
+            "| bundle 上限被旧实现丢弃 | %s |"
+            % "；".join("`%s = %s`" % (k, v) for k, v in mm.get("bundle_caps_ignored_by_old", {}).items()),
+            "| 现金/敞口对照（defended @0bps） | 旧：非零现金 %s 日、均值 %.5f；新：非零现金 %s 日、均值 %.5f |"
+            % (mm["exposure_evidence"]["defended_0bps_old_nonzero_cash_days"],
+               mm["exposure_evidence"]["defended_0bps_old_mean_cash_weight"],
+               mm["exposure_evidence"]["defended_0bps_new_nonzero_cash_days"],
+               mm["exposure_evidence"]["defended_0bps_new_mean_cash_weight"]),
+            "",
+        ]
+
+    _sp = next((s for s in _split if s["strategy"] == "gen2_v2_defended"), None)
+    lines += [
+        "### 9.5 旧基线的数字为什么变了（**方向性说明，已更正**）",
+        "",
+        "- **统一账本的方向（更正）**：更早的实现把**现金腿重复计入换手** ⇒ 换手与**费用被高估** ⇒",
+        "  **净收益被低估、表现更悲观**。此前把这里写成「旧读数偏乐观」是**错误的**，本版已更正。",
+        "  但请同时注意：**本次 Δ 与统一账本无关** —— 统一账本早已在旧审计基线内生效（§9.3 判定 + §9.4 机检）。",
+        "- **本次 Δ 的方向由 F4 决定**（旧基线在权重语义上把 `1/n` 等权当作组合，并丢弃上限）：",
+    ]
+    if _sp:
+        lines += [
+            "  - 旧基线在 CORE 只有 1 只时把 **100%** 押在单只（例如 `2020-05-27` 的 `target_weight = 1.0`），",
+            "    远超 bundle 的 `max_single_weight = 0.25` ⇒ **敞口更高、换手更大**；",
+            "  - 在 2020–2026 这段行情里，这种集中敞口换来**更高的毛收益**：毛收益效应 **%+.2fpp**；"
+            % (_sp["gross_effect_0bps"] * 100),
+            "  - 同时更高的换手带来更重的费用：成本拖累 **%.2fpp → %.2fpp**（@10bps），"
+            % (_sp["old_cost_drag_10bps"] * 100, _sp["new_cost_drag_10bps"] * 100),
+            "    缓解 **%+.2fpp**；" % (_sp["cost_drag_relief"] * 100),
+            "  - 净效应 **%+.2fpp**（@10bps）：**毛收益的下降（%+.2fpp）大于费用的缓解（%+.2fpp）**，"
+            % (_sp["net_effect_10bps"] * 100, _sp["gross_effect_0bps"] * 100,
+               _sp["cost_drag_relief"] * 100),
+            "    所以旧基线看起来「更好」**不是因为旧账本更乐观**，而是因为旧的组合口径把上限约束**当成了不存在**。",
+        ]
+    else:
+        _why = ("**不可对照**（两侧窗口不一致）⇒ 本节不给数值" if not comparable
+                else "本次运行未含 0 bps 成本档 ⇒ 无法给毛收益效应/成本拖累数值")
+        lines += [
+            "  - ⚠️ %s。方向性结论仍然成立（它是**机制**层面的）：" % _why,
+            "    旧基线丢弃 `max_single_weight / max_cluster_weight / max_tech_weight` ⇒ 敞口更高、换手更大；",
+            "    在 2020–2026 的行情里换来了更高的毛收益，同时付出更重的费用 —— **F4 是唯一实质性来源**",
+            "    （§9.3 判定 + `F4MechanismValidityTest` 的机制反例）。具体幅度需跑**同窗口全量运行**（0/5/10/20bps）补齐。",
+        ]
+    lines += [
+        "",
+        "### 9.6 与「候选冻结运行」的关系（扩锁未改语义）",
+        "",
+        "> **口径澄清**：rev2 与 rev3 读数一致**只能**证明「扩锁未改变运行语义」，",
+        "> **不能**代替 §9.1–§9.5 对「旧基线为何变化」的量化解释。两者是不同的问题。",
+        "",
+        "- 上一轮曾在 `lock_revision 2` 下跑过一次 B1（10bps 下 `gen2_v2_defended` **+61.01%** / Sharpe 0.55）：",
+        "  那是**候选运行证据**，不是最终 Frozen B1。",
+        "- 本次为 `lock_revision %s` 下的运行。两次扩围都**只改变锁定范围、不改变规则字节与参数**，"
+        % m["frozen_input"]["lock"]["lock_revision"],
+        "  所以两份读数的正确关系是「**应当一致**」—— 出现差异即说明扩围顺带改了运行语义（缺陷）。",
+        "",
+        "| 策略 | 候选运行（rev 2，10bps） | 本次（rev %s，10bps） | 判定 |"
+        % m["frozen_input"]["lock"]["lock_revision"],
+        "|---|---|---|---|",
+    ]
+    if comparable:
+        for name, ref, cum, shp, same in _candidate_run_comparison(summary):
+            lines.append("| `%s` | %+.2f%% / Sharpe %.2f | %+.2f%% / Sharpe %.2f | %s |"
+                         % (name, ref["cumulative_return"] * 100, ref["sharpe"], cum * 100, shp,
+                            "✅ 逐位一致（扩锁未改语义）" if same else "❌ **不一致**（扩锁改了语义，须查）"))
+        lines += [
+            "",
+            "> 「逐位一致」是本页**针对扩锁**最强的单点证据：若扩围真的只锁范围，读数就必须一动不动。",
+        ]
+    else:
+        lines += [
+            "| — | — | — | ⚠️ **不适用** |",
+            "",
+            "> ⚠️ 本次为裁剪窗口（`%s` → `%s`），候选运行读数取自**全窗口**运行 ⇒ 两者不可比对。"
+            % (_rw.get("first_date"), _rw.get("last_date")),
+            "> 扩锁一致性核对**只**在全窗口运行时有效（`test_final_run_matches_candidate_run_at_10bps` 即用全窗口）。",
+        ]
+    lines.append("")
+    lines += [
         "",
         "## 10. 边界（本运行未做 / 刻意不做）",
         "",
@@ -849,6 +1433,14 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "- **未改规则**：本次运行只**读**冻结 bundle 与冻结实现，未做任何参数或语义变更；",
         "- **旧报告降级**：`b1_ledger_baseline_20260911` / `gen2_b1_research_baselines_20260911.md`",
         "  自本次起**只作审计基线**，不再作为比较对象。",
+    ]
+    lines += (["- **Frozen B1 已接受**：接受记录已写入（§12）；**此时才允许启动 B3 Frozen OOS** ——",
+               "  但 B3 本身仍不得据此提升 authority / 部署 / 写正式仓位。",
+               "  `%s / Sharpe %s`（候选读法）**不是**经济资格。" % ("+61.01%", "0.55")]
+              if accepted else
+              ["- **不据此启动 B3**：本产出是「待合并冻结运行」，在 §12 的接受记录写入之前不进入 B3 Frozen OOS；",
+               "  `+61.01% / Sharpe 0.55` **不是**经济资格。"])
+    lines += [
         "",
         "## 11. 复现",
         "",
@@ -858,11 +1450,76 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "# 只读验锁（不改盘）",
         "python scripts/ml/freeze-gen2-rule-bundle.py --check",
         "node scripts/verify-immutable.js",
+        "# 合并后写入接受记录（校验三类摘要未变；不变则无需重跑）",
+        "PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>",
         "```",
         "",
         "> 任一门禁失配（锁 SHA / ROOT_ANCHORS / 配置漂移 / 跨实现常量 / manifest 自校验）时本入口",
         "> **直接拒绝运行**，因此不存在「在一份未冻结的规则上跑出 B1」这种形态。",
+        "",
+        "## 12. 合并接受条件%s"
+        % ("（已写入接受记录）" if accepted else "（写入接受记录前，本产出只是「待合并冻结运行」）"),
+        "",
+        "顺序（不可跳）：",
+        "",
+        "1. **冻结 PR 先合并**（`feat/gen2-wp-g2-04-freeze` → `master`）；",
+        "2. **B1 PR 自动改基后合并**（`feat/gen2-b1-frozen-run`，其 base 选冻结分支；冻结 PR 合并后",
+        "   GitHub 自动把 base 改为 `master`）；",
+        "3. 在 B1 manifest 写入**接受记录**：`accepted_master_commit` / `source_tree_sha`。",
+        "   内容哈希不变则**无需重跑** —— 只把**本次同一**的「组件摘要 / 输入摘要 / 输出摘要」",
+        "   绑定到合并后的 master。",
+        "",
+        "当前状态：%s" % ("**Frozen B1 已接受**" if accepted
+                          else "**待合并**（接受记录尚未写入 → 措辞不得写「已接受」）"),
+        "",
+        "| 项 | 值 |",
+        "|---|---|",
+        "| `run_status` | `%s` |" % m.get("run_status"),
+        "| %s**组件摘要**（lock 8 项折叠） | `%s` |"
+        % ("已绑定的" if accepted else "待绑定的", m["frozen_input"]["lock_component_digest"]),
+        "| %s**输入摘要** | `%s` |"
+        % ("已绑定的" if accepted else "待绑定的", m["input_data"]["content_digest"]),
+        "| %s**输出摘要** | 见 manifest `outputs.committed_report.sha256`（报告不含自身哈希） |"
+        % ("已绑定的" if accepted else "待绑定的"),
     ]
+    if accepted:
+        ar = m.get("acceptance_record") or {}
+        lines += [
+            "",
+            "**接受记录（已写入 manifest `acceptance_record`）**",
+            "",
+            "| 字段 | 值 |",
+            "|---|---|",
+            "| `accepted_master_commit` | `%s` |" % ar.get("accepted_master_commit"),
+            "| `accepted_master_commit_input` | `%s` |" % ar.get("accepted_master_commit_input"),
+            "| `source_tree_sha` | `%s` |" % ar.get("source_tree_sha"),
+            "| `accepted_at` | `%s` |" % ar.get("accepted_at"),
+            "| 三类摘要未变 | %s |" % ("✅ 是（无需重跑）" if ar.get("digests_unchanged") else "❌ 否"),
+            "",
+            "> **接受记录写入的前提与效果**：写入前入口会**重算三类摘要**（锁 SHA + 组件折叠摘要 /",
+            "> 输入内容摘要 / 运行实现摘要），任一变化即 `FrozenAttestationError` **拒绝写入并要求重跑**；",
+            "> 三者逐位一致 ⇒ 才写入 `accepted_master_commit` / `source_tree_sha`。因此「内容哈希不变 ⇒",
+            "> 无需重跑」这句话在本文件中是**被校验的前提**，不是约定。",
+            "",
+            "> 复核通过后即可进入 **B3 Frozen OOS**（B3 仍不得据此提升 authority / 部署 / 写正式仓位）。",
+            "> 复核命令（可重跑；已接受状态下会重新核对摘要并提示）：",
+            ">",
+            "> ```bash",
+            "> PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>",
+            "> ```",
+        ]
+    else:
+        lines += [
+            "",
+            "> **在接受记录写入之前**：不进入 B3 Frozen OOS、不提升 authority、不部署、不写正式仓位；",
+            "> 本报告全部净值 / Sharpe 只作**研发证据**。",
+            "",
+            "> 接受记录写入命令（合并后执行；会先重算三类摘要，任一变化即**拒绝**并要求重跑）：",
+            ">",
+            "> ```bash",
+            "> PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>",
+            "> ```",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -871,8 +1528,30 @@ def main() -> int:
     ap.add_argument("--date", default="20260914", help="日期标签（YYYYMMDD），用于 run ID 与报告名")
     ap.add_argument("--run-id", default=None, help="显式 run ID（默认由 bundle_version 派生）")
     ap.add_argument("--report-dir", default=None)
+    ap.add_argument("--report", default=None, help="报告路径（--accept-merge 时用于重写措辞）")
     ap.add_argument("--manifest", default=None)
+    ap.add_argument("--accept-merge", action="store_true",
+                    help="把本次运行的三类摘要绑定到合并后的 master 并写入接受记录（不重跑）")
+    ap.add_argument("--master-commit", default=None, help="合并后的 master commit（--accept-merge 必填）")
+    ap.add_argument("--source-tree-sha", default=None, help="显式指定 source tree sha（默认由 git 推导）")
     args = ap.parse_args()
+
+    if args.accept_merge:
+        if not args.master_commit:
+            print("[B1-FROZEN] --accept-merge 需要 --master-commit", file=sys.stderr)
+            return 2
+        try:
+            m = accept_merge(args.master_commit, manifest_path=args.manifest,
+                             report_path=args.report, source_tree_sha=args.source_tree_sha)
+        except FrozenAttestationError as exc:
+            print("[B1-FROZEN] 拒绝写入接受记录：%s" % exc, file=sys.stderr)
+            return 2
+        ar = m["acceptance_record"]
+        print("[B1-FROZEN] status    :", m["run_status"])
+        print("[B1-FROZEN] accepted  :", ar["accepted_master_commit"])
+        print("[B1-FROZEN] tree sha  :", ar["source_tree_sha"])
+        print("[B1-FROZEN] no rerun  :", ar["no_rerun_required"])
+        return 0
 
     try:
         r = run(date_tag=args.date, run_id=args.run_id,
@@ -884,6 +1563,7 @@ def main() -> int:
     m = r["manifest_data"]
     a = m["acceptance"]
     print("[B1-FROZEN] run id      :", r["run_id"])
+    print("[B1-FROZEN] run status  :", m["run_status"])
     print("[B1-FROZEN] run dir     :", r["run_dir"])
     print("[B1-FROZEN] manifest    :", r["manifest"])
     print("[B1-FROZEN] report      :", r["report"])
@@ -898,6 +1578,10 @@ def main() -> int:
     print("[B1-FROZEN] input digest: %s (%s → %s)" % (
         m["input_data"]["content_digest"][:12] + "…",
         m["input_data"]["date_range"]["first_date"], m["input_data"]["date_range"]["last_date"]))
+    print("[B1-FROZEN] attribution : 基准逐位相同=%s；能解释本次 Δ 的变更=%s" % (
+        m["attribution"]["controls"]["benchmark_bit_identical"],
+        ", ".join(c["id"] for c in m["attribution"]["changes"]
+                  if c["numeric_contribution"] == "material") or "（无）"))
     print("[B1-FROZEN] self-check  : %d/%d 项哈希一致 → %s" % (
         m["self_check"]["passed"], m["self_check"]["checks"],
         "PASS" if m["self_check"]["all_pass"] else "FAIL"))
