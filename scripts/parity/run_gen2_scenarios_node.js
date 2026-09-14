@@ -28,11 +28,40 @@ const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 const AUDIT_EXPORT = '\nexports.audit = { UNIVERSE, PORTFOLIO_CFG, DEFENSE_CFG, ROLE_THRESHOLDS, resolveRoleThresholds, RULE_BUNDLE_GATE, RULE_BUNDLE_REASON, deriveRoleThresholdsFromLegacy, SELECTION_SCORE_WEIGHTS, SELECTION_SCORE_SOURCE, combineSelectionScore, applySelectionScores, selectionScoreHash,'
   + ' marketScore, classifyRegime, selectionMode, promotionAllowed, maxCoreCount,'
   + ' computeLeadershipScore, rankFeatures, initialRoles, buildDailyRoles,'
+  + ' buildCandidatePortfolio, candidatePriorityHash, candidateConfigHash,'
   + ' computeReplacementEdge, shouldReplace, applyReplacementGate, assertFinalRoleConstraints, finalizeRoles,'
   + ' inspectBarsIntegrity, validatePublishResults };\n';
 
 /** 空 db（纯函数场景用；run 级场景另见 makeRunDb） */
 const EMPTY_DB = { query: async () => [], upsert: async () => {} };
+
+// G2S-10：与 Python 端逐字一致的确定性工具（固定 10 位小数 / code 升序 / 上限观测）
+function fixed10N(x) { return Number(x).toFixed(10); }
+function byCodeAscN(a, b) {
+  const ca = String(a.code); const cb = String(b.code);
+  return ca < cb ? -1 : (ca > cb ? 1 : 0);
+}
+function candidateCapsObs(rows) {
+  const nonCash = rows.filter((r) => r.code !== 'CASH').slice().sort(byCodeAscN);
+  let maxSingle = 0;
+  const byCluster = {};
+  const byDayTech = {};
+  const TECH = ['software_ai', 'tech_hardware'];
+  for (const r of nonCash) {
+    maxSingle = Math.max(maxSingle, r.target_weight);
+    const ck = String(r.trade_date) + '~' + String(r.correlation_cluster);
+    byCluster[ck] = (byCluster[ck] || 0) + r.target_weight;
+    if (TECH.indexOf(r.correlation_cluster) >= 0) {
+      const dk = String(r.trade_date);
+      byDayTech[dk] = (byDayTech[dk] || 0) + r.target_weight;
+    }
+  }
+  let maxCluster = 0;
+  for (const k in byCluster) maxCluster = Math.max(maxCluster, byCluster[k]);
+  let maxTech = 0;
+  for (const k in byDayTech) maxTech = Math.max(maxTech, byDayTech[k]);
+  return { maxSingle, maxCluster, maxTech };
+}
 
 // WP-G2-05R：运行路径不再有 role_thresholds fallback（缺 → blocked/RULE_BUNDLE_INCOMPLETE）。
 // 因此 parity 必须**显式注入**运行 bundle：冻结 manifest + 运行配置 role_thresholds。
@@ -594,6 +623,71 @@ const HANDLERS = {
         early_gate_data_gate: early.data_gate,
         early_gate_status_reason: early.status_reason
       };
+    }
+    return out;
+  },
+
+  /** G2S-10：统一候选组合构建（WP-G2-06 / F4）—— JS 影子端 vs Python 回测逐日对表 */
+  portfolio_build(sc) {
+    const panel = sc.input.panel;
+    const pcfg = panel.portfolio_config || {};
+    const dcfg = panel.defense_config || {};
+    const out = {};
+    for (const c of sc.input.cases) {
+      let rows = null;
+      let error = null;
+      try {
+        rows = A.buildCandidatePortfolio(panel.roles, {
+          priority: panel.priority,
+          portfolio_config: pcfg,
+          defense_config: dcfg,
+          benchmark: panel.benchmark,
+          apply_defense: !!c.apply_defense
+        });
+      } catch (e) {
+        error = String(e && e.message ? e.message : e);
+      }
+      const obs = { error: error, final_target_present: false };
+      if (rows) {
+        const nonCash = rows.filter((r) => r.code !== 'CASH');
+        obs.sleeve = rows.length ? rows[0].sleeve : null;
+        obs.priority_hash = rows.length ? rows[0].priority_hash : null;
+        obs.config_hash = A.candidateConfigHash(pcfg, dcfg);
+        obs.priority_source_all_injected = nonCash.every(
+          (r) => r.priority_source === 'INJECTED_SELECTION_SCORE');
+        obs.final_target_present = rows.some((r) => Object.prototype.hasOwnProperty.call(r, 'final_target'));
+        const caps = candidateCapsObs(rows);
+        obs.max_single_seen = fixed10N(caps.maxSingle);
+        obs.max_cluster_seen = fixed10N(caps.maxCluster);
+        obs.max_tech_seen = fixed10N(caps.maxTech);
+        const days = {};
+        for (const r of rows) (days[String(r.trade_date)] = days[String(r.trade_date)] || []).push(r);
+        const dayObs = {};
+        for (const d of Object.keys(days).sort()) {
+          const day = days[d].slice().sort(byCodeAscN);
+          const weights = {};
+          const priority = {};
+          let sum = 0;
+          let cash = null;
+          let defense = 0;
+          for (const r of day) {
+            priority[r.code] = r.priority;
+            if (r.code === 'CASH') { cash = r.target_weight; continue; }
+            weights[r.code] = fixed10N(r.target_weight);
+            sum += r.target_weight;
+            if (r.role === 'HEDGE') defense += r.target_weight;
+          }
+          dayObs[d] = {
+            weights: weights,
+            priority: priority,
+            weight_sum: fixed10N(sum + (cash === null ? 0 : cash)),
+            cash_weight: fixed10N(cash === null ? 0 : cash),
+            defense_weight: fixed10N(defense)
+          };
+        }
+        obs.days = dayObs;
+      }
+      out[c.id] = obs;
     }
     return out;
   }

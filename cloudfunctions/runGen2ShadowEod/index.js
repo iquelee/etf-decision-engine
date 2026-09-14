@@ -1331,6 +1331,167 @@ function applyDefense(candidates, features, benchmarkFeatures) {
   return out;
 }
 
+/* ---------------- WP-G2-06（F4）：统一候选组合构建（跨端 parity seam） ----------------
+ *
+ * 与 Python `gen2.portfolio.portfolio_builder.build_portfolio_candidates` **同一口径**：
+ *   B1 权重直接沿用角色层权威 target_weight（只做上限复核，越界即抛错，不静默缩）
+ *   B2 priority 必须来自显式注入 selection score（缺即抛错），绝不读 legacy rank
+ *   B3 现金腿（residual）与防守腿逐日进入组合
+ *   B5 priority 全覆盖 / 有限值 / 按 score 降序、**同分按 code 升序**；写入 priority_source/hash
+ * 现金求和的累加顺序固定为 **code 升序**，保证 IEEE 浮点结果与 Python 端逐位一致。
+ */
+const CANDIDATE_SLEEVE = 'GEN2_CANDIDATE';
+const CANDIDATE_CASH_CODE = 'CASH';
+const CANDIDATE_PRIORITY_SOURCE = 'INJECTED_SELECTION_SCORE';
+const CANDIDATE_PRIORITY_SOURCE_RESIDUAL = 'RESIDUAL_CASH_LEG';
+
+function fixed10(x) { return Number(x).toFixed(10); }
+
+function candidatePriorityHash(priority) {
+  const rows = [];
+  for (const d of Object.keys(priority).map(String).sort()) {
+    const m = priority[d] || {};
+    for (const c of Object.keys(m).map(String).sort()) rows.push(d + '~' + c + '~' + fixed10(m[c]));
+  }
+  return crypto.createHash('sha256').update(rows.join('|')).digest('hex');
+}
+
+function candidateConfigHash(pcfg, dcfg) {
+  const clusters = (pcfg.tech_clusters || ['software_ai', 'tech_hardware']).map(String).sort();
+  const tokens = [
+    'max_single_weight=' + fixed10(pcfg.max_single_weight != null ? pcfg.max_single_weight : 0.25),
+    'max_cluster_weight=' + fixed10(pcfg.max_cluster_weight != null ? pcfg.max_cluster_weight : 0.40),
+    'max_tech_weight=' + fixed10(pcfg.max_tech_weight != null ? pcfg.max_tech_weight : 0.65),
+    'tech_clusters=' + clusters.join(','),
+    'risk_off_exposure_scale=' + fixed10(dcfg.risk_off_exposure_scale != null ? dcfg.risk_off_exposure_scale : 0.50),
+    'risk_off_hedge_weight=' + fixed10(dcfg.risk_off_hedge_weight != null ? dcfg.risk_off_hedge_weight : 0.15)
+  ];
+  return crypto.createHash('sha256').update(tokens.join('|')).digest('hex');
+}
+
+const byCodeAsc = (a, b) => (String(a.code) < String(b.code) ? -1 : (String(a.code) > String(b.code) ? 1 : 0));
+
+function buildCandidatePortfolio(roles, opts) {
+  const o = opts || {};
+  const pcfg = Object.assign({
+    max_single_weight: 0.25, max_cluster_weight: 0.40, max_tech_weight: 0.65,
+    tech_clusters: ['software_ai', 'tech_hardware']
+  }, o.portfolio_config || {});
+  const dcfg = Object.assign({
+    risk_off_exposure_scale: 0.50, risk_off_hedge_weight: 0.15, hedge_code: '518880',
+    vol_target_enabled: true, vol_target_annualized: 0.17
+  }, o.defense_config || {});
+  const priority = o.priority;
+  if (!priority || typeof priority !== 'object') {
+    throw new Error('缺显式 priority：研究路径禁止回退 legacy rank（B2）');
+  }
+  const EPS = 1e-9;
+  const ph = candidatePriorityHash(priority);
+
+  const byDate = {};
+  for (const r of roles) (byDate[r.trade_date] = byDate[r.trade_date] || []).push(r);
+
+  const out = [];
+  for (const d of Object.keys(byDate).sort()) {
+    const m = priority[d];
+    if (!m) throw new Error('priority 缺交易日 ' + d);
+    const scored = byDate[d].map((r) => {
+      const c = String(r.code);
+      if (!(c in m)) throw new Error('priority 缺 ' + d + '/' + c);
+      const s = Number(m[c]);
+      if (!isFinite(s)) throw new Error('priority 非有限值 ' + d + '/' + c);
+      return { r, c, s };
+    });
+    scored.sort((a, b) => (b.s - a.s) || (a.c < b.c ? -1 : (a.c > b.c ? 1 : 0)));
+    scored.forEach((x, i) => {
+      out.push(Object.assign({}, x.r, {
+        code: x.c,
+        target_weight: Number(x.r.target_weight),
+        priority: i + 1,
+        priority_score: x.s,
+        priority_source: CANDIDATE_PRIORITY_SOURCE,
+        priority_hash: ph,
+        sleeve: CANDIDATE_SLEEVE
+      }));
+    });
+  }
+
+  // B1 上限复核（越界即抛错，绝不静默缩、更不重置为等权）
+  let maxSingle = 0;
+  for (const r of out) maxSingle = Math.max(maxSingle, r.target_weight);
+  if (!isFinite(maxSingle) || maxSingle < -EPS) throw new Error('target_weight 非有限或为负');
+  if (maxSingle > pcfg.max_single_weight + EPS) throw new Error('单只上限被突破（B1）');
+
+  const clusterSum = {};
+  const techSum = {};
+  for (const r of out) {
+    if (r.role !== 'CORE') continue;
+    const ck = r.trade_date + '~' + r.correlation_cluster;
+    clusterSum[ck] = (clusterSum[ck] || 0) + r.target_weight;
+    if (pcfg.tech_clusters.indexOf(r.correlation_cluster) >= 0) {
+      techSum[r.trade_date] = (techSum[r.trade_date] || 0) + r.target_weight;
+    }
+  }
+  for (const k in clusterSum) {
+    if (clusterSum[k] > pcfg.max_cluster_weight + EPS) throw new Error('cluster 上限被突破（B1）');
+  }
+  for (const k in techSum) {
+    if (techSum[k] > pcfg.max_tech_weight + EPS) throw new Error('广义科技上限被突破（B1）');
+  }
+
+  // 防守腿（regime + vol target），与 applyDefense / Python apply_regime_defense 同式
+  const bench = {};
+  for (const b of (o.benchmark || [])) bench[String(b.trade_date)] = b;
+  const applied = out.map((r) => {
+    const sig = bench[String(r.trade_date)] || {};
+    let state = 'NORMAL';
+    let coreScale = 1.0;
+    let hedgeWeight = 0.0;
+    if (o.apply_defense) {
+      const hasMa = sig.benchmark_px_ma20 != null && sig.benchmark_px_ma60 != null;
+      const ms = hasMa ? marketScore(sig.benchmark_px_ma20, sig.benchmark_px_ma60) : null;
+      if (classifyRegime(ms) === 'RISK_OFF') {
+        state = 'RISK_OFF';
+        coreScale = Math.max(0, dcfg.risk_off_exposure_scale - dcfg.risk_off_hedge_weight);
+        hedgeWeight = dcfg.risk_off_hedge_weight;
+      } else if (dcfg.vol_target_enabled && sig.realized_vol20 && sig.realized_vol20 > 0) {
+        coreScale = Math.min(1.0, dcfg.vol_target_annualized / sig.realized_vol20);
+      }
+    }
+    const isHedge = String(r.code) === String(dcfg.hedge_code);
+    const tw = (state === 'RISK_OFF')
+      ? (isHedge ? hedgeWeight : r.target_weight * coreScale)
+      : r.target_weight * coreScale;
+    return Object.assign({}, r, { target_weight: tw, defense_state: state });
+  });
+
+  // 现金腿（residual）：累加顺序固定 code 升序 → 与 Python 端 IEEE 结果逐位一致
+  const byDay = {};
+  for (const r of applied) (byDay[r.trade_date] = byDay[r.trade_date] || []).push(r);
+  const result = [];
+  for (const d of Object.keys(byDay).sort()) {
+    const day = byDay[d].slice().sort(byCodeAsc);
+    let invested = 0;
+    for (const r of day) invested += r.target_weight;
+    if (invested > 1 + EPS) throw new Error('持仓合计超过 1 @ ' + d);
+    const t = day[0];
+    for (const r of day) result.push(r);
+    result.push({
+      trade_date: t.trade_date, code: CANDIDATE_CASH_CODE, name: '现金',
+      correlation_cluster: 'cash', role: 'CASH', target_weight: Math.max(0, 1 - invested),
+      priority: day.length + 1, priority_score: null,
+      priority_source: CANDIDATE_PRIORITY_SOURCE_RESIDUAL, priority_hash: ph,
+      sleeve: CANDIDATE_SLEEVE, defense_state: t.defense_state
+    });
+  }
+  result.sort((a, b) => {
+    const da = String(a.trade_date); const db = String(b.trade_date);
+    if (da !== db) return da < db ? -1 : 1;
+    return a.priority - b.priority;
+  });
+  return result;
+}
+
 /* ---------------- 主流程 ---------------- */
 
 // 跨语言 Parity 测试入口：暴露纯决策函数（供 scripts/parity/run_node.js 调用），不改生产行为。
@@ -1352,6 +1513,10 @@ exports._internal = {
   buildDailyRoles,
   buildPortfolioCandidates,
   applyDefense,
+  // WP-G2-06（F4）：统一候选组合构建（跨端 parity seam）—— 权威权重复核 + 注入 priority + 现金/防守腿
+  buildCandidatePortfolio,
+  candidatePriorityHash,
+  candidateConfigHash,
   // WP-G2-03：角色生成统一出口（替换事务 + 无条件终局约束检查）与两个组件，供跨语言 parity 读取
   finalizeRoles,
   applyReplacementGate,

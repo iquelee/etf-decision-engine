@@ -200,6 +200,35 @@ class TestScenarioParity(unittest.TestCase):
         self.assertIn("data_source_trap_raised", fields)
         self.assertIn("bundle_selection_base", sc["input"])
 
+    def test_g2s10_portfolio_build_declared(self):
+        """WP-G2-06（F4）：必须存在统一候选组合构建的跨端**逐日**对表场景。"""
+        sc = next((s for s in self.fixture["scenarios"] if s["id"] == "G2S-10"), None)
+        self.assertIsNotNone(sc, "缺 G2S-10（统一候选组合构建跨端对表）")
+        self.assertEqual(sc["handler"], "portfolio_build")
+        self.assertEqual(sc["status"], "RUNNABLE")
+        self.assertEqual({c["id"] for c in sc["input"]["cases"]}, {"undefended", "regime_path"})
+        panel = sc["input"]["panel"]
+        for key in ("roles", "priority", "benchmark", "portfolio_config", "defense_config"):
+            self.assertIn(key, panel, "G2S-10 panel 缺 " + key)
+        # priority 必须显式注入，且夹具**不含 rank 列**（无法回退 legacy rank）
+        self.assertTrue(panel["priority"], "G2S-10 必须显式声明注入 score")
+        self.assertFalse(any("rank" in r for r in panel["roles"]), "roles 不得携带 legacy rank")
+
+        fields = {inv["field"] for inv in sc["invariants"]}
+        # 对表不只比「有无腿」：每只 ETF / 现金 / 防守腿的权重、权重和、上限、priority、hash
+        required = [
+            "days.2026-03-02.weights.513310", "days.2026-03-02.weights.159570",
+            "days.2026-03-02.cash_weight", "days.2026-03-02.weight_sum",
+            "days.2026-03-03.cash_weight", "days.2026-03-03.weight_sum",
+            "days.2026-03-02.priority.159582", "days.2026-03-02.priority.CASH",
+            "days.2026-03-03.defense_weight", "days.2026-03-03.weights.513310",
+            "max_single_seen", "max_cluster_seen", "max_tech_seen",
+            "sleeve", "final_target_present", "priority_hash", "config_hash",
+            "priority_source_all_injected",
+        ]
+        for needle in required:
+            self.assertIn(needle, fields, "G2S-10 对表口径缺 " + needle)
+
     def test_rule_bundle_order_proof_cases_declared(self):
         """裁决追加验证：G2S-09 必须带「数据源一读就抛错」的顺序证明 case（主控 + 正控）。"""
         sc = next(s for s in self.fixture["scenarios"] if s["id"] == "G2S-09")
