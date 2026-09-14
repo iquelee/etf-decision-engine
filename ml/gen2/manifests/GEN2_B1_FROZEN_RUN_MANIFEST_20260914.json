@@ -1,9 +1,16 @@
 {
   "manifest_type": "GEN2_B1_FROZEN_RUN",
   "run_id": "b1_ledger_baseline_20260914_frozen_v201",
-  "created_at": "2026-09-14T07:46:34.417897+00:00",
+  "created_at": "2026-09-14T08:40:21.700336+00:00",
   "run_status": "PENDING_MERGE",
-  "run_status_note": "**待合并冻结运行**：本运行已完成全部取证，但在冻结 PR + B1 PR 合并并写入接受记录（`acceptance_record.accepted_master_commit` / `source_tree_sha`）之前，**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。",
+  "run_status_note": "**待合并冻结运行**：本运行已完成全部取证，但在「冻结 PR + B1 PR 合并 → 独立分支 `chore/gen2-b1-accept-v201` 写入接受记录 → 该接受记录 PR 合并」完成之前，**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。",
+  "source_state": {
+    "git_head_commit": "874efe03d72cf0b870d19fec59f7503df83a4d57",
+    "source_tree_sha": "50920f858a52e7b03e73cb41b790e4d25f4fd180",
+    "working_tree_dirty": false,
+    "dirty_tracked_paths": [],
+    "note": "`source_tree_sha` = 取证运行时 `HEAD^{tree}`。接受记录要求`--master-commit^{tree}` 与它**严格相等** ⇒ 合并进来的源码树与取证树相同。`working_tree_dirty=true` 时该前提不成立（存在未提交的受控改动），接受时会拒绝绑定。未跟踪文件不影响 tree。"
+  },
   "boundaries": {
     "stage": "SHADOW/CANARY",
     "deployed": false,
@@ -140,7 +147,7 @@
       "role": "B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配",
       "file": "ml/gen2/baseline/b1_frozen_run.py",
       "exists": true,
-      "sha256": "9c58e7be92e2b58a2b8eb19704633e36a8b7e69b912870444aa7b4e31cb38e93"
+      "sha256": "ef2b1d31a7f32981b5c51dbb866f66045c1616113b6af1e97e60d879751e3f69"
     },
     {
       "id": "baseline_builder",
@@ -707,7 +714,7 @@
     {
       "file": "calendar_meta.json",
       "exists": true,
-      "sha256": "9e15112f33a595a05c9c3262560b0e758a8d062502cd0be25530ecdceb7f1986",
+      "sha256": "b55391362b9cfa4db61acf18187a0aa7e1a6873beb447044099711c74769c096",
       "bytes": 3347
     },
     {
@@ -1544,8 +1551,8 @@
     "committed_report": {
       "file": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
       "exists": true,
-      "sha256": "e3e52c32d7fd931dbc3ba37a9ef54d1433b746e884fc0ca8d7e60c14700d6703",
-      "bytes": 31170
+      "sha256": "9b15d52ee091dc8d294019a9a31e5f246de79d1b65c161037b93fa2b6372467a",
+      "bytes": 33448
     }
   },
   "self_check": {
