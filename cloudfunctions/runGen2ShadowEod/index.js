@@ -23,8 +23,9 @@ const crypto = require('crypto');
 const db = require('./common/utils/db');
 const { COLLECTIONS } = require('./common/constants');
 
-// Gen-2 Rule V2 单一真相源：优先从 bundle 读（build 时由 build-cloudfunctions.js 复制到本目录），
-// 缺失（本地直跑 / 未 build）则 fallback 硬编码（与 ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json 一致）。
+// Gen-2 Rule V2 单一真相源：从 bundle 读（build 时由 build-cloudfunctions.js 复制到本目录）。
+// bundle 文件缺失 ⇒ `_bundle=null` ⇒ 无 selection.role_thresholds ⇒ 规则 bundle 闸门判
+// blocked/RULE_BUNDLE_INCOMPLETE（fail-closed；不再有任何「硬编码/旧字段」兜底）。
 let _bundle = null;
 let _bundle_sha256 = null;
 try {
@@ -250,7 +251,8 @@ const PORTFOLIO_CFG = {
   demotion_persistence_days: _sel.demotion_persistence_days != null ? _sel.demotion_persistence_days : 5,
   max_core_count: _sel.max_core_count != null ? _sel.max_core_count : 5,
   max_core_per_cluster: _sel.max_core_per_cluster != null ? _sel.max_core_per_cluster : 2,
-  top_quantile: _sel.top_quantile != null ? _sel.top_quantile : 0.2,
+  // 注：旧 `top_quantile` 已从运行配置**移除**（WP-G2-05R）。它只在离线迁移 bundle 时经
+  // `deriveRoleThresholdsFromLegacy(_sel)` 读取一次，运行路径一律使用 selection.role_thresholds。
   min_replacement_edge: _sel.min_replacement_edge != null ? _sel.min_replacement_edge : 8.0,
   max_single_weight: _pf.max_single_weight != null ? _pf.max_single_weight : 0.25,
   max_cluster_weight: _pf.max_cluster_weight != null ? _pf.max_cluster_weight : 0.40,
@@ -272,15 +274,21 @@ const DEFENSE_CFG = {
 };
 
 /**
- * 角色分层阈值（WP-G2-05 / F2 修复）。
+ * 角色分层阈值（WP-G2-05 / F2 修复；WP-G2-05R 收口运行时 fallback）。
  *
  * 显式契约：`selection.role_thresholds = { core_top_fraction, challenger_top_fraction, satellite_top_fraction }`
  * 含义为「位于前多少比例」（不需要 1 - top_quantile 反向推导），校验
- * 0 < core <= challenger <= satellite < 1；默认值与旧行为等价（core 0.80 / challenger 0.70 / satellite 0.60）。
+ * 0 < core <= challenger <= satellite < 1；取值与旧行为等价（core 0.80 / challenger 0.70 / satellite 0.60）。
  *
- * 迁移窗口：当前冻结 bundle（gen2-rule-v2.0）尚无 role_thresholds，此时**显式**回落到旧
- * `top_quantile` 并把 source 标为 LEGACY_TOP_QUANTILE_AUDIT（写进运行记录，绝不静默）。
- * WP-G2-04 重新生成 bundle 后本回落分支自动失效（并由测试强制 source=RUNTIME_BUNDLE）。
+ * **运行路径禁止 fallback**（用户裁决：显式配置 + 与 Python 端语义一致）：
+ *   * bundle 缺 `selection.role_thresholds` → 本次运行 `blocked`，`status_reason=RULE_BUNDLE_INCOMPLETE`
+ *     （`data_gate=RULE_BUNDLE_ROLE_THRESHOLDS_MISSING`）；
+ *   * 提供了但非法（键缺失 / 非数值 / 顺序违例）→ 同样 `blocked`，`data_gate=RULE_BUNDLE_ROLE_THRESHOLDS_INVALID`
+ *     （配置损坏同样意味着「无法可信运行」，绝不静默沿用旧值）；
+ *   * 旧 `top_quantile` **只允许离线迁移 bundle 时**经 `deriveRoleThresholdsFromLegacy()` 读取，
+ *     任何运行路径都不得再读它。
+ *
+ * 因此本函数**永不抛错**：把判定结果（ok / gate / detail）交给 `main()` 统一转成 run 状态四态。
  */
 function validateTopFractions(rt, label) {
   const keys = ['core_top_fraction', 'challenger_top_fraction', 'satellite_top_fraction'];
@@ -299,42 +307,76 @@ function validateTopFractions(rt, label) {
 
 function resolveRoleThresholds(sel) {
   const node = sel && sel.role_thresholds;
-  if (node && typeof node === 'object') {
+  if (!node || typeof node !== 'object') {
+    return {
+      ok: false,
+      source: 'RULE_BUNDLE_INCOMPLETE',
+      reason: 'RULE_BUNDLE_INCOMPLETE',
+      gate: 'RULE_BUNDLE_ROLE_THRESHOLDS_MISSING',
+      detail: '规则 bundle 缺 selection.role_thresholds；禁止运行路径 fallback 到旧 top_quantile'
+        + '（旧字段只允许离线迁移 bundle 时读取）'
+    };
+  }
+  try {
     const vals = validateTopFractions(node, 'selection.role_thresholds');
     return {
+      ok: true,
       source: 'RUNTIME_BUNDLE',
       top_fractions: vals,
       core_pct: 1 - vals.core_top_fraction,
       challenger_pct: 1 - vals.challenger_top_fraction,
       satellite_pct: 1 - vals.satellite_top_fraction
     };
+  } catch (e) {
+    return {
+      ok: false,
+      source: 'RULE_BUNDLE_INVALID',
+      reason: 'RULE_BUNDLE_INCOMPLETE',
+      gate: 'RULE_BUNDLE_ROLE_THRESHOLDS_INVALID',
+      detail: String((e && e.message) || e)
+    };
   }
-  // 迁移窗口（bundle 尚未含 role_thresholds）：读旧 top_quantile，但显式标注来源
-  const corePct = 1 - (PORTFOLIO_CFG.top_quantile != null ? PORTFOLIO_CFG.top_quantile : 0.2);
-  const challengerPct = _sel.challenger_pct != null ? _sel.challenger_pct : 0.70;
-  const satellitePct = _sel.satellite_pct != null ? _sel.satellite_pct : 0.60;
-  if (!(corePct >= challengerPct && challengerPct >= satellitePct)) {
-    throw new Error(`遗留 top_quantile/challenger_pct/satellite_pct 派生的切点顺序非法：${corePct}/${challengerPct}/${satellitePct}`);
-  }
-  // 迁移审计用的分位回推：四舍五入到 1e-10，避免 1-(1-0.2)=0.19999999999999996 这类噪声写进运行记录
-  const frac = (v) => Math.round((1 - v) * 1e10) / 1e10;
-  return {
-    source: 'LEGACY_TOP_QUANTILE_AUDIT',
-    top_fractions: {
-      core_top_fraction: frac(corePct),
-      challenger_top_fraction: frac(challengerPct),
-      satellite_top_fraction: frac(satellitePct)
-    },
-    core_pct: corePct,
-    challenger_pct: challengerPct,
-    satellite_pct: satellitePct
-  };
 }
 
+/**
+ * **离线迁移助手**（WP-G2-04 重建 bundle/lock 用；严禁出现在运行路径）。
+ *
+ * 把冻结 bundle 里残留的旧字段（`top_quantile` / `challenger_pct` / `satellite_pct`）一次性
+ * 换算成显式 `role_thresholds`，烘焙进新 bundle。运行路径只认 `selection.role_thresholds`，
+ * 不调用本函数；迁移产物一律要过 `validateTopFractions` 校验，保证新 bundle 一定合法。
+ */
+function deriveRoleThresholdsFromLegacy(sel) {
+  const s = sel && typeof sel === 'object' ? sel : {};
+  const corePct = 1 - (s.top_quantile != null ? Number(s.top_quantile) : 0.2);
+  const challengerPct = s.challenger_pct != null ? Number(s.challenger_pct) : 0.70;
+  const satellitePct = s.satellite_pct != null ? Number(s.satellite_pct) : 0.60;
+  // 分位回推：四舍五入到 1e-10，避免 1-(1-0.2)=0.19999999999999996 这类噪声落进 bundle
+  const frac = (v) => Math.round((1 - v) * 1e10) / 1e10;
+  const out = {
+    core_top_fraction: frac(corePct),
+    challenger_top_fraction: frac(challengerPct),
+    satellite_top_fraction: frac(satellitePct)
+  };
+  validateTopFractions(out, 'legacy 迁移派生 role_thresholds');
+  return out;
+}
+
+// 运行配置的显式阈值：ok=false 时下游常量一律为 null（main() 会在规则 bundle 闸门拦下）。
 const ROLE_THRESHOLDS = resolveRoleThresholds(_sel);
-const CORE_PCT = ROLE_THRESHOLDS.core_pct;
-const CHALLENGER_PCT = ROLE_THRESHOLDS.challenger_pct;
-const SATELLITE_PCT = ROLE_THRESHOLDS.satellite_pct;
+const CORE_PCT = ROLE_THRESHOLDS.ok ? ROLE_THRESHOLDS.core_pct : null;
+const CHALLENGER_PCT = ROLE_THRESHOLDS.ok ? ROLE_THRESHOLDS.challenger_pct : null;
+const SATELLITE_PCT = ROLE_THRESHOLDS.ok ? ROLE_THRESHOLDS.satellite_pct : null;
+
+/**
+ * run 级「规则 bundle 闸门」（优先级最高，见夹具 `seam_contracts.run_status_gate.gate_order`）。
+ * 非 null ⇒ 本次运行必须 `blocked`（status_reason=RULE_BUNDLE_INCOMPLETE），且**不读数据**。
+ */
+const RULE_BUNDLE_REASON = 'RULE_BUNDLE_INCOMPLETE';
+const RULE_BUNDLE_GATE = ROLE_THRESHOLDS.ok ? null : {
+  gate: ROLE_THRESHOLDS.gate,
+  detail: ROLE_THRESHOLDS.detail,
+  status_reason: RULE_BUNDLE_REASON
+};
 
 /* ---------------- 统一 Regime 契约（与 ml/gen2/portfolio/regime.py 一致） ---------------- */
 
@@ -1046,9 +1088,13 @@ function assertFinalRoleConstraints(day, prevRoles) {
 }
 
 function buildDailyRoles(features, roleThresholds) {
-  // WP-G2-05：阈值来自显式 role_thresholds（迁移窗口内由旧 top_quantile 派生，来源写入运行记录）；
-  // roleThresholds 参数供跨语言 parity / 场景实验显式覆盖，默认即运行配置。
+  // WP-G2-05/F2：阈值只能来自显式 role_thresholds（roleThresholds 参数供跨语言 parity /
+  // 场景实验显式覆盖，默认即运行配置）。运行路径缺显式配置时 main() 已在规则 bundle 闸门
+  // blocked；这里再 fail-closed 兜一层，杜绝「没有显式阈值也算出角色」。
   const T = roleThresholds || ROLE_THRESHOLDS;
+  if (!T || T.ok === false || T.core_pct == null) {
+    throw new Error('RULE_BUNDLE_INCOMPLETE: buildDailyRoles 需要显式 role_thresholds（禁止 fallback）');
+  }
   const corePct = T.core_pct;
   const challengerPct = T.challenger_pct;
   const satellitePct = T.satellite_pct;
@@ -1316,6 +1362,10 @@ exports._internal = {
   // WP-G2-05：显式 Selection Score 注入链 + 角色阈值（F1/F2）
   ROLE_THRESHOLDS,
   resolveRoleThresholds,
+  // WP-G2-05R：规则 bundle 闸门 + 旧字段的**离线**迁移助手（运行路径不得调用）
+  RULE_BUNDLE_REASON,
+  RULE_BUNDLE_GATE,
+  deriveRoleThresholdsFromLegacy,
   SELECTION_SCORE_WEIGHTS,
   SELECTION_SCORE_VERSION,
   SELECTION_SCORE_SOURCE,
@@ -1339,6 +1389,51 @@ exports.main = async (event = {}, context = {}) => {
   };
   try {
     await diag('start', 'main entered');
+
+    // F01：数据闸门（P0-1 重写）——独立应到交易日 + 唯一交易日 + benchmark 完整性 + LIVE/REPLAY 分离。
+    // 核心契约：绝不把「陈旧批次」「唯一交易日不足」「benchmark 特征未就绪」标成可消费的 FULL。
+    const MIN_HISTORY_DAYS = 120;        // 候选「唯一交易日」下限（对齐 Python 120 行语义，但按唯一日计算）
+    const BENCHMARK_MIN_DAYS = 60;       // benchmark「唯一交易日」下限（MA20/MA60/vol 必要输入）
+    let mode = (event.mode === 'REPLAY') ? 'REPLAY' : 'LIVE';
+    const expectedTradeDate = dateKey(event.expected_trade_date || event.as_of_trade_date) || null;
+
+    // 闸门失败：写 blocked 运行记录（不得产生 completed 决策快照），再返回
+    /**
+     * 数据/资格/约束闸门未通过 → run 状态 **blocked**（可预期的业务结果，不是系统故障）。
+     * 四态契约（WP-G2-03）：running → completed | blocked | failed
+     *   blocked  今日没有可信的 Gen-2 结果（数据陈旧/重复/缺基准/短历史/无合格标的/规则不完整等），
+     *            前台只展示 V3.6.1
+     *   failed   代码/网络/数据库等运行异常，系统未正常完成
+     * 二者处理、告警与文案必须区分，不得合并。
+     *
+     * status_reason 取值：DATA_OR_ELIGIBILITY_GATE（数据/资格闸门）/
+     * RULE_BUNDLE_INCOMPLETE（规则 bundle 缺显式必需配置 → 见 RULE_BUNDLE_GATE）/ PUBLISH_VALIDATION_FAILED。
+     */
+    const failGate = async (gate, error, extra = {}) => {
+      // status_reason 默认数据/资格闸门；规则 bundle 闸门通过 extra 显式传入 RULE_BUNDLE_INCOMPLETE。
+      const statusReason = extra.status_reason || 'DATA_OR_ELIGIBILITY_GATE';
+      try {
+        await db.upsert(COLLECTIONS.GEN2_SHADOW, {
+          type: 'gen2_run', run_id: runId, engine_id: ENGINE_ID,
+          universe_version: UNIVERSE.version, mode, status: 'blocked',
+          status_reason: statusReason,
+          data_gate: gate, error: String(error || '').slice(0, 300),
+          created_at: new Date().toISOString()
+        }, { type: 'gen2_run', run_id: runId });
+      } catch (e2) { /* 忽略失败记录落库失败 */ }
+      return { ok: false, status: 'blocked', status_reason: statusReason, error: String(error || ''), data_gate: gate, mode, ...extra };
+    };
+
+    // -1) 规则 bundle 闸门（**优先于任何数据读取与统计**，编号与夹具 gate_order 的 `-1` 对齐）：
+    //     bundle 缺显式 selection.role_thresholds（或提供但非法）→ 本次运行 blocked /
+    //     RULE_BUNDLE_INCOMPLETE。绝不 fallback 到旧 top_quantile：那会产出一套「未经显式声明」
+    //     的角色分层，并与 Python 端（缺配置直接失败）语义分裂。
+    if (RULE_BUNDLE_GATE) {
+      await diag('rule_bundle_gate', RULE_BUNDLE_GATE.gate + ' :: ' + RULE_BUNDLE_GATE.detail);
+      return await failGate(RULE_BUNDLE_GATE.gate, RULE_BUNDLE_GATE.detail,
+        { status_reason: RULE_BUNDLE_REASON, rule_bundle_status: 'INCOMPLETE' });
+    }
+
     // 1. 读研究日线（14 只 universe + benchmark 510300，qfq 前复权完整历史；串行避免 SDK 并发挂起）
     const barsByCode = {};
     const allCodes = [...UNIVERSE.eligible_codes, UNIVERSE.benchmark_code];
@@ -1350,34 +1445,6 @@ exports.main = async (event = {}, context = {}) => {
       await diag('read', code + ':' + (bars ? bars.length : 0));
     }
     await diag('read_done', 'codes=' + Object.keys(barsByCode).length);
-
-    // F01：数据闸门（P0-1 重写）——独立应到交易日 + 唯一交易日 + benchmark 完整性 + LIVE/REPLAY 分离。
-    // 核心契约：绝不把「陈旧批次」「唯一交易日不足」「benchmark 特征未就绪」标成可消费的 FULL。
-    const MIN_HISTORY_DAYS = 120;        // 候选「唯一交易日」下限（对齐 Python 120 行语义，但按唯一日计算）
-    const BENCHMARK_MIN_DAYS = 60;       // benchmark「唯一交易日」下限（MA20/MA60/vol 必要输入）
-    let mode = (event.mode === 'REPLAY') ? 'REPLAY' : 'LIVE';
-    const expectedTradeDate = dateKey(event.expected_trade_date || event.as_of_trade_date) || null;
-
-    // 闸门失败：写 failed 运行记录（不得产生 completed 决策快照），再返回
-    /**
-     * 数据/资格/约束闸门未通过 → run 状态 **blocked**（可预期的业务结果，不是系统故障）。
-     * 四态契约（WP-G2-03）：running → completed | blocked | failed
-     *   blocked  今日没有可信的 Gen-2 结果（数据陈旧/重复/缺基准/短历史/无合格标的等），前台只展示 V3.6.1
-     *   failed   代码/网络/数据库等运行异常，系统未正常完成
-     * 二者处理、告警与文案必须区分，不得合并。
-     */
-    const failGate = async (gate, error, extra = {}) => {
-      try {
-        await db.upsert(COLLECTIONS.GEN2_SHADOW, {
-          type: 'gen2_run', run_id: runId, engine_id: ENGINE_ID,
-          universe_version: UNIVERSE.version, mode, status: 'blocked',
-          status_reason: 'DATA_OR_ELIGIBILITY_GATE',
-          data_gate: gate, error: String(error || '').slice(0, 300),
-          created_at: new Date().toISOString()
-        }, { type: 'gen2_run', run_id: runId });
-      } catch (e2) { /* 忽略失败记录落库失败 */ }
-      return { ok: false, status: 'blocked', status_reason: 'DATA_OR_ELIGIBILITY_GATE', error: String(error || ''), data_gate: gate, mode, ...extra };
-    };
 
     // 0) 输入完整性（A2：字段完整性 + 唯一交易日）——早于任何统计，脏数据不得参与排名。
     const integrity = inspectBarsIntegrity(barsByCode, allCodes);
@@ -1513,6 +1580,7 @@ exports.main = async (event = {}, context = {}) => {
       confidence_reason: confidenceReason,
       role_classification: rcls,
       // WP-G2-05：Alpha 与角色阈值的 provenance（可审计；不是从 legacy 字段反推）
+      // 运行路径已由规则 bundle 闸门保证 ROLE_THRESHOLDS.ok=true（缺显式配置走不到这里）
       selection_score_version: selectionMeta.score_version,
       selection_score_source: selectionMeta.score_source,
       selection_score_hash: selectionMeta.score_hash,

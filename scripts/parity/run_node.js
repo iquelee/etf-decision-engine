@@ -15,15 +15,37 @@ const ROOT = path.resolve(__dirname, '..', '..', 'cloudfunctions', 'runGen2Shado
 const SRC_COMMON = path.resolve(__dirname, '..', '..', 'src', 'common');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
 
+// WP-G2-05R：运行路径已无 role_thresholds fallback（缺 → blocked/RULE_BUNDLE_INCOMPLETE）。
+// 本 runner 是离线链路的等价入口，因此显式注入「运行 bundle」= 冻结 manifest + 运行配置阈值
+// （与 ml/gen2/config/gen2.yaml portfolio.role_thresholds / Python run_python.py 一致）。
+const MANIFEST_BUNDLE = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '..', '..', 'ml', 'gen2', 'manifests', 'GEN2_RULE_V2_BUNDLE.json'), 'utf8'));
+const RUNNING_ROLE_THRESHOLDS = {
+  core_top_fraction: 0.20, challenger_top_fraction: 0.30, satellite_top_fraction: 0.40,
+};
+const RUNNING_BUNDLE = (() => {
+  const b = JSON.parse(JSON.stringify(MANIFEST_BUNDLE));
+  b.selection = Object.assign({}, b.selection, { role_thresholds: RUNNING_ROLE_THRESHOLDS });
+  return b;
+})();
+
 const fixturePath = process.argv[2] || path.resolve(__dirname, '..', '..', 'fixtures', 'gen2', 'parity_fixture.json');
 const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
 function loadInternal() {
   const db = { query: async () => [], upsert: async () => {} };
+  const bundleJson = JSON.stringify(RUNNING_BUNDLE);
+  const realFs = require('fs');
+  const fsShim = Object.assign({}, realFs, {
+    readFileSync: (p, ...rest) => (String(p).endsWith('GEN2_RULE_V2_BUNDLE.json')
+      ? bundleJson
+      : realFs.readFileSync(p, ...rest))
+  });
   const box = {
     exports: {},
+    __dirname: ROOT,
     require: (p) => {
-      if (p === 'fs') return require('fs');
+      if (p === 'fs') return fsShim;
       if (p === 'path') return require('path');
       if (p === 'crypto') return require('crypto');
       if (p === './common/utils/db') return db;

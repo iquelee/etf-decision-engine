@@ -171,12 +171,30 @@ class TestScenarioParity(unittest.TestCase):
     def test_run_status_gate_order_declared(self):
         gate = self.fixture.get("seam_contracts", {}).get("run_status_gate", {})
         order = gate.get("gate_order", [])
-        expect = ["NAN_OR_MISSING_FIELD", "DUPLICATE_TRADE_DATE", "BENCHMARK_MISSING",
+        # WP-G2-05R：规则 bundle 闸门优先级最高（先于任何数据闸门）
+        expect = ["RULE_BUNDLE_INCOMPLETE", "NAN_OR_MISSING_FIELD", "DUPLICATE_TRADE_DATE", "BENCHMARK_MISSING",
                   "BENCHMARK_INSUFFICIENT_HISTORY", "STALE_BATCH", "NO_ELIGIBLE_TODAY",
                   "UNIVERSE_INCOMPLETE", "PUBLISH_VALIDATION_FAILED"]
         self.assertEqual(len(order), len(expect), "闸门顺序条目数不符")
         for i, name in enumerate(expect):
             self.assertIn(name, order[i], f"闸门顺序第 {i + 1} 位应为 {name}")
+        # RULE_BUNDLE_INCOMPLETE 必须是最先的闸门，且明确登记为 blocked reason
+        self.assertTrue(any("RULE_BUNDLE_INCOMPLETE" in r for r in gate.get("rules", [])),
+                        "rules 必须登记 RULE_BUNDLE_INCOMPLETE")
+
+    def test_rule_bundle_scenario_declared(self):
+        """WP-G2-05R：必须存在规则 bundle 闸门的跨端 blocked 回归场景。"""
+        sc = next((s for s in self.fixture["scenarios"] if s["id"] == "G2S-09"), None)
+        self.assertIsNotNone(sc, "缺 G2S-09（规则 bundle 闸门双端 blocked 回归）")
+        self.assertEqual(sc["handler"], "rule_bundle_gate")
+        self.assertEqual(sc["status"], "RUNNABLE")
+        cases = {c["id"] for c in sc["input"]["cases"]}
+        self.assertEqual(cases, {"missing_role_thresholds", "legacy_only_no_role_thresholds",
+                                 "invalid_role_thresholds", "complete_role_thresholds"})
+        fields = {inv["field"] for inv in sc["invariants"]}
+        self.assertIn("status_reason", fields)
+        self.assertIn("early_gate_data_gate", fields)
+        self.assertIn("bundle_selection_base", sc["input"])
 
 
 if __name__ == "__main__":

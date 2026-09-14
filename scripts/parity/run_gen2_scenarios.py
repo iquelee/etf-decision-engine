@@ -31,7 +31,12 @@ from gen2.baseline.rule_v2_ab import (  # noqa: E402
 )
 from gen2.baseline.leadership_score import compute_leadership_score  # noqa: E402
 from gen2.baseline.alpha_score import compute_alpha_score_v2  # noqa: E402
-from gen2.data.run_gate import evaluate_run_gate, validate_publish_results  # noqa: E402
+from gen2.data.run_gate import (  # noqa: E402
+    STATUS_COMPLETED,
+    evaluate_rule_bundle_gate,
+    evaluate_run_gate,
+    validate_publish_results,
+)
 from gen2.portfolio.regime import classify_regime, market_score as regime_market_score  # noqa: E402
 from gen2.portfolio.selection_permission import (  # noqa: E402
     max_core_count,
@@ -441,7 +446,17 @@ def h_selection_injection(sc):
     panel = sc["input"]["panel"]
     cluster_map = {c["code"]: c["cluster"] for c in panel["codes"]}
     base_cfg = load_gen2_config()
-    default_thresholds = load_role_thresholds(base_cfg)
+    # WP-G2-05R：JS 端已删除 role_thresholds fallback，运行配置由夹具显式声明
+    # （panel.role_thresholds_running_config）并在 runner 中注入。这里校验 gen2.yaml 与夹具
+    # 声明一致 —— 两端吃的必须是同一份「运行配置」，不能靠默认值碰巧相等。
+    yaml_thresholds = load_role_thresholds(base_cfg)
+    declared = panel["role_thresholds_running_config"]
+    for k in ("core_top_fraction", "challenger_top_fraction", "satellite_top_fraction"):
+        if abs(getattr(yaml_thresholds, k) - declared[k]) > 1e-12:
+            raise SystemExit(
+                "role_thresholds 漂移：gen2.yaml %s=%r != 夹具声明 %r"
+                % (k, getattr(yaml_thresholds, k), declared[k])
+            )
 
     out = {}
     canon = None
@@ -519,6 +534,52 @@ def h_selection_injection(sc):
     return out
 
 
+def h_rule_bundle_gate(sc):
+    """G2S-09：规则 bundle 闸门（WP-G2-05R）。
+
+    两端基于**同一份**冻结 bundle 的 selection 段逐 case 覆盖，观察 run 状态：
+      * blocked 用例（空数据）→ 必须拿到 RULE_BUNDLE_*；若规则闸门不是最先，会先撞 BENCHMARK_MISSING；
+      * complete 用例（完整横截面）→ 必须走到 completed（正对照）。
+    """
+    panel = sc["input"]["panel"]
+    base = sc["input"]["bundle_selection_base"]
+    out = {}
+    for c in sc["input"]["cases"]:
+        selection = dict(base)
+        selection.update(c.get("bundle_selection_overrides") or {})
+        cfg = {"selection": selection}
+        # blocked 用例走空数据、complete 用例走完整面板（与 JS handler 逐字同形）
+        rows = apply_run_mutations(run_panel_base(panel), [], panel) if c.get("data") == "full_panel" else []
+        rb = evaluate_rule_bundle_gate(cfg)
+        # 顺序证据：同一 cfg 在**空数据**下的状态（与 JS 的 early 逐字同形）。
+        # 规则闸门若未抢在数据闸门之前，这里会得到 BENCHMARK_MISSING 而不是 RULE_BUNDLE_*。
+        early = evaluate_run_gate(
+            {},
+            eligible_codes=panel["codes"],
+            benchmark_code=panel["benchmark_code"],
+            target_size=panel["target_size"],
+            mode="REPLAY",
+            rule_bundle_config=cfg,
+        )
+        done = rb["status"] == STATUS_COMPLETED
+        rt = rb.get("role_thresholds") or {}
+        out[c["id"]] = {
+            "status": rb["status"],
+            "status_reason": rb["status_reason"],
+            "data_gate": rb["data_gate"],
+            "rule_bundle_status": rb.get("rule_bundle_status"),
+            "role_thresholds_effective": ({
+                "core_pct": 1.0 - rt["core_top_fraction"],
+                "challenger_pct": 1.0 - rt["challenger_top_fraction"],
+                "satellite_pct": 1.0 - rt["satellite_top_fraction"],
+            } if done else None),
+            "panel_sha256": run_panel_hash(rows),
+            "early_gate_data_gate": early["data_gate"],
+            "early_gate_status_reason": early["status_reason"],
+        }
+    return out
+
+
 HANDLERS = {
     "regime_selection": h_regime_selection,
     "replacement_edge": h_replacement_edge,
@@ -528,6 +589,7 @@ HANDLERS = {
     "roles_panel": h_roles_panel,
     "run_status_gate": h_run_status_gate,
     "selection_injection": h_selection_injection,
+    "rule_bundle_gate": h_rule_bundle_gate,
 }
 
 

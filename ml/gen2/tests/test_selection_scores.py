@@ -1,12 +1,15 @@
-"""WP-G2-05 / F1 + F2 验收测试。
+"""WP-G2-05 / F1 + F2 验收测试（+ WP-G2-05R 规则 bundle 闸门）。
 
 F1：Alpha 必须显式注入 `build_v2_roles`（不得内部静默重算 / 覆盖 / fallback）
 F2：角色阈值必须来自显式 `role_thresholds`（旧 `top_quantile` 退出运行路径）
+WP-G2-05R：规则 bundle 缺显式 role_thresholds → run 状态 blocked / RULE_BUNDLE_INCOMPLETE
+        （与 JS main() 同序同判；规则闸门抢在数据闸门之前）
 
 用合成面板（不依赖本地日线池），CI 可跑。
 """
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -18,6 +21,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "ml"))
 
+from gen2.data.run_gate import evaluate_rule_bundle_gate, evaluate_run_gate  # noqa: E402
 from gen2.baseline.rule_v2_ab import build_v2_roles  # noqa: E402
 from gen2.baseline.selection_scores import (  # noqa: E402
     CANONICAL_SCORE_SOURCE,
@@ -322,6 +326,75 @@ class RoleThresholdsTest(unittest.TestCase):
         with self.assertRaises(RoleThresholdError):
             build_v2_roles(panel, _rankings(panel), cfg,
                            selection_scores=canonical_selection_scores(panel))
+
+
+class RuleBundleGateTest(unittest.TestCase):
+    """WP-G2-05R：规则 bundle 闸门（Python 侧 blocked 回归，与 JS main() 同序同判）。"""
+
+    @staticmethod
+    def _base_selection() -> dict:
+        """冻结 manifest 的 selection 段 —— 与 JS 侧 G2S-09 吃的是同一份输入。"""
+        manifest = json.loads(
+            (ROOT / "ml" / "gen2" / "manifests" / "GEN2_RULE_V2_BUNDLE.json").read_text(encoding="utf-8"))
+        return dict(manifest["selection"])
+
+    def _cfg(self, **overrides) -> dict:
+        selection = self._base_selection()
+        selection.update(overrides)
+        return {"selection": selection}
+
+    def test_missing_role_thresholds_blocks(self):
+        rb = evaluate_rule_bundle_gate(self._cfg())
+        self.assertEqual(rb["status"], "blocked")
+        self.assertEqual(rb["status_reason"], "RULE_BUNDLE_INCOMPLETE")
+        self.assertEqual(rb["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
+        self.assertEqual(rb["rule_bundle_status"], "INCOMPLETE")
+
+    def test_legacy_fields_do_not_satisfy_gate(self):
+        """只有旧字段同样是 MISSING —— 运行路径绝不从旧字段派生阈值。"""
+        rb = evaluate_rule_bundle_gate(
+            self._cfg(top_quantile=0.3, challenger_pct=0.7, satellite_pct=0.6))
+        self.assertEqual(rb["status"], "blocked")
+        self.assertEqual(rb["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
+
+    def test_invalid_role_thresholds_blocks(self):
+        rb = evaluate_rule_bundle_gate(self._cfg(role_thresholds={
+            "core_top_fraction": 0.5, "challenger_top_fraction": 0.3, "satellite_top_fraction": 0.4}))
+        self.assertEqual(rb["status"], "blocked")
+        self.assertEqual(rb["status_reason"], "RULE_BUNDLE_INCOMPLETE")
+        self.assertEqual(rb["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_INVALID")
+
+    def test_complete_role_thresholds_pass(self):
+        rb = evaluate_rule_bundle_gate(self._cfg(role_thresholds=dict(DEFAULT_ROLE_THRESHOLDS)))
+        self.assertEqual(rb["status"], "completed")
+        self.assertIsNone(rb["status_reason"])
+        self.assertIsNone(rb["data_gate"])
+        self.assertEqual(rb["rule_bundle_status"], "COMPLETE")
+        self.assertEqual(rb["role_thresholds"]["core_top_fraction"], 0.20)
+
+    def test_rule_gate_preempts_data_gate(self):
+        """顺序证据：空数据 + 缺 role_thresholds → RULE_BUNDLE_*（而不是 BENCHMARK_MISSING）。"""
+        bad = evaluate_run_gate({}, eligible_codes=["513310"], rule_bundle_config=self._cfg())
+        self.assertEqual(bad["status"], "blocked")
+        self.assertEqual(bad["status_reason"], "RULE_BUNDLE_INCOMPLETE")
+        self.assertEqual(bad["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
+        # 正对照：同一空数据 + 完整 role_thresholds → 规则闸门放行，由数据闸门接手
+        ok = evaluate_run_gate(
+            {}, eligible_codes=["513310"],
+            rule_bundle_config=self._cfg(role_thresholds=dict(DEFAULT_ROLE_THRESHOLDS)))
+        self.assertEqual(ok["status_reason"], "DATA_OR_ELIGIBILITY_GATE")
+        self.assertEqual(ok["data_gate"], "BENCHMARK_MISSING")
+
+    def test_fixture_running_config_matches_yaml(self):
+        """夹具声明的运行配置必须与 gen2.yaml 一致（两端不能悄悄漂移）。"""
+        fixture = json.loads(
+            (ROOT / "fixtures" / "gen2" / "golden_scenarios_v1.json").read_text(encoding="utf-8"))
+        sc = next(s for s in fixture["scenarios"] if s["id"] == "G2S-08")
+        declared = sc["input"]["panel"]["role_thresholds_running_config"]
+        yaml_t = load_role_thresholds(load_gen2_config())
+        for key in ("core_top_fraction", "challenger_top_fraction", "satellite_top_fraction"):
+            self.assertAlmostEqual(declared[key], getattr(yaml_t, key), places=12,
+                                   msg="%s 在夹具与 gen2.yaml 之间漂移" % key)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,19 @@ const ROOT = path.resolve(__dirname, '..', 'cloudfunctions', 'runGen2ShadowEod')
 const SRC_COMMON = path.resolve(__dirname, '..', 'src', 'common');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
 
-function load(data, failRankingAt = 0) {
+// WP-G2-05R：运行路径已无 role_thresholds fallback（缺 → blocked/RULE_BUNDLE_INCOMPLETE）。
+// 本测试聚焦**数据闸门 / 角色状态机**，因此显式注入「运行 bundle」= 冻结 manifest + 运行配置阈值；
+// 缺 role_thresholds 的 blocked 行为由 tests/gen2-selection-scores.test.js 专门回归。
+const MANIFEST_BUNDLE = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '..', 'ml', 'gen2', 'manifests', 'GEN2_RULE_V2_BUNDLE.json'), 'utf8'));
+const RUNNING_ROLE_THRESHOLDS = { core_top_fraction: 0.20, challenger_top_fraction: 0.30, satellite_top_fraction: 0.40 };
+const RUNNING_BUNDLE = (() => {
+  const b = JSON.parse(JSON.stringify(MANIFEST_BUNDLE));
+  b.selection = Object.assign({}, b.selection, { role_thresholds: RUNNING_ROLE_THRESHOLDS });
+  return b;
+})();
+
+function load(data, failRankingAt = 0, bundle) {
   const writes = [];
   let rankingCalls = 0;
   const db = {
@@ -29,8 +41,15 @@ function load(data, failRankingAt = 0) {
       writes.push({ collection, doc, where });
     }
   };
-  const box = { exports: {}, require: (p) => {
-    if (p === 'fs') return require('fs');
+  const bundleJson = JSON.stringify(bundle === undefined ? RUNNING_BUNDLE : bundle);
+  const realFs = require('fs');
+  const fsShim = Object.assign({}, realFs, {
+    readFileSync: (p, ...rest) => (String(p).endsWith('GEN2_RULE_V2_BUNDLE.json')
+      ? bundleJson
+      : realFs.readFileSync(p, ...rest))
+  });
+  const box = { exports: {}, __dirname: ROOT, require: (p) => {
+    if (p === 'fs') return fsShim;
     if (p === 'path') return require('path');
     if (p === 'crypto') return require('crypto');
     if (p === './common/utils/db') return db;
