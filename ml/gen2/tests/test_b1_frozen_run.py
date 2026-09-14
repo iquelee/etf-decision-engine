@@ -22,9 +22,15 @@
      `ledger_summary` 数据**生成（旧基线读数固化为入库快照 `GEN2_B1_AUDIT_BASELINE_20260911.json`），
      且四项已登记变更（D-001 / F1+F2 / F4 / 统一账本）的「能否解释本次 Δ」由**时间线判定规则**
      推导而非叙述。基准策略不经过规则实现 ⇒ 其 Δ 必须**恰为 0**（可机检控制项）。
-  6. **接受记录**（`AcceptanceRecordTest`）：`accept_merge(master_commit)` 前置重算三类摘要
-     （锁 SHA + 组件折叠摘要 / 输入内容摘要 / 运行实现摘要），任一变化即**拒绝写入并要求重跑**；
-     三者不变则写入 `accepted_master_commit` / `source_tree_sha` 并把措辞切为「Frozen B1 已接受」。
+  6. **接受记录 + 独立接受记录 PR 闸门**（`AcceptanceRecordTest`）：`accept_merge(master_commit)`
+     前置 fail-closed 三项校验 —— ① `<SHA>` 是 `origin/master` 的**祖先**；② `<SHA>^{tree}`
+     与 manifest 记录的 `source_tree_sha` 一致（不等时**差异只允许**是本次运行自身的产物
+     manifest / 报告，其它路径一律拒绝）；③ **组件 / 输入 / 输出**摘要与 manifest 逐位一致 ——
+     任一不过即**拒绝写入并要求重跑**；全过才写入 `accepted_master_commit` / `source_tree_sha`，
+     并把措辞切为「Frozen B1 已接受」。该命令**会修改受版本控制的 manifest / 报告**，
+     因此必须落在独立分支 `chore/gen2-b1-accept-v201` 的**接受记录 PR** 上（报告 §12 断言）。
+  7. **归因口径限定**：§9 的结论**只**在「2026-09-11 审计基线 vs 本次运行、相同窗口/数据」这一组
+     对照内成立，**不得**写成对所有历史结果的普遍因果结论（断言无限定的旧措辞不出现）。
 
 端到端跑 `run()` 需要本地日线池（未入库），在 CI 跳过 —— 与 `test_b1_baseline_contract`
 同策略：**显式跳过而不是伪造通过**。
@@ -371,7 +377,28 @@ class FrozenRunEndToEndTest(unittest.TestCase):
                           "更正必须**显式**写出被更正的旧说法，而不是悄悄删掉")
             self.assertNotIn("❌ 存在失配", text)
             self.assertIn("待合并冻结运行", text)
-            self.assertNotIn("Frozen B1 已接受", text)
+            # 措辞闸门：报告**允许提及**「Frozen B1 已接受」这个**条件句**（§12：「该 PR 合并之后，
+            # 本产出才可正式称为『Frozen B1 已接受』」）—— 所以不能拿子串全盘否定，那会把条件句误伤，
+            # 逼着实现去删掉对闸门的说明（正是要保留的东西）。断言**具体口径**：
+            self.assertIn("措辞不得写「已接受」", text, "待合并态必须显式声明措辞约束")
+            self.assertNotIn("已接受", text.splitlines()[0], "标题不得出现「已接受」")
+            self.assertNotIn("**Frozen B1 已接受**（生效以接受记录 PR 合并为准）", text,
+                             "不得渲染「已接受」状态行")
+            self.assertIn("| `run_status` | `PENDING_MERGE` |", text,
+                          "§12 状态表必须明示 PENDING_MERGE")
+            # ⑩（第四次裁决）归因口径限定 + 独立接受记录 PR 闸门 + 取证源码树
+            ss = m["source_state"]
+            self.assertEqual(len(ss["source_tree_sha"]), 40,
+                             "manifest 必须记录取证时的源码树（接受记录据此比对 master^{tree}）")
+            self.assertEqual(len(ss["git_head_commit"]), 40)
+            self.assertIn("结论的适用范围", text)
+            self.assertIn("F4 是唯一实质来源", text)
+            self.assertNotIn("F4 是唯一实质性来源", text,
+                             "不得保留未限定范围的旧措辞（普遍因果结论）")
+            self.assertIn("普遍因果结论", text, "必须显式声明**不**推广为普遍因果结论")
+            self.assertIn(B.ACCEPT_BRANCH, text)
+            self.assertIn("接受记录 PR", text)
+            self.assertIn("source_tree_sha", text)
             # 验收
             a = m["acceptance"]
             self.assertTrue(a["gate_pass"], a)
@@ -648,31 +675,105 @@ class F4MechanismValidityTest(unittest.TestCase):
         self.assertIn(P.CANDIDATE_ERR["CAP_TECH"], str(ctx2.exception))
 
 
+class SourceStateTest(unittest.TestCase):
+    """`source_state()` 的解析正确性 —— 它产出的文案会进**审计记录**，截断即假信号。"""
+
+    @staticmethod
+    def _state(stdout: str):
+        proc = mock.Mock(returncode=0, stdout=stdout, stderr="")
+        with mock.patch.object(B, "_git_run", return_value=proc), \
+                mock.patch.object(B, "_git", side_effect=lambda *a: "a" * 40):
+            return B.source_state()
+
+    def test_porcelain_paths_keep_their_first_character(self):
+        """回归：`_git()` 会 `.strip()` 整个输出，把**首行**的前导空格吃掉 ⇒ `l[3:]` 会多切一刀。
+
+        历史缺陷：` M ml/gen2/...` 被 strip 成 `M ml/gen2/...`，`l[3:]` 交出 `l/gen2/...`
+        —— 路径少了第一个字符，写进拒绝理由里会让人去查一个**不存在**的路径。
+        """
+        ss = self._state(" M ml/gen2/baseline/regime.py\n M ml/gen2/baseline/selection_scores.py\n")
+        self.assertEqual(ss["dirty_tracked_paths"],
+                         ["ml/gen2/baseline/regime.py", "ml/gen2/baseline/selection_scores.py"])
+        self.assertTrue(ss["working_tree_dirty"])
+
+    def test_untracked_and_blank_lines_are_not_controlled_changes(self):
+        ss = self._state("?? scratch.txt\n\n")
+        self.assertEqual(ss["dirty_tracked_paths"], [], "未跟踪文件不进入任何提交的 tree")
+        self.assertFalse(ss["working_tree_dirty"])
+
+    def test_clean_tree_reports_not_dirty(self):
+        ss = self._state("")
+        self.assertFalse(ss["working_tree_dirty"])
+        self.assertEqual(ss["dirty_tracked_paths"], [])
+        self.assertEqual(ss["source_tree_sha"], "a" * 40)
+
+
 class AcceptanceRecordTest(unittest.TestCase):
-    """④（第三次裁决）接受记录：三类摘要不变 ⇒ 绑定到 master；变 ⇒ 拒绝并要求重跑。"""
+    """④⑤（第三 / 四次裁决）接受记录：三项前置校验全过 ⇒ 绑定 master；任一不过 ⇒ 拒绝并要求重跑。
+
+    第四次裁决追加的**流程闸门**：`--accept-merge` 会修改**受版本控制**的 manifest / 报告 ⇒
+    它不是「B1 合并后跑一下就算完」，而必须落在独立分支 `chore/gen2-b1-accept-v201` 的
+    **接受记录 PR** 上（报告 §12 断言 + `landed_via_pull_request_required`）。
+    """
+
+    #: `source_state()` 的**干净替身**。本地开发时工作树通常是脏的；若让 `run()` 走真实 git，
+    #: manifest 会记 `working_tree_dirty=true`，于是 `accept_merge` 的⓪前置校验**先于**摘要校验
+    #: 触发，本类想覆盖的注入摘要根本到不了（本轮真实踩到：两个反例测试拿到的是脏树消息）。
+    #: 脏树前置本身由 `test_accept_refuses_when_attested_on_a_dirty_tree` 专门覆盖。
+    CLEAN_SOURCE_STATE = {
+        "git_head_commit": "0" * 40,
+        "source_tree_sha": "1" * 40,
+        "working_tree_dirty": False,
+        "dirty_tracked_paths": [],
+        "note": "(test double)",
+    }
 
     def setUp(self):
         if not _b1_dataset_available():
             raise unittest.SkipTest(
-                "本地 Gen-2 日线池不可用 → 接受记录（需真实 manifest 的三类摘要）在 CI 跳过")
+                "本地 Gen-2 日线池不可用 → 接受记录（需真实 manifest 的摘要）在 CI 跳过")
 
-    @staticmethod
-    def _run(tmp: str) -> dict:
-        return B.run(date_tag="20260914", report_dir=Path(tmp) / "rep",
-                     manifest_path=Path(tmp) / "manifest.json",
-                     output_root=Path(tmp) / "out",
-                     cost_levels=[10.0], date_from="2025-01-01")
+    @classmethod
+    def _run(cls, tmp: str) -> dict:
+        with mock.patch.object(B, "source_state", return_value=dict(cls.CLEAN_SOURCE_STATE)):
+            return B.run(date_tag="20260914", report_dir=Path(tmp) / "rep",
+                         manifest_path=Path(tmp) / "manifest.json",
+                         output_root=Path(tmp) / "out",
+                         cost_levels=[10.0], date_from="2025-01-01")
 
-    @staticmethod
-    def _fake_git(*args):
-        """`git rev-parse` 一律返回替身 SHA（无 git 环境也可复现）。"""
-        return "a" * 40 if args and args[0] == "rev-parse" else None
+    def _fake_git(self, manifest_path, *, master_tree="<declared>", ancestor_ok=True,
+                  master_ref_exists=True):
+        """git 替身：`master^{tree}` 默认 == manifest 记录的 `source_tree_sha`（校验②通过）。"""
+        declared = json.loads(Path(manifest_path).read_text(encoding="utf-8")) \
+            .get("source_state", {}).get("source_tree_sha")
+        tree = declared if master_tree == "<declared>" else master_tree
+
+        def fake_git(*args):
+            if not args or args[0] != "rev-parse":
+                return None
+            if "--verify" in args:
+                return "a" * 40 if master_ref_exists else None
+            if args[-1].endswith("^{tree}"):
+                return tree
+            return "a" * 40
+
+        def fake_git_run(*args):
+            return mock.Mock(returncode=0 if ancestor_ok else 1, stdout="", stderr="")
+
+        return mock.patch.object(B, "_git", side_effect=fake_git), \
+            mock.patch.object(B, "_git_run", side_effect=fake_git_run)
 
     def test_accept_merge_binds_digests_and_switches_wording(self):
         with tempfile.TemporaryDirectory() as tmp:
             r = self._run(tmp)
+            declared = r["manifest_data"]["source_state"]["source_tree_sha"]
             self.assertEqual(r["manifest_data"]["run_status"], B.STATUS_PENDING_MERGE)
-            with mock.patch.object(B, "_git", side_effect=self._fake_git):
+            # ⓪ 前置：manifest 必须记录「取证时工作树干净」，否则 ② 的源码树比对失去意义
+            ss = r["manifest_data"]["source_state"]
+            self.assertFalse(ss["working_tree_dirty"], "取证须在干净树上进行")
+            self.assertEqual(ss["dirty_tracked_paths"], [])
+            p1, p2 = self._fake_git(r["manifest"])
+            with p1, p2:
                 m = B.accept_merge("HEAD", manifest_path=r["manifest"], report_path=r["report"])
             self.assertEqual(m["run_status"], B.STATUS_ACCEPTED)
             self.assertNotIn("run_status_note", m, "接受后不应再保留「待合并」口径说明")
@@ -681,12 +782,31 @@ class AcceptanceRecordTest(unittest.TestCase):
             self.assertEqual(rec["status"], B.STATUS_ACCEPTED)
             self.assertEqual(rec["accepted_master_commit"], "a" * 40)
             self.assertEqual(rec["accepted_master_commit_input"], "HEAD")
-            self.assertEqual(rec["source_tree_sha"], "a" * 40)
+            self.assertEqual(rec["master_ref"], B.DEFAULT_MASTER_REF)
+            self.assertTrue(rec["ancestor_of_master_ref"], "① <SHA> 必须是 origin/master 的祖先")
+            self.assertEqual(rec["source_tree_sha"], declared,
+                             "② 绑定的 source_tree_sha 必须就是 manifest 记录的取证源码树")
+            self.assertTrue(rec["source_tree_matches_master_commit_tree"])
+            self.assertEqual(rec["source_tree_match_mode"], "strict_equality")
+            self.assertTrue(rec["tree_strictly_equal"], "② 理想情形是逐位严格相等")
+            self.assertEqual(rec["source_tree_diff_vs_master_commit"], [])
             self.assertTrue(rec["digests_unchanged"])
             self.assertTrue(rec["no_rerun_required"], "内容哈希未变 ⇒ 无需重跑")
+            # 三项前置校验必须逐条留痕
+            self.assertEqual([v["check"] for v in rec["verifications"]],
+                             ["master_commit_is_ancestor_of_master_ref",
+                              "master_commit_tree_equals_source_tree_sha",
+                              "digests_unchanged"])
+            # 流程闸门：这份改动必须走独立 PR，不能「本地跑一下就完」
+            self.assertEqual(rec["acceptance_branch"], B.ACCEPT_BRANCH)
+            self.assertTrue(rec["landed_via_pull_request_required"])
+            self.assertIn("接受记录 PR", rec["note"])
+            # 摘要绑定
             for k in ("lock_sha256", "lock_component_digest", "input_content_digest",
                       "run_implementation_digest", "committed_report_sha256"):
                 self.assertTrue(rec["bound_digests"].get(k), f"接受记录缺摘要绑定：{k}")
+            self.assertEqual(sorted(rec["bound_digests"]["run_dir_artifacts"]),
+                             sorted(a["file"] for a in m["artifacts"]))
             self.assertEqual(rec["bound_digests"]["lock_sha256"],
                              m["frozen_input"]["lock"]["lock_sha256"])
             self.assertEqual(rec["bound_digests"]["input_content_digest"],
@@ -695,6 +815,9 @@ class AcceptanceRecordTest(unittest.TestCase):
             text = Path(m["outputs"]["committed_report"]["file"]).read_text(encoding="utf-8")
             self.assertIn("Frozen B1 已接受", text)
             self.assertIn("已接受", text.splitlines()[0])
+            self.assertIn(B.ACCEPT_BRANCH, text, "报告须写明接受记录 PR 分支")
+            self.assertIn("本记录尚未生效", text,
+                          "接受记录 PR 合并前，措辞仍不得视为生效")
             self.assertNotIn("待合并冻结运行", text)
             self.assertNotIn("不得据此启动 B3", text)
             self.assertTrue(m["self_check"]["all_pass"], m["self_check"]["detail"])
@@ -703,18 +826,118 @@ class AcceptanceRecordTest(unittest.TestCase):
             self.assertEqual(on_disk["run_status"], B.STATUS_ACCEPTED,
                              "接受记录必须随 committed manifest 一起落盘")
             self.assertEqual(on_disk["acceptance_record"]["accepted_master_commit"], "a" * 40)
+            self.assertNotIn("run_status_note", on_disk)
+
+    # ---- 校验①：master_commit 必须是 origin/master 的祖先 ----
+
+    def test_accept_refuses_when_master_commit_is_not_an_ancestor(self):
+        """反例：给了一个**没进 master** 的提交 ⇒ 拒绝（它不是「合并后的 master」）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            p1, p2 = self._fake_git(r["manifest"], ancestor_ok=False)
+            with p1, p2:
+                with self.assertRaises(B.FrozenAttestationError) as ctx:
+                    B.accept_merge("deadbeef", manifest_path=r["manifest"],
+                                   report_path=r["report"])
+            msg = str(ctx.exception)
+            self.assertIn("祖先", msg)
+            self.assertIn("拒绝", msg)
+            on_disk = json.loads(Path(r["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(on_disk["run_status"], B.STATUS_PENDING_MERGE)
+
+    def test_accept_refuses_when_master_ref_is_missing(self):
+        """反例：本地没有 `origin/master` 引用 ⇒ 拒绝并提示 `git fetch origin`，不得静默放行。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            p1, p2 = self._fake_git(r["manifest"], master_ref_exists=False)
+            with p1, p2:
+                with self.assertRaises(B.FrozenAttestationError) as ctx:
+                    B.accept_merge("HEAD", manifest_path=r["manifest"], report_path=r["report"])
+            self.assertIn("git fetch origin", str(ctx.exception))
+
+    # ---- 校验②：master^{tree} 与取证源码树一致 ----
+
+    def test_accept_allows_tree_diff_confined_to_run_artifacts(self):
+        """差异**只**是本次运行自己写出的 manifest / 报告 ⇒ 允许（与「报告不含自身哈希」同构）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            report_rel = B._rel(Path(r["report"]))
+            p1, p2 = self._fake_git(r["manifest"], master_tree="b" * 40)
+            with p1, p2:
+                with mock.patch.object(B, "_git_run", side_effect=[
+                        mock.Mock(returncode=0, stdout="", stderr=""),          # merge-base
+                        mock.Mock(returncode=0, stdout=report_rel + "\n", stderr="")]):
+                    m = B.accept_merge("HEAD", manifest_path=r["manifest"],
+                                       report_path=r["report"])
+            rec = m["acceptance_record"]
+            self.assertEqual(rec["source_tree_match_mode"], "artifacts_only")
+            self.assertFalse(rec["tree_strictly_equal"],
+                             "放宽情形必须**显式**标出，不能被读成严格相等")
+            self.assertEqual(rec["source_tree_diff_vs_master_commit"], [report_rel])
+            self.assertIn(report_rel, rec["source_tree_diff_allowed_paths"])
+            self.assertIn("仅差本次运行产物", rec["note"])
+
+    def test_accept_refuses_when_tree_diff_goes_beyond_run_artifacts(self):
+        """反例：差异里出现**别的**路径（PR 掺了改动）⇒ 拒绝并要求重跑 B1。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            p1, p2 = self._fake_git(r["manifest"], master_tree="b" * 40)
+            with p1, p2:
+                with mock.patch.object(B, "_git_run", side_effect=[
+                        mock.Mock(returncode=0, stdout="", stderr=""),
+                        mock.Mock(returncode=0, stdout="ml/gen2/portfolio/regime.py\n",
+                                  stderr="")]):
+                    with self.assertRaises(B.FrozenAttestationError) as ctx:
+                        B.accept_merge("HEAD", manifest_path=r["manifest"],
+                                       report_path=r["report"])
+            msg = str(ctx.exception)
+            self.assertIn("超出", msg)
+            self.assertIn("regime.py", msg)
+
+    def test_accept_refuses_when_attested_on_a_dirty_tree(self):
+        """反例：取证时磁盘上有未提交的受控改动 ⇒ `source_tree_sha` 不代表实际运行字节 ⇒ 拒绝。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            man = json.loads(Path(r["manifest"]).read_text(encoding="utf-8"))
+            man["source_state"]["working_tree_dirty"] = True
+            man["source_state"]["dirty_tracked_paths"] = ["ml/gen2/baseline/regime.py"]
+            Path(r["manifest"]).write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
+            p1, p2 = self._fake_git(r["manifest"])
+            with p1, p2:
+                with self.assertRaises(B.FrozenAttestationError) as ctx:
+                    B.accept_merge("HEAD", manifest_path=r["manifest"], report_path=r["report"])
+            self.assertIn("working_tree_dirty", str(ctx.exception))
+            self.assertIn("重跑 B1", str(ctx.exception))
+
+    def test_accept_refuses_when_manifest_lacks_source_tree_sha(self):
+        """反例：旧 manifest 没记录 `source_state` ⇒ 无法证明源码树未变 ⇒ 拒绝。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            man = json.loads(Path(r["manifest"]).read_text(encoding="utf-8"))
+            man.pop("source_state", None)
+            Path(r["manifest"]).write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
+            p1, p2 = self._fake_git(r["manifest"])
+            with p1, p2:
+                with self.assertRaises(B.FrozenAttestationError) as ctx:
+                    B.accept_merge("HEAD", manifest_path=r["manifest"], report_path=r["report"])
+            self.assertIn("source_tree_sha", str(ctx.exception))
+
+    # ---- 校验③：组件 / 输入 / 输出摘要一致 ----
 
     def test_accept_merge_refuses_when_a_frozen_component_changed(self):
-        """反例：取证后有人动了冻结实现 ⇒ 三类摘要不一致 ⇒ 拒绝写入，必须重跑 B1。"""
+        """反例：取证后有人动了冻结实现 ⇒ 摘要不一致 ⇒ 拒绝写入，必须重跑 B1。"""
         target = B._abs("ml/gen2/baseline/selection_scores.py")
         self.assertTrue(target.is_file(), "反例目标文件缺失")
         with tempfile.TemporaryDirectory() as tmp:
             r = self._run(tmp)
             original = target.read_bytes()
+            p1, p2 = self._fake_git(r["manifest"])
             try:
                 target.write_bytes(original + b"\n# tampered-after-attestation\n")
-                with self.assertRaises(B.FrozenAttestationError) as ctx:
-                    B.accept_merge("HEAD", manifest_path=r["manifest"], report_path=r["report"])
+                with p1, p2:
+                    with self.assertRaises(B.FrozenAttestationError) as ctx:
+                        B.accept_merge("HEAD", manifest_path=r["manifest"],
+                                       report_path=r["report"])
             finally:
                 target.write_bytes(original)  # 必须按原字节写回
             msg = str(ctx.exception)
@@ -726,6 +949,23 @@ class AcceptanceRecordTest(unittest.TestCase):
             self.assertEqual(on_disk["run_status"], B.STATUS_PENDING_MERGE,
                              "拒绝时必须保持「待合并」，不得半写接受记录")
             self.assertNotIn("acceptance_record", on_disk)
+
+    def test_accept_merge_refuses_when_the_committed_report_changed(self):
+        """反例：报告被改动（输出摘要不一致）⇒ 拒绝；输出摘要是三类校验的一部分。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self._run(tmp)
+            rep = Path(r["report"])
+            original = rep.read_bytes()
+            p1, p2 = self._fake_git(r["manifest"])
+            try:
+                rep.write_bytes(original + b"\n<!-- tampered -->\n")
+                with p1, p2:
+                    with self.assertRaises(B.FrozenAttestationError) as ctx:
+                        B.accept_merge("HEAD", manifest_path=r["manifest"],
+                                       report_path=r["report"])
+            finally:
+                rep.write_bytes(original)
+            self.assertIn("output[committed_report]", str(ctx.exception))
 
 
 if __name__ == "__main__":
