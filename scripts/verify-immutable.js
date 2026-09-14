@@ -114,15 +114,18 @@ const g2Lock = JSON.parse(fs.readFileSync(path.join(REPO, G2_LOCK_REL), 'utf8'))
 // lock_revision 2（2026-09-14 审查裁决扩围）：新增 python_role_thresholds
 //   （ml/gen2/portfolio/role_thresholds.py —— 线上阈值加载/校验契约；不锁会留下
 //    「bundle 字节未变、运行语义已变」的旁路）。
-const G2_FROZEN_EXPECT = 6;
+// lock_revision 3（2026-09-14 审查裁决扩围）：新增 python_selection_scores
+//   （ml/gen2/baseline/selection_scores.py —— 显式 Alpha 计算/覆盖校验/内容哈希）与
+//   python_regime（ml/gen2/portfolio/regime.py —— 55/45 实际执行常量，bundle 仅是声明）。
+const G2_FROZEN_EXPECT = 8;
 const G2_REQUIRED_IDS = [
   'bundle', 'js_implementation', 'python_rule', 'python_candidate', 'python_defense',
-  'python_role_thresholds',
+  'python_role_thresholds', 'python_selection_scores', 'python_regime',
 ];
 {
   const entries = g2Lock.immutable_set || [];
   CHECKS.push({
-    name: `lock.immutable_set 条目数（bundle + JS 实现 + Python 规则/候选/防守/阈值契约）`,
+    name: `lock.immutable_set 条目数（bundle + JS 实现 + Python 规则/候选/防守/阈值契约/评分/regime）`,
     expected: String(G2_FROZEN_EXPECT),
     actual: String(entries.length),
     lockRef: G2_LOCK_REL,
@@ -131,7 +134,7 @@ const G2_REQUIRED_IDS = [
   const gotIds = entries.map((e) => e.id).slice().sort();
   const wantIds = G2_REQUIRED_IDS.slice().sort();
   CHECKS.push({
-    name: `lock.immutable_set id 集合 == 必需集合（含 python_role_thresholds）`,
+    name: `lock.immutable_set id 集合 == 必需集合（含 python_role_thresholds / selection_scores / regime）`,
     expected: wantIds.join(','),
     actual: gotIds.join(','),
     lockRef: G2_LOCK_REL,
@@ -153,7 +156,7 @@ const G2_REQUIRED_IDS = [
 const ROOT_ANCHORS = [
   { lock: 'ml/manifests/GEN1_IMMUTABLE_LOCK.json', sha256: '138fe886a9f50440f717eaa0739d3144fd5e6418fc8d3d2ad03d1643320501c0' },
   { lock: 'ml/manifests/V361_IMMUTABLE_LOCK.json', sha256: '1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd' },
-  { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: '289cdec1c49d65f1369e963a1b002d3e840550566d014bdbecafd9d3d6800a4a' },
+  { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: 'd3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c' },
 ];
 for (const a of ROOT_ANCHORS) {
   CHECKS.push({

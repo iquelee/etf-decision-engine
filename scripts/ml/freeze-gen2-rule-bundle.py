@@ -44,10 +44,11 @@
     python3 scripts/ml/freeze-gen2-rule-bundle.py --rebuild-lock    # 只重建 lock（immutable_set 扩围）
     python3 scripts/ml/freeze-gen2-rule-bundle.py --print-root-anchor   # 打印 ROOT_ANCHORS 行
 
-锁范围（``immutable_set``，共 6 项）::
+锁范围（``immutable_set``，共 8 项）::
 
     bundle / js_implementation / python_rule / python_candidate / python_defense
     / python_role_thresholds          # 2026-09-14 审查裁决扩围（lock_revision 2）
+    / python_selection_scores / python_regime   # 2026-09-14 审查裁决扩围（lock_revision 3）
 
 扩围只追加条目、不改规则：``--rebuild-lock`` 会断言 bundle 字节与 ``bundle_version`` 均未变。
 本脚本自身**不入锁**（它不是运行时依赖，只在冻结时被人工执行）。
@@ -75,7 +76,8 @@ LEGACY_SELECTION_FIELDS = ("core_pct", "challenger_pct", "satellite_pct", "top_q
 DEFAULT_LEGACY = {"top_quantile": 0.2, "challenger_pct": 0.70, "satellite_pct": 0.60}
 
 #: 冻结实现集合（裁决要求：bundle SHA + JS 实现哈希 + Python 规则/候选/防守实现哈希）
-#: 注：python_role_thresholds 为 2026-09-14 审查裁决**扩围**新增（lock_revision 2）。
+#: 注：python_role_thresholds 为 2026-09-14 审查裁决**扩围**新增（lock_revision 2）；
+#:     python_selection_scores / python_regime 为同日第二次裁决扩围（lock_revision 3）。
 IMMUTABLE_SET = [
     ("bundle", "规则单一真相源（Python 回测 + Node Shadow 共用）",
      "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json"),
@@ -89,6 +91,10 @@ IMMUTABLE_SET = [
      "ml/gen2/portfolio/defense_gate.py"),
     ("python_role_thresholds", "Python 阈值加载/校验契约：load_role_thresholds / validate_role_thresholds",
      "ml/gen2/portfolio/role_thresholds.py"),
+    ("python_selection_scores", "Python 显式 Alpha 实现：Alpha 计算 / 覆盖校验 / 内容哈希 / canonical 权重",
+     "ml/gen2/baseline/selection_scores.py"),
+    ("python_regime", "Python 统一 regime 契约：RISK_ON_GE / RISK_OFF_LE 实际执行常量 + classify_regime",
+     "ml/gen2/portfolio/regime.py"),
 ]
 
 #: 构建产物（须与 immutable_set 中对应条目**逐位一致**）
@@ -106,7 +112,7 @@ RULE_TEXT = (
 )
 
 #: lock 版本号（结构性扩围 +1；变更需同步 verify-immutable.js 的期望条目数）
-LOCK_REVISION = 2
+LOCK_REVISION = 3
 
 #: lock 修订留痕（每次扩围/重新封印追加一条，不允许改写历史条目）
 LOCK_AMENDMENTS = [
@@ -124,6 +130,23 @@ LOCK_AMENDMENTS = [
             "审查裁决：该模块直接定义线上阈值加载与校验（load_role_thresholds / "
             "validate_role_thresholds）；未锁定时，改它即可在 bundle 字节不变的前提下改变运行语义，"
             "形成旁路。迁移脚本 freeze-gen2-rule-bundle.py 不入锁（非运行时依赖）。"
+        ),
+        "bundle_bytes_changed": False,
+        "bundle_version_changed": False,
+    },
+    {
+        "at": "2026-09-14",
+        "revision": 3,
+        "action": ("immutable_set 扩围：新增 [python_selection_scores] "
+                   "ml/gen2/baseline/selection_scores.py 与 [python_regime] "
+                   "ml/gen2/portfolio/regime.py"),
+        "reason": (
+            "审查裁决：① selection_scores.py 承载**显式 Alpha 的计算、覆盖校验与内容哈希**"
+            "（build_selection_scores / validate_selection_scores / CANONICAL_ALPHA_WEIGHTS）；"
+            "只交叉核对权重常量不足以锁住其运行语义 —— 改它即可在 bundle 不变时改掉评分口径与校验强度。"
+            "② regime.py 的 RISK_ON_GE=55 / RISK_OFF_LE=45 是**实际执行常量**，bundle.regime 只是声明，"
+            "属同类旁路（改常量即可在不改 bundle 的前提下改变 regime 切分）。"
+            "扩围不改变任何规则参数与 bundle 字节。"
         ),
         "bundle_bytes_changed": False,
         "bundle_version_changed": False,
@@ -375,8 +398,11 @@ def rebuild_lock_only() -> int:
 
     if LOCK_PATH.exists():
         old_lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+        old_ids = [e["id"] for e in (old_lock.get("immutable_set") or [])]
         print(f"  旧 lock : revision={old_lock.get('lock_revision', 1)}、"
               f"immutable_set={len(old_lock.get('immutable_set') or [])} 项")
+    else:
+        old_ids = []
 
     lock = build_lock(bundle["bundle_version"])
     LOCK_PATH.write_bytes((json.dumps(lock, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
@@ -384,9 +410,14 @@ def rebuild_lock_only() -> int:
     after = normalized_sha256(BUNDLE_PATH)
     if before != after:
         raise RuntimeError("扩围过程中 bundle 字节发生变化（不允许）")
+    new_ids = [e["id"] for e in lock["immutable_set"]]
+    added = [i for i in new_ids if i not in old_ids]
     print(f"  新 lock : revision={lock['lock_revision']}、"
           f"immutable_set={len(lock['immutable_set'])} 项 + 构建产物={len(lock['build_artifacts'])} 项")
-    print(f"  扩围新增 : {[eid for eid, _, _ in IMMUTABLE_SET][-1]}（{IMMUTABLE_SET[-1][2]}）")
+    print(f"  本次扩围新增 : {added}")
+    for eid in added:
+        rel = next(rel for i, _, rel in IMMUTABLE_SET if i == eid)
+        print(f"      + [{eid}] {rel}")
     print(f"  bundle   : 字节未变（sha256 {after}），bundle_version 保持 {lock['bundle_version']}")
     print("\n  下一步（必须）：把 verify-immutable.js 的 ROOT_ANCHORS 更新为下列值，否则它会拦下：")
     print_root_anchor()

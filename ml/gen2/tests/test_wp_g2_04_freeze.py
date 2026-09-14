@@ -5,8 +5,9 @@
   1. **离线迁移**：旧字段（``core_pct`` / ``challenger_pct`` / ``satellite_pct`` / ``top_quantile``）
      一次性换算为显式 ``selection.role_thresholds``，语义等价（不是调参）；
   2. **重建 bundle 与 lock**：``bundle_version`` 升为 ``gen2-rule-v2.0.1``，新 lock 与 bundle 同版；
-  3. **lock 覆盖范围**（``lock_revision 2``，共 6 项）：bundle SHA + JS 实现哈希 +
+  3. **lock 覆盖范围**（``lock_revision 3``，共 8 项）：bundle SHA + JS 实现哈希 +
      Python 规则/候选/防守实现哈希 + **阈值加载校验契约**（``role_thresholds.py``）
+     + **显式 Alpha 实现**（``selection_scores.py``）+ **统一 regime 契约**（``regime.py``）
      + 构建产物哈希；
   4. **构建产物与锁逐位一致**：由 ``scripts/verify-gen2-build-artifacts.js``（Stage F）负责，
      本文件只断言 lock 的声明自洽（每条产物的 ``must_equal`` 指向存在的冻结条目）。
@@ -19,7 +20,10 @@
     —— 否则「重新封印」会因自锚失配而全量 FAIL（这是有意的审批动作，不是可忘的细节）。
 
 以及一条「旁路」断言：被锁的 ``role_thresholds.py`` 必须**就是**运行时真正 import 的那个模块
-（路径同一），否则「锁住了 A、运行时读 B」会让锁定失去意义。
+（路径同一），否则「锁住了 A、运行时读 B」会让锁定失去意义。``lock_revision 3``（同日第二次裁决）
+把**显式 Alpha 实现**（``selection_scores.py``：计算 / 覆盖校验 / 内容哈希 / canonical 权重）
+与**统一 regime 契约**（``regime.py``：55/45 实际执行常量）一并纳入 —— 只交叉核对常量不足以
+锁住运行语义。
 
 运行::
 
@@ -49,6 +53,8 @@ BUNDLE_REL = "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json"
 LOCK_REL = "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json"
 VERIFIER_REL = "scripts/verify-immutable.js"
 ROLE_THRESHOLDS_REL = "ml/gen2/portfolio/role_thresholds.py"
+SELECTION_SCORES_REL = "ml/gen2/baseline/selection_scores.py"
+REGIME_REL = "ml/gen2/portfolio/regime.py"
 
 LEGACY_FIELDS = ("core_pct", "challenger_pct", "satellite_pct", "top_quantile")
 
@@ -162,15 +168,16 @@ class WpG204FreezeTest(unittest.TestCase):
 
     # ---------------- 4. lock 覆盖范围 ----------------
 
-    def test_immutable_set_covers_six_required_files(self):
+    def test_immutable_set_covers_eight_required_files(self):
         entries = self.lock.get("immutable_set") or []
         self.assertEqual(
-            len(entries), 6,
-            "lock 必须覆盖 bundle + JS 实现 + Python 规则/候选/防守 + 阈值加载校验契约（role_thresholds.py）")
+            len(entries), 8,
+            "lock 必须覆盖 bundle + JS 实现 + Python 规则/候选/防守 + 阈值加载校验契约"
+            "（role_thresholds.py）+ 显式 Alpha 实现（selection_scores.py）+ 统一 regime 契约（regime.py）")
         self.assertEqual(
             sorted(e["id"] for e in entries),
             ["bundle", "js_implementation", "python_candidate", "python_defense",
-             "python_role_thresholds", "python_rule"])
+             "python_regime", "python_role_thresholds", "python_rule", "python_selection_scores"])
 
     def test_role_thresholds_contract_is_frozen(self):
         """扩围的目的：阈值加载/校验契约必须被锁住。
@@ -183,6 +190,31 @@ class WpG204FreezeTest(unittest.TestCase):
         self.assertIn("python_role_thresholds", by_id, "role_thresholds.py 未被冻结")
         self.assertEqual(by_id["python_role_thresholds"]["file"], ROLE_THRESHOLDS_REL)
 
+    def test_selection_scores_and_regime_are_frozen(self):
+        """lock_revision 3 的目的：显式 Alpha 实现与统一 regime 契约必须被锁住。
+
+        ① ``selection_scores.py`` 承载 Alpha **计算、覆盖校验与内容哈希**；只交叉核对
+           ``CANONICAL_ALPHA_WEIGHTS`` 常量不足以锁住运行语义（可改 ``_combine`` /
+           ``validate_selection_scores`` 而在 bundle 不动时改掉评分口径）。
+        ② ``regime.py`` 的 ``RISK_ON_GE``/``RISK_OFF_LE`` 是**实际执行常量**，
+           ``bundle.regime`` 只是声明 —— 不锁即留下旁路。
+        """
+        by_id = {e["id"]: e for e in self.lock["immutable_set"]}
+        self.assertIn("python_selection_scores", by_id, "selection_scores.py 未被冻结")
+        self.assertEqual(by_id["python_selection_scores"]["file"], SELECTION_SCORES_REL)
+        self.assertIn("python_regime", by_id, "regime.py 未被冻结")
+        self.assertEqual(by_id["python_regime"]["file"], REGIME_REL)
+
+    def test_frozen_impl_files_are_the_modules_runtime_imports(self):
+        """反「锁 A 读 B」：被锁的实现文件必须就是运行时 import 的那个模块（路径同一）。"""
+        import gen2.baseline.selection_scores as ss_module  # noqa: PLC0415
+        import gen2.portfolio.regime as rg_module  # noqa: PLC0415
+
+        self.assertEqual(Path(rg_module.__file__).resolve(), (ROOT / REGIME_REL).resolve(),
+                         "运行时 import 的 regime 模块与冻结文件不是同一个 → 锁定失效")
+        self.assertEqual(Path(ss_module.__file__).resolve(), (ROOT / SELECTION_SCORES_REL).resolve(),
+                         "运行时 import 的 selection_scores 模块与冻结文件不是同一个 → 锁定失效")
+
     def test_frozen_role_thresholds_file_is_the_module_runtime_imports(self):
         """反「锁 A 读 B」：被锁的文件必须就是运行时 import 的那个模块（路径同一）。"""
         import gen2.portfolio.role_thresholds as rt_module  # noqa: PLC0415
@@ -190,16 +222,20 @@ class WpG204FreezeTest(unittest.TestCase):
         self.assertEqual(Path(rt_module.__file__).resolve(), (ROOT / ROLE_THRESHOLDS_REL).resolve(),
                          "运行时 import 的 role_thresholds 模块与冻结文件不是同一个 → 锁定失效")
 
-    def test_lock_amendment_records_scope_expansion(self):
-        """扩围必须留痕，且明确「bundle 字节/版本均未变」——避免被误读成改规则。"""
-        self.assertEqual(self.lock.get("lock_revision"), 2)
+    def test_lock_amendment_records_scope_expansions(self):
+        """两次扩围都必须留痕，且明确「bundle 字节/版本均未变」——避免被误读成改规则。"""
+        self.assertEqual(self.lock.get("lock_revision"), 3)
         amendments = self.lock.get("lock_amendments") or []
         self.assertTrue(amendments, "锁扩围必须写 lock_amendments")
-        last = amendments[-1]
-        self.assertEqual(last.get("revision"), 2)
-        self.assertIn("python_role_thresholds", last.get("action", ""))
-        self.assertIs(last.get("bundle_bytes_changed"), False)
-        self.assertIs(last.get("bundle_version_changed"), False)
+        self.assertEqual([a.get("revision") for a in amendments], [1, 2, 3],
+                         "扩围历史不得改写：revision 1/2/3 依次留痕")
+        rev2, rev3 = amendments[1], amendments[2]
+        self.assertIn("python_role_thresholds", rev2.get("action", ""))
+        self.assertIn("python_selection_scores", rev3.get("action", ""))
+        self.assertIn("python_regime", rev3.get("action", ""))
+        for a in (rev2, rev3):
+            self.assertIs(a.get("bundle_bytes_changed"), False)
+            self.assertIs(a.get("bundle_version_changed"), False)
         self.assertEqual(self.bundle["bundle_version"], "gen2-rule-v2.0.1",
                          "扩围不得改 bundle_version（bundle 字节未变）")
 

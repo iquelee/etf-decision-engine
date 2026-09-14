@@ -3,7 +3,7 @@
   "bundle_version": "gen2-rule-v2.0.1",
   "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
   "sealed_at": "2026-09-14",
-  "lock_revision": 2,
+  "lock_revision": 3,
   "rule": "GEN2_RULE_V2_BUNDLE 为 Rule V2 单一真相源，禁止静默修改；升级须新 bundle_version + 新 lock（Rule V2.1 另立）。LOCK 自 v2.0.1 起同时锚定 JS/Python **实现**哈希与构建产物哈希：改任一实现文件必须重新封印（新 bundle_version + 新 lock + 同步 verify-immutable.js 的 ROOT_ANCHORS）。扩围 immutable_set（纳入新的运行期依赖文件）同样必须新 lock + 同步 ROOT_ANCHORS；bundle 字节不变时bundle_version 保持不变，扩围动作留痕于 lock_amendments。",
   "lock_amendments": [
     {
@@ -17,6 +17,14 @@
       "revision": 2,
       "action": "immutable_set 扩围：新增 [python_role_thresholds] ml/gen2/portfolio/role_thresholds.py",
       "reason": "审查裁决：该模块直接定义线上阈值加载与校验（load_role_thresholds / validate_role_thresholds）；未锁定时，改它即可在 bundle 字节不变的前提下改变运行语义，形成旁路。迁移脚本 freeze-gen2-rule-bundle.py 不入锁（非运行时依赖）。",
+      "bundle_bytes_changed": false,
+      "bundle_version_changed": false
+    },
+    {
+      "at": "2026-09-14",
+      "revision": 3,
+      "action": "immutable_set 扩围：新增 [python_selection_scores] ml/gen2/baseline/selection_scores.py 与 [python_regime] ml/gen2/portfolio/regime.py",
+      "reason": "审查裁决：① selection_scores.py 承载**显式 Alpha 的计算、覆盖校验与内容哈希**（build_selection_scores / validate_selection_scores / CANONICAL_ALPHA_WEIGHTS）；只交叉核对权重常量不足以锁住其运行语义 —— 改它即可在 bundle 不变时改掉评分口径与校验强度。② regime.py 的 RISK_ON_GE=55 / RISK_OFF_LE=45 是**实际执行常量**，bundle.regime 只是声明，属同类旁路（改常量即可在不改 bundle 的前提下改变 regime 切分）。扩围不改变任何规则参数与 bundle 字节。",
       "bundle_bytes_changed": false,
       "bundle_version_changed": false
     }
@@ -57,6 +65,18 @@
       "role": "Python 阈值加载/校验契约：load_role_thresholds / validate_role_thresholds",
       "file": "ml/gen2/portfolio/role_thresholds.py",
       "sha256": "62d542615e6b2be2d622c594c88433e51531b69c209e5b85140924376e74a9c4"
+    },
+    {
+      "id": "python_selection_scores",
+      "role": "Python 显式 Alpha 实现：Alpha 计算 / 覆盖校验 / 内容哈希 / canonical 权重",
+      "file": "ml/gen2/baseline/selection_scores.py",
+      "sha256": "1d67f768a654ff361b9e00fd1845a269585427436edad6af0eaf234d8cc27d2e"
+    },
+    {
+      "id": "python_regime",
+      "role": "Python 统一 regime 契约：RISK_ON_GE / RISK_OFF_LE 实际执行常量 + classify_regime",
+      "file": "ml/gen2/portfolio/regime.py",
+      "sha256": "738f49c1bb2ed661bb86e7f19188e16ab26a7aebde4853c6b443a32bbeeb466e"
     }
   ],
   "build_artifacts": [
