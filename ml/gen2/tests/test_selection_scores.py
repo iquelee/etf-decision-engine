@@ -328,6 +328,45 @@ class RoleThresholdsTest(unittest.TestCase):
                            selection_scores=canonical_selection_scores(panel))
 
 
+class _TrapBars(dict):
+    """数据源陷阱：**任何**读取访问都直接抛错。
+
+    Python 侧等价于 JS 测试里「注入一个在任何读操作（query/find/get…）时直接抛错的 DB 客户端」。
+    用来证明闸门顺序 —— 不是「结果上 blocked」而已，而是「压根没碰数据源」。
+    """
+
+    class AccessError(RuntimeError):
+        """数据源被读取时抛出（说明闸门顺序错了）。"""
+
+    def _boom(self, op):
+        raise _TrapBars.AccessError(
+            "DATA_SOURCE_TRAP: 规则 bundle 闸门之前访问了数据源 :: " + op)
+
+    def __getitem__(self, k):
+        self._boom("__getitem__(" + str(k) + ")")
+
+    def __contains__(self, k):
+        self._boom("__contains__")
+
+    def __iter__(self):
+        self._boom("__iter__")
+
+    def __len__(self):
+        self._boom("__len__")
+
+    def get(self, *a, **kw):
+        self._boom("get")
+
+    def keys(self):
+        self._boom("keys")
+
+    def values(self):
+        self._boom("values")
+
+    def items(self):
+        self._boom("items")
+
+
 class RuleBundleGateTest(unittest.TestCase):
     """WP-G2-05R：规则 bundle 闸门（Python 侧 blocked 回归，与 JS main() 同序同判）。"""
 
@@ -395,6 +434,27 @@ class RuleBundleGateTest(unittest.TestCase):
         for key in ("core_top_fraction", "challenger_top_fraction", "satellite_top_fraction"):
             self.assertAlmostEqual(declared[key], getattr(yaml_t, key), places=12,
                                    msg="%s 在夹具与 gen2.yaml 之间漂移" % key)
+
+    def test_rule_gate_precedes_every_data_access(self):
+        """顺序证明（裁决追加验证）：规则 bundle 闸门必须**先于任何数据访问**执行。
+
+        Python 侧等价于「注入一个在任何读操作时直接抛错的数据源」：闸门若真的在最前，
+        这次调用根本不会碰数据源；反之（闸门只是「结果上优先」而实际先读了数据）会抛 AccessError。
+        """
+        # 主控：缺 role_thresholds + 数据源「一读就抛错」 → 仍必须干净返回 blocked
+        blocked = evaluate_run_gate(
+            _TrapBars(), eligible_codes=["513310"],
+            rule_bundle_config=self._cfg())
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["status_reason"], "RULE_BUNDLE_INCOMPLETE")
+        self.assertEqual(blocked["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
+
+        # 正控：同一陷阱 + 完整 role_thresholds → 闸门放行后**必然**触发数据访问并抛错。
+        # 没有这条，「上面没抛错」可能只是陷阱没接线（空跑）。
+        with self.assertRaises(_TrapBars.AccessError):
+            evaluate_run_gate(
+                _TrapBars(), eligible_codes=["513310"],
+                rule_bundle_config=self._cfg(role_thresholds=dict(DEFAULT_ROLE_THRESHOLDS)))
 
 
 if __name__ == "__main__":

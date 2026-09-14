@@ -534,12 +534,54 @@ def h_selection_injection(sc):
     return out
 
 
+class _TrapReadsBars(dict):
+    """数据源「读操作即抛错」陷阱（Python 侧等价于 JS 的 trapReads db）。
+
+    * 每次**读取**访问先计数（``reads``）/ ``accesses`` 再加一，然后**立即抛错**；
+    * 用来证明规则 bundle 闸门位于所有数据读取**之前** —— 若闸门不是最先，
+      访问必然发生，异常必被触发。
+    """
+
+    class TrapError(RuntimeError):
+        """数据源在闸门之前被读取。"""
+
+    def __init__(self, source=None):
+        super().__init__()
+        self._source = dict(source or {})
+        self.accesses = 0
+
+    def _boom(self, op):
+        self.accesses += 1
+        raise _TrapReadsBars.TrapError(
+            "DATA_SOURCE_TRAP: 规则 bundle 闸门之前发生了数据读取 :: " + op)
+
+    def __getitem__(self, k):
+        self._boom("__getitem__")
+
+    def __contains__(self, k):
+        self._boom("__contains__")
+
+    def __iter__(self):
+        self._boom("__iter__")
+
+    def __len__(self):
+        self._boom("__len__")
+
+    def get(self, *a, **kw):
+        self._boom("get")
+
+    def keys(self):
+        self._boom("keys")
+
+
 def h_rule_bundle_gate(sc):
-    """G2S-09：规则 bundle 闸门（WP-G2-05R）。
+    """G2S-09：规则 bundle 闸门（WP-G2-05R + 裁决追加的顺序证明）。
 
     两端基于**同一份**冻结 bundle 的 selection 段逐 case 覆盖，观察 run 状态：
       * blocked 用例（空数据）→ 必须拿到 RULE_BUNDLE_*；若规则闸门不是最先，会先撞 BENCHMARK_MISSING；
-      * complete 用例（完整横截面）→ 必须走到 completed（正对照）。
+      * complete 用例（完整横截面）→ 必须走到 completed（正对照）；
+      * trap_reads 用例（完整横截面 + 一读就抛错的数据源）→ 缺阈值时仍 blocked 且读取次数 = 0；
+        有阈值时读取必然被触发（正控，证明陷阱接线有效）。
     """
     panel = sc["input"]["panel"]
     base = sc["input"]["bundle_selection_base"]
@@ -549,7 +591,47 @@ def h_rule_bundle_gate(sc):
         selection.update(c.get("bundle_selection_overrides") or {})
         cfg = {"selection": selection}
         # blocked 用例走空数据、complete 用例走完整面板（与 JS handler 逐字同形）
-        rows = apply_run_mutations(run_panel_base(panel), [], panel) if c.get("data") == "full_panel" else []
+        full = apply_run_mutations(run_panel_base(panel), [], panel) if c.get("data") == "full_panel" else []
+        if c.get("trap_reads"):
+            # 数据源陷阱：任何读取立即抛错。完整面板在手，闸门若不在最前必然触发异常。
+            rb_direct = evaluate_rule_bundle_gate(cfg)
+            rt_direct = rb_direct.get("role_thresholds") or {}
+            direct_ok = rb_direct["status"] == STATUS_COMPLETED
+            trap = _TrapReadsBars(group_by_code(full))
+            try:
+                res = evaluate_run_gate(
+                    trap,
+                    eligible_codes=panel["codes"],
+                    benchmark_code=panel["benchmark_code"],
+                    target_size=panel["target_size"],
+                    mode="REPLAY",
+                    rule_bundle_config=cfg,
+                )
+                status, status_reason, data_gate, trap_raised = (
+                    res["status"], res["status_reason"], res["data_gate"], False)
+            except _TrapReadsBars.TrapError:
+                # 调用方捕获运行异常 → failed / SYSTEM_ERROR（run_gate.py 文档约定的四态语义）
+                status, status_reason, data_gate, trap_raised = "failed", "SYSTEM_ERROR", None, True
+            early = evaluate_run_gate(
+                {}, eligible_codes=panel["codes"], benchmark_code=panel["benchmark_code"],
+                target_size=panel["target_size"], mode="REPLAY", rule_bundle_config=cfg)
+            out[c["id"]] = {
+                "status": status,
+                "status_reason": status_reason,
+                "data_gate": data_gate,
+                "rule_bundle_status": "COMPLETE" if direct_ok else "INCOMPLETE",
+                "role_thresholds_effective": ({
+                    "core_pct": 1.0 - rt_direct["core_top_fraction"],
+                    "challenger_pct": 1.0 - rt_direct["challenger_top_fraction"],
+                    "satellite_pct": 1.0 - rt_direct["satellite_top_fraction"],
+                } if direct_ok else None),
+                "panel_sha256": run_panel_hash(full),
+                "data_source_reads": trap.accesses,
+                "data_source_trap_raised": trap_raised,
+                "early_gate_data_gate": early["data_gate"],
+                "early_gate_status_reason": early["status_reason"],
+            }
+            continue
         rb = evaluate_rule_bundle_gate(cfg)
         # 顺序证据：同一 cfg 在**空数据**下的状态（与 JS 的 early 逐字同形）。
         # 规则闸门若未抢在数据闸门之前，这里会得到 BENCHMARK_MISSING 而不是 RULE_BUNDLE_*。
@@ -573,7 +655,9 @@ def h_rule_bundle_gate(sc):
                 "challenger_pct": 1.0 - rt["challenger_top_fraction"],
                 "satellite_pct": 1.0 - rt["satellite_top_fraction"],
             } if done else None),
-            "panel_sha256": run_panel_hash(rows),
+            "panel_sha256": run_panel_hash(full),
+            "data_source_reads": None,
+            "data_source_trap_raised": False,
             "early_gate_data_gate": early["data_gate"],
             "early_gate_status_reason": early["status_reason"],
         }

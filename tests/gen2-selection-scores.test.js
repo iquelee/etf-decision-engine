@@ -42,9 +42,9 @@ const RUNNING_BUNDLE = withRoleThresholds(MANIFEST_BUNDLE, RUNNING_ROLE_THRESHOL
  * 生产代码用 `path.join(__dirname, 'GEN2_RULE_V2_BUNDLE.json')` 读 bundle，故这里提供 __dirname
  * 并用 fs shim 替换该文件的读取。
  */
-function load(data, bundle) {
+function load(data, bundle, dbOverride) {
   const writes = [];
-  const db = {
+  const db = dbOverride || {
     query: async (_, where) => (data[where && where.code] || []).slice(),
     upsert: async (collection, doc, where) => { writes.push({ collection, doc, where }); }
   };
@@ -73,6 +73,45 @@ function load(data, bundle) {
     + ' SELECTION_SCORE_WEIGHTS, SELECTION_SCORE_SOURCE, combineSelectionScore,'
     + ' validateSelectionWeights, applySelectionScores, buildDailyRoles};', box);
   return { entry: box.exports, writes };
+}
+
+/**
+ * DB 读操作陷阱（闸门**顺序**证明，裁决追加验证要求）：
+ * - 任何「读」操作（query / getById / getParamConfig / getEtf* / getLatest* /
+ *   getActiveRiskEvents / getPosition，以及底层 getApp / getDb / getCommand / getCollection）
+ *   一律**立即抛错** DB_READ_TRAP，并留下调用记录；
+ * - 「写」操作（upsert / batchInsert）照常记录 —— 否则 failGate 无法落 blocked 记录，
+ *   陷阱会把「闸门正确」误判成「闸门失效」。
+ *
+ * 判定方式：缺 role_thresholds + 陷阱 DB 下，若 reads.length === 0，即证明
+ * 「规则 bundle 闸门实际位于所有数据库读取之前」，而不是仅仅「结果上优先」。
+ */
+function makeTrapDb() {
+  const reads = [];
+  const writes = [];
+  const trap = (op) => (...args) => {
+    reads.push({ op, collection: args[0], where: args[1] });
+    throw new Error('DB_READ_TRAP: 规则 bundle 闸门之前发生了数据库读取 :: ' + op);
+  };
+  const db = {
+    upsert: async (collection, doc, where) => { writes.push({ collection, doc, where }); },
+    batchInsert: async (collection, docs) => { writes.push({ collection, docs }); },
+    query: trap('query'),
+    getById: trap('getById'),
+    getApp: trap('getApp'),
+    getDb: trap('getDb'),
+    getCommand: trap('getCommand'),
+    getCollection: trap('getCollection'),
+    getParamConfig: trap('getParamConfig'),
+    getEtfList: trap('getEtfList'),
+    getEtf: trap('getEtf'),
+    getLatestSnapshot: trap('getLatestSnapshot'),
+    getLatestDecision: trap('getLatestDecision'),
+    getLatestFundamentalState: trap('getLatestFundamentalState'),
+    getActiveRiskEvents: trap('getActiveRiskEvents'),
+    getPosition: trap('getPosition')
+  };
+  return { db, reads, writes };
 }
 
 const { entry } = load({});
@@ -272,6 +311,38 @@ console.log('\n== F1 显式 Selection Score（合成 + 校验 + provenance） ==
         out.status === 'blocked' && out.data_gate === 'RULE_BUNDLE_ROLE_THRESHOLDS_INVALID',
         out.status + '/' + out.data_gate);
     }
+  }
+
+  console.log('\n== 闸门顺序证明：规则 bundle 闸门先于**所有** DB 读取（DB 读操作陷阱） ==');
+  {
+    // 顺序证明（主控）：缺 role_thresholds + 任何 DB 读都抛错 → 仍必须 blocked/RULE_BUNDLE_INCOMPLETE，
+    // 且读调用计数为 0。若规则闸门只是「结果上优先」而实际先读了库，这里会变成 failed/SYSTEM_ERROR。
+    const trap = makeTrapDb();
+    const { entry: e } = load(data, withRoleThresholds(MANIFEST_BUNDLE, null), trap.db);
+    const out = await e.main({ mode: 'REPLAY' });
+    assert('缺 role_thresholds + 读操作抛错 → 仍为 blocked（不是 failed/SYSTEM_ERROR）',
+      out.status === 'blocked' && out.status_reason === 'RULE_BUNDLE_INCOMPLETE',
+      out.status + '/' + out.status_reason + '/' + out.error);
+    assert('data_gate = RULE_BUNDLE_ROLE_THRESHOLDS_MISSING（未被数据闸门抢占）',
+      out.data_gate === 'RULE_BUNDLE_ROLE_THRESHOLDS_MISSING', out.data_gate);
+    assert('规则闸门早于所有 DB 读取：DB 读调用计数 = 0', trap.reads.length === 0, trap.reads);
+    assert('闸门失败仍能写 blocked 运行记录（读陷阱不影响写路径）',
+      trap.writes.some((w) => w.doc && w.doc.type === 'gen2_run' && w.doc.status === 'blocked'),
+      trap.writes.map((w) => w.doc && w.doc.type));
+    assert('未写入任何 ranking / 未触发合格性读取',
+      trap.writes.filter((w) => w.doc && w.doc.type === 'gen2_ranking').length === 0);
+
+    // 正控：同一陷阱 + 完整 role_thresholds → 读操作**必须**被触发并抛错。
+    // 没有这条，上面「reads = 0」可能只是陷阱本身没接线（空跑）。
+    const trap2 = makeTrapDb();
+    const { entry: e2 } = load(data, undefined, trap2.db);
+    const out2 = await e2.main({ mode: 'REPLAY' });
+    assert('正控：完整 role_thresholds 下同一陷阱被触发（failed/SYSTEM_ERROR + DB_READ_TRAP）',
+      out2.status === 'failed' && out2.status_reason === 'SYSTEM_ERROR' && /DB_READ_TRAP/.test(String(out2.error)),
+      out2.status + '/' + out2.status_reason + '/' + out2.error);
+    assert('正控：确实发生了 DB 读（>= 1 次，陷阱接线有效）', trap2.reads.length >= 1, trap2.reads.length);
+    assert('正控：首个被触发的读操作是 GEN2_DAILY 日线读取',
+      trap2.reads[0] && trap2.reads[0].op === 'query', trap2.reads[0]);
   }
 
   console.log('\n=== 结果：' + passed + ' 通过 / ' + failed + ' 失败 ===');

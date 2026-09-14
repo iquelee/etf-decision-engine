@@ -295,15 +295,20 @@ function runPublishHash(codes, alphas, written) {
 /** 注入式 db：query 返回面板数据；simulate_system_error 时抛异常以触发 failed 路径 */
 function makeRunDb(groups, opts) {
   const writes = [];
+  const reads = [];
   const db = {
     query: async (collection, where) => {
+      reads.push({ collection, where });
+      // WP-G2-05R 追加验证：读操作陷阱 —— 任何数据读取**立即抛错**。
+      // 用来证明规则 bundle 闸门位于所有数据库读取**之前**（不是「结果上优先」）。
+      if (opts && opts.trapReads) throw new Error('DB_READ_TRAP: 规则 bundle 闸门之前发生了数据库读取');
       if (opts && opts.failQuery) throw new Error('injected db query failure (SYSTEM_ERROR simulation)');
       const code = where && where.code;
       return (groups.get(code) || []).slice();
     },
     upsert: async (collection, doc) => { writes.push({ collection, doc }); }
   };
-  return { db, writes };
+  return { db, writes, reads };
 }
 
 /** 驱动真实 main()：注入 db + 事件，取「最后一次 gen2_run 写入 / 返回值」的规范化状态 */
@@ -542,17 +547,21 @@ const HANDLERS = {
     const base = sc.input.bundle_selection_base;
     const out = {};
     // 驱动真实 main()：注入 bundle + 数据行，取「返回值 / 最后一次 gen2_run 写入」的规范化状态
-    const runCase = async (bundle, rows) => {
-      const { db: rdb, writes } = makeRunDb(groupByCode(rows), {});
+    const runCase = async (bundle, rows, opts) => {
+      const { db: rdb, writes, reads } = makeRunDb(groupByCode(rows), opts || {});
       const entry = loadEntry(rdb, bundle);
       const res = await entry.main({ mode: 'REPLAY' });
       const runs = writes.filter((w) => w.doc && w.doc.type === 'gen2_run');
       const last = runs.length ? runs[runs.length - 1].doc : null;
       const pick = (a, b) => (a === undefined || a === null ? (b === undefined ? null : b) : a);
+      const err = String((res && res.error) || '');
       return {
         status: pick(res && res.status, last && last.status),
         status_reason: pick(res && res.status_reason, last && last.status_reason),
-        data_gate: pick(res && res.data_gate, last && last.data_gate)
+        data_gate: pick(res && res.data_gate, last && last.data_gate),
+        // 顺序证明证据：数据源读取尝试次数 + 读陷阱是否被触发
+        data_source_reads: reads.length,
+        data_source_trap_raised: /DB_READ_TRAP/.test(err)
       };
     };
     for (const c of sc.input.cases) {
@@ -561,7 +570,10 @@ const HANDLERS = {
       const rows = c.data === 'full_panel'
         ? applyRunMutations(runPanelBase(panel), [], panel)
         : [];
-      const primary = await runCase(bundle, rows);
+      // trap_reads：同一面板换成「一读就抛错」的 db —— 缺阈值时必须仍 blocked 且零读取；
+      // 有阈值时必然被触发（正控：证明陷阱真的接线了）。
+      const opts = c.trap_reads ? { trapReads: true } : {};
+      const primary = await runCase(bundle, rows, opts);
       // 顺序证据：同一 bundle 在**空数据**下的状态。规则闸门若未抢在数据闸门之前，
       // 这里会得到 BENCHMARK_MISSING 而不是 RULE_BUNDLE_*。
       const early = await runCase(bundle, []);
@@ -577,6 +589,8 @@ const HANDLERS = {
           satellite_pct: direct.satellite_pct
         } : null,
         panel_sha256: runPanelHash(rows),
+        data_source_reads: c.trap_reads ? primary.data_source_reads : null,
+        data_source_trap_raised: primary.data_source_trap_raised,
         early_gate_data_gate: early.data_gate,
         early_gate_status_reason: early.status_reason
       };

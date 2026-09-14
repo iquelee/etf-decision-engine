@@ -25,13 +25,13 @@
 |---|---|
 | `cloudfunctions/runGen2ShadowEod/index.js` | `resolveRoleThresholds()` 删除 `LEGACY_TOP_QUANTILE_AUDIT` 回退分支 → 缺失/非法一律返回 `{ok:false, gate, detail}`（**本函数不再抛错**）；新增 `RULE_BUNDLE_GATE`（非 null ⇒ 本次必须 blocked）；`main()` 在**读任何数据之前**早退 `blocked/RULE_BUNDLE_INCOMPLETE`；`failGate()` 支持显式 `status_reason`；`buildDailyRoles()` 增加 fail-closed 兜底；`PORTFOLIO_CFG.top_quantile` 移除；旧字段入口收敛到**离线迁移助手** `deriveRoleThresholdsFromLegacy()` |
 | `ml/gen2/data/run_gate.py` | 新增 `evaluate_rule_bundle_gate(config)`（`RULE_BUNDLE_ROLE_THRESHOLDS_MISSING` / `_INVALID`）；`evaluate_run_gate(..., rule_bundle_config=...)` 最先执行规则闸门；模块 docstring 闸门顺序补 `-1. RULE_BUNDLE_INCOMPLETE` |
-| `fixtures/gen2/golden_scenarios_v1.json` | `run_status_gate.gate_order` 前置 `RULE_BUNDLE_INCOMPLETE` 并补 rules；新增 **G2S-09**（`rule_bundle_gate`，4 case / 16 不变量，双端）；G2S-08 panel 增加 `role_thresholds_running_config`（运行配置显式声明，去掉对 JS 隐式回退的依赖） |
-| `scripts/parity/run_gen2_scenarios_node.js` / `.py` | 均支持**显式注入运行 bundle**；新增 `rule_bundle_gate` handler；G2S-08 运行配置改由夹具声明并注入（Python 侧校验 gen2.yaml 与夹具一致，防漂移） |
+| `fixtures/gen2/golden_scenarios_v1.json` | `run_status_gate.gate_order` 前置 `RULE_BUNDLE_INCOMPLETE` 并补 rules；新增 **G2S-09**（`rule_bundle_gate`，**6 case / 24 不变量**，双端）；G2S-08 panel 增加 `role_thresholds_running_config`（运行配置显式声明，去掉对 JS 隐式回退的依赖）；**追加** `trap_reads_*` 两 case（顺序证明主控 + 正控） |
+| `scripts/parity/run_gen2_scenarios_node.js` / `.py` | 均支持**显式注入运行 bundle**；新增 `rule_bundle_gate` handler；G2S-08 运行配置改由夹具声明并注入（Python 侧校验 gen2.yaml 与夹具一致，防漂移）；**追加** `makeRunDb({trapReads})` / `_TrapReadsBars`（读操作立即抛错并计数）+ `data_source_reads` / `data_source_trap_raised` 观测字段 |
 | `scripts/parity/run_node.js` | 同上注入运行 bundle（否则跨语言 parity 链会因缺显式阈值而抛错） |
-| `tests/gen2-selection-scores.test.js` | 装载器支持 bundle 注入；F2 断言改为「INCOMPLETE 标记」语义；新增 **blocked 回归 9 条**（缺失 / 仅旧字段 / bundle 文件缺失 / 非法） |
+| `tests/gen2-selection-scores.test.js` | 装载器支持 bundle 注入；F2 断言改为「INCOMPLETE 标记」语义；新增 **blocked 回归 9 条**（缺失 / 仅旧字段 / bundle 文件缺失 / 非法）；**追加** `makeTrapDb()` 与**顺序证明 8 条**（主控 4 + 正控 3 + 零 ranking 1） |
 | `tests/gen2-gate.test.js` | 装载器注入运行 bundle（保持数据闸门 / 角色用例语义） |
-| `ml/gen2/tests/test_selection_scores.py` | 新增 `RuleBundleGateTest`（6 条：缺失 / 仅旧字段 / 非法 / 合法 / 顺序证据 / 夹具↔yaml 漂移） |
-| `ml/gen2/tests/test_scenario_parity.py` | 闸门顺序断言补第 0 位；新增 `test_rule_bundle_scenario_declared` |
+| `ml/gen2/tests/test_selection_scores.py` | 新增 `RuleBundleGateTest`（**7 条**：缺失 / 仅旧字段 / 非法 / 合法 / 顺序证据 / 夹具↔yaml 漂移 / **`_TrapBars` 顺序证明**） |
+| `ml/gen2/tests/test_scenario_parity.py` | 闸门顺序断言补第 0 位；新增 `test_rule_bundle_scenario_declared`、`test_rule_bundle_order_proof_cases_declared` |
 | `ml/gen2/baseline/rebuild_research_baselines.py`、`ml/gen2/reports/gen2_b1_research_baselines_20260911.md` | 修正 F2 描述（不再存在 `role_thresholds_source=LEGACY_TOP_QUANTILE_AUDIT` 运行态） |
 
 **阈值取值、`alpha` 权重、universe、规则实现均未改动；bundle / lock 未重新生成。**
@@ -71,12 +71,30 @@
 
 | 证据 | 内容 |
 |---|---|
-| 跨端场景 | `G2S-09` 4 个 case 双端**逐字段一致**；`[compare] invariants 224/224 passed`，`unlocated=0`，**门禁 PASS** |
+| 跨端场景 | `G2S-09` 6 个 case 双端**逐字段一致**；`[compare] invariants 240/240 passed`，`unlocated=0`，**门禁 PASS** |
 | 优先级证据 | `missing_role_thresholds` 用**空数据**驱动真实 `main()`，拿到 `RULE_BUNDLE_ROLE_THRESHOLDS_MISSING` 而非 `BENCHMARK_MISSING`（`I-09-07 / I-09-14 / I-09-15`）；正对照 `complete_role_thresholds` 空数据下得到 `BENCHMARK_MISSING`（`I-09-16`，证明闸门放行后由数据闸门接手） |
+| **顺序证据（追加）** | 见 §4.1 —— 「空数据」只证明**结果优先**；用「数据源一读就抛错」的陷阱 + **完整横截面**才证明**顺序** |
 | 正对照 | `complete_role_thresholds` 完整横截面 → `completed`，`role_thresholds_effective.core_pct = 0.8`（`I-09-12`）：**只补这一项即恢复**，阻断项单一可定向修复 |
-| JS 单测 | `tests/gen2-selection-scores.test.js` 47/47（含 blocked 回归 9 条）· `tests/gen2-gate.test.js` 34/34 |
-| Python 单测 | `RuleBundleGateTest` 6/6 · `test_selection_scores + test_scenario_parity` 38/38 |
-| 全量套件 | `node scripts/test-all.js` → **42/42 通过，0 项失败**（A：35/35 文件；B：`unittest discover ml/gen2/tests`；C：Immutable SHA 11/11 —— 含 `GEN2_RULE_V2_BUNDLE.json` SHA 未变；D：跨语言 parity；E/F/G 全通过） |
+| JS 单测 | `tests/gen2-selection-scores.test.js` 55/55（含 blocked 回归 9 条 + DB 陷阱顺序证明 8 条）· `tests/gen2-gate.test.js` 34/34 |
+| Python 单测 | `RuleBundleGateTest` 7/7 · `test_selection_scores` 28/28 · `test_scenario_parity` 12/12 |
+| 全量套件 | `node scripts/test-all.js` → **42/42 通过，0 项失败**（A：35/35 文件；B：`unittest discover ml/gen2/tests` 154 项；C：Immutable SHA 11/11 —— 含 `GEN2_RULE_V2_BUNDLE.json` SHA 未变；D：跨语言 parity；E/F/G 全通过） |
+
+### 4.1 追加验证：闸门**顺序**证明（DB 读操作陷阱）
+
+裁决追加要求：「G2S-09 的『空数据』证明了结果优先级，还应加一条**注入 DB 客户端并在任何读操作时直接抛错**
+的测试，证明规则 bundle 闸门实际位于所有数据库读取之前。」
+
+三层落地，**主控 + 正控成对**，避免「陷阱没接线 → 0 读取其实空跑」的自证风险：
+
+| 层 | 主控（缺 `role_thresholds` + 陷阱 + **完整横截面**） | 正控（补显式阈值 + 同一陷阱） |
+|---|---|---|
+| JS 单测 `makeTrapDb()` | `blocked` / `RULE_BUNDLE_INCOMPLETE` / `reads = 0` / 无 ranking 写入 | `failed` / `SYSTEM_ERROR` + `DB_READ_TRAP` / `reads >= 1` |
+| Python 单测 `_TrapBars` | 干净返回 `blocked`（`AccessError` 未触发） | 必然抛 `_TrapBars.AccessError` |
+| 跨端夹具 `G2S-09` | `status=blocked`、`data_source_reads=0`、`data_source_trap_raised=false`（`I-09-17..21`） | `status=failed`、`status_reason=SYSTEM_ERROR`、`data_source_trap_raised=true`（`I-09-22..24`） |
+
+为什么主控必须用**完整横截面**：空数据下即使闸门排在数据闸门之后，也可能「碰巧」先撞规则判定；
+给定可用数据却仍然**零读取**，才排除了「先读后判」的可能。
+正控则证明陷阱真的接线 —— 没有它，主控的 `reads=0` 无法与「陷阱根本没生效」区分。
 
 ### G2S-09 双端观测（节选）
 
@@ -106,6 +124,8 @@
 
 * 未修改 `ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json` / `GEN2_RULE_V2_LOCK.json`（→ WP-G2-04）；
 * 未修改任何阈值取值、`alpha` 权重、universe、规则实现语义；
-* 未开工 F4（`build_portfolio_candidates` 等权重重置 / legacy rank / 缺防守腿 → **WP-G2-06**）；
+* 未开工 F4 的**实现**（`build_portfolio_candidates` 等权重重置 / legacy rank / 缺防守腿 → **WP-G2-06**）；
+  2026-09-14 裁决后 WP-G2-06 已**立项**（红基线 + 实施计划见 `gen2_wp_g2_06_plan_20260914.md`），
+  本报告所属变更仍**未触碰** `portfolio_builder.py`；
 * 未重跑 B1 / B3（→ 顺序表第 6 项）；
 * 未提升 authority、未部署、未写 `portfolio_position` / `portfolio_snapshot`。
