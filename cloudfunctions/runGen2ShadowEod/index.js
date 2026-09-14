@@ -4,12 +4,29 @@
  * 职责（只读，绝不改生产仓位）：
  *   1. 读线上 etf_daily 的 universe 日线；
  *   2. 计算 Gen-2 特征 → leadership_score → 横截面 rank；
- *   3. 角色状态机（Core/Challenger/Reserve + hedge + 滞后 + cluster cap）；
- *   4. 组合候选（CORE 等权）+ 防守闸门（MA60 regime + vol target）；
- *   5. 全部写 gen2_shadow 集合（type=gen2_ranking / gen2_run），供状态包导出与后续判断。
+ *   3. 角色状态机（Core/Challenger/Reserve + hedge + 滞后 + cluster cap），并产出**权威权重**
+ *      `target_weight`（`attachAuthoritativeWeights()`，全仓唯一权重算法：1/n 起算 →
+ *      cluster cap → 广义科技 cap；非 CORE 一律 0）；
+ *   4. 候选组合 = **沿用**角色层权威权重（只做上限**复核**，越界抛错；绝不重算、绝不重置为等权）
+ *      + 现金腿（逐日 residual = 1 - Σ证券腿）
+ *      + 防守腿（market-score regime：RISK_ON ≥ 55 / RISK_OFF ≤ 45，缩仓 + hedge 腿）；
+ *   5. `priority` = **显式 selection score**（`features.alpha_score_v2` 的**未四舍五入**值），
+ *      与权重排序无关；缺失即 blocked（不猜、不回退 legacy rank）；
+ *   6. 发布**两类**记录到 gen2_shadow（同 run_id）：
+ *        * `gen2_ranking`       —— **只含 30 条 ETF**（现金腿没有 alpha，不得进入排名校验）；
+ *        * `gen2_candidate_leg` —— **30 ETF + CASH = 31 条候选腿**，带
+ *          `priority / priority_score / priority_source / priority_hash / config_hash /
+ *           defense_state / sleeve='GEN2_CANDIDATE'`；
+ *      两类记录**都通过发布校验**才把 run 标 `completed`，否则 blocked（fail-closed）。
  *
  * 与 Gen-1 / V3.6.1 完全隔离：本函数不调用 runDecisionEngine、不写 decision_result、
  * 不写 portfolio_position / portfolio_snapshot，仅产生观测数据。
+ * 候选腿**绝不写** `final_target`（那是 V3.6.1 的正式仓位字段，两者口径严格分离）。
+ *
+ * 规则单一真相源：`GEN2_RULE_V2_BUNDLE.json`（build 时由 `scripts/build-cloudfunctions.js`
+ * 复制到本目录）。规则 bundle 缺 `selection.role_thresholds`（或提供但非法）→ 本次运行
+ * `blocked` / `RULE_BUNDLE_INCOMPLETE`，且**先于任何数据读取**早退（fail-closed；
+ * 运行路径禁止 fallback 到旧 `top_quantile`）。
  *
  * 适配说明：线上 etf_daily 当前只有 5 只主 ETF、无 benchmark 510300，
  * 故 benchmark 用 universe 等权组合收益作代理（rs 与防守 regime 均基于等权基准）。
@@ -120,7 +137,11 @@ const LEADERSHIP_WEIGHTS = {
   breakout: 0.05, volatility: 0.05, liquidity: 0.05, diversification: 0.05
 };
 
-// Gen-2 Rule V2 配置：单一真相源 GEN2_RULE_V2_BUNDLE（缺失时 fallback 硬编码，值与 bundle 一致）
+// Gen-2 Rule V2 配置：单一真相源 GEN2_RULE_V2_BUNDLE。
+// 说明：alpha / portfolio / defense / regime 的**数值**在 bundle 缺失时回落到与本文件一致的
+// 硬编码默认（见下方 `!= null ? : default`）；**角色阈值不在该回落范围内** —— 它必须显式来自
+// bundle 的 `selection.role_thresholds`，缺失或非法即 blocked / RULE_BUNDLE_INCOMPLETE
+// （fail-closed，见 `resolveRoleThresholds()`）。
 const _sel = (_bundle && _bundle.selection) || {};
 const _pf = (_bundle && _bundle.portfolio) || {};
 const _def = (_bundle && _bundle.defense) || {};

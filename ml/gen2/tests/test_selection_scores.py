@@ -382,8 +382,21 @@ class RuleBundleGateTest(unittest.TestCase):
         selection.update(overrides)
         return {"selection": selection}
 
+    def _cfg_missing(self, **overrides) -> dict:
+        """显式构造「缺 role_thresholds」的输入。
+
+        WP-G2-04 冻结之后，bundle 的 ``selection`` 段**已含** ``role_thresholds``
+        （这正是 WP-G2-04 的目的：解除 ``blocked/RULE_BUNDLE_INCOMPLETE``）。因此
+        「缺显式阈值」这一类回归必须**显式剥掉该键**，而不能依赖「bundle 恰好还没迁移」——
+        否则冻结一落地，这些回归就会变成假绿/假红。
+        """
+        selection = self._base_selection()
+        selection.pop("role_thresholds", None)
+        selection.update(overrides)
+        return {"selection": selection}
+
     def test_missing_role_thresholds_blocks(self):
-        rb = evaluate_rule_bundle_gate(self._cfg())
+        rb = evaluate_rule_bundle_gate(self._cfg_missing())
         self.assertEqual(rb["status"], "blocked")
         self.assertEqual(rb["status_reason"], "RULE_BUNDLE_INCOMPLETE")
         self.assertEqual(rb["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
@@ -392,7 +405,7 @@ class RuleBundleGateTest(unittest.TestCase):
     def test_legacy_fields_do_not_satisfy_gate(self):
         """只有旧字段同样是 MISSING —— 运行路径绝不从旧字段派生阈值。"""
         rb = evaluate_rule_bundle_gate(
-            self._cfg(top_quantile=0.3, challenger_pct=0.7, satellite_pct=0.6))
+            self._cfg_missing(top_quantile=0.3, challenger_pct=0.7, satellite_pct=0.6))
         self.assertEqual(rb["status"], "blocked")
         self.assertEqual(rb["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
 
@@ -413,7 +426,7 @@ class RuleBundleGateTest(unittest.TestCase):
 
     def test_rule_gate_preempts_data_gate(self):
         """顺序证据：空数据 + 缺 role_thresholds → RULE_BUNDLE_*（而不是 BENCHMARK_MISSING）。"""
-        bad = evaluate_run_gate({}, eligible_codes=["513310"], rule_bundle_config=self._cfg())
+        bad = evaluate_run_gate({}, eligible_codes=["513310"], rule_bundle_config=self._cfg_missing())
         self.assertEqual(bad["status"], "blocked")
         self.assertEqual(bad["status_reason"], "RULE_BUNDLE_INCOMPLETE")
         self.assertEqual(bad["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")
@@ -444,7 +457,7 @@ class RuleBundleGateTest(unittest.TestCase):
         # 主控：缺 role_thresholds + 数据源「一读就抛错」 → 仍必须干净返回 blocked
         blocked = evaluate_run_gate(
             _TrapBars(), eligible_codes=["513310"],
-            rule_bundle_config=self._cfg())
+            rule_bundle_config=self._cfg_missing())
         self.assertEqual(blocked["status"], "blocked")
         self.assertEqual(blocked["status_reason"], "RULE_BUNDLE_INCOMPLETE")
         self.assertEqual(blocked["data_gate"], "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING")

@@ -1,7 +1,55 @@
 {
   "engine_id": "gen2-rule-v2",
-  "bundle_version": "gen2-rule-v2.0",
-  "bundle_sha256": "1df81e33dfc1271bedca427a33f45b8be9ce0c76409d9a26e7f4e7aab5b2aebd",
-  "sealed_at": "2026-09-08",
-  "rule": "GEN2_RULE_V2_BUNDLE 为 Rule V2 单一真相源，禁止静默修改；升级须新 bundle_version + 新 lock（Rule V2.1 另立）。"
+  "bundle_version": "gen2-rule-v2.0.1",
+  "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+  "sealed_at": "2026-09-14",
+  "rule": "GEN2_RULE_V2_BUNDLE 为 Rule V2 单一真相源，禁止静默修改；升级须新 bundle_version + 新 lock（Rule V2.1 另立）。LOCK 自 v2.0.1 起同时锚定 JS/Python **实现**哈希与构建产物哈希：改任一实现文件必须重新封印（新 bundle_version + 新 lock + 同步 verify-immutable.js 的 ROOT_ANCHORS）。",
+  "immutable_set": [
+    {
+      "id": "bundle",
+      "role": "规则单一真相源（Python 回测 + Node Shadow 共用）",
+      "file": "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json",
+      "sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37"
+    },
+    {
+      "id": "js_implementation",
+      "role": "JS 权威实现：角色状态机 / 权威权重 / 候选组合 / 发布校验",
+      "file": "cloudfunctions/runGen2ShadowEod/index.js",
+      "sha256": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b"
+    },
+    {
+      "id": "python_rule",
+      "role": "Python 规则实现：build_v2_roles 角色状态机",
+      "file": "ml/gen2/baseline/rule_v2_ab.py",
+      "sha256": "89b4e6d867acacf80028fe2cba4fa51f07eecfdf51cfa48e6706b73451631e7f"
+    },
+    {
+      "id": "python_candidate",
+      "role": "Python 候选组合实现：build_portfolio_candidates",
+      "file": "ml/gen2/portfolio/portfolio_builder.py",
+      "sha256": "0831764c775fb4d3757d926d3105240573f4755b02075304186d2c7f1f245ccb"
+    },
+    {
+      "id": "python_defense",
+      "role": "Python 防守实现：apply_regime_defense",
+      "file": "ml/gen2/portfolio/defense_gate.py",
+      "sha256": "e3f48f081936ab0d9a5dac1645e6dce24121808785d26fde81e1d93d06e51afa"
+    }
+  ],
+  "build_artifacts": [
+    {
+      "id": "dist_bundle",
+      "file": "dist-functions/runGen2ShadowEod/GEN2_RULE_V2_BUNDLE.json",
+      "must_equal": "bundle",
+      "sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+      "note": "构建产物必须与冻结源逐位一致（build-cloudfunctions 直接复制）；由 scripts/verify-gen2-build-artifacts.js 校验。"
+    },
+    {
+      "id": "dist_index",
+      "file": "dist-functions/runGen2ShadowEod/index.js",
+      "must_equal": "js_implementation",
+      "sha256": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+      "note": "构建产物必须与冻结源逐位一致（build-cloudfunctions 直接复制）；由 scripts/verify-gen2-build-artifacts.js 校验。"
+    }
+  ]
 }

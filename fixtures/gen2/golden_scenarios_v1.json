@@ -1756,8 +1756,8 @@
         "js": "runGen2ShadowEod resolveRoleThresholds / RULE_BUNDLE_GATE + main() 规则 bundle 闸门早退（注入式 db 驱动真实 main）"
       },
       "input": {
-        "note": "两端基于**同一份**冻结 bundle 的 selection 段（ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json）逐 case 覆盖 bundle_selection_overrides，再观察 run 状态。blocked 用例用空数据面板：规则闸门若未抢在数据闸门之前，将得到 BENCHMARK_MISSING —— 因此「拿到 RULE_BUNDLE_*」本身就是优先级证据。",
-        "bundle_selection_base_source": "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json::selection",
+        "note": "本场景测的是**规则闸门的行为**，输入是下方**合成基线** + 逐 case 覆盖，不再镜像冻结 bundle。两端吃同一份合成基线，逐 case 覆盖 bundle_selection_overrides，再观察 run 状态。blocked 用例用空数据面板：规则闸门若未抢在数据闸门之前，将得到 BENCHMARK_MISSING —— 因此「拿到 RULE_BUNDLE_*」本身就是优先级证据。",
+        "bundle_selection_base_source": "SYNTHETIC（迁移前镜像自 GEN2_RULE_V2_BUNDLE.json::selection@v2.0 的旧字段形态）。WP-G2-04 起冻结 bundle 已含 selection.role_thresholds，故本夹具**刻意不镜像冻结 bundle**：「缺显式阈值」的 case 由本方显式构造，否则冻结一落地这些回归就变成假绿。冻结后 bundle 是否满足闸门，由 test_wp_g2_04_freeze.py / tests/gen2-rule-freeze.test.js 直接断言真实 bundle。",
         "bundle_selection_base": {
           "core_pct": 0.8,
           "challenger_pct": 0.7,
@@ -1815,7 +1815,7 @@
         "cases": [
           {
             "id": "missing_role_thresholds",
-            "title": "冻结 bundle 现状：无 role_thresholds（也无旧字段）",
+            "title": "合成基线：无 role_thresholds（也无旧字段）→ MISSING（WP-G2-04 后冻结 bundle 已不属此形态，见 bundle_selection_base_source）",
             "bundle_selection_overrides": {},
             "data": "empty"
           },
