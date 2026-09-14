@@ -42,9 +42,16 @@
     运行 `--accept-merge --master-commit <B1 合并提交完整 SHA>`，再开并合并**独立的接受记录 PR**；
     该 PR 合并后才可正式称「Frozen B1 已接受」，**此后才允许启动 B3**；
   * `--accept-merge` **会修改受版本控制的 manifest / 报告** ⇒ 它自身也必须走 PR（见 §12）；
-  * 接受命令的**额外校验**（fail-closed）：① `<SHA>` 是 `origin/master` 的**祖先**；
-    ② `<SHA>^{tree}` **严格等于** manifest 记录的 `source_tree_sha`（取证时的源码树）；
-    ③ 当前**组件 / 输入 / 输出摘要**全部与 B1 manifest 逐位一致 ⇒ 内容哈希不变则**无需重跑**；
+  * 接受命令的**校验**（fail-closed）—— 第五次裁决修正后的**正确契约**：
+    ⓪ **工作树干净**（接受时 + 取证时两态）；
+    ① **执行提交** `source_state.git_head_commit` 是 `<B1 merge SHA>` 的**祖先**；
+    ② 当前**锁定组件 / B1 工具链 / 输入摘要 / 输出摘要**与 manifest **逐项**逐位一致；
+    ③ `<B1 merge SHA>` 的**树中包含**已承诺的**报告 / manifest / 审计快照**，且**哈希匹配**；
+    ④ 另行记录 `accepted_master_commit` / `accepted_master_tree_sha` / `execution_source_tree_sha`。
+    ⚠️ **不再要求** `accepted_master_tree_sha == execution_source_tree_sha`：报告 / manifest /
+    审计快照是**执行之后**才提交进 B1 分支的 ⇒ 两个 tree **必然不同**。前者是「接受时仓库快照」、
+    后者是「执行时语义源码快照」，两者的关联由 ② 的摘要族与 ③ 的已承诺证据哈希建立。
+    （早期版本要求「整棵树相等」，那会**必然失败** —— 已废弃。）；
   * §9 归因页必须给出**可审计的数值对照表**（不只是方向）：按 0/5/10/20bps、逐策略列
     净值 / CAGR / Sharpe / 换手 / 成本与差异，并逐项标注 D-001 / F1-F2 / F4 / 统一账本的归因。
     口径严格限定为「**在 2026-09-11 审计基线与本次相同窗口/数据的对照中，F4 是唯一实质来源**」，
@@ -54,7 +61,7 @@
 
     PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run
     PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --date 20260914 --run-id <id>
-    # B1 PR 合并后：在独立分支建接受记录（三项校验全过才写入；不变则无需重跑）
+    # B1 PR 合并后：在独立分支建接受记录（四项校验全过才写入；不变则无需重跑）
     git switch -c chore/gen2-b1-accept-v201 origin/master
     PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>
 """
@@ -175,11 +182,17 @@ AUDIT_BASELINE_REL = "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json"
 STATUS_PENDING_MERGE = "PENDING_MERGE"
 STATUS_ACCEPTED = "ACCEPTED"
 
+#: fail-closed 中止码：**执行窗口内源被改动**（`HEAD` 移动 / 运行实现文件被改）。
+#: 命中即本次运行**不予采信、作废**，也**不得**当作门禁证据 —— 它的读数无法归因到某一版源码。
+STATUS_ABORTED_SOURCE_MUTATED = "ABORTED_SOURCE_MUTATED"
+
 #: 接受记录必须落在这条**独立分支**（进而独立 PR）上 —— `accept_merge` 会修改**受版本控制**的
 #: manifest / 报告，在受保护的 `master` 下不能「合并 B1 后直接在本地跑一下就完事」。
 ACCEPT_BRANCH = "chore/gen2-b1-accept-v201"
 
-#: `--accept-merge` 默认据以判定「合并后的 master」的引用。
+#: `--accept-merge` 记录用的**信息性**基准引用（用于在记录里标注「`<SHA>` 是否已进入 master」）。
+#: ⚠️ **不作为拒绝条件** —— 契约要求的祖先关系是「**执行提交**（`source_state.git_head_commit`）
+#: 是 `<SHA>` 的祖先」，而不是「`<SHA>` 是某个 ref 的祖先」。见 `accept_merge` ①。
 DEFAULT_MASTER_REF = "origin/master"
 
 #: 四项已登记变更 → 快照 `code_state_timeline` 的键。`in_this_delta` 由
@@ -401,16 +414,51 @@ def _git_run(*args: str):
         return None
 
 
+def _git_blob_bytes(commit: str, path: str) -> bytes | None:
+    """取 `<commit>:<path>` 的 blob **原始字节**（不经 working-tree 的换行转换）。
+
+    用 `git cat-file blob` 而非 `git show`：前者对 blob 是**逐字节直出**，不受
+    `core.autocrlf` / smudge filter 影响，与磁盘侧 `normalized_sha256`（CRLF→LF 归一化）
+    配合即可得到同口径哈希。blob 不存在返回 `None`。
+    """
+    try:
+        r = subprocess.run(["git", "cat-file", "blob", "%s:%s" % (commit, path)],
+                           cwd=str(PROJECT_ROOT), capture_output=True, check=False)
+    except OSError:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def _git_blob_sha256(commit: str, path: str) -> str | None:
+    """`<commit>:<path>` 的内容 sha256（CRLF→LF 归一化，与 `normalized_sha256` 同口径）。
+
+    用于「**已承诺证据**是否真的在合并提交的树里」：拿 **提交里的 blob** 算哈希，
+    而不是拿磁盘当前文件算 —— 后者只能证明「本地是这样」，证明不了「合并进去的是这样」。
+    """
+    data = _git_blob_bytes(commit, path)
+    if data is None:
+        return None
+    try:
+        text = data.decode("utf-8").replace("\r\n", "\n")
+    except UnicodeDecodeError:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def source_state() -> dict:
     """记录**源树状态**：本次取证所依据的 git 提交与其 **tree 对象 sha**。
 
-    接受记录要求 `--master-commit^{tree}` **严格等于** 这里的 `source_tree_sha` ——
-    这是「合并进来的源码树 == 取证时的源码树」的机器证明，也是「内容哈希不变 ⇒ 无需重跑」
-    这句前提的**可校验**依据（不是约定）。
+    语义（第五次裁决修正）：`source_tree_sha` 是「**执行时**语义源码快照」，不是「接受时仓库快照」。
+    接受记录**不要求**它等于 `<B1 merge SHA>^{tree}` —— 报告 / manifest / 审计快照是**执行之后**
+    才被提交进 B1 分支的，两者**必然不同**。它们之间的关联由「组件 / 工具链 / 输入 / 输出摘要 +
+    已承诺证据哈希」建立（见 `accept_merge`）。
+
+    它真正承重的两件事：① `git_head_commit` 必须是 `<B1 merge SHA>` 的**祖先**
+    （证明「接受的就是这次执行所依据的源码」）；② 幂等绑定 —— 同一次运行不因本命令被重复执行而失真。
 
     若 `working_tree_dirty` 为 true，说明取证时磁盘上存在**未提交的受控改动** ⇒
-    `source_tree_sha` 不能代表实际参与运行的字节 ⇒ `accept_merge` 会**拒绝**绑定（须先提交再重跑）。
-    未跟踪文件（`??`）不算 —— 它们不进入任何提交的 tree。
+    `source_tree_sha` / 组件哈希不代表实际参与运行的字节 ⇒ `accept_merge` 会**拒绝**绑定
+    （须先提交再重跑）。未跟踪文件（`??`）不算 —— 它们不进入任何提交的 tree。
     """
     head = _git("rev-parse", "HEAD")
     tree = _git("rev-parse", "HEAD^{tree}")
@@ -430,10 +478,43 @@ def source_state() -> dict:
         "source_tree_sha": tree,
         "working_tree_dirty": bool(dirty_tracked),
         "dirty_tracked_paths": dirty_tracked[:20],
-        "note": ("`source_tree_sha` = 取证运行时 `HEAD^{tree}`。接受记录要求"
-                 "`--master-commit^{tree}` 与它**严格相等** ⇒ 合并进来的源码树与取证树相同。"
-                 "`working_tree_dirty=true` 时该前提不成立（存在未提交的受控改动），"
-                 "接受时会拒绝绑定。未跟踪文件不影响 tree。"),
+        "note": ("`source_tree_sha` = **执行时**语义源码快照（`HEAD^{tree}`）。接受记录**不要求**它等于"
+                 "`<B1 merge SHA>^{tree}`（产物在执行后才提交 ⇒ 必然不同）；承重的是"
+                 "「`git_head_commit` 是 `<B1 merge SHA>` 的祖先」+ 组件 / 产物摘要一致。"
+                 "`working_tree_dirty=true` 时哈希不代表实际参与运行的字节，接受时会拒绝绑定。"
+                 "未跟踪文件不影响 tree。"),
+    }
+
+
+def source_mutation_report(baseline: dict, impl: list[dict]) -> dict:
+    """重放「**执行窗口内源是否被改动**」的判定（fail-closed）。
+
+    只看两样东西：① `HEAD` 提交是否还在原地；② `run_implementation` 每个文件的**当前**哈希是否
+    仍等于取证时的值。
+
+    **不能**顺手看 `git status` 是否脏 —— `run()` 自己就会写**受版本控制**的 manifest / 报告，
+    那不算「源被改动」，拿脏树判定会**恒真**。要抓的正是「跑到一半有人提交/改文件」这种
+    「读数与源码对不上」的情形（本轮门禁首跑 44/45 就是它）。
+
+    命中 ⇒ `run_status = ABORTED_SOURCE_MUTATED`：该次运行**不予采信**，不是「假失败」，
+    而是**正确的 fail-closed 中止**，不得当作门禁证据。
+    """
+    head_now = _git("rev-parse", "HEAD")
+    modified = []
+    if head_now != baseline.get("git_head_commit"):
+        modified.append({"kind": "head_moved",
+                         "at_attestation": baseline.get("git_head_commit"), "now": head_now})
+    for e in impl:
+        now = _sha(e["file"])
+        if now != e["sha256"]:
+            modified.append({"kind": "file_changed", "id": e["id"], "file": e["file"],
+                             "at_attestation": e["sha256"], "now": now})
+    return {
+        "mutated": bool(modified),
+        "status_if_mutated": STATUS_ABORTED_SOURCE_MUTATED,
+        "head_at_attestation": baseline.get("git_head_commit"),
+        "head_now": head_now,
+        "modified": modified,
     }
 
 
@@ -889,6 +970,26 @@ def run(*, date_tag: str = "20260914", run_id: str | None = None,
     # ---- 阶段 1：写 manifest（此时尚无 outputs / self_check）----
     _write_manifest(manifest, out_dir, man_out)
 
+    # ---- 阶段 1.5：**执行窗口内源是否被改动**（fail-closed 中止，先于任何哈希自校验）----
+    #   必须排在自校验之前：源被改动时 `verify_manifest` 也会失配，但那样只会给出泛化的
+    #   「哈希不一致」，掩盖真实原因。这里给出**专属中止码** `ABORTED_SOURCE_MUTATED`，
+    #   并把证据写进 manifest —— 该次运行**不予采信**，不得当作门禁证据（要重跑）。
+    mutation = source_mutation_report(src, impl)
+    manifest["source_mutation_check"] = mutation
+    if mutation["mutated"]:
+        manifest["run_status"] = STATUS_ABORTED_SOURCE_MUTATED
+        manifest["run_status_note"] = (
+            "**已中止（源在执行窗口内被改动）**：%s。本次读数无法归因到某一版源码 ⇒ "
+            "**不予采信**，也不得当作门禁证据；请在**静止**的源码上重跑。"
+            % (", ".join("%s(%s)" % (x["kind"], x.get("file") or x.get("now"))
+                         for x in mutation["modified"]) or "未知"))
+        _write_manifest(manifest, out_dir, man_out)
+        raise FrozenAttestationError(
+            "拒绝产出交付物：%s —— 执行窗口内源被改动（%s）。"
+            "这不是「假失败」，是正确的 fail-closed 中止；请在源静止后重跑 B1。"
+            % (STATUS_ABORTED_SOURCE_MUTATED,
+               json.dumps(mutation["modified"], ensure_ascii=False)))
+
     # ---- 阶段 2：报告写出前的自校验（不含报告自身哈希）—— 报告据此**如实**展示，
     #      避免「报告先于自校验写出」导致 §8 恒报「0/0 ❌」的假阴性 ----
     manifest["self_check_pre_report"] = verify_manifest(manifest, skip_report=True)
@@ -929,188 +1030,268 @@ def _write_manifest(manifest: dict, out_dir: Path, man_out: Path) -> None:
                        encoding="utf-8")
 
 
+def _evidence_row(commit: str, path: str, *, role: str, expected: str | None) -> dict:
+    """核一条「已承诺证据」：`path` 是否**存在于 `commit` 的树里**，且其 **blob** 哈希匹配期望值。"""
+    blob = _git_blob_sha256(commit, path)
+    return {
+        "role": role,
+        "path": path,
+        "present_in_merge_tree": blob is not None,
+        "blob_sha256": blob,
+        "expected_sha256": expected,
+        "matches": bool(blob) and bool(expected) and blob == expected,
+    }
+
+
+def committed_evidence(commit: str, m: dict, manifest_path: str | Path, *,
+                       already: bool, report_expected: str | None) -> list[dict]:
+    """核对「**执行之后**才提交进 B1 分支」的三份产物是否真的在 `commit` 的树里，且哈希匹配。
+
+    这三份产物正是「`execution_source_tree_sha` 与 `accepted_master_tree_sha` 必然不同」的原因，
+    也**是**两者的关联 —— 所以必须拿**提交里的 blob** 算哈希（`git cat-file blob`），
+    而不是拿磁盘上的文件算：后者只能证明「本地是这样」，证明不了「合并进去的是这样」。
+
+    期望值来源（都是**已被承诺**的值，不是新约定）：
+      * `run_report`     ← manifest `outputs.committed_report.sha256`（复跑时回退到首次接受承诺值）；
+      * `run_manifest`   ← 自引用（manifest 记不了自身哈希）⇒ 由**接受记录**承诺
+        `accepted_manifest_input_sha256`，复跑时以它为准；
+      * `audit_baseline` ← manifest `attribution.audit_baseline.snapshot_sha256`（归因所依据的
+        入库快照，§9 数值对照表的来源）。
+    """
+    man = Path(manifest_path)
+    attr = ((m.get("attribution") or {}).get("audit_baseline") or {})
+    rep_rel = _rel(_abs(((m.get("outputs") or {}).get("committed_report") or {}).get("file")
+                        or m["report"]))
+    man_rel = _rel(man)
+    man_expected = (((m.get("acceptance_record") or {}).get("accepted_manifest_input_sha256"))
+                    if already else _sha(man))
+    return [
+        _evidence_row(commit, rep_rel, role="run_report", expected=report_expected),
+        _evidence_row(commit, man_rel, role="run_manifest", expected=man_expected),
+        _evidence_row(commit, attr.get("snapshot_file") or AUDIT_BASELINE_REL,
+                      role="audit_baseline", expected=attr.get("snapshot_sha256")),
+    ]
+
+
 def accept_merge(master_commit: str,
                  manifest_path: str | Path | None = None,
                  report_path: str | Path | None = None,
                  source_tree_sha: str | None = None,
                  master_ref: str = DEFAULT_MASTER_REF) -> dict:
-    """把本次冻结运行的三类摘要绑定到合并后的 master，写入接受记录（`ACCEPTED`）。
+    """把本次冻结运行的摘要**绑定到 B1 合并提交**，写入接受记录（`ACCEPTED`）。
 
     **这条命令会修改受版本控制的 manifest / 报告** ⇒ 在受保护的 `master` 下，它**不是**
     「B1 合并后跑一下就算完成」的动作，而必须落在**独立的接受记录 PR**
     （分支约定 `chore/gen2-b1-accept-v201`）里评审、合并；该 PR 合并后才可正式称为
     「Frozen B1 已接受」，也才允许启动 B3 Frozen OOS。
 
-    **前置校验（fail-closed，任一不过即拒绝写入；即报告 §12 的顺序）**：
+    **契约（第五次裁决修正 · fail-closed，任一不过即拒绝写入；即报告 §12 的顺序）**：
 
-    ⓪ `source_state.working_tree_dirty` 必须为 false —— 取证时若存在**未提交的受控改动**，
-       `source_tree_sha` 就不代表实际参与运行的字节，后面两条源码树校验全部失去意义；
-    ① `master_commit` 必须是 `master_ref`（默认 `origin/master`）的**祖先** ——
-       否则它根本不是「合并后的 master」；
-    ② `master_commit^{tree}` 必须等于 manifest 记录的 `source_state.source_tree_sha`（取证时的源码树）。
-       **理想情形是逐位严格相等**（`tree_strictly_equal=true`）。这里存在一处**自引用**：
-       `source_tree_sha` 是「取证运行时 `HEAD^{tree}`」，而本次运行会**重写** manifest 与报告，
-       这两份产物随后被提交进 B1 分支 ⇒ 合并后 `master^{tree}` 与取证树**必然**在这两条路径上不同。
-       与「报告不含自身哈希」同构，故放宽为：差异**只允许**是本次运行自身产物
-       （manifest / 报告），且必须**非空子集**；任何**其它**路径的差异一律拒绝
-       （那说明 PR 里掺入了别的改动）。放宽的边界被记录在
-       `acceptance_record.source_tree_diff_allowed_paths` / `source_tree_diff_vs_master_commit`，
-       由审阅者可直接核对，**不是**一句口头豁免；
-    ③ 当前**组件摘要 / 输入摘要 / 输出摘要**（含运行目录产物与报告自身哈希）必须与
-       B1 manifest 逐位一致。
+    ⓪ **工作树干净**（两态）：接受时 `git status` 无受控改动；且 manifest 记录的**取证时**
+       `working_tree_dirty=false`。任一为脏 ⇒ 磁盘字节与提交字节无法对应，下面的哈希校验失去意义。
 
-    三者全过 ⇒ 才写 `acceptance_record`（`accepted_master_commit` / `source_tree_sha`），
-    `run_status = ACCEPTED`，报告措辞改「Frozen B1 已接受」。这一步落实的正是
-    「**内容哈希不变则无需重跑**」—— 该前提是被**校验**的，不是被约定的。
+    ① **执行提交是 `<SHA>` 的祖先**：`source_state.git_head_commit` 必须是 `master_commit`
+       的祖先 —— 这证明「接受的就是这次执行所依据的那份源码」。它**取代**了早期版本里那条
+       「`<SHA>^{tree}` 严格等于 `source_tree_sha`」的要求（见下）。
+
+    ② **摘要逐位一致**：当前**锁定组件**（lock 文件 + `immutable_set` 逐项 + 折叠摘要）、
+       **B1 工具链**（`run_implementation` 逐项 + 折叠摘要）、**输入摘要**（逐码行情 + 元数据 +
+       内容折叠摘要）、**输出摘要**（运行目录产物 + 报告）与 manifest **逐项**一致。
+       不只比折叠摘要 —— 逐项才能把「**哪一条锁定路径**变了」直接指出来。
+
+    ③ **`<SHA>` 的树中包含已承诺证据且哈希匹配**：报告 / manifest / 审计快照三个文件必须
+       **存在于 `master_commit` 的树里**（拿**提交里的 blob** 算哈希，不是拿磁盘文件算），
+       且分别匹配：报告 ← manifest 承诺的 `outputs.committed_report.sha256`；
+       manifest ← 接受时所依据的那份 manifest 字节的哈希（自引用，故由本记录承诺）；
+       审计快照 ← manifest `attribution.audit_baseline.snapshot_sha256`。
+
+    ④ **另行记录**（不是相等要求）：
+       `accepted_master_commit` / `accepted_master_tree_sha`（**接受时仓库快照**）/
+       `execution_source_tree_sha`（**执行时语义源码快照**）。
+       ⚠️ **不再要求** `accepted_master_tree_sha == execution_source_tree_sha`：
+       报告 / manifest / 审计快照是**执行之后**才提交进 B1 分支的 ⇒ 两个 tree **必然不同**。
+       把「执行时源码树」当成「接受时仓库树」来强校验，会**必然失败**（早期设计的缺陷）。
+       两者的关联由 ② 的摘要族与 ③ 的已承诺证据哈希建立 —— 这才是可机器校验的绑定。
+
+    全过 ⇒ 才写 `acceptance_record`，`run_status = ACCEPTED`，报告措辞改「Frozen B1 已接受」。
+    这一步落实的正是「**内容哈希不变则无需重跑**」—— 该前提是被**校验**的，不是被约定的。
     """
     man = Path(manifest_path) if manifest_path else \
         (GEN2_ROOT / "manifests" / "GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json")
     m = json.loads(man.read_text(encoding="utf-8"))
 
     already = m.get("run_status") == STATUS_ACCEPTED
+    prev_rec = m.get("acceptance_record") or {}
     rep_obj = (m.get("outputs") or {}).get("committed_report") or {}
-    rep_declared = rep_obj.get("sha256")
     rep_now_path = _abs(rep_obj.get("file") or m["report"])
+    # 报告期望值：**首跑**时磁盘报告就是被承诺的那份（= manifest 记录的哈希）；**复跑**时磁盘报告
+    # 已被本命令改写成「已接受」版本 ⇒ 期望值回退到**首次接受**时承诺的哈希（见校验 ③）。
+    rep_expected = (rep_obj.get("sha256") if not already
+                    else (prev_rec.get("bound_digests") or {}).get("committed_report_sha256"))
 
-    # ---- 校验 ①：master_commit 是 master_ref 的祖先 ----
-    if not _git("rev-parse", "--verify", "--quiet", master_ref):
+    # ---- 校验 ⓪：工作树干净（接受时 + 取证时，两态都要）----
+    #   接受时的脏树会让「磁盘字节」与「提交字节」脱钩；取证时的脏树会让组件哈希失去意义。
+    now_state = source_state()
+    if now_state["working_tree_dirty"]:
         raise FrozenAttestationError(
-            "接受记录**拒绝**写入：本地不存在引用 `%s`（远端跟踪分支未更新？）⇒ 先执行 "
-            "`git fetch origin`，或用 `--master-ref` 指定正确引用。" % master_ref)
-    resolved_master = _git("rev-parse", master_commit)
-    if not resolved_master:
-        raise FrozenAttestationError(
-            "接受记录**拒绝**写入：`%s` 在本地不可解析（不是本仓库的提交）。" % master_commit)
-    anc = _git_run("merge-base", "--is-ancestor", resolved_master, master_ref)
-    if anc is None:
-        raise FrozenAttestationError("接受记录**拒绝**写入：无法执行 git（仓库不可用）。")
-    if anc.returncode != 0:
-        raise FrozenAttestationError(
-            "接受记录**拒绝**写入：`%s` **不是** `%s` 的祖先 ⇒ 它不能证明「合并后的 master」。"
-            "请传入 B1 PR 合并进 `%s` 之后的那次提交。"
-            % (resolved_master, master_ref, master_ref))
+            "接受记录**拒绝**写入：**当前工作树脏**（未提交的受控改动：%s）⇒ 磁盘字节与 `<SHA>` "
+            "树中的字节无法对应，摘要校验失去意义。请先提交 / 清理工作树，再运行接受命令。"
+            % (", ".join(now_state["dirty_tracked_paths"] or []) or "未识别"))
 
-    # ---- 校验 ②：master_commit^{tree} == manifest 记录的 source_tree_sha ----
     ss = m.get("source_state") or {}
-    declared_tree = ss.get("source_tree_sha")
-    if not declared_tree:
+    execution_head_declared = ss.get("git_head_commit")
+    execution_tree = ss.get("source_tree_sha")
+    if not execution_tree or not execution_head_declared:
         raise FrozenAttestationError(
-            "接受记录**拒绝**写入：manifest 未记录 `source_state.source_tree_sha`"
-            "（取证版本过旧，无法证明源码树未变）⇒ 必须重跑 B1。")
-    if source_tree_sha and source_tree_sha != declared_tree:
+            "接受记录**拒绝**写入：manifest 未记录 `source_state.git_head_commit` / "
+            "`source_tree_sha`（取证版本过旧）⇒ 无法证明「接受的是哪次执行的源码」⇒ 必须重跑 B1。")
+    if source_tree_sha and source_tree_sha != execution_tree:
         raise FrozenAttestationError(
             "接受记录**拒绝**写入：`--source-tree-sha` 与 manifest 记录的 `source_tree_sha` 不一致。")
     if ss.get("working_tree_dirty"):
         raise FrozenAttestationError(
-            "接受记录**拒绝**写入：取证时 `working_tree_dirty=true`（未提交的受控改动：%s）"
-            "⇒ `source_tree_sha` 不代表实际参与运行的字节。请先提交，再**重跑 B1**。"
-            % ", ".join(ss.get("dirty_tracked_paths") or []))
+            "接受记录**拒绝**写入：**取证时** `working_tree_dirty=true`（未提交的受控改动：%s）"
+            "⇒ 组件 / 工具链哈希不代表实际参与运行的字节。请先提交，再**重跑 B1**。"
+            % (", ".join(ss.get("dirty_tracked_paths") or []) or "未识别"))
+
+    # ---- 校验 ①：**执行提交**必须是 `<SHA>` 的祖先（证明「接受的就是这次执行所依据的源码」）----
+    #   注意方向：是「执行提交 → `<SHA>`」，不是「`<SHA>` → origin/master」。前者才是可校验的绑定。
+    resolved_master = _git("rev-parse", master_commit)
+    if not resolved_master:
+        raise FrozenAttestationError(
+            "接受记录**拒绝**写入：`%s` 在本地不可解析（不是本仓库的提交）。" % master_commit)
+    execution_head = _git("rev-parse", execution_head_declared) or execution_head_declared
+    anc = _git_run("merge-base", "--is-ancestor", execution_head, resolved_master)
+    if anc is None:
+        raise FrozenAttestationError("接受记录**拒绝**写入：无法执行 git（仓库不可用）。")
+    if anc.returncode != 0:
+        raise FrozenAttestationError(
+            "接受记录**拒绝**写入：**执行提交** `%s` **不是** `%s` 的祖先 ⇒ 无法证明 `<SHA>` 包含"
+            "本次执行所依据的源码（B1 PR 未合并 / 传错提交 / 分支被重写？）。"
+            "请传入 B1 PR 合并进 `master` 之后的那次提交。"
+            % (execution_head, resolved_master))
     master_tree = _git("rev-parse", "%s^{tree}" % resolved_master)
     if not master_tree:
         raise FrozenAttestationError(
             "接受记录**拒绝**写入：无法解析 `%s^{tree}`。" % resolved_master)
-    # 理想情形是**严格逐位相等**。但写 manifest 这一动作本身就会改变 tree（manifest 是其自身
-    # 所在提交的一部分）——与「报告不含自身哈希」同构的自引用。因此放宽为：
-    # 「`<SHA>^{tree}` 与 `source_tree_sha` 的差异**只允许**是本次运行自己生成的产物
-    #  （入库 manifest / 入库报告）」，任何**其它**路径的改动一律拒绝。
-    allowed_tree_diff = {_rel(man), _rel(rep_now_path), _rel(_abs(m["report"]))}
-    if master_tree == declared_tree:
-        tree_match_mode, tree_diff = "strict_equality", []
-    else:
-        d = _git_run("diff", "--name-only", declared_tree, master_tree)
-        if d is None or d.returncode != 0:
-            raise FrozenAttestationError(
-                "接受记录**拒绝**写入：无法比较 `source_tree_sha` 与 `%s^{tree}` 的差异。"
-                % resolved_master)
-        tree_diff = sorted(x.strip() for x in (d.stdout or "").splitlines() if x.strip())
-        unexpected = [p for p in tree_diff if p not in allowed_tree_diff]
-        if unexpected:
-            raise FrozenAttestationError(
-                "接受记录**拒绝**写入：`%s^{tree}` 与 manifest `source_tree_sha` 的差异**超出**"
-                "本次运行自身的产物（manifest / 报告）⇒ 合并进来的源码树与取证树不同"
-                "（PR 里掺入了其它改动？）⇒ 必须重跑 B1。差异：%s"
-                % (resolved_master, json.dumps(tree_diff, ensure_ascii=False)))
-        tree_match_mode = "artifacts_only"
 
-    # ---- 校验 ③：组件 / 输入 / 输出摘要与 manifest 逐位一致 ----
-    declared = {
-        "lock_sha256": m["frozen_input"]["lock"]["lock_sha256"],
-        "lock_component_digest": m["frozen_input"]["lock_component_digest"],
-        "input_content_digest": m["input_data"]["content_digest"],
-        "run_implementation_digest": _aggregate_digest(
-            [(e["id"], e["sha256"]) for e in m["run_implementation"]]),
-    }
-    recomputed = {
-        "lock_sha256": _sha(m["frozen_input"]["lock"]["lock_file"]),
-        "lock_component_digest": _aggregate_digest(
-            [(e["id"], _sha(e["file"]) or "") for e in m["frozen_input"]["immutable_set"]]),
-        "input_content_digest": _aggregate_digest(
-            [(f"daily:{f['code']}", _sha(f["file"]) or "") for f in m["input_data"]["files"]]
-            + [(f"meta:{e['id']}", _sha(e["file"]) or "") for e in m["input_data"]["meta_files"]]),
-        "run_implementation_digest": _aggregate_digest(
-            [(e["id"], _sha(e["file"]) or "") for e in m["run_implementation"]]),
-    }
-    # 输出摘要：运行目录产物逐个重算；报告只在**尚未接受**时校验（已接受状态下报告由本命令自己重写）
+    # ---- 校验 ②：锁定组件 / B1 工具链 / 输入 / 输出摘要**逐项**逐位一致 ----
+    declared: dict = {}
+    recomputed: dict = {}
+
+    def _cmp(key: str, expected, actual) -> None:
+        declared[key] = expected
+        recomputed[key] = actual
+
+    fi = m["frozen_input"]
+    _cmp("lock.lock_sha256", fi["lock"]["lock_sha256"], _sha(fi["lock"]["lock_file"]))
+    for e in fi["immutable_set"]:
+        _cmp("lock.component[%s]" % e["id"], e["actual"], _sha(e["file"]))
+    _cmp("lock.component_digest", fi["lock_component_digest"],
+         _aggregate_digest([(e["id"], _sha(e["file"]) or "") for e in fi["immutable_set"]]))
+
+    for e in m["run_implementation"]:
+        _cmp("toolchain[%s]" % e["id"], e["sha256"], _sha(e["file"]))
+    _cmp("toolchain.digest",
+         _aggregate_digest([(e["id"], e["sha256"]) for e in m["run_implementation"]]),
+         _aggregate_digest([(e["id"], _sha(e["file"]) or "") for e in m["run_implementation"]]))
+
+    for f in m["input_data"]["files"]:
+        _cmp("input.daily[%s]" % f["code"], f["sha256"], _sha(f["file"]))
+    for e in m["input_data"]["meta_files"]:
+        _cmp("input.meta[%s]" % e["id"], e["sha256"], _sha(e["file"]))
+    _cmp("input.content_digest", m["input_data"]["content_digest"],
+         _aggregate_digest([("daily:%s" % f["code"], _sha(f["file"]) or "")
+                            for f in m["input_data"]["files"]]
+                           + [("meta:%s" % e["id"], _sha(e["file"]) or "")
+                              for e in m["input_data"]["meta_files"]]))
+
     for a in m["artifacts"]:
-        declared["output[%s]" % a["file"]] = a["sha256"]
-        recomputed["output[%s]" % a["file"]] = _sha(_join_run_dir(m, a))
-    if rep_declared and not already:
-        declared["output[committed_report]"] = rep_declared
-        recomputed["output[committed_report]"] = _sha(rep_now_path)
+        _cmp("output[%s]" % a["file"], a["sha256"], _sha(_join_run_dir(m, a)))
+    if rep_expected and not already:
+        _cmp("output[committed_report]", rep_expected, _sha(rep_now_path))
 
     diffs = {k: {"declared": declared[k], "recomputed": recomputed[k]}
              for k in declared if declared[k] != recomputed[k]}
     if diffs:
         raise FrozenAttestationError(
-            "接受记录**拒绝**写入：组件 / 输入 / 输出摘要与 B1 manifest 不一致 ⇒ 必须重跑 B1。差异："
-            + json.dumps(diffs, ensure_ascii=False))
+            "接受记录**拒绝**写入：锁定组件 / 工具链 / 输入 / 输出摘要与 B1 manifest 不一致 "
+            "⇒ 必须重跑 B1。逐项差异：" + json.dumps(diffs, ensure_ascii=False))
+
+    # ---- 校验 ③：`<SHA>` 的**树中**必须包含已承诺证据，且哈希匹配 ----
+    evidence = committed_evidence(resolved_master, m, man,
+                                  already=already, report_expected=rep_expected)
+    bad_evidence = [e for e in evidence if not (e["present_in_merge_tree"] and e["matches"])]
+    if bad_evidence:
+        raise FrozenAttestationError(
+            "接受记录**拒绝**写入：`%s` 的树中未包含已承诺证据，或哈希不匹配 ⇒ 合并进去的不是本次"
+            "运行承诺的那份产物（报告 / manifest / 审计快照）。明细：%s"
+            % (resolved_master, json.dumps(bad_evidence, ensure_ascii=False)))
+
+    # ---- 记录 ④：三项 SHA（accepted master commit / accepted master tree / execution source tree）
+    #      + 信息性 master-ref 可达性（**不作拒绝条件**）----
+    reach = None
+    if _git("rev-parse", "--verify", "--quiet", master_ref):
+        rr = _git_run("merge-base", "--is-ancestor", resolved_master, master_ref)
+        reach = (rr.returncode == 0) if rr is not None else None
 
     m["acceptance_record"] = {
         "status": STATUS_ACCEPTED,
         "accepted_master_commit": resolved_master,
         "accepted_master_commit_input": master_commit,
+        "accepted_master_tree_sha": master_tree,
+        "execution_head_commit": execution_head,
+        "execution_source_tree_sha": execution_tree,
+        "execution_head_is_ancestor_of_accepted_master_commit": True,
+        "trees_required_to_be_equal": False,
+        "tree_relation": "accepted_master_tree_contains_committed_evidence",
+        "tree_relation_note": (
+            "`accepted_master_tree_sha` = **接受时仓库快照**，`execution_source_tree_sha` = "
+            "**执行时语义源码快照**。报告 / manifest / 审计快照是**执行之后**才被提交进 B1 分支的 "
+            "⇒ 两者**应当不同**；**不要求相等**。二者的关联由校验 ② 的摘要族与校验 ③ 的"
+            "已承诺证据哈希建立。"),
+        "accepted_manifest_input_sha256": _sha(man),
+        "committed_evidence": evidence,
         "master_ref": master_ref,
-        "ancestor_of_master_ref": True,
-        "source_tree_sha": declared_tree,
-        "source_tree_matches_master_commit_tree": True,
-        "source_tree_match_mode": tree_match_mode,
-        "tree_strictly_equal": tree_match_mode == "strict_equality",
-        "source_tree_diff_vs_master_commit": tree_diff,
-        "source_tree_diff_allowed_paths": sorted(allowed_tree_diff),
+        "master_ref_is_blocking": False,
+        "accepted_master_commit_reachable_from_master_ref": reach,
         "accepted_at": pd.Timestamp.now("UTC").isoformat(),
         "digests_unchanged": True,
         "no_rerun_required": True,
         "verifications": [
-            {"check": "master_commit_is_ancestor_of_master_ref",
-             "master_commit": resolved_master, "master_ref": master_ref, "ok": True},
-            {"check": "master_commit_tree_equals_source_tree_sha",
-             "master_tree": master_tree, "source_tree_sha": declared_tree,
-             "match_mode": tree_match_mode, "diff_paths": tree_diff, "ok": True},
-            {"check": "digests_unchanged",
-             "families": ["lock", "lock_components", "inputs", "outputs_artifacts",
-                          "outputs_report"],
-             "ok": True},
+            {"check": "working_tree_clean_at_accept", "ok": True,
+             "dirty_tracked_paths": now_state["dirty_tracked_paths"]},
+            {"check": "working_tree_clean_at_attestation", "ok": True,
+             "dirty_tracked_paths": ss.get("dirty_tracked_paths") or []},
+            {"check": "execution_head_is_ancestor_of_accepted_master_commit",
+             "execution_head_commit": execution_head,
+             "accepted_master_commit": resolved_master, "ok": True},
+            {"check": "digests_unchanged", "compared_items": sorted(declared), "ok": True},
+            {"check": "accepted_master_tree_contains_committed_evidence",
+             "committed_evidence": evidence, "ok": True},
         ],
         "bound_digests": {
-            "lock_sha256": declared["lock_sha256"],
-            "lock_component_digest": declared["lock_component_digest"],
-            "input_content_digest": declared["input_content_digest"],
-            "run_implementation_digest": declared["run_implementation_digest"],
-            "committed_report_sha256": rep_declared,
+            "lock_sha256": declared["lock.lock_sha256"],
+            "lock_component_digest": declared["lock.component_digest"],
+            "toolchain_digest": declared["toolchain.digest"],
+            "input_content_digest": declared["input.content_digest"],
+            "committed_report_sha256": rep_expected,
+            "accepted_manifest_input_sha256": _sha(man),
+            "audit_baseline_sha256": next((e["expected_sha256"] for e in evidence
+                                           if e["role"] == "audit_baseline"), None),
             "run_dir_artifacts": {a["file"]: a["sha256"] for a in m["artifacts"]},
         },
         "acceptance_branch": ACCEPT_BRANCH,
         "landed_via_pull_request_required": True,
         "note": ("本记录由 `--accept-merge` 写出，**会修改受版本控制的 manifest / 报告** ⇒ "
-                 "必须落在独立分支 `%s` 的**接受记录 PR** 上评审合并。该 PR 合并**之前**，"
-                 "本产出的措辞**仍不得**称为「Frozen B1 已接受」，也不得启动 B3。"
-                 "三项前置校验全过（`master_commit` 是 `%s` 祖先 / `master^{tree}` 与 "
-                 "`source_tree_sha` **%s**〔差异仅限本次运行自身产物：%s〕 / 组件·输入·输出摘要逐位"
-                 "一致）⇒ **无需重跑**，只做绑定。"
-                 % (ACCEPT_BRANCH, master_ref,
-                    "逐位相同" if tree_match_mode == "strict_equality"
-                    else "仅差本次运行产物",
-                    ", ".join("`%s`" % p for p in tree_diff) or "无")),
+                 "必须落在独立分支 `%s` 的**接受记录 PR** 上评审合并。该 PR 合并**之前**，本产出的"
+                 "措辞**仍不得**称为「Frozen B1 已接受」，也不得启动 B3。"
+                 "四项校验全过（⓪ 工作树干净（接受 + 取证两态）/ ① 执行提交 `%s` 是 `%s` 的祖先 / "
+                 "② 锁定组件·工具链·输入·输出摘要**逐项**一致 / ③ `<SHA>` 树含报告·manifest·"
+                 "审计快照且哈希匹配）⇒ **无需重跑**，只做绑定。⚠️ **不要求** "
+                 "`accepted_master_tree_sha == execution_source_tree_sha`（产物在执行后才提交 ⇒ "
+                 "必然不同；二者的关联由摘要族 + 已承诺证据哈希建立）。"
+                 % (ACCEPT_BRANCH, (execution_head or "")[:12], (resolved_master or "")[:12])),
     }
     m["run_status"] = STATUS_ACCEPTED
     m.pop("run_status_note", None)
@@ -1176,7 +1357,7 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         lines += [
             "> **状态口径（本次复核结论）**：在 **① 冻结 PR 合并 → ② B1 PR 自动改基后合并 → ③ 独立的",
             "> 接受记录 PR 合并** 这三步完成之前，本产出的正确表述是「**待合并冻结运行**」，**不是**项目",
-            "> 最终 Frozen B1；也因此**不得**据此启动 B3。接受条件、三项前置校验与流程见 **§12**。",
+            "> 最终 Frozen B1；也因此**不得**据此启动 B3。接受条件、四项校验与流程见 **§12**。",
             ">",
         ]
     lines += [
@@ -1652,7 +1833,7 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "# 只读验锁（不改盘）",
         "python scripts/ml/freeze-gen2-rule-bundle.py --check",
         "node scripts/verify-immutable.js",
-        "# B1 PR 合并后：在独立分支建接受记录（三项前置校验全过才写入；内容哈希不变则无需重跑）",
+        "# B1 PR 合并后：在独立分支建接受记录（四项校验全过才写入；内容哈希不变则无需重跑）",
         "git switch -c %s origin/master" % ACCEPT_BRANCH,
         "PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>",
         "```",
@@ -1671,12 +1852,17 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "   自动把 base 改为 `master`）；",
         "3. 从**新的 master** 建 `%s`，运行接受命令：" % ACCEPT_BRANCH,
         "   `python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <B1 合并提交完整 SHA>`；",
-        "4. 该命令**额外校验**（任一不过即拒绝写入）：",
-        "   - `<SHA>` 是 `origin/master` 的**祖先**；",
-        "   - `<SHA>^{tree}` **严格等于** manifest 记录的 `source_tree_sha`；若不等，则**差异只允许**",
-        "     是本次运行自身的产物（入库 manifest / 报告）—— 与「报告不含自身哈希」同构的自引用；",
-        "     **任何其它路径**的差异即拒绝（说明 PR 掺入了别的改动）；",
-        "   - 当前**组件 / 输入 / 输出摘要**全部与 B1 manifest 逐位一致。",
+        "4. 该命令**校验**（任一不过即拒绝写入并要求重跑，`FrozenAttestationError`）：",
+        "   - ⓪ **工作树干净**（接受时 + 取证时两态）；",
+        "   - ① **执行提交** `source_state.git_head_commit` 是 `<B1 merge SHA>` 的**祖先**",
+        "     （证明「接受的就是这次执行所依据的源码」）；",
+        "   - ② **锁定组件 / B1 工具链 / 输入摘要 / 输出摘要**与 manifest **逐项**逐位一致",
+        "     （逐项才能指出**哪一条锁定路径**变了，不只比折叠摘要）；",
+        "   - ③ `<B1 merge SHA>` 的**树中包含**已承诺的**报告 / manifest / 审计快照**，且**哈希匹配**",
+        "     （取**提交里的 blob** 算哈希，不是取磁盘文件 —— 后者证明不了「合并进去的是这样」）。",
+        "   > ⚠️ **不再要求** `accepted_master_tree_sha == execution_source_tree_sha`：报告 / manifest /",
+        "   > 审计快照是**执行之后**才提交的 ⇒ 两个 tree **必然不同**。前者是「接受时仓库快照」、",
+        "   > 后者是「执行时语义源码快照」，两者的关联由 ② 的摘要族与 ③ 的已承诺证据哈希建立。",
         "5. 开并合并**这一个很小的接受记录 PR**（`%s` → `master`）。" % ACCEPT_BRANCH,
         "",
         "> **为什么必须是独立 PR**：`--accept-merge` **会修改受版本控制**的 manifest / 报告；",
@@ -1690,7 +1876,7 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
         "| 项 | 值 |",
         "|---|---|",
         "| `run_status` | `%s` |" % m.get("run_status"),
-        "| `source_tree_sha`（**取证时**的源码树，接受时须 == `<SHA>^{tree}`） | `%s` |"
+        "| `execution_source_tree_sha`（**执行时**语义源码快照；**不要求** == `<SHA>^{tree}`） | `%s` |"
         % ((m.get("source_state") or {}).get("source_tree_sha") or "—"),
         "| %s**组件摘要**（lock 8 项折叠） | `%s` |"
         % ("已绑定的" if accepted else "待绑定的", m["frozen_input"]["lock_component_digest"]),
@@ -1709,31 +1895,40 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
             "|---|---|",
             "| `accepted_master_commit` | `%s` |" % ar.get("accepted_master_commit"),
             "| `accepted_master_commit_input` | `%s` |" % ar.get("accepted_master_commit_input"),
-            "| `master_ref`（祖先判定的基准引用） | `%s` |" % ar.get("master_ref"),
-            "| `source_tree_sha` | `%s` |" % ar.get("source_tree_sha"),
-            "| `source_tree_match_mode` | `%s`%s |"
-            % (ar.get("source_tree_match_mode"),
-               "" if ar.get("source_tree_match_mode") == "strict_equality"
-               else "（差异仅限本次运行产物：%s）"
-               % ("、".join("`%s`" % p for p in (ar.get("source_tree_diff_vs_master_commit") or []))
-                  or "无")),
+            "| `accepted_master_tree_sha`（**接受时**仓库快照） | `%s` |"
+            % ar.get("accepted_master_tree_sha"),
+            "| `execution_head_commit`（取证执行提交） | `%s` |" % ar.get("execution_head_commit"),
+            "| `execution_source_tree_sha`（**执行时**语义源码快照） | `%s` |"
+            % ar.get("execution_source_tree_sha"),
+            "| 两个 tree 是否要求相等 | ❌ **不要求**（产物在执行后才提交 ⇒ 应当不同；由摘要族 + "
+            "已承诺证据哈希关联） |",
+            "| `master_ref`（**信息性**，不作拒绝条件） | `%s` |" % ar.get("master_ref"),
             "| `acceptance_branch`（须经该分支的 PR 合并才生效） | `%s` |" % ar.get("acceptance_branch"),
             "| `accepted_at` | `%s` |" % ar.get("accepted_at"),
-            "| 三项前置校验 | %s |"
+            "| 四项校验 | %s |"
             % (" / ".join("✅ `%s`" % v.get("check") for v in (ar.get("verifications") or [])) or "—"),
+            "| 已承诺证据（在 `<SHA>` 树中逐个核对） | %s |"
+            % ("、".join("`%s`=%s" % (e.get("role"), "✅" if (e.get("present_in_merge_tree")
+                                                              and e.get("matches")) else "❌")
+                         for e in (ar.get("committed_evidence") or [])) or "—"),
             "| 摘要未变 | %s |" % ("✅ 是（无需重跑）" if ar.get("digests_unchanged") else "❌ 否"),
             "",
-            "> **写入的前置与效果**：写入前入口 fail-closed 地校验 ①「`<SHA>` 是 `origin/master` 的祖先」",
-            "> ②「`<SHA>^{tree}` == manifest `source_tree_sha`」③「组件 / 输入 / **输出**摘要与 manifest",
-            "> 逐位一致」（含运行目录产物与报告自身哈希）；任一不过即 `FrozenAttestationError` **拒绝写入",
-            "> 并要求重跑 B1**。因此「内容哈希不变 ⇒ 无需重跑」在本文件中是**被校验的前提**，不是约定。",
+            "> **写入的前置与效果**：写入前入口 fail-closed 地校验 ⓪「工作树干净（接受 + 取证两态）」",
+            "> ①「**执行提交**是 `<SHA>` 的祖先」②「锁定组件 / B1 工具链 / 输入 / **输出**摘要与 manifest",
+            "> **逐项**逐位一致」③「`<SHA>` 的**树中**含报告 / manifest / 审计快照且**哈希匹配**」——",
+            "> 任一不过即 `FrozenAttestationError` **拒绝写入并要求重跑 B1**。因此「内容哈希不变 ⇒",
+            "> 无需重跑」在本文件中是**被校验的前提**，不是约定。",
+            ">",
+            "> ⚠️ **两个 tree 不要求相等**（早期版本要求「整棵树相等」，那会**必然失败**：报告 / manifest /",
+            "> 审计快照在执行后才提交，`accepted_master_tree_sha` 里**必然**含有 `execution_source_tree_sha`",
+            "> 所没有的路径 —— 这正是本次契约修正的原因）。",
             "",
             "> ⚠️ **本记录尚未生效**：`--accept-merge` 修改的是**受版本控制**的 manifest / 报告 ⇒ 必须经"
             "> `%s` 这条**接受记录 PR** 合并进 `master`；**该 PR 合并之后**，本产出才可正式称为" % ACCEPT_BRANCH,
             "> 「Frozen B1 已接受」，也才允许启动 **B3 Frozen OOS**（B3 本身仍不得据此提升 authority /",
             "> 部署 / 写正式仓位）。",
             ">",
-            "> 复核命令（可重跑；已接受状态下会重新核对三项校验并提示）：",
+            "> 复核命令（可重跑；已接受状态下会重新核对四项校验并提示）：",
             ">",
             "> ```bash",
             "> PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>",
@@ -1745,7 +1940,7 @@ def _render_report(m: dict, summary: pd.DataFrame, bundle: dict) -> str:
             "> **在接受记录写入之前**：不进入 B3 Frozen OOS、不提升 authority、不部署、不写正式仓位；",
             "> 本报告全部净值 / Sharpe 只作**研发证据**。",
             "",
-            "> 接受记录命令（B1 PR 合并后，在**独立分支** `%s` 上执行；会先做三项前置校验，" % ACCEPT_BRANCH,
+            "> 接受记录命令（B1 PR 合并后，在**独立分支** `%s` 上执行；会先做四项校验，" % ACCEPT_BRANCH,
             "> 任一不过即**拒绝**并要求重跑；随后开并合并该接受记录 PR）：",
             ">",
             "> ```bash",
@@ -1769,7 +1964,8 @@ def main() -> int:
                          "会修改受版本控制的 manifest / 报告 ⇒ 须落在独立接受记录 PR 上")
     ap.add_argument("--master-commit", default=None, help="合并后的 master commit（--accept-merge 必填）")
     ap.add_argument("--master-ref", default=DEFAULT_MASTER_REF,
-                    help="祖先判定的基准引用（默认 origin/master；先用 git fetch origin 更新）")
+                    help="**信息性**引用（默认 origin/master）：仅在记录里标注 `<SHA>` 是否已进入该引用，"
+                         "**不作拒绝条件**（契约要求的祖先关系是「执行提交是 <SHA> 的祖先」）")
     ap.add_argument("--source-tree-sha", default=None, help="显式指定 source tree sha（默认由 manifest 记录）")
     args = ap.parse_args()
 
@@ -1786,11 +1982,16 @@ def main() -> int:
             return 2
         ar = m["acceptance_record"]
         print("[B1-FROZEN] status    :", m["run_status"])
-        print("[B1-FROZEN] accepted  :", ar["accepted_master_commit"], "(ref %s ✅ 祖先)"
-              % ar["master_ref"])
-        print("[B1-FROZEN] tree sha  :", ar["source_tree_sha"], "(== %s^{tree} ✅)"
-              % ar["accepted_master_commit"][:12])
-        print("[B1-FROZEN] digests   : ✅ 组件 / 输入 / 输出摘要与 manifest 逐位一致")
+        print("[B1-FROZEN] accepted  :", ar["accepted_master_commit"])
+        print("[B1-FROZEN] ① ancestor :", ar["execution_head_commit"][:12],
+              "（执行提交）→", ar["accepted_master_commit"][:12], "（B1 合并提交）✅ 祖先")
+        print("[B1-FROZEN] ② digests  : ✅ 锁定组件 / 工具链 / 输入 / 输出摘要**逐项**一致（%d 项）"
+              % len(ar["bound_digests"]["run_dir_artifacts"]))
+        print("[B1-FROZEN] ③ evidence :", "、".join(
+            "%s=%s" % (e["role"], "✅" if (e["present_in_merge_tree"] and e["matches"]) else "❌")
+            for e in ar["committed_evidence"]))
+        print("[B1-FROZEN] tree      : accepted %s ⊃ 证据 / execution %s（**不要求相等**）"
+              % (ar["accepted_master_tree_sha"][:12], ar["execution_source_tree_sha"][:12]))
         print("[B1-FROZEN] no rerun  :", ar["no_rerun_required"])
         print("[B1-FROZEN] ⚠️ 下一步  : 把本改动（manifest + 报告）推到分支 `%s` 并开"
               "「接受记录 PR」；该 PR 合并后才可正式称「Frozen B1 已接受」并启动 B3。"
