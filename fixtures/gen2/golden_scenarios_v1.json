@@ -1852,6 +1852,28 @@
               }
             },
             "data": "full_panel"
+          },
+          {
+            "id": "trap_reads_missing_role_thresholds",
+            "title": "顺序证明（主控）：完整面板在手 + 数据源「一读就抛错」→ 仍 blocked 且读取次数 = 0",
+            "bundle_selection_overrides": {},
+            "data": "full_panel",
+            "trap_reads": true,
+            "_note": "等价于「注入一个在任何读操作时直接抛错的 DB 客户端」。用**完整横截面**而非空数据：闸门若只是结果上优先而实际先读了库，必然触发陷阱变成 failed/SYSTEM_ERROR。拿到 blocked + 0 读取 = 闸门确实位于所有数据读取之前。"
+          },
+          {
+            "id": "trap_reads_complete_role_thresholds",
+            "title": "正控：同一陷阱 + 显式 role_thresholds → 陷阱**必然**被触发（failed/SYSTEM_ERROR）",
+            "bundle_selection_overrides": {
+              "role_thresholds": {
+                "core_top_fraction": 0.2,
+                "challenger_top_fraction": 0.3,
+                "satellite_top_fraction": 0.4
+              }
+            },
+            "data": "full_panel",
+            "trap_reads": true,
+            "_note": "没有这条，「主控 0 读取」可能只是陷阱没接线（空跑）。两端均由调用方捕获运行异常 → failed / SYSTEM_ERROR（run_gate.py 文档约定的四态语义）。"
           }
         ]
       },
@@ -1981,11 +2003,74 @@
           "field": "early_gate_data_gate",
           "op": "eq",
           "value": "BENCHMARK_MISSING"
+        },
+        {
+          "id": "I-09-17",
+          "applies_to": "both",
+          "case": "trap_reads_missing_role_thresholds",
+          "field": "status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "id": "I-09-18",
+          "applies_to": "both",
+          "case": "trap_reads_missing_role_thresholds",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "RULE_BUNDLE_INCOMPLETE"
+        },
+        {
+          "id": "I-09-19",
+          "applies_to": "both",
+          "case": "trap_reads_missing_role_thresholds",
+          "field": "data_gate",
+          "op": "eq",
+          "value": "RULE_BUNDLE_ROLE_THRESHOLDS_MISSING"
+        },
+        {
+          "id": "I-09-20",
+          "applies_to": "both",
+          "case": "trap_reads_missing_role_thresholds",
+          "field": "data_source_reads",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "id": "I-09-21",
+          "applies_to": "both",
+          "case": "trap_reads_missing_role_thresholds",
+          "field": "data_source_trap_raised",
+          "op": "is_false"
+        },
+        {
+          "id": "I-09-22",
+          "applies_to": "both",
+          "case": "trap_reads_complete_role_thresholds",
+          "field": "status",
+          "op": "eq",
+          "value": "failed"
+        },
+        {
+          "id": "I-09-23",
+          "applies_to": "both",
+          "case": "trap_reads_complete_role_thresholds",
+          "field": "status_reason",
+          "op": "eq",
+          "value": "SYSTEM_ERROR"
+        },
+        {
+          "id": "I-09-24",
+          "applies_to": "both",
+          "case": "trap_reads_complete_role_thresholds",
+          "field": "data_source_trap_raised",
+          "op": "is_true"
         }
       ],
       "notes": [
         "本场景是 WP-G2-05R（step 2）的跨端 blocked 回归：证明「同一份规则 bundle → 同一 run 状态」。",
-        "complete_role_thresholds 是正对照：除 role_thresholds 外不改任何东西，闸门即通过（说明阻断项单一、可定向修复）。"
+        "complete_role_thresholds 是正对照：除 role_thresholds 外不改任何东西，闸门即通过（说明阻断项单一、可定向修复）。",
+        "trap_reads 两 case 是裁决追加的**顺序证明**（不只是结果优先级）：数据源被换成「任何读操作立即抛错」的陷阱，且面板故意给足完整横截面 —— 缺阈值时若还拿到 blocked 且 data_source_reads=0，即证明规则 bundle 闸门位于所有数据库读取之前；complete 正控必须触发陷阱（证明陷阱接线有效，主控不是空跑）。"
       ]
     }
   ]

@@ -190,11 +190,49 @@ class TestScenarioParity(unittest.TestCase):
         self.assertEqual(sc["status"], "RUNNABLE")
         cases = {c["id"] for c in sc["input"]["cases"]}
         self.assertEqual(cases, {"missing_role_thresholds", "legacy_only_no_role_thresholds",
-                                 "invalid_role_thresholds", "complete_role_thresholds"})
+                                 "invalid_role_thresholds", "complete_role_thresholds",
+                                 "trap_reads_missing_role_thresholds",
+                                 "trap_reads_complete_role_thresholds"})
         fields = {inv["field"] for inv in sc["invariants"]}
         self.assertIn("status_reason", fields)
         self.assertIn("early_gate_data_gate", fields)
+        self.assertIn("data_source_reads", fields)
+        self.assertIn("data_source_trap_raised", fields)
         self.assertIn("bundle_selection_base", sc["input"])
+
+    def test_rule_bundle_order_proof_cases_declared(self):
+        """裁决追加验证：G2S-09 必须带「数据源一读就抛错」的顺序证明 case（主控 + 正控）。"""
+        sc = next(s for s in self.fixture["scenarios"] if s["id"] == "G2S-09")
+        cases = {c["id"]: c for c in sc["input"]["cases"]}
+        trap = [c for c in cases.values() if c.get("trap_reads")]
+        self.assertEqual(len(trap), 2, "必须成对声明 trap_reads 主控 + 正控")
+        main = cases.get("trap_reads_missing_role_thresholds")
+        ctrl = cases.get("trap_reads_complete_role_thresholds")
+        self.assertIsNotNone(main, "缺顺序证明主控 case")
+        self.assertIsNotNone(ctrl, "缺顺序证明正控 case")
+        # 主控必须用**完整横截面**：空数据下「拿到 RULE_BUNDLE_*」不足以证明「先于读取」，
+        # 必须给定可用数据仍零读取，才是顺序证据。
+        self.assertEqual(main["data"], "full_panel")
+        self.assertEqual(ctrl["data"], "full_panel")
+        self.assertTrue((ctrl.get("bundle_selection_overrides") or {}).get("role_thresholds"),
+                        "正控必须补上显式 role_thresholds（否则闸门再早也不会放行）")
+        inv = sc["invariants"]
+        must = [
+            ("trap_reads_missing_role_thresholds", "status", "eq", "blocked"),
+            ("trap_reads_missing_role_thresholds", "status_reason", "eq", "RULE_BUNDLE_INCOMPLETE"),
+            ("trap_reads_missing_role_thresholds", "data_source_reads", "eq", 0),
+            ("trap_reads_missing_role_thresholds", "data_source_trap_raised", "is_false", None),
+            ("trap_reads_complete_role_thresholds", "status", "eq", "failed"),
+            ("trap_reads_complete_role_thresholds", "status_reason", "eq", "SYSTEM_ERROR"),
+            ("trap_reads_complete_role_thresholds", "data_source_trap_raised", "is_true", None),
+        ]
+        for case, field, op, value in must:
+            hit = [i for i in inv
+                   if i.get("case") == case and i.get("field") == field and i.get("op") == op]
+            self.assertTrue(hit, f"缺顺序证明不变量：{case}/{field}/{op}")
+            if value is not None:
+                self.assertEqual(hit[0].get("value"), value,
+                                 f"{case}/{field} 期望值不符")
 
 
 if __name__ == "__main__":
