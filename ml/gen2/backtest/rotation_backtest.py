@@ -57,7 +57,14 @@ def run_rotation_backtest(
     candidates: pd.DataFrame,
     output_dir: str | Path | None = None,
     extra_weights: dict[str, pd.DataFrame] | None = None,
+    *,
+    cost_levels: list | None = None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    """轮动回测（经 `costs.apply_turnover_cost` 委托唯一权威账本）。
+
+    cost_levels：显式覆盖费用档。**不传则用配置的四档**；调用方若只关心单档
+    （如敏感性矩阵的场景评估）必须显式传入，否则会白跑 4 倍（历史缺陷）。
+    """
     cfg = load_gen2_config()
     universe = load_universe_definition()
     main5 = universe["incumbent_main5"]
@@ -80,7 +87,9 @@ def run_rotation_backtest(
     benchmark_names = {"fixed_main5_system_proxy", "main5_equal_weight", "expanded_universe_equal_weight"}
     navs: dict[str, pd.DataFrame] = {}
     summaries = []
-    for cost_bps in cfg["evaluation"].get("include_cost_sensitivity_bps", [0, 5, 10, 20]):
+    levels = [float(x) for x in (cost_levels if cost_levels is not None
+                                 else cfg["evaluation"].get("include_cost_sensitivity_bps", [0, 5, 10, 20]))]
+    for cost_bps in levels:
         for strategy, weights in weights_map.items():
             eff = shift_weights_next_trade_date(weights, calendar)
             result = apply_turnover_cost(eff, returns, cost_bps=float(cost_bps), return_col="ret_1d_next")

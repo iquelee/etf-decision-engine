@@ -1,5 +1,13 @@
 # Gen-2 P1：Rule V2 结构重构 A/B 报告
 
+> ⚠️ **旧角色语义审计基线 —— 不可与新结果逐位比较**
+>
+> 本报告产生于 PR #24 之前：角色语义来自旧实现（缺 NO_CORE 硬门槛与 Selection Permission），
+> 回测账本为旧口径（现金腿被计入换手，持有现金缓冲的策略费用最多高估 2 倍）。
+> 仅作**审计基线**留存；**不得**用于继续宣称 Rule V2 的经济表现。
+> 新基线见 `ml/gen2/reports/gen2_b1_ledger_baseline_20260911.md`（WP-G2-02 / B1，唯一权威角色语义 + 唯一权威账本）。
+
+
 **日期**：2026-09-05
 **范围**：Selection Engine 重构（Alpha/Utility 分离 + Selection Permission + NO_CORE + label vs market）
 **核心结论**：**把「找赢家」和「控风险」拆开后，选池信号 Rank IC 从 0.0023 提升到 0.0414（约 18 倍），Top-Bottom spread 由负翻正——结构重构方向正确。**

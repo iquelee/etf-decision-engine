@@ -1,5 +1,13 @@
 # Gen-2.1 M3 报告 v3（M3-r3）— Turnover-aware Replacement + Stateful 三臂 Validation（2026-09-09）
 
+> ⚠️ **旧角色语义审计基线 —— 不可与新结果逐位比较**
+>
+> 本报告产生于 PR #24 之前：角色语义来自旧实现（缺 NO_CORE 硬门槛与 Selection Permission），
+> 回测账本为旧口径（现金腿被计入换手，持有现金缓冲的策略费用最多高估 2 倍）。
+> 仅作**审计基线**留存；**不得**用于继续宣称 Rule V2 的经济表现。
+> 新基线见 `ml/gen2/reports/gen2_b1_ledger_baseline_20260911.md`（WP-G2-02 / B1，唯一权威角色语义 + 唯一权威账本）。
+
+
 状态：M3 研究交付（Validation 2024 层）。**v3 = 按 M3-r2 复审修复 5 技术缺口 + 1 协议级问题后重跑**：
 ①weight_delta → **projected trade weight**（真实 cap 后目标权重）；②**cluster Replacement Payoff + bootstrap CI** 补齐预注册指标；③**pairing 窗口确定性 bug** 修复；④**参数 provenance 统一**（去 selected/design-fixed 自相矛盾）；⑤**2025+ 降级 contaminated** 标注。
 **核心结论不变且证据链完整：三臂成本后仍跑输 Main5（bootstrap CI 上界 ≈0）；Replacement Payoff vs incumbent 为负、vs cluster 无优势 → 换仓不创造价值 → Gate 允许关闭、min_quality 不冻结；Freeze 走 B′ 但 2025+ M4/M5 降级为 post-hoc diagnostics。**

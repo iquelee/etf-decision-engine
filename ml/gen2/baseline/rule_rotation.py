@@ -31,7 +31,16 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _write_manifest(output_dir: Path, config: dict, summary: pd.DataFrame) -> Path:
+def _display_path(path: Path) -> str:
+    """报告里展示路径：能相对仓库根就相对，否则给出绝对路径（覆写输出目录时不炸）。"""
+    try:
+        return str(Path(path).relative_to(GEN2_ROOT.parent.parent))
+    except ValueError:
+        return str(Path(path))
+
+
+def _write_manifest(output_dir: Path, config: dict, summary: pd.DataFrame,
+                    manifest_path: str | Path | None = None) -> Path:
     cfg_path = GEN2_ROOT / "config" / "gen2.yaml"
     manifest = {
         "experiment_id": EXPERIMENT_ID,
@@ -53,7 +62,8 @@ def _write_manifest(output_dir: Path, config: dict, summary: pd.DataFrame) -> Pa
             "write_cloudbase": False,
         },
     }
-    out = GEN2_ROOT / "manifests" / f"{EXPERIMENT_ID}.json"
+    # 允许覆写：避免重算基线时覆盖历史实验 manifest（审计留痕）
+    out = Path(manifest_path) if manifest_path else GEN2_ROOT / "manifests" / f"{EXPERIMENT_ID}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return out
@@ -65,7 +75,12 @@ def _markdown_table(df: pd.DataFrame, max_rows: int = 20) -> str:
     return "```csv\n" + df.head(max_rows).to_csv(index=False).strip() + "\n```"
 
 
-def run_rule_baseline(output_dir: str | Path | None = None) -> dict[str, Path]:
+def run_rule_baseline(output_dir: str | Path | None = None, *, report_path: str | Path | None = None,
+                      manifest_path: str | Path | None = None) -> dict[str, Path]:
+    """角色基线回测（V2 权威角色语义 + 唯一权威账本）。
+
+    report_path / manifest_path 允许覆写，避免重算时覆盖历史报告与 manifest。
+    """
     out_dir = Path(output_dir) if output_dir else GEN2_ROOT / "outputs"
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = load_gen2_config()
@@ -135,7 +150,7 @@ def run_rule_baseline(output_dir: str | Path | None = None) -> dict[str, Path]:
     universe_eligibility.to_csv(paths["universe_eligibility"], index=False)
     feature_coverage.to_csv(paths["feature_coverage"], index=False)
 
-    manifest_path = _write_manifest(out_dir, cfg, backtest_summary)
+    manifest_path = _write_manifest(out_dir, cfg, backtest_summary, manifest_path=manifest_path)
 
     latest_date = rankings["trade_date"].max()
     latest_top = rankings[rankings["trade_date"] == latest_date].head(10)[["rank", "code", "name", "leadership_score", "correlation_cluster", "rank_percentile"]]
@@ -158,7 +173,7 @@ def run_rule_baseline(output_dir: str | Path | None = None) -> dict[str, Path]:
     )
     verdict = "PASS" if gate_pass else "FAIL / UNPROVEN"
 
-    report = GEN2_ROOT / "reports" / "gen2_rule_baseline_report.md"
+    report = Path(report_path) if report_path else GEN2_ROOT / "reports" / "gen2_rule_baseline_report.md"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join([
         "# Gen-2 Rule Leadership Baseline Report v1",
@@ -168,7 +183,7 @@ def run_rule_baseline(output_dir: str | Path | None = None) -> dict[str, Path]:
         f"**Feature**：`{cfg['ranking']['feature_version']}`",
         f"**Label**：`{cfg['ranking']['label_version']}`",
         f"**日期范围**：{rankings['trade_date'].min()} 至 {latest_date}",
-        f"**Manifest**：`{manifest_path.relative_to(GEN2_ROOT.parent.parent)}`",
+        f"**Manifest**：`{_display_path(manifest_path)}`",
         "",
         "## 硬约束",
         "",
@@ -219,7 +234,7 @@ def run_rule_baseline(output_dir: str | Path | None = None) -> dict[str, Path]:
         "",
         "## 输出文件",
         "",
-        *[f"- `{p.relative_to(GEN2_ROOT)}`" for p in paths.values()],
+        *[f"- `{_display_path(p)}`" for p in paths.values()],
     ]), encoding="utf-8")
     paths["report"] = report
     paths["manifest"] = manifest_path
