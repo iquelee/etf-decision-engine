@@ -1,0 +1,743 @@
+{
+  "manifest_type": "GEN2_B1_FROZEN_RUN",
+  "run_id": "b1_ledger_baseline_20260914_frozen_v201",
+  "created_at": "2026-09-14T07:06:47.185832+00:00",
+  "boundaries": {
+    "stage": "SHADOW/CANARY",
+    "deployed": false,
+    "authority_promoted": false,
+    "writes_position": false,
+    "economic_claim_allowed": false,
+    "economic_claim_gate": "B3 FROZEN OOS（未通过前本 manifest 只作研发证据）",
+    "supersedes": {
+      "note": "旧报告自本次起只作审计基线，不再作为比较对象",
+      "old_run_id": "b1_ledger_baseline_20260911",
+      "old_report": "ml/gen2/reports/gen2_b1_research_baselines_20260911.md",
+      "candidate_run": {
+        "run_id": "b1_ledger_baseline_20260914_frozen_v201",
+        "lock_revision": 2,
+        "note": "lock_revision 2 下的候选冻结运行（有效候选证据，但不标为最终 Frozen B1）；本运行在 lock_revision 3 下取代之。两次扩围只收紧锁定范围、未改 bundle 字节与规则参数 ⇒ 读数应当一致；差异即缺陷。"
+      }
+    }
+  },
+  "frozen_input": {
+    "lock": {
+      "lock_file": "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json",
+      "lock_sha256": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_sha256_declared_in_root_anchors": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_revision": 3,
+      "engine_id": "gen2-rule-v2",
+      "bundle_version": "gen2-rule-v2.0.1",
+      "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+      "root_anchor_in_sync": true
+    },
+    "lock_component_digest": "86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c",
+    "immutable_set": [
+      {
+        "id": "bundle",
+        "role": "规则单一真相源（Python 回测 + Node Shadow 共用）",
+        "file": "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json",
+        "expected": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "actual": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "match": true
+      },
+      {
+        "id": "js_implementation",
+        "role": "JS 权威实现：角色状态机 / 权威权重 / 候选组合 / 发布校验",
+        "file": "cloudfunctions/runGen2ShadowEod/index.js",
+        "expected": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "actual": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "match": true
+      },
+      {
+        "id": "python_rule",
+        "role": "Python 规则实现：build_v2_roles 角色状态机",
+        "file": "ml/gen2/baseline/rule_v2_ab.py",
+        "expected": "89b4e6d867acacf80028fe2cba4fa51f07eecfdf51cfa48e6706b73451631e7f",
+        "actual": "89b4e6d867acacf80028fe2cba4fa51f07eecfdf51cfa48e6706b73451631e7f",
+        "match": true
+      },
+      {
+        "id": "python_candidate",
+        "role": "Python 候选组合实现：build_portfolio_candidates",
+        "file": "ml/gen2/portfolio/portfolio_builder.py",
+        "expected": "0831764c775fb4d3757d926d3105240573f4755b02075304186d2c7f1f245ccb",
+        "actual": "0831764c775fb4d3757d926d3105240573f4755b02075304186d2c7f1f245ccb",
+        "match": true
+      },
+      {
+        "id": "python_defense",
+        "role": "Python 防守实现：apply_regime_defense",
+        "file": "ml/gen2/portfolio/defense_gate.py",
+        "expected": "e3f48f081936ab0d9a5dac1645e6dce24121808785d26fde81e1d93d06e51afa",
+        "actual": "e3f48f081936ab0d9a5dac1645e6dce24121808785d26fde81e1d93d06e51afa",
+        "match": true
+      },
+      {
+        "id": "python_role_thresholds",
+        "role": "Python 阈值加载/校验契约：load_role_thresholds / validate_role_thresholds",
+        "file": "ml/gen2/portfolio/role_thresholds.py",
+        "expected": "62d542615e6b2be2d622c594c88433e51531b69c209e5b85140924376e74a9c4",
+        "actual": "62d542615e6b2be2d622c594c88433e51531b69c209e5b85140924376e74a9c4",
+        "match": true
+      },
+      {
+        "id": "python_selection_scores",
+        "role": "Python 显式 Alpha 实现：Alpha 计算 / 覆盖校验 / 内容哈希 / canonical 权重",
+        "file": "ml/gen2/baseline/selection_scores.py",
+        "expected": "1d67f768a654ff361b9e00fd1845a269585427436edad6af0eaf234d8cc27d2e",
+        "actual": "1d67f768a654ff361b9e00fd1845a269585427436edad6af0eaf234d8cc27d2e",
+        "match": true
+      },
+      {
+        "id": "python_regime",
+        "role": "Python 统一 regime 契约：RISK_ON_GE / RISK_OFF_LE 实际执行常量 + classify_regime",
+        "file": "ml/gen2/portfolio/regime.py",
+        "expected": "738f49c1bb2ed661bb86e7f19188e16ab26a7aebde4853c6b443a32bbeeb466e",
+        "actual": "738f49c1bb2ed661bb86e7f19188e16ab26a7aebde4853c6b443a32bbeeb466e",
+        "match": true
+      }
+    ],
+    "build_artifacts": [
+      {
+        "id": "dist_bundle",
+        "file": "dist-functions/runGen2ShadowEod/GEN2_RULE_V2_BUNDLE.json",
+        "must_equal": "bundle",
+        "declared_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "declared_match_mirror": true
+      },
+      {
+        "id": "dist_index",
+        "file": "dist-functions/runGen2ShadowEod/index.js",
+        "must_equal": "js_implementation",
+        "declared_sha256": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "declared_match_mirror": true
+      }
+    ],
+    "bundle_selection": {
+      "role_thresholds": {
+        "core_top_fraction": 0.2,
+        "challenger_top_fraction": 0.3,
+        "satellite_top_fraction": 0.4
+      },
+      "legacy_migration_audit_status": "MIGRATION_AUDIT_ONLY"
+    },
+    "bundle_alpha": {
+      "trend": 0.3333333333,
+      "rs": 0.3333333333,
+      "breakout": 0.3333333333
+    },
+    "bundle_regime": {
+      "risk_on_ge": 55,
+      "risk_off_le": 45
+    }
+  },
+  "run_implementation": [
+    {
+      "id": "b1_frozen_run",
+      "role": "B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配",
+      "file": "ml/gen2/baseline/b1_frozen_run.py",
+      "exists": true,
+      "sha256": "29f980e031a6ae74115815b9501ae4db5adf98de9b0019eeeb33b06bab2eec6b"
+    },
+    {
+      "id": "baseline_builder",
+      "role": "B1 基线构建：build_unified_baselines（特征→排名→角色→权重→账本）",
+      "file": "ml/gen2/baseline/rebuild_baselines.py",
+      "exists": true,
+      "sha256": "f4197e28a43380cb406befdfb54aeb5197bb1a3bd65da5e609182a23f4eaef93"
+    },
+    {
+      "id": "ledger",
+      "role": "唯一权威账本：run_ledger / LEDGER_CONTRACT（费用 = turnover × bps / 1e4）",
+      "file": "ml/gen2/backtest/ledger.py",
+      "exists": true,
+      "sha256": "d4fe7907741be52aaa721e13f4973d441c5c2df236f4ffe381259cb75d2d5b53"
+    },
+    {
+      "id": "cost_impl",
+      "role": "费用兼容层：apply_turnover_cost（委托 ledger.run_ledger，非自带实现）",
+      "file": "ml/gen2/backtest/costs.py",
+      "exists": true,
+      "sha256": "535b16cf85f09d59878d91fe846e2d9d8f148de79f01ee0f5cbcde8aa0c2bbad"
+    }
+  ],
+  "environment": {
+    "python": "3.13.14",
+    "python_implementation": "CPython",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "byteorder": "little"
+  },
+  "input_data": {
+    "daily_dir": "deliverables/etf_daily_ml_pool",
+    "codes": [
+      "513310",
+      "159582",
+      "515880",
+      "159570",
+      "518880",
+      "588000",
+      "588080",
+      "512480",
+      "159995",
+      "512760",
+      "515050",
+      "159819",
+      "159915",
+      "159992",
+      "159770",
+      "159852",
+      "512010",
+      "512690",
+      "159928",
+      "510880",
+      "512800",
+      "512000",
+      "512660",
+      "515030",
+      "515790",
+      "512400",
+      "515220",
+      "513180",
+      "159941",
+      "513500",
+      "510300"
+    ],
+    "rows_total": 38083,
+    "date_range": {
+      "first_date": "2011-12-09",
+      "last_date": "2026-09-04"
+    },
+    "files": [
+      {
+        "code": "513310",
+        "file": "deliverables/etf_daily_ml_pool/513310_qfq.csv",
+        "rows": 898,
+        "first_date": "2022-12-22",
+        "last_date": "2026-09-04",
+        "sha256": "5aede708b5dc562c30c09493c7fc03bd446701ee3d0a808a071ad46bdeb94c6f"
+      },
+      {
+        "code": "159582",
+        "file": "deliverables/etf_daily_ml_pool/159582_qfq.csv",
+        "rows": 582,
+        "first_date": "2024-04-16",
+        "last_date": "2026-09-04",
+        "sha256": "2eb03468d97bcd44012edf2dc3d87c0fceaf144ac04813a553aecc65292f4755"
+      },
+      {
+        "code": "515880",
+        "file": "deliverables/etf_daily_ml_pool/515880_qfq.csv",
+        "rows": 1696,
+        "first_date": "2019-09-06",
+        "last_date": "2026-09-04",
+        "sha256": "b470c90487db9c1efb539b4a085a778b0b026641fe58269e172e813dffafa6fa"
+      },
+      {
+        "code": "159570",
+        "file": "deliverables/etf_daily_ml_pool/159570_qfq.csv",
+        "rows": 635,
+        "first_date": "2024-01-22",
+        "last_date": "2026-09-04",
+        "sha256": "7bcb0b2bb4b8913e3f2e112272cb3ee4d0f88bd0e5b2591e741b3c54d6be33dc"
+      },
+      {
+        "code": "518880",
+        "file": "deliverables/etf_daily_ml_pool/518880_qfq.csv",
+        "rows": 810,
+        "first_date": "2023-05-09",
+        "last_date": "2026-09-04",
+        "sha256": "0978095c379aff1da207b42f05193d8f25e4b134f5ea9c3fa2a79afba0991e4e"
+      },
+      {
+        "code": "588000",
+        "file": "deliverables/etf_daily_ml_pool/588000_qfq.csv",
+        "rows": 1410,
+        "first_date": "2020-11-16",
+        "last_date": "2026-09-04",
+        "sha256": "a38af4029ceace1e65d523a79ae19ef9df2f46c5bd1374bb0f6ebc214fbd2924"
+      },
+      {
+        "code": "588080",
+        "file": "deliverables/etf_daily_ml_pool/588080_qfq.csv",
+        "rows": 1410,
+        "first_date": "2020-11-16",
+        "last_date": "2026-09-04",
+        "sha256": "80e59ddb0296c37c6330a0be5caf090e35c0cac459eddd2e05d95296e407107e"
+      },
+      {
+        "code": "512480",
+        "file": "deliverables/etf_daily_ml_pool/512480_qfq.csv",
+        "rows": 1757,
+        "first_date": "2019-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "a1b723fb1c7997fc506919cb9b935ad046e84957b6ee76b75b3ef9ecad9ca696"
+      },
+      {
+        "code": "159995",
+        "file": "deliverables/etf_daily_ml_pool/159995_qfq.csv",
+        "rows": 1598,
+        "first_date": "2020-02-10",
+        "last_date": "2026-09-04",
+        "sha256": "acf026b01ac015e464e99ec09b4af96a363ec72e68b6f674877c07550f5bad75"
+      },
+      {
+        "code": "512760",
+        "file": "deliverables/etf_daily_ml_pool/512760_qfq.csv",
+        "rows": 1757,
+        "first_date": "2019-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "95e1c6547a30e0510040d768ba1c6ac758b9d4b5f2f1a9c04d11ab479242727f"
+      },
+      {
+        "code": "515050",
+        "file": "deliverables/etf_daily_ml_pool/515050_qfq.csv",
+        "rows": 1674,
+        "first_date": "2019-10-16",
+        "last_date": "2026-09-04",
+        "sha256": "24d3bafe034d63820d949319d66c4f31278fc4b68360e48cea1806f1c761b443"
+      },
+      {
+        "code": "159819",
+        "file": "deliverables/etf_daily_ml_pool/159819_qfq.csv",
+        "rows": 1442,
+        "first_date": "2020-09-23",
+        "last_date": "2026-09-04",
+        "sha256": "032002a9614fab36bd9f518009efb528031457c041ad5478df63f9f2af8741c6"
+      },
+      {
+        "code": "159915",
+        "file": "deliverables/etf_daily_ml_pool/159915_qfq.csv",
+        "rows": 3579,
+        "first_date": "2011-12-09",
+        "last_date": "2026-09-04",
+        "sha256": "0123dd26e9188eefbd4726f9f24bad8684910eb9be181fb5639e23aeefd809c5"
+      },
+      {
+        "code": "159992",
+        "file": "deliverables/etf_daily_ml_pool/159992_qfq.csv",
+        "rows": 1555,
+        "first_date": "2020-04-10",
+        "last_date": "2026-09-04",
+        "sha256": "175698cf212169e6bc3293c72fdbb94a7403ae1b6928d8bc9d67782f879a2653"
+      },
+      {
+        "code": "159770",
+        "file": "deliverables/etf_daily_ml_pool/159770_qfq.csv",
+        "rows": 1173,
+        "first_date": "2021-11-08",
+        "last_date": "2026-09-04",
+        "sha256": "dbc10a5b3d3e8e65cecd6acbab1b7dfa606636501267d151e4ba019fb78d4e8b"
+      },
+      {
+        "code": "159852",
+        "file": "deliverables/etf_daily_ml_pool/159852_qfq.csv",
+        "rows": 1350,
+        "first_date": "2021-02-09",
+        "last_date": "2026-09-04",
+        "sha256": "02c7c1cb81a26f4c9724f88e7d1848a98b99948095662a8ed9187dc6181189bb"
+      },
+      {
+        "code": "512010",
+        "file": "deliverables/etf_daily_ml_pool/512010_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "ab624712cbb5833534b2105e2176d963491981abb4897093d4de0aa243943ea1"
+      },
+      {
+        "code": "512690",
+        "file": "deliverables/etf_daily_ml_pool/512690_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "3f4b3e88b6b9e78b8a35d2e76fec0775eab1e0ff9c02b063d031afe4ccc74749"
+      },
+      {
+        "code": "159928",
+        "file": "deliverables/etf_daily_ml_pool/159928_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "416ac847f8a53ffc5af838265f4642e9c9e61492162026503e2a673e83461ef8"
+      },
+      {
+        "code": "510880",
+        "file": "deliverables/etf_daily_ml_pool/510880_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "93767147e3ef6776c33825774f3a1f25e529a4a3d8f2f306093433bce0a642a5"
+      },
+      {
+        "code": "512800",
+        "file": "deliverables/etf_daily_ml_pool/512800_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "4085ccdbba9b745a7531dfebfc5b2c8e03785f4e271cc2940f13444dc7c2bfc2"
+      },
+      {
+        "code": "512000",
+        "file": "deliverables/etf_daily_ml_pool/512000_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "808608548d37c91b7d74231efe89ae6a1acebded4cc65df64185067b9692025c"
+      },
+      {
+        "code": "512660",
+        "file": "deliverables/etf_daily_ml_pool/512660_qfq.csv",
+        "rows": 2000,
+        "first_date": "2018-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "53f0e12dd3f2b0729e8e06aa8545ba19af6fb7aaef149cc8586346b8e3027b3c"
+      },
+      {
+        "code": "515030",
+        "file": "deliverables/etf_daily_ml_pool/515030_qfq.csv",
+        "rows": 1581,
+        "first_date": "2020-03-04",
+        "last_date": "2026-09-04",
+        "sha256": "fc0d3888a0cd78eb2049b8e4d2ff3cde5b779143d428dbf94be5b3a0f6eec801"
+      },
+      {
+        "code": "515790",
+        "file": "deliverables/etf_daily_ml_pool/515790_qfq.csv",
+        "rows": 1386,
+        "first_date": "2020-12-18",
+        "last_date": "2026-09-04",
+        "sha256": "b95f084f3123e127c254eb3050ef20db4dceb4b179cb34adf97ecbd7185cc433"
+      },
+      {
+        "code": "512400",
+        "file": "deliverables/etf_daily_ml_pool/512400_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "42f3b5d75c29783a37643ba965a50a164665c2487497eea5aaa4b73b0af61f6b"
+      },
+      {
+        "code": "515220",
+        "file": "deliverables/etf_daily_ml_pool/515220_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "000f626e7bf204a4dd04831a25607e0206f6a4bcf41ccb8d0168db9fdc4f6eb7"
+      },
+      {
+        "code": "513180",
+        "file": "deliverables/etf_daily_ml_pool/513180_qfq.csv",
+        "rows": 1284,
+        "first_date": "2021-05-25",
+        "last_date": "2026-09-04",
+        "sha256": "2ec308811bba8fc261824f89f8ba6c831a092f9f89f0e3398dd15ef269140d55"
+      },
+      {
+        "code": "159941",
+        "file": "deliverables/etf_daily_ml_pool/159941_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "c696ad77b863804da8a0a4d0883ecd3aac4d81fb8ddc81fcd96eebcb6485198c"
+      },
+      {
+        "code": "513500",
+        "file": "deliverables/etf_daily_ml_pool/513500_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "e51839779425d63ac08133c8720753702092ceedbe9864e47236b4f7cff87ae2"
+      },
+      {
+        "code": "510300",
+        "file": "deliverables/etf_daily_ml_pool/510300_qfq.csv",
+        "rows": 2106,
+        "first_date": "2018-01-02",
+        "last_date": "2026-09-04",
+        "sha256": "b1ff29f7ae13b65796a0ccbbc30647742742d9b5af84c2f61da91c97d23fd71c"
+      }
+    ],
+    "meta_files": [
+      {
+        "id": "etf_master",
+        "file": "ml/gen2/universe/etf_master.csv",
+        "sha256": "31e6d6fc81e3b3b69824970414ed49d77c609b00ad7341e01e33f14044fc9147"
+      },
+      {
+        "id": "universe_definition",
+        "file": "ml/gen2/universe/universe_v1.json",
+        "sha256": "013457b3ec9405f877840bc253efc6d313dcfc337ebff5ab12285c59623cc03a"
+      }
+    ],
+    "content_digest": "7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191"
+  },
+  "config_attestation": {
+    "rule_map": [
+      {
+        "key": "portfolio.max_single_weight",
+        "bundle_path": "portfolio/max_single_weight",
+        "run_config_path": "portfolio/max_single_weight"
+      },
+      {
+        "key": "portfolio.max_cluster_weight",
+        "bundle_path": "portfolio/max_cluster_weight",
+        "run_config_path": "portfolio/max_cluster_weight"
+      },
+      {
+        "key": "portfolio.max_tech_weight",
+        "bundle_path": "portfolio/max_tech_weight",
+        "run_config_path": "portfolio/max_tech_weight"
+      },
+      {
+        "key": "portfolio.tech_clusters",
+        "bundle_path": "portfolio/tech_clusters",
+        "run_config_path": "portfolio/tech_clusters"
+      },
+      {
+        "key": "portfolio.max_core_count",
+        "bundle_path": "selection/max_core_count",
+        "run_config_path": "portfolio/max_core_count"
+      },
+      {
+        "key": "portfolio.max_core_per_cluster",
+        "bundle_path": "selection/max_core_per_cluster",
+        "run_config_path": "portfolio/max_core_per_cluster"
+      },
+      {
+        "key": "portfolio.promotion_persistence_days",
+        "bundle_path": "selection/promotion_persistence_days",
+        "run_config_path": "portfolio/promotion_persistence_days"
+      },
+      {
+        "key": "portfolio.demotion_persistence_days",
+        "bundle_path": "selection/demotion_persistence_days",
+        "run_config_path": "portfolio/demotion_persistence_days"
+      },
+      {
+        "key": "portfolio.min_replacement_edge",
+        "bundle_path": "selection/min_replacement_edge",
+        "run_config_path": "portfolio/min_replacement_edge"
+      },
+      {
+        "key": "portfolio.role_thresholds",
+        "bundle_path": "selection/role_thresholds",
+        "run_config_path": "portfolio/role_thresholds"
+      },
+      {
+        "key": "portfolio.defense.risk_off_exposure_scale",
+        "bundle_path": "defense/risk_off_exposure_scale",
+        "run_config_path": "portfolio/defense/risk_off_exposure_scale"
+      },
+      {
+        "key": "portfolio.defense.risk_off_hedge_weight",
+        "bundle_path": "defense/risk_off_hedge_weight",
+        "run_config_path": "portfolio/defense/risk_off_hedge_weight"
+      },
+      {
+        "key": "portfolio.defense.hedge_code",
+        "bundle_path": "defense/hedge_code",
+        "run_config_path": "portfolio/defense/hedge_code"
+      },
+      {
+        "key": "portfolio.defense.vol_target_enabled",
+        "bundle_path": "defense/vol_target_enabled",
+        "run_config_path": "portfolio/defense/vol_target_enabled"
+      },
+      {
+        "key": "portfolio.defense.vol_target_annualized",
+        "bundle_path": "defense/vol_target_annualized",
+        "run_config_path": "portfolio/defense/vol_target_annualized"
+      },
+      {
+        "key": "data.benchmark_code",
+        "bundle_path": "benchmark_code",
+        "run_config_path": "data/benchmark_code"
+      },
+      {
+        "key": "universe.version",
+        "bundle_path": "universe_version",
+        "run_config_path": "universe/version"
+      }
+    ],
+    "drift": [],
+    "cross_checks": [],
+    "config_source": "FROZEN_BUNDLE_OVERLAY"
+  },
+  "run_inputs": {
+    "universe_version": null,
+    "benchmark_code": "510300",
+    "main5": [
+      "513310",
+      "159582",
+      "515880",
+      "159570",
+      "518880"
+    ],
+    "cost_levels": [
+      0.0,
+      5.0,
+      10.0,
+      20.0
+    ],
+    "default_cost_bps": 10.0,
+    "role_thresholds_from_config": {
+      "core_top_fraction": 0.2,
+      "challenger_top_fraction": 0.3,
+      "satellite_top_fraction": 0.4,
+      "source": "CONFIG_ROLE_THRESHOLDS",
+      "derived": {
+        "core_pct": 0.8,
+        "challenger_pct": 0.7,
+        "satellite_pct": 0.6
+      }
+    },
+    "selection": {
+      "score_version": "alpha-v2-equal-3",
+      "score_source": "bundle.alpha",
+      "score_hash": "2fb5b477fdc6e728eb81082ec5b173f92feda48b6a2945c2ef6a78e262985081",
+      "score_weights": {
+        "trend": 0.3333333333333333,
+        "rs": 0.3333333333333333,
+        "breakout": 0.3333333333333333
+      },
+      "score_coverage": 30992,
+      "notes": [
+        "canonical Alpha = 1/3*(trend+rs+breakout)，与 compute_alpha_score_v2 逐位一致"
+      ]
+    },
+    "ledger_contract_source": "gen2.backtest.ledger.LEDGER_CONTRACT",
+    "role_semantics": "gen2.baseline.rule_v2_ab.build_v2_roles"
+  },
+  "window": {
+    "calendar": {
+      "first_date": "2020-03-10",
+      "last_date": "2026-09-04",
+      "days": 1577,
+      "strategies": [
+        "gen2_v2_defended__0.0bps",
+        "gen2_v2_defended__10.0bps",
+        "gen2_v2_defended__20.0bps",
+        "gen2_v2_defended__5.0bps",
+        "gen2_v2_undefended__0.0bps",
+        "gen2_v2_undefended__10.0bps",
+        "gen2_v2_undefended__20.0bps",
+        "gen2_v2_undefended__5.0bps",
+        "main5_equal_weight__0.0bps",
+        "main5_equal_weight__10.0bps",
+        "main5_equal_weight__20.0bps",
+        "main5_equal_weight__5.0bps",
+        "market_510300__0.0bps",
+        "market_510300__10.0bps",
+        "market_510300__20.0bps",
+        "market_510300__5.0bps",
+        "universe_equal_weight__0.0bps",
+        "universe_equal_weight__10.0bps",
+        "universe_equal_weight__20.0bps",
+        "universe_equal_weight__5.0bps"
+      ]
+    },
+    "common_window": {
+      "per_strategy_signal_window": {
+        "gen2_v2_defended": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "gen2_v2_undefended": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "main5_equal_weight": {
+          "first": "2020-03-10",
+          "last": "2026-09-04",
+          "days": 1577
+        },
+        "universe_equal_weight": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "market_510300": {
+          "first": "2018-01-02",
+          "last": "2026-09-04",
+          "days": 2106
+        }
+      },
+      "naive_union_days": 3580,
+      "common_days": 1577,
+      "excluded_leading_days": 2003
+    }
+  },
+  "acceptance": {
+    "conservation_max_error": 0.0,
+    "cash_min": 0.0,
+    "gross_exposure_max": 1.0,
+    "over_allocated_days_total": 0,
+    "dropped_signal_days_total": 20,
+    "missing_quote_days_total": 20,
+    "ledgers": 20,
+    "strategies": [
+      "gen2_v2_defended",
+      "gen2_v2_undefended",
+      "main5_equal_weight",
+      "market_510300",
+      "universe_equal_weight"
+    ],
+    "gate_pass": true
+  },
+  "artifacts": [
+    {
+      "file": "ledger_daily.csv",
+      "exists": true,
+      "sha256": "c6ff697b36c84e6bd0324572261b20be9d5a6a7e5f6192463c4dfd5aa4772f51",
+      "bytes": 4951772
+    },
+    {
+      "file": "ledger_summary.csv",
+      "exists": true,
+      "sha256": "1bb10a755cad512070f9a03fa41d678b0dba92057a97453a2d63d64e1fef3567",
+      "bytes": 4105
+    },
+    {
+      "file": "calendar_meta.json",
+      "exists": true,
+      "sha256": "5be4e3f7f78b0d5b364c6d2f3dd411184e635cf5a399b3e69c6fbf4cac240301",
+      "bytes": 3347
+    },
+    {
+      "file": "gen2_b1_ledger_baseline_20260914_frozen_v201.md",
+      "exists": true,
+      "sha256": "c9e8d6e0f4e99fc126b6365c2dc09b541d9f2deedddbf61626579ccb3106c5d3",
+      "bytes": 5011
+    }
+  ],
+  "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
+  "committed_manifest": "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json",
+  "report": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+  "outputs": {
+    "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
+    "run_dir_artifacts": [
+      "ledger_daily.csv",
+      "ledger_summary.csv",
+      "calendar_meta.json",
+      "gen2_b1_ledger_baseline_20260914_frozen_v201.md"
+    ],
+    "committed_report": {
+      "file": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+      "exists": true,
+      "sha256": "bcd164f6885a65fa19ef8f033b62c5c7688f7a36e25267a22f992aec9af8292a",
+      "bytes": 20186
+    }
+  },
+  "self_check": {
+    "checks": 53,
+    "passed": 53,
+    "failed": 0,
+    "all_pass": true,
+    "detail": []
+  }
+}
