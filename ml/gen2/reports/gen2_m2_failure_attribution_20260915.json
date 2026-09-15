@@ -1,0 +1,257 @@
+{
+ "attribution": "gen2_m2_postmortem_attribution",
+ "generated_on": "2026-09-15",
+ "protocol": "POSTMORTEM_NOT_FOR_CALIBRATION",
+ "ruling": "用户裁决 2026-09-15：M2 只读拆解 选池/权重·上限/防守/换手·成本 四层；禁止参数搜索·网格·阈值调整·新 bundle/lock·重跑 OOS 找通过结果；输出只能形成新假设与任务书，不得改变 ACCEPTED_FAIL 归档状态。",
+ "frozen_input": {
+  "bundle_version": "gen2-rule-v2.0.1",
+  "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+  "config_drift": [],
+  "regime_constants_crosscheck": {
+   "bundle": {
+    "risk_on_ge": 55,
+    "risk_off_le": 45
+   },
+   "locked_module": {
+    "risk_on_ge": 55.0,
+    "risk_off_le": 45.0
+   },
+   "source_of_truth": "ml/gen2/portfolio/regime.py（实际执行常量，已锁）",
+   "agree": true
+  },
+  "portfolio_caps": {
+   "max_single_weight": 0.25,
+   "max_cluster_weight": 0.4,
+   "max_tech_weight": 0.65,
+   "tech_clusters": [
+    "tech_hardware",
+    "software_ai"
+   ],
+   "max_core_count": 5,
+   "max_core_per_cluster": 2
+  },
+  "defense": {
+   "enabled": true,
+   "risk_off_exposure_scale": 0.5,
+   "risk_off_hedge_weight": 0.15,
+   "hedge_code": "518880",
+   "vol_target_enabled": true,
+   "vol_target_annualized": 0.17
+  },
+  "role_thresholds": {
+   "core_top_fraction": 0.2,
+   "challenger_top_fraction": 0.3,
+   "satellite_top_fraction": 0.4
+  },
+  "note": "运行配置取自 b3.derive_config(bundle, load_gen2_config())；regime 常量不在运行配置内，实际执行值来自被锁定的 ml/gen2/portfolio/regime.py。"
+ },
+ "identity_check_vs_accepted_b1": {
+  "all_match": true,
+  "mismatched_cells": 0,
+  "note": "重算全窗口读数 == 已接受 B1 报告逐位 ⇒ 本归因跑在同一条被接受的规则上"
+ },
+ "oos_window": {
+  "first": "2021-01-04",
+  "last": "2026-09-04",
+  "days": 1376
+ },
+ "common_calendar": {
+  "first": "2020-03-10",
+  "last": "2026-09-04",
+  "days": 1577,
+  "excluded_leading_days": 2003
+ },
+ "layer_lines_0bps": {
+  "main5_equal_weight": {
+   "cum_net_pct_0bps": 251.18,
+   "cum_net_pct_10bps": 247.15,
+   "turnover_total": 11.53,
+   "cost_total_pct": 1.15,
+   "avg_cash_weight": 0.0,
+   "max_drawdown_pct": null,
+   "yearly_net_pct_0bps": {}
+  },
+  "universe_equal_weight": {
+   "cum_net_pct_0bps": 30.6,
+   "cum_net_pct_10bps": 28.54,
+   "turnover_total": 15.94,
+   "cost_total_pct": 1.59,
+   "avg_cash_weight": 0.0,
+   "max_drawdown_pct": null,
+   "yearly_net_pct_0bps": {}
+  },
+  "core_equal_weight": {
+   "cum_net_pct_0bps": 46.04,
+   "cum_net_pct_10bps": 22.03,
+   "turnover_total": 179.45,
+   "cost_total_pct": 17.95,
+   "avg_cash_weight": 0.2878,
+   "max_drawdown_pct": null,
+   "yearly_net_pct_0bps": {}
+  },
+  "gen2_v2_undefended": {
+   "cum_net_pct_0bps": 39.22,
+   "cum_net_pct_10bps": 25.63,
+   "turnover_total": 102.66,
+   "cost_total_pct": 10.27,
+   "avg_cash_weight": 0.4991,
+   "max_drawdown_pct": null,
+   "yearly_net_pct_0bps": {}
+  },
+  "gen2_v2_defended": {
+   "cum_net_pct_0bps": 57.16,
+   "cum_net_pct_10bps": 37.54,
+   "turnover_total": 133.42,
+   "cost_total_pct": 13.34,
+   "avg_cash_weight": 0.5671,
+   "max_drawdown_pct": null,
+   "yearly_net_pct_0bps": {}
+  }
+ },
+ "yearly_net_pct_0bps": {
+  "main5_equal_weight": {
+   "2021": 6.86,
+   "2022": -26.74,
+   "2023": 42.11,
+   "2024": 30.89,
+   "2025": 80.75,
+   "2026": 33.42
+  },
+  "universe_equal_weight": {
+   "2021": 16.17,
+   "2022": -29.04,
+   "2023": -4.77,
+   "2024": 10.92,
+   "2025": 36.73,
+   "2026": 9.7
+  },
+  "core_equal_weight": {
+   "2021": 26.68,
+   "2022": -11.38,
+   "2023": -5.71,
+   "2024": 15.04,
+   "2025": 33.4,
+   "2026": -10.11
+  },
+  "gen2_v2_undefended": {
+   "2021": 10.04,
+   "2022": -5.77,
+   "2023": -4.34,
+   "2024": 8.19,
+   "2025": 30.28,
+   "2026": -0.41
+  },
+  "gen2_v2_defended": {
+   "2021": 4.1,
+   "2022": -1.23,
+   "2023": -5.8,
+   "2024": 4.05,
+   "2025": 41.51,
+   "2026": 10.2
+  }
+ },
+ "max_drawdown_pct_0bps": {
+  "main5_equal_weight": -34.57,
+  "universe_equal_weight": -49.72,
+  "core_equal_weight": -37.58,
+  "gen2_v2_undefended": -27.7,
+  "gen2_v2_defended": -21.5
+ },
+ "decomposition_0bps": [
+  {
+   "step": "A→B",
+   "layer": "选池范围（Main5 等权 → 全池等权）",
+   "delta_pct": -220.58
+  },
+  {
+   "step": "B→C",
+   "layer": "角色选池（全池等权 → 每日 CORE 等权，无上限）",
+   "delta_pct": 15.44
+  },
+  {
+   "step": "C→D",
+   "layer": "权重·上限（CORE 等权 → 实际权重，含 单只0.25/cluster0.40/科技0.65 + 留现金）",
+   "delta_pct": -6.82
+  },
+  {
+   "step": "D→E",
+   "layer": "防守（未防守 → 防守后）",
+   "delta_pct": 17.94
+  },
+  {
+   "step": "E→F",
+   "layer": "换手·成本（0bps → 10bps）",
+   "delta_pct": -19.62
+  },
+  {
+   "step": "A→F",
+   "layer": "**总差**（Main5 → Gen-2 防守 @10bps）",
+   "delta_pct": -213.64
+  }
+ ],
+ "cap_binding": {
+  "caps": {
+   "max_single_weight": 0.25,
+   "max_cluster_weight": 0.4,
+   "max_tech_weight": 0.65,
+   "tech_clusters": [
+    "software_ai",
+    "tech_hardware"
+   ]
+  },
+  "scope_note": "单只上限取全部**证券行** `max`；cluster / 科技上限**仅统计 `role=='CORE'` 行** —— 与 `_assert_caps(PRE_DEFENSE)` 同口径。`CASH` 腿（权重 = 1 − Σ证券）已剔除，否则 50% 级现金腿会假触发单只上限。",
+  "full_candidate_panel": {
+   "window": "full_candidate_panel",
+   "days": 2046,
+   "cash_only_days": 731,
+   "cash_only_day_pct": 35.73,
+   "avg_residual_cash_on_security_rows": 0.6055,
+   "single_cap_bound_days": 924,
+   "single_cap_bound_day_pct": 45.16,
+   "core_days": 1315,
+   "cluster_cap_bound_days": 696,
+   "tech_cap_bound_days": 137,
+   "core_count_hist": {
+    "1": 326,
+    "2": 217,
+    "3": 394,
+    "4": 129,
+    "5": 249
+   }
+  },
+  "oos_only": {
+   "window": "oos_only(2021-01-04→2026-09-04)",
+   "days": 1376,
+   "cash_only_days": 396,
+   "cash_only_day_pct": 28.78,
+   "avg_residual_cash_on_security_rows": 0.4992,
+   "single_cap_bound_days": 612,
+   "single_cap_bound_day_pct": 44.48,
+   "core_days": 980,
+   "cluster_cap_bound_days": 647,
+   "tech_cap_bound_days": 137,
+   "core_count_hist": {
+    "1": 97,
+    "2": 162,
+    "3": 343,
+    "4": 129,
+    "5": 249
+   }
+  }
+ },
+ "core_size_stats": {
+  "days": 2046,
+  "mean": 1.81,
+  "min": 0,
+  "max": 5,
+  "hist": {
+   "0": 731,
+   "1": 326,
+   "2": 217,
+   "3": 394,
+   "4": 129,
+   "5": 249
+  }
+ },
+ "no_calibration_statement": "本文件**未**产生任何新参数、新阈值、新 bundle/lock；未重跑 OOS 以寻找通过结果；结论只用于形成新假设。Rule V2.0.1 仍为 ACCEPTED_FAIL / NOT_PRODUCTION_ELIGIBLE。"
+}

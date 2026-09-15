@@ -1,0 +1,619 @@
+{
+ "taxonomy_version": "cluster_taxonomy_v1",
+ "created_at": "2026-09-15",
+ "status": "FROZEN_RESEARCH_ONLY",
+ "governing_ruling": "用户裁决 D（2026-09-15）：M1-B 必须产出并冻结唯一 cluster_taxonomy_v1；在此之前不做「≥6/8」合格判定",
+ "scope": [
+  "用于 O2 研究宇宙的逐标的分类、sector 覆盖统计与段级充分性判定。",
+  "不改 Rule V2（GEN2_RULE_V2_BUNDLE.json 未定义 cluster 成员，仅定义 tech_clusters 与每 cluster CORE 上限）。",
+  "不改 universe_v1.json 的 eligible_codes / candidate_map。",
+  "不参与任何评分、信号构造或权重计算；不得作策略参数。"
+ ],
+ "provenance": {
+  "l2_membership_authority": "ml/gen2/universe/clusters_v1.json（clusters_v1_static_research, 2026-09-05）",
+  "l2_membership_is_frozen_by_rule_v2": false,
+  "note": "⚠ 治理缺口：clusters_v1.json 与 universe_v1.json 均**不在** Rule V2 的 immutable_set（8 项）内 ⇒ 成员关系可在 bundle 字节不变的前提下被改动。本文件的冻结即为闭合该缺口（但**不**把 clusters_v1.json 纳入 LOCK，那属于新 lock revision，需用户批准）。",
+  "keyword_rules_version": "keyword_rule_v1",
+  "keyword_rules_scope": "仅用于 O2 候选（池外标的）的指派**建议**；既有 31 只池一律以文件为准。"
+ },
+ "layers": {
+  "l1_sector": {
+   "description": "上位概念层 = etf_master.sector 的取值域（10 个），其中 8 个为行业/主题",
+   "values": [
+    "broad",
+    "commodity",
+    "consumer",
+    "cyclical_resources",
+    "defensive_dividend",
+    "financial",
+    "healthcare",
+    "overseas_equity",
+    "software_ai",
+    "technology"
+   ],
+   "non_sector_values": [
+    "broad",
+    "commodity"
+   ]
+  },
+  "l2_cluster": {
+   "description": "下位实现层 = clusters_v1.json 的 11 个 correlation_cluster",
+   "values": [
+    "broad_beta",
+    "consumer",
+    "cyclical_resources",
+    "defensive_dividend",
+    "financial",
+    "gold_commodity",
+    "growth_broad",
+    "healthcare",
+    "overseas_equity",
+    "software_ai",
+    "tech_hardware"
+   ],
+   "max_core_count": {
+    "broad_beta": 0,
+    "consumer": 2,
+    "cyclical_resources": 2,
+    "defensive_dividend": 2,
+    "financial": 2,
+    "gold_commodity": 1,
+    "growth_broad": 2,
+    "healthcare": 2,
+    "overseas_equity": 2,
+    "software_ai": 2,
+    "tech_hardware": 2
+   },
+   "to_l1": {
+    "tech_hardware": "technology",
+    "software_ai": "software_ai",
+    "growth_broad": "broad",
+    "broad_beta": "broad",
+    "healthcare": "healthcare",
+    "consumer": "consumer",
+    "financial": "financial",
+    "defensive_dividend": "defensive_dividend",
+    "cyclical_resources": "cyclical_resources",
+    "overseas_equity": "overseas_equity",
+    "gold_commodity": "commodity"
+   }
+  }
+ },
+ "coverage_denominator": {
+  "value": 8,
+  "members": [
+   "consumer",
+   "cyclical_resources",
+   "defensive_dividend",
+   "financial",
+   "healthcare",
+   "overseas_equity",
+   "software_ai",
+   "tech_hardware"
+  ],
+  "rule": "L2 去除全部非行业/主题（broad_beta / growth_broad / gold_commodity）",
+  "why_this_is_8": "11 − 3 = 8；两条独立路径得同一集合：① 11 个 L2 cluster 去掉 3 个非行业 cluster；② etf_master.sector 的 10 个取值去掉 broad / commodity。",
+  "unsourced_before_this_file": "freeze §2.4/§2.6 与 taskbook §0.9 是「8」的唯一出处，此前无任何文件枚举过其成员。",
+  "alternative_readings": {
+   "11_all_l2_clusters": {
+    "value": 11,
+    "rule": "clusters_v1.json 的全部 L2 cluster"
+   },
+   "10_competitive_l2": {
+    "value": 10,
+    "rule": "L2 去除基准 broad_beta（保留 growth_broad / gold_commodity）"
+   },
+   "9_l2_minus_broad_commodity": {
+    "value": 9,
+    "rule": "L2 去除基准与商品（保留 growth_broad）"
+   }
+  },
+  "threshold_unchanged": "≥6 的门槛数值未改动；本文件只把分母的定义补成可复算。",
+  "requires_user_confirmation": true
+ },
+ "sector_cluster_definitions": {
+  "broad_beta": {
+   "l1_sector": "broad",
+   "l2_members_existing": [
+    "510300"
+   ],
+   "coverage_eligible": false
+  },
+  "consumer": {
+   "l1_sector": "consumer",
+   "l2_members_existing": [
+    "512690",
+    "159928"
+   ],
+   "coverage_eligible": true
+  },
+  "cyclical_resources": {
+   "l1_sector": "cyclical_resources",
+   "l2_members_existing": [
+    "512660",
+    "515030",
+    "515790",
+    "512400",
+    "515220"
+   ],
+   "coverage_eligible": true
+  },
+  "defensive_dividend": {
+   "l1_sector": "defensive_dividend",
+   "l2_members_existing": [
+    "510880"
+   ],
+   "coverage_eligible": true
+  },
+  "financial": {
+   "l1_sector": "financial",
+   "l2_members_existing": [
+    "512800",
+    "512000"
+   ],
+   "coverage_eligible": true
+  },
+  "gold_commodity": {
+   "l1_sector": "commodity",
+   "l2_members_existing": [
+    "518880"
+   ],
+   "coverage_eligible": false
+  },
+  "growth_broad": {
+   "l1_sector": "broad",
+   "l2_members_existing": [
+    "588000",
+    "588080",
+    "159915"
+   ],
+   "coverage_eligible": false
+  },
+  "healthcare": {
+   "l1_sector": "healthcare",
+   "l2_members_existing": [
+    "159570",
+    "159992",
+    "512010"
+   ],
+   "coverage_eligible": true
+  },
+  "overseas_equity": {
+   "l1_sector": "overseas_equity",
+   "l2_members_existing": [
+    "513180",
+    "159941",
+    "513500"
+   ],
+   "coverage_eligible": true
+  },
+  "software_ai": {
+   "l1_sector": "software_ai",
+   "l2_members_existing": [
+    "159819",
+    "159770",
+    "159852"
+   ],
+   "coverage_eligible": true
+  },
+  "tech_hardware": {
+   "l1_sector": "technology",
+   "l2_members_existing": [
+    "513310",
+    "159582",
+    "515880",
+    "512480",
+    "159995",
+    "512760",
+    "515050"
+   ],
+   "coverage_eligible": true
+  }
+ },
+ "members": {
+  "159570": {
+   "name": "港股通创新药ETF",
+   "l2_cluster": "healthcare",
+   "l1_sector": "healthcare",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "healthcare",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": true
+  },
+  "159582": {
+   "name": "半导体设备ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": true
+  },
+  "159770": {
+   "name": "机器人ETF",
+   "l2_cluster": "software_ai",
+   "l1_sector": "software_ai",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "software_ai",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159819": {
+   "name": "人工智能ETF",
+   "l2_cluster": "software_ai",
+   "l1_sector": "software_ai",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "software_ai",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159852": {
+   "name": "软件ETF",
+   "l2_cluster": "software_ai",
+   "l1_sector": "software_ai",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "software_ai",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159915": {
+   "name": "创业板ETF",
+   "l2_cluster": "growth_broad",
+   "l1_sector": "broad",
+   "coverage_eligible": false,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "growth_broad",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159928": {
+   "name": "消费ETF",
+   "l2_cluster": "consumer",
+   "l1_sector": "consumer",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "consumer",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159941": {
+   "name": "纳指ETF",
+   "l2_cluster": "overseas_equity",
+   "l1_sector": "overseas_equity",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "overseas_equity",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159992": {
+   "name": "创新药ETF",
+   "l2_cluster": "healthcare",
+   "l1_sector": "healthcare",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "healthcare",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "159995": {
+   "name": "芯片ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "510300": {
+   "name": "沪深300ETF",
+   "l2_cluster": "broad_beta",
+   "l1_sector": "broad",
+   "coverage_eligible": false,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "broad_beta",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": false,
+   "incumbent": false
+  },
+  "510880": {
+   "name": "红利ETF",
+   "l2_cluster": "defensive_dividend",
+   "l1_sector": "defensive_dividend",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "defensive_dividend",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512000": {
+   "name": "券商ETF",
+   "l2_cluster": "financial",
+   "l1_sector": "financial",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "financial",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512010": {
+   "name": "医药ETF",
+   "l2_cluster": "healthcare",
+   "l1_sector": "healthcare",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "healthcare",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512400": {
+   "name": "有色金属ETF",
+   "l2_cluster": "cyclical_resources",
+   "l1_sector": "cyclical_resources",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "cyclical_resources",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512480": {
+   "name": "半导体ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512660": {
+   "name": "军工ETF",
+   "l2_cluster": "cyclical_resources",
+   "l1_sector": "cyclical_resources",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "cyclical_resources",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512690": {
+   "name": "酒ETF",
+   "l2_cluster": "consumer",
+   "l1_sector": "consumer",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "consumer",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512760": {
+   "name": "芯片产业ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "512800": {
+   "name": "银行ETF",
+   "l2_cluster": "financial",
+   "l1_sector": "financial",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "financial",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "513180": {
+   "name": "恒生科技ETF",
+   "l2_cluster": "overseas_equity",
+   "l1_sector": "overseas_equity",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "overseas_equity",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "513310": {
+   "name": "中韩半导体ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": true
+  },
+  "513500": {
+   "name": "标普500ETF",
+   "l2_cluster": "overseas_equity",
+   "l1_sector": "overseas_equity",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "overseas_equity",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "515030": {
+   "name": "新能源车ETF",
+   "l2_cluster": "cyclical_resources",
+   "l1_sector": "cyclical_resources",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "cyclical_resources",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "515050": {
+   "name": "5G通信ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "515220": {
+   "name": "煤炭ETF",
+   "l2_cluster": "cyclical_resources",
+   "l1_sector": "cyclical_resources",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "cyclical_resources",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "515790": {
+   "name": "光伏ETF",
+   "l2_cluster": "cyclical_resources",
+   "l1_sector": "cyclical_resources",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "cyclical_resources",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "515880": {
+   "name": "通信ETF",
+   "l2_cluster": "tech_hardware",
+   "l1_sector": "technology",
+   "coverage_eligible": true,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "tech_hardware",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": true
+  },
+  "518880": {
+   "name": "黄金ETF",
+   "l2_cluster": "gold_commodity",
+   "l1_sector": "commodity",
+   "coverage_eligible": false,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "gold_commodity",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": true
+  },
+  "588000": {
+   "name": "科创50ETF",
+   "l2_cluster": "growth_broad",
+   "l1_sector": "broad",
+   "coverage_eligible": false,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "growth_broad",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  },
+  "588080": {
+   "name": "科创板50ETF",
+   "l2_cluster": "growth_broad",
+   "l1_sector": "broad",
+   "coverage_eligible": false,
+   "assignment_source": "clusters_v1.json + etf_master.correlation_cluster（权威）",
+   "keyword_rule_would_say": "growth_broad",
+   "keyword_rule_agrees": true,
+   "in_universe_v1": true,
+   "incumbent": false
+  }
+ },
+ "consistency": {
+  "clusters_v1_vs_etf_master_disagreements": [],
+  "keyword_rule_mismatches_in_pool": [],
+  "eligible_codes_sector_coverage": {
+   "l1_sectors_covered": [
+    "broad",
+    "commodity",
+    "consumer",
+    "cyclical_resources",
+    "defensive_dividend",
+    "financial",
+    "healthcare",
+    "overseas_equity",
+    "software_ai",
+    "technology"
+   ],
+   "n_l1": 10,
+   "n_coverage_eligible": 8
+  }
+ },
+ "unresolved": [
+  "「8」的原始出处仍未见文件枚举；本文件给出可复算构造，待用户确认。",
+  "若用户确认分母应为 9 / 10 / 11，只需改 coverage_denominator.value 与 members，其余结构不变（阈值 ≥6 不动）。",
+  "growth_broad 是否算「行业」需裁决：本文件按 sector=broad 判为非行业。"
+ ],
+ "o2_candidate_assignment_stats": {
+  "total": 1604,
+  "by_kind": {
+   "excluded": 59,
+   "non_sector": 317,
+   "sector": 726,
+   "unknown": 502
+  },
+  "unobserved_early_by_cluster": {
+   "broad_beta": 42,
+   "consumer": 4,
+   "cyclical_resources": 10,
+   "defensive_dividend": 3,
+   "financial": 11,
+   "gold_commodity": 3,
+   "growth_broad": 4,
+   "healthcare": 4,
+   "overseas_equity": 7,
+   "tech_hardware": 4
+  },
+  "unobserved_all_by_cluster": {
+   "broad_beta": 236,
+   "consumer": 65,
+   "cyclical_resources": 135,
+   "defensive_dividend": 115,
+   "financial": 59,
+   "gold_commodity": 11,
+   "growth_broad": 65,
+   "healthcare": 100,
+   "overseas_equity": 60,
+   "software_ai": 89,
+   "tech_hardware": 77
+  },
+  "unobserved_early_total": 92,
+  "unobserved_early_any_kind": 92,
+  "unobserved_early_unmatched": 0,
+  "unobserved_early_unmatched_codes": []
+ }
+}
