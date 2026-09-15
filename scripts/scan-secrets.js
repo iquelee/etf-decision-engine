@@ -33,6 +33,47 @@ function isPlaceholder(value) {
   return false;
 }
 
+/**
+ * GitHub 令牌形态检测。
+ *
+ * 覆盖 `ghp_`（经典 PAT）/ `gho_`（OAuth）/ `ghu_`（用户）/ `ghs_`（应用/服务）/
+ * `ghr_`（refresh）/ `github_pat_`（仓库限定细粒度）。
+ *
+ * 长度取 GitHub 官方 secret scanning 的口径（体 36+；细粒度 22+）；并**排除占位符体**
+ * （全同字符、`x`/下划线填充）——否则文档里的示例 `ghp_xxxx…` 会把发布门禁打成假红。
+ *
+ * 为什么必须单独查：本仓库原有检查只认 `FRED_API_KEY` / `DEEPSEEK_API_KEY` /
+ * `TUSHARE_TOKEN` / `OPENDART_API_KEY` / `sk-` / 通用 `api_key`，**GitHub 令牌形态完全
+ * 不在覆盖内**（2026-09-15 PAT 审计发现）。本函数是 Stage E 门禁与 `pack-source.js`
+ * 打包过滤的共同依赖。
+ */
+const GITHUB_TOKEN_RE_SRC = '\\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\\b';
+
+function isPlaceholderTokenBody(body) {
+  const b = String(body || '');
+  if (!b) return true;
+  if (/^(.)\1*$/.test(b)) return true;          // 全同字符（aaaa… / AAAA…）
+  if (/^[xX_]+$/.test(b)) return true;          // x 或下划线填充
+  if (/^x+_/i.test(b)) return true;             // 细粒度文档示例 xxxx_…
+  return false;
+}
+
+function githubTokenHits(text) {
+  const hits = [];
+  const re = new RegExp(GITHUB_TOKEN_RE_SRC, 'g');
+  let m;
+  while ((m = re.exec(text))) {
+    const raw = m[0];
+    const body = raw.slice(raw.indexOf('_') + 1);
+    if (isPlaceholderTokenBody(body)) continue;
+    hits.push({
+      key: 'GITHUB_TOKEN',
+      preview: `疑似 GitHub 令牌（${raw.slice(0, raw.indexOf('_') + 1)}…，${raw.length} 字符）`
+    });
+  }
+  return hits;
+}
+
 function looksLikeSecretAssignment(text) {
   const hits = [];
   const named = /(?:^|[\s,{;])["']?(FRED_API_KEY|DEEPSEEK_API_KEY|TUSHARE_TOKEN|OPENDART_API_KEY)["']?\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^\s,;]+))/gm;
@@ -48,6 +89,7 @@ function looksLikeSecretAssignment(text) {
   if (/\bsk-[a-zA-Z0-9]{16,}\b/.test(text)) {
     hits.push({ key: 'DEEPSEEK_LIKE', preview: '疑似 sk- 密钥' });
   }
+  for (const h of githubTokenHits(text)) hits.push(h);
   return hits;
 }
 
@@ -137,6 +179,8 @@ module.exports = {
   isPlaceholder,
   isSecretRel,
   looksLikeSecretAssignment,
+  githubTokenHits,
+  isPlaceholderTokenBody,
   scanPaths,
   scanZipNamelist
 };
