@@ -109,17 +109,62 @@ production_daily.ok == true  &&  benchmark_daily.ok == true
 
 ---
 
+# ⚠️ 已知偏差登记（2026-09-10 复审裁决）
+
+以下两项**均不阻塞 Gen-1 首次上线**，登记在案，上线链结束前不得顺带整改（减少变量原则）。
+
+## D-1：`fetchDailyData.InstallDependency = TRUE`（配置漂移，P2）
+
+```text
+fetchDailyData.InstallDependency = TRUE
+status              = KNOWN_CONFIG_DRIFT
+severity            = P2
+production_blocker  = false
+```
+
+- **判定依据**：属**配置一致性问题，不是功能/数据安全问题**。新代码已在线、部署包 SHA 对齐、模块加载与出网冒烟成功，且部署包**自带 `node_modules`**（不依赖运行时安装）。
+- **处置**：**不**为恢复 `FALSE` 去做设备码授权 + 二次部署 —— 那会为一个非阻塞配置引入新的变化源（CLI 登录态 + 重部署），违背「临近首次上线尽量减少变量」。
+- **恢复时机**：待 CloudBase CLI 登录态恢复稳定后，统一做一次 **Runtime Config Normalization**，届时一并复位为 `FALSE`。**不得夹在 Gen-1 Canary 上线链里执行。**
+
+## D-2：`fetchDailyData` 链式调用语义未按 Lane 区分（P2）
+
+现状：无论 Lane 结果为 `OK / PARTIAL / FAIL`，末尾都无条件链式调用 `materializeIndicators`。
+
+- **为何不阻塞**：① benchmark 失败时 Gen-1 下游 Data Health 本就 fail-closed；② V3.6.1 的 Main5 生产链**不应被 benchmark 拖死**（这是 B+ 的既定语义）；③ 首次执行安排在 15:45 finalized 之后。
+- **后续方向**（**不要现在扩 DATA-02 范围**）：
+
+```text
+Production Lane OK   → materializeIndicators 可运行
+Production Lane FAIL → 不链式物化 / 或显式标 degraded
+```
+
+## D-3：`DAILY_BAR_FINALIZATION_CUTOFF = '15:30'` 维持不变（观察期）
+
+- `15:45` 仅作为**首次人工 backfill 的保守执行时间**；日常生产逻辑固定用 `15:30` cutoff，两者不是一回事。
+- 现行规则：历史 bar 随时可写；today bar `< 15:30` 不写；`>= 15:30` 写并打 `is_final: true`。
+- **先观察实际生产几天**。若发现腾讯在 15:30 附近仍会修订 EOD OHLCV，再评估改 15:35/15:45；**当前无证据，不扩大安全余量**。
+
+---
+
+# 冻结管线处置确认（2026-09-10）
+
+- ✅ 未为「单一事实源更漂亮」去改冻结的 `runGen1ShadowEod`（Pipeline Lock 覆盖文件）。
+- 维持 **Frozen Contract Alias + CI 守卫**（G1-T 断言「字面量 === `GEN1_BENCHMARK_CODE`」）方案 —— 比重签 immutable root anchor 更稳（重签会破坏冻结链）。
+- `frozen model SHA` / `threshold_signal_p = 0.65` / Safety / authority / V3.6.1 / Gen-2 **全部零改动**。
+
+---
+
 ## 0. 上线前提（全部满足才继续）
 
 | 项 | 期望值 |
 |---|---|
-| 本地 `npm test` | **37/37** |
-| Gen-1 Production Gates | **G1-A ~ G1-T 20/20** |
+| 本地 `npm test` | **39/39** |
+| Gen-1 Production Gates | **G1-A ~ G1-U 21/21**（含 G1-T Benchmark Pipeline、G1-U Daily Finality） |
 | Immutable SHA | 11/11 |
 | Feature Pipeline Lock | 10/10（frozen 管线文件零改动） |
 | frozen model SHA | `d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712` |
 | `threshold_signal_p` | `0.65`（未改） |
-| 分支/PR 链 | #11→#12→#13→#14→#15→#16→#17→#18 **全部已合并入 master**（merge commit，未 squash） |
+| 分支/PR 链 | #11→…→#18+#19+#20 **全部已合并入 master**（merge commit，未 squash）；当前 master = `ad7330f8`（PR #20 merge） |
 
 ---
 
