@@ -4,7 +4,18 @@
   * 夹具**不能自证**：核对类断言必须让「正确的输入通过、错误的输入失败」两侧都跑到；
   * **不依赖本地日线池**：只用已入库的 manifest / 报告（CI 与本地一致）；
   * 本文件在**接受记录写入前、写入后都必须绿**（CI 跑的是已接受的那棵树）——
-    因此对 `run_status` 只断言「落在允许集合内」，不写死 `PENDING_REVIEW`。
+    因此对 `run_status` 只断言「落在允许集合内」，不写死 `PENDING_REVIEW`；
+  * **不依赖完整 git 历史**（PR #34 教训）：CI 用 `actions/checkout@v4`，默认
+    **`fetch-depth: 1`（浅克隆）**，且 PR 上检出的还是 `refs/pull/N/merge`
+    ⇒ `30943b2f`（B3 执行提交）与 `f8ef523c`（PR #33 合并提交）**都不在本机对象库里**。
+    于是「执行提交是合并提交的祖先」与「合并提交的树里有接受前报告 blob」这两件事
+    **在 CI 上无法从本地仓库复核**。凡依赖它们的断言，必须二选一：
+    **注入**（伪造「祖先判定」这一个动作为真，让下游校验 ②/③ 仍走真实实现），
+    或在该对象确实不可用时**显式跳过并写明原因** —— **绝不允许**在 CI 恒红，
+    也**不允许**把「无法复核」静默当成「已通过」。
+
+    这条与 PR #31 的教训同源：**测试必须在 CI 的检出条件下自洽**
+    （那里既没有完整 git 历史，也没有 `ml/gen2/outputs/` 这类未入库产物）。
 """
 from __future__ import annotations
 
@@ -35,6 +46,49 @@ def _clean_state() -> dict:
 def _dirty_state() -> dict:
     return {"working_tree_dirty": True, "dirty_tracked_paths": ["ml/x.py"],
             "git_head_commit": "x", "source_tree_sha": "y"}
+
+
+# ---------------------------------------------------------------- 浅克隆适配
+#
+# CI 与本地唯一的**检出条件差异**是 git 历史深度（`fetch-depth: 1`）。凡断言依赖
+# 「某个历史提交的对象 / 祖先关系」的，都必须在这里显式处理，否则 CI 恒红。
+
+def _commit_object_present(rev: str) -> bool:
+    """`rev` 的**提交对象**在本机对象库里是否可用（浅克隆下祖先提交不可见 ⇒ False）。"""
+    return bool(b1._git("rev-parse", "--verify", "--quiet", "%s^{commit}" % rev))
+
+
+class _AncestorResult:
+    """只伪造 `merge-base --is-ancestor` 的**退出码**（stdout 本就为空）。"""
+
+    def __init__(self, returncode: int):
+        self.returncode = returncode
+        self.stdout = ""
+        self.stderr = ""
+
+
+def _patch_ancestor(verdict: int | None):
+    """造一个 `_git_run` 替身：`merge-base --is-ancestor` 一律返回 `verdict`，其余走真实实现。
+
+    `verdict = 0` → 祖先成立；`1` → 不成立；`None` → 无法执行 git。
+
+    **为什么必须伪造**：CI 是浅克隆，`30943b2f` 与 `f8ef523c` 都不在对象库里
+    ⇒ 真实的 `merge-base --is-ancestor` 在 CI 上**必然判定失败** ⇒ 校验 ① 提前拒绝
+    ⇒ ② 的摘要逐项比对、③ 的树内 blob 比对**永远跑不到**，于是「② 必须拒绝摘要漂移」
+    这类用例在 CI 恒红（PR #34 的真实故障）。
+
+    伪造的**只有**「①祖先判定」这一个动作为真；下游 ②/③ 仍调用**真实实现**。
+    ① 本身并没有失去覆盖：由 `test_refuses_when_execution_head_not_ancestor`
+    与 `test_refuses_when_git_unavailable` 用 `verdict=1 / None` 正面钉住。
+    """
+    real = acc._git_run
+
+    def fake(*args):
+        if len(args) >= 2 and args[0] == "merge-base" and args[1] == "--is-ancestor":
+            return None if verdict is None else _AncestorResult(verdict)
+        return real(*args)
+
+    return fake
 
 
 class _Base(unittest.TestCase):
@@ -193,20 +247,48 @@ class EvidenceTest(_Base):
         """协议哈希是 B3「判据结果前冻结」的唯一凭据，不能缺。"""
         self.assertTrue(self.m["protocol"]["sha256"])
 
-    def test_accepted_tree_contains_pre_accept_report_blob(self):
-        """接受记录承诺的**接受前**报告哈希，必须仍能在**被接受的合并树**里找到 blob。
+    def test_accepted_report_digest_changed_and_matches_disk(self):
+        """**不需要 git 历史**：接受记录承诺的旧报告哈希必须 ≠ 当前磁盘报告哈希，
 
-        这是接受后仍可机器复核的追溯链：磁盘报告已被改写 ⇒ 原件的存在性只能由
-        「PR #33 合并提交的树里那个 blob」来证明，而不是靠磁盘。
+        且当前磁盘报告哈希 == manifest `outputs.committed_report.sha256`。
+        （接受记录把**接受前**那份报告的哈希承诺为 `bound_digests.committed_report_sha256`；
+        措辞改写后磁盘报告必然换哈希 —— 这半条在任何检出条件下都可断言。）
         """
         rec = self.m.get("acceptance_record")
         if not rec:
             self.skipTest("尚未写入接受记录")
         old = rec["bound_digests"]["committed_report_sha256"]
         new = self.m["outputs"]["committed_report"]["sha256"]
+        self.assertRegex(old, r"^[0-9a-f]{64}$")
+        self.assertNotEqual(old, new, "接受后报告哈希必须变化（措辞改写）")
+        self.assertEqual(new, _sha(REPORT))
+
+    def test_accepted_tree_contains_pre_accept_report_blob(self):
+        """接受记录承诺的**接受前**报告哈希，必须仍能在**被接受的合并树**里找到 blob。
+
+        这是接受后仍可机器复核的追溯链：磁盘报告已被改写 ⇒ 原件的存在性只能由
+        「PR #33 合并提交的树里那个 blob」来证明，而不是靠磁盘。
+
+        ⚠️ **依赖完整 git 历史**：CI 是浅克隆（`fetch-depth: 1`），合并提交对象不在
+        对象库里 ⇒ 这里**显式跳过**并写明原因，而不是让 CI 恒红、也不是把
+        「无法复核」当成「已通过」。该结论在**完整克隆**（本地门禁）中复核，
+        接受时的校验 ③ 亦已把结果记入 manifest 的 `committed_evidence`。
+        """
+        rec = self.m.get("acceptance_record")
+        if not rec:
+            self.skipTest("尚未写入接受记录")
+        merge_commit = rec["accepted_master_commit"]
+        if not _commit_object_present(merge_commit):
+            self.skipTest(
+                "浅克隆（actions/checkout@v4 默认 fetch-depth: 1）：合并提交 %s 的对象不在本机"
+                "对象库 ⇒ 无法复核「接受前报告 blob 仍在被接受树中」；请在**完整克隆**中复核"
+                "（本地门禁已复核，且接受时校验 ③ 的结果记录在 acceptance_record.committed_evidence）"
+                % merge_commit[:12])
+        old = rec["bound_digests"]["committed_report_sha256"]
+        new = self.m["outputs"]["committed_report"]["sha256"]
         self.assertNotEqual(old, new, "接受后报告哈希必须变化（措辞改写）")
         path = acc._rel(acc._abs(self.m["outputs"]["committed_report"]["file"]))
-        self.assertEqual(old, b1._git_blob_sha256(rec["accepted_master_commit"], path))
+        self.assertEqual(old, b1._git_blob_sha256(merge_commit, path))
         self.assertEqual(new, _sha(REPORT))
 
 
@@ -271,16 +353,45 @@ class FailClosedTest(unittest.TestCase):
         self.assertIn("取证时", str(cm.exception))
 
     def test_refuses_when_toolchain_digest_differs(self):
-        """改一处**被记录的工具链**摘要 ⇒ 校验 ② 必须拒绝（并指出是哪一条）。"""
+        """改一处**被记录的工具链**摘要 ⇒ 校验 ② 必须拒绝（并指出是哪一条）。
+
+        ① 的祖先判定被注入为真：本用例要钉的是 **②**，而 ① 在浅克隆下（CI）无法判定
+        ⇒ 不注入就会在 CI 恒红（PR #34 的真实故障）。① 由下面两个用例正面覆盖。
+        """
         m = json.loads(MANIFEST.read_text(encoding="utf-8"))
         m["run_implementation"][0]["sha256"] = "0" * 64
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td) / "man.json"
             tmp.write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
-            with mock.patch.object(acc, "source_state", _clean_state):
+            with mock.patch.object(acc, "source_state", _clean_state), \
+                 mock.patch.object(acc, "_git_run", _patch_ancestor(0)):
                 with self.assertRaises(FrozenAttestationError) as cm:
                     acc.accept_fail_merge("HEAD", manifest_path=tmp)
         self.assertIn("toolchain", str(cm.exception))
+
+    def test_refuses_when_execution_head_not_ancestor(self):
+        """校验 ① 正面用例：执行提交**不是** `<SHA>` 的祖先 ⇒ 拒绝写入。
+
+        用注入把①的判定钉成「不成立」，因此**不依赖真实 git 历史**（CI 浅克隆同样可跑）。
+        报错必须**点名执行提交**，否则无法诊断是哪个提交对不上。
+        """
+        m = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        execution_head = m["source_state"]["git_head_commit"]
+        with mock.patch.object(acc, "source_state", _clean_state), \
+             mock.patch.object(acc, "_git_run", _patch_ancestor(1)):
+            with self.assertRaises(FrozenAttestationError) as cm:
+                acc.accept_fail_merge("HEAD", manifest_path=MANIFEST)
+        msg = str(cm.exception)
+        self.assertIn("祖先", msg)
+        self.assertIn(execution_head[:12], msg)
+
+    def test_refuses_when_git_unavailable(self):
+        """`merge-base` 无法执行（`_git_run` 返回 None）⇒ 拒绝，**不得**当作通过。"""
+        with mock.patch.object(acc, "source_state", _clean_state), \
+             mock.patch.object(acc, "_git_run", _patch_ancestor(None)):
+            with self.assertRaises(FrozenAttestationError) as cm:
+                acc.accept_fail_merge("HEAD", manifest_path=MANIFEST)
+        self.assertIn("无法执行 git", str(cm.exception))
 
     def test_refuses_unresolvable_master_commit(self):
         with mock.patch.object(acc, "source_state", _clean_state):
