@@ -1,0 +1,1572 @@
+{
+  "manifest_type": "GEN2_B1_FROZEN_RUN",
+  "run_id": "b1_ledger_baseline_20260914_frozen_v201",
+  "created_at": "2026-09-14T10:24:33.226015+00:00",
+  "run_status": "PENDING_MERGE",
+  "run_status_note": "**待合并冻结运行**：本运行已完成全部取证，但在「冻结 PR + B1 PR 合并 → 独立分支 `chore/gen2-b1-accept-v201` 写入接受记录 → 该接受记录 PR 合并」完成之前，**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。",
+  "source_state": {
+    "git_head_commit": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
+    "source_tree_sha": "2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7",
+    "working_tree_dirty": false,
+    "dirty_tracked_paths": [],
+    "note": "`source_tree_sha` = **执行时**语义源码快照（`HEAD^{tree}`）。接受记录**不要求**它等于`<B1 merge SHA>^{tree}`（产物在执行后才提交 ⇒ 必然不同）；承重的是「`git_head_commit` 是 `<B1 merge SHA>` 的祖先」+ 组件 / 产物摘要一致。`working_tree_dirty=true` 时哈希不代表实际参与运行的字节，接受时会拒绝绑定。未跟踪文件不影响 tree。"
+  },
+  "boundaries": {
+    "stage": "SHADOW/CANARY",
+    "deployed": false,
+    "authority_promoted": false,
+    "writes_position": false,
+    "economic_claim_allowed": false,
+    "economic_claim_gate": "B3 FROZEN OOS（未通过前本 manifest 只作研发证据）",
+    "supersedes": {
+      "note": "旧报告自本次起只作审计基线，不再作为比较对象",
+      "old_run_id": "b1_ledger_baseline_20260911",
+      "old_report": "ml/gen2/reports/gen2_b1_research_baselines_20260911.md",
+      "candidate_run": {
+        "run_id": "b1_ledger_baseline_20260914_frozen_v201",
+        "lock_revision": 2,
+        "note": "lock_revision 2 下的候选冻结运行（有效候选证据，但不标为最终 Frozen B1）；本运行在 lock_revision 3 下取代之。两次扩围只收紧锁定范围、未改 bundle 字节与规则参数 ⇒ 读数应当一致；差异即缺陷。"
+      }
+    }
+  },
+  "frozen_input": {
+    "lock": {
+      "lock_file": "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json",
+      "lock_sha256": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_sha256_declared_in_root_anchors": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_revision": 3,
+      "engine_id": "gen2-rule-v2",
+      "bundle_version": "gen2-rule-v2.0.1",
+      "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+      "root_anchor_in_sync": true
+    },
+    "lock_component_digest": "86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c",
+    "immutable_set": [
+      {
+        "id": "bundle",
+        "role": "规则单一真相源（Python 回测 + Node Shadow 共用）",
+        "file": "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json",
+        "expected": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "actual": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "match": true
+      },
+      {
+        "id": "js_implementation",
+        "role": "JS 权威实现：角色状态机 / 权威权重 / 候选组合 / 发布校验",
+        "file": "cloudfunctions/runGen2ShadowEod/index.js",
+        "expected": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "actual": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "match": true
+      },
+      {
+        "id": "python_rule",
+        "role": "Python 规则实现：build_v2_roles 角色状态机",
+        "file": "ml/gen2/baseline/rule_v2_ab.py",
+        "expected": "89b4e6d867acacf80028fe2cba4fa51f07eecfdf51cfa48e6706b73451631e7f",
+        "actual": "89b4e6d867acacf80028fe2cba4fa51f07eecfdf51cfa48e6706b73451631e7f",
+        "match": true
+      },
+      {
+        "id": "python_candidate",
+        "role": "Python 候选组合实现：build_portfolio_candidates",
+        "file": "ml/gen2/portfolio/portfolio_builder.py",
+        "expected": "0831764c775fb4d3757d926d3105240573f4755b02075304186d2c7f1f245ccb",
+        "actual": "0831764c775fb4d3757d926d3105240573f4755b02075304186d2c7f1f245ccb",
+        "match": true
+      },
+      {
+        "id": "python_defense",
+        "role": "Python 防守实现：apply_regime_defense",
+        "file": "ml/gen2/portfolio/defense_gate.py",
+        "expected": "e3f48f081936ab0d9a5dac1645e6dce24121808785d26fde81e1d93d06e51afa",
+        "actual": "e3f48f081936ab0d9a5dac1645e6dce24121808785d26fde81e1d93d06e51afa",
+        "match": true
+      },
+      {
+        "id": "python_role_thresholds",
+        "role": "Python 阈值加载/校验契约：load_role_thresholds / validate_role_thresholds",
+        "file": "ml/gen2/portfolio/role_thresholds.py",
+        "expected": "62d542615e6b2be2d622c594c88433e51531b69c209e5b85140924376e74a9c4",
+        "actual": "62d542615e6b2be2d622c594c88433e51531b69c209e5b85140924376e74a9c4",
+        "match": true
+      },
+      {
+        "id": "python_selection_scores",
+        "role": "Python 显式 Alpha 实现：Alpha 计算 / 覆盖校验 / 内容哈希 / canonical 权重",
+        "file": "ml/gen2/baseline/selection_scores.py",
+        "expected": "1d67f768a654ff361b9e00fd1845a269585427436edad6af0eaf234d8cc27d2e",
+        "actual": "1d67f768a654ff361b9e00fd1845a269585427436edad6af0eaf234d8cc27d2e",
+        "match": true
+      },
+      {
+        "id": "python_regime",
+        "role": "Python 统一 regime 契约：RISK_ON_GE / RISK_OFF_LE 实际执行常量 + classify_regime",
+        "file": "ml/gen2/portfolio/regime.py",
+        "expected": "738f49c1bb2ed661bb86e7f19188e16ab26a7aebde4853c6b443a32bbeeb466e",
+        "actual": "738f49c1bb2ed661bb86e7f19188e16ab26a7aebde4853c6b443a32bbeeb466e",
+        "match": true
+      }
+    ],
+    "build_artifacts": [
+      {
+        "id": "dist_bundle",
+        "file": "dist-functions/runGen2ShadowEod/GEN2_RULE_V2_BUNDLE.json",
+        "must_equal": "bundle",
+        "declared_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "declared_match_mirror": true
+      },
+      {
+        "id": "dist_index",
+        "file": "dist-functions/runGen2ShadowEod/index.js",
+        "must_equal": "js_implementation",
+        "declared_sha256": "cb9a91b79a8ad9ee11c4271d4f321b38324a1f906bb229e83909292e59d37d1b",
+        "declared_match_mirror": true
+      }
+    ],
+    "bundle_selection": {
+      "role_thresholds": {
+        "core_top_fraction": 0.2,
+        "challenger_top_fraction": 0.3,
+        "satellite_top_fraction": 0.4
+      },
+      "legacy_migration_audit_status": "MIGRATION_AUDIT_ONLY"
+    },
+    "bundle_alpha": {
+      "trend": 0.3333333333,
+      "rs": 0.3333333333,
+      "breakout": 0.3333333333
+    },
+    "bundle_regime": {
+      "risk_on_ge": 55,
+      "risk_off_le": 45
+    }
+  },
+  "run_implementation": [
+    {
+      "id": "b1_frozen_run",
+      "role": "B1 冻结运行入口：三门前置核验 / 配置派生 / manifest 装配",
+      "file": "ml/gen2/baseline/b1_frozen_run.py",
+      "exists": true,
+      "sha256": "4aeb19dedadc7094c6fcd18bf6a32027a2b947c6b9260ac8631d72ad298fdd2a"
+    },
+    {
+      "id": "baseline_builder",
+      "role": "B1 基线构建：build_unified_baselines（特征→排名→角色→权重→账本）",
+      "file": "ml/gen2/baseline/rebuild_baselines.py",
+      "exists": true,
+      "sha256": "f4197e28a43380cb406befdfb54aeb5197bb1a3bd65da5e609182a23f4eaef93"
+    },
+    {
+      "id": "ledger",
+      "role": "唯一权威账本：run_ledger / LEDGER_CONTRACT（费用 = turnover × bps / 1e4）",
+      "file": "ml/gen2/backtest/ledger.py",
+      "exists": true,
+      "sha256": "d4fe7907741be52aaa721e13f4973d441c5c2df236f4ffe381259cb75d2d5b53"
+    },
+    {
+      "id": "cost_impl",
+      "role": "费用兼容层：apply_turnover_cost（委托 ledger.run_ledger，非自带实现）",
+      "file": "ml/gen2/backtest/costs.py",
+      "exists": true,
+      "sha256": "535b16cf85f09d59878d91fe846e2d9d8f148de79f01ee0f5cbcde8aa0c2bbad"
+    }
+  ],
+  "environment": {
+    "python": "3.13.14",
+    "python_implementation": "CPython",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "byteorder": "little"
+  },
+  "input_data": {
+    "daily_dir": "deliverables/etf_daily_ml_pool",
+    "codes": [
+      "513310",
+      "159582",
+      "515880",
+      "159570",
+      "518880",
+      "588000",
+      "588080",
+      "512480",
+      "159995",
+      "512760",
+      "515050",
+      "159819",
+      "159915",
+      "159992",
+      "159770",
+      "159852",
+      "512010",
+      "512690",
+      "159928",
+      "510880",
+      "512800",
+      "512000",
+      "512660",
+      "515030",
+      "515790",
+      "512400",
+      "515220",
+      "513180",
+      "159941",
+      "513500",
+      "510300"
+    ],
+    "rows_total": 38083,
+    "date_range": {
+      "first_date": "2011-12-09",
+      "last_date": "2026-09-04"
+    },
+    "files": [
+      {
+        "code": "513310",
+        "file": "deliverables/etf_daily_ml_pool/513310_qfq.csv",
+        "rows": 898,
+        "first_date": "2022-12-22",
+        "last_date": "2026-09-04",
+        "sha256": "5aede708b5dc562c30c09493c7fc03bd446701ee3d0a808a071ad46bdeb94c6f"
+      },
+      {
+        "code": "159582",
+        "file": "deliverables/etf_daily_ml_pool/159582_qfq.csv",
+        "rows": 582,
+        "first_date": "2024-04-16",
+        "last_date": "2026-09-04",
+        "sha256": "2eb03468d97bcd44012edf2dc3d87c0fceaf144ac04813a553aecc65292f4755"
+      },
+      {
+        "code": "515880",
+        "file": "deliverables/etf_daily_ml_pool/515880_qfq.csv",
+        "rows": 1696,
+        "first_date": "2019-09-06",
+        "last_date": "2026-09-04",
+        "sha256": "b470c90487db9c1efb539b4a085a778b0b026641fe58269e172e813dffafa6fa"
+      },
+      {
+        "code": "159570",
+        "file": "deliverables/etf_daily_ml_pool/159570_qfq.csv",
+        "rows": 635,
+        "first_date": "2024-01-22",
+        "last_date": "2026-09-04",
+        "sha256": "7bcb0b2bb4b8913e3f2e112272cb3ee4d0f88bd0e5b2591e741b3c54d6be33dc"
+      },
+      {
+        "code": "518880",
+        "file": "deliverables/etf_daily_ml_pool/518880_qfq.csv",
+        "rows": 810,
+        "first_date": "2023-05-09",
+        "last_date": "2026-09-04",
+        "sha256": "0978095c379aff1da207b42f05193d8f25e4b134f5ea9c3fa2a79afba0991e4e"
+      },
+      {
+        "code": "588000",
+        "file": "deliverables/etf_daily_ml_pool/588000_qfq.csv",
+        "rows": 1410,
+        "first_date": "2020-11-16",
+        "last_date": "2026-09-04",
+        "sha256": "a38af4029ceace1e65d523a79ae19ef9df2f46c5bd1374bb0f6ebc214fbd2924"
+      },
+      {
+        "code": "588080",
+        "file": "deliverables/etf_daily_ml_pool/588080_qfq.csv",
+        "rows": 1410,
+        "first_date": "2020-11-16",
+        "last_date": "2026-09-04",
+        "sha256": "80e59ddb0296c37c6330a0be5caf090e35c0cac459eddd2e05d95296e407107e"
+      },
+      {
+        "code": "512480",
+        "file": "deliverables/etf_daily_ml_pool/512480_qfq.csv",
+        "rows": 1757,
+        "first_date": "2019-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "a1b723fb1c7997fc506919cb9b935ad046e84957b6ee76b75b3ef9ecad9ca696"
+      },
+      {
+        "code": "159995",
+        "file": "deliverables/etf_daily_ml_pool/159995_qfq.csv",
+        "rows": 1598,
+        "first_date": "2020-02-10",
+        "last_date": "2026-09-04",
+        "sha256": "acf026b01ac015e464e99ec09b4af96a363ec72e68b6f674877c07550f5bad75"
+      },
+      {
+        "code": "512760",
+        "file": "deliverables/etf_daily_ml_pool/512760_qfq.csv",
+        "rows": 1757,
+        "first_date": "2019-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "95e1c6547a30e0510040d768ba1c6ac758b9d4b5f2f1a9c04d11ab479242727f"
+      },
+      {
+        "code": "515050",
+        "file": "deliverables/etf_daily_ml_pool/515050_qfq.csv",
+        "rows": 1674,
+        "first_date": "2019-10-16",
+        "last_date": "2026-09-04",
+        "sha256": "24d3bafe034d63820d949319d66c4f31278fc4b68360e48cea1806f1c761b443"
+      },
+      {
+        "code": "159819",
+        "file": "deliverables/etf_daily_ml_pool/159819_qfq.csv",
+        "rows": 1442,
+        "first_date": "2020-09-23",
+        "last_date": "2026-09-04",
+        "sha256": "032002a9614fab36bd9f518009efb528031457c041ad5478df63f9f2af8741c6"
+      },
+      {
+        "code": "159915",
+        "file": "deliverables/etf_daily_ml_pool/159915_qfq.csv",
+        "rows": 3579,
+        "first_date": "2011-12-09",
+        "last_date": "2026-09-04",
+        "sha256": "0123dd26e9188eefbd4726f9f24bad8684910eb9be181fb5639e23aeefd809c5"
+      },
+      {
+        "code": "159992",
+        "file": "deliverables/etf_daily_ml_pool/159992_qfq.csv",
+        "rows": 1555,
+        "first_date": "2020-04-10",
+        "last_date": "2026-09-04",
+        "sha256": "175698cf212169e6bc3293c72fdbb94a7403ae1b6928d8bc9d67782f879a2653"
+      },
+      {
+        "code": "159770",
+        "file": "deliverables/etf_daily_ml_pool/159770_qfq.csv",
+        "rows": 1173,
+        "first_date": "2021-11-08",
+        "last_date": "2026-09-04",
+        "sha256": "dbc10a5b3d3e8e65cecd6acbab1b7dfa606636501267d151e4ba019fb78d4e8b"
+      },
+      {
+        "code": "159852",
+        "file": "deliverables/etf_daily_ml_pool/159852_qfq.csv",
+        "rows": 1350,
+        "first_date": "2021-02-09",
+        "last_date": "2026-09-04",
+        "sha256": "02c7c1cb81a26f4c9724f88e7d1848a98b99948095662a8ed9187dc6181189bb"
+      },
+      {
+        "code": "512010",
+        "file": "deliverables/etf_daily_ml_pool/512010_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "ab624712cbb5833534b2105e2176d963491981abb4897093d4de0aa243943ea1"
+      },
+      {
+        "code": "512690",
+        "file": "deliverables/etf_daily_ml_pool/512690_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "3f4b3e88b6b9e78b8a35d2e76fec0775eab1e0ff9c02b063d031afe4ccc74749"
+      },
+      {
+        "code": "159928",
+        "file": "deliverables/etf_daily_ml_pool/159928_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "416ac847f8a53ffc5af838265f4642e9c9e61492162026503e2a673e83461ef8"
+      },
+      {
+        "code": "510880",
+        "file": "deliverables/etf_daily_ml_pool/510880_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "93767147e3ef6776c33825774f3a1f25e529a4a3d8f2f306093433bce0a642a5"
+      },
+      {
+        "code": "512800",
+        "file": "deliverables/etf_daily_ml_pool/512800_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "4085ccdbba9b745a7531dfebfc5b2c8e03785f4e271cc2940f13444dc7c2bfc2"
+      },
+      {
+        "code": "512000",
+        "file": "deliverables/etf_daily_ml_pool/512000_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "808608548d37c91b7d74231efe89ae6a1acebded4cc65df64185067b9692025c"
+      },
+      {
+        "code": "512660",
+        "file": "deliverables/etf_daily_ml_pool/512660_qfq.csv",
+        "rows": 2000,
+        "first_date": "2018-06-12",
+        "last_date": "2026-09-04",
+        "sha256": "53f0e12dd3f2b0729e8e06aa8545ba19af6fb7aaef149cc8586346b8e3027b3c"
+      },
+      {
+        "code": "515030",
+        "file": "deliverables/etf_daily_ml_pool/515030_qfq.csv",
+        "rows": 1581,
+        "first_date": "2020-03-04",
+        "last_date": "2026-09-04",
+        "sha256": "fc0d3888a0cd78eb2049b8e4d2ff3cde5b779143d428dbf94be5b3a0f6eec801"
+      },
+      {
+        "code": "515790",
+        "file": "deliverables/etf_daily_ml_pool/515790_qfq.csv",
+        "rows": 1386,
+        "first_date": "2020-12-18",
+        "last_date": "2026-09-04",
+        "sha256": "b95f084f3123e127c254eb3050ef20db4dceb4b179cb34adf97ecbd7185cc433"
+      },
+      {
+        "code": "512400",
+        "file": "deliverables/etf_daily_ml_pool/512400_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "42f3b5d75c29783a37643ba965a50a164665c2487497eea5aaa4b73b0af61f6b"
+      },
+      {
+        "code": "515220",
+        "file": "deliverables/etf_daily_ml_pool/515220_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "000f626e7bf204a4dd04831a25607e0206f6a4bcf41ccb8d0168db9fdc4f6eb7"
+      },
+      {
+        "code": "513180",
+        "file": "deliverables/etf_daily_ml_pool/513180_qfq.csv",
+        "rows": 1284,
+        "first_date": "2021-05-25",
+        "last_date": "2026-09-04",
+        "sha256": "2ec308811bba8fc261824f89f8ba6c831a092f9f89f0e3398dd15ef269140d55"
+      },
+      {
+        "code": "159941",
+        "file": "deliverables/etf_daily_ml_pool/159941_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "c696ad77b863804da8a0a4d0883ecd3aac4d81fb8ddc81fcd96eebcb6485198c"
+      },
+      {
+        "code": "513500",
+        "file": "deliverables/etf_daily_ml_pool/513500_qfq.csv",
+        "rows": 640,
+        "first_date": "2024-01-15",
+        "last_date": "2026-09-04",
+        "sha256": "e51839779425d63ac08133c8720753702092ceedbe9864e47236b4f7cff87ae2"
+      },
+      {
+        "code": "510300",
+        "file": "deliverables/etf_daily_ml_pool/510300_qfq.csv",
+        "rows": 2106,
+        "first_date": "2018-01-02",
+        "last_date": "2026-09-04",
+        "sha256": "b1ff29f7ae13b65796a0ccbbc30647742742d9b5af84c2f61da91c97d23fd71c"
+      }
+    ],
+    "meta_files": [
+      {
+        "id": "etf_master",
+        "file": "ml/gen2/universe/etf_master.csv",
+        "sha256": "31e6d6fc81e3b3b69824970414ed49d77c609b00ad7341e01e33f14044fc9147"
+      },
+      {
+        "id": "universe_definition",
+        "file": "ml/gen2/universe/universe_v1.json",
+        "sha256": "013457b3ec9405f877840bc253efc6d313dcfc337ebff5ab12285c59623cc03a"
+      }
+    ],
+    "content_digest": "7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191"
+  },
+  "config_attestation": {
+    "rule_map": [
+      {
+        "key": "portfolio.max_single_weight",
+        "bundle_path": "portfolio/max_single_weight",
+        "run_config_path": "portfolio/max_single_weight"
+      },
+      {
+        "key": "portfolio.max_cluster_weight",
+        "bundle_path": "portfolio/max_cluster_weight",
+        "run_config_path": "portfolio/max_cluster_weight"
+      },
+      {
+        "key": "portfolio.max_tech_weight",
+        "bundle_path": "portfolio/max_tech_weight",
+        "run_config_path": "portfolio/max_tech_weight"
+      },
+      {
+        "key": "portfolio.tech_clusters",
+        "bundle_path": "portfolio/tech_clusters",
+        "run_config_path": "portfolio/tech_clusters"
+      },
+      {
+        "key": "portfolio.max_core_count",
+        "bundle_path": "selection/max_core_count",
+        "run_config_path": "portfolio/max_core_count"
+      },
+      {
+        "key": "portfolio.max_core_per_cluster",
+        "bundle_path": "selection/max_core_per_cluster",
+        "run_config_path": "portfolio/max_core_per_cluster"
+      },
+      {
+        "key": "portfolio.promotion_persistence_days",
+        "bundle_path": "selection/promotion_persistence_days",
+        "run_config_path": "portfolio/promotion_persistence_days"
+      },
+      {
+        "key": "portfolio.demotion_persistence_days",
+        "bundle_path": "selection/demotion_persistence_days",
+        "run_config_path": "portfolio/demotion_persistence_days"
+      },
+      {
+        "key": "portfolio.min_replacement_edge",
+        "bundle_path": "selection/min_replacement_edge",
+        "run_config_path": "portfolio/min_replacement_edge"
+      },
+      {
+        "key": "portfolio.role_thresholds",
+        "bundle_path": "selection/role_thresholds",
+        "run_config_path": "portfolio/role_thresholds"
+      },
+      {
+        "key": "portfolio.defense.risk_off_exposure_scale",
+        "bundle_path": "defense/risk_off_exposure_scale",
+        "run_config_path": "portfolio/defense/risk_off_exposure_scale"
+      },
+      {
+        "key": "portfolio.defense.risk_off_hedge_weight",
+        "bundle_path": "defense/risk_off_hedge_weight",
+        "run_config_path": "portfolio/defense/risk_off_hedge_weight"
+      },
+      {
+        "key": "portfolio.defense.hedge_code",
+        "bundle_path": "defense/hedge_code",
+        "run_config_path": "portfolio/defense/hedge_code"
+      },
+      {
+        "key": "portfolio.defense.vol_target_enabled",
+        "bundle_path": "defense/vol_target_enabled",
+        "run_config_path": "portfolio/defense/vol_target_enabled"
+      },
+      {
+        "key": "portfolio.defense.vol_target_annualized",
+        "bundle_path": "defense/vol_target_annualized",
+        "run_config_path": "portfolio/defense/vol_target_annualized"
+      },
+      {
+        "key": "data.benchmark_code",
+        "bundle_path": "benchmark_code",
+        "run_config_path": "data/benchmark_code"
+      },
+      {
+        "key": "universe.version",
+        "bundle_path": "universe_version",
+        "run_config_path": "universe/version"
+      }
+    ],
+    "drift": [],
+    "cross_checks": [],
+    "config_source": "FROZEN_BUNDLE_OVERLAY"
+  },
+  "run_inputs": {
+    "universe_version": null,
+    "benchmark_code": "510300",
+    "main5": [
+      "513310",
+      "159582",
+      "515880",
+      "159570",
+      "518880"
+    ],
+    "cost_levels": [
+      0.0,
+      5.0,
+      10.0,
+      20.0
+    ],
+    "default_cost_bps": 10.0,
+    "role_thresholds_from_config": {
+      "core_top_fraction": 0.2,
+      "challenger_top_fraction": 0.3,
+      "satellite_top_fraction": 0.4,
+      "source": "CONFIG_ROLE_THRESHOLDS",
+      "derived": {
+        "core_pct": 0.8,
+        "challenger_pct": 0.7,
+        "satellite_pct": 0.6
+      }
+    },
+    "selection": {
+      "score_version": "alpha-v2-equal-3",
+      "score_source": "bundle.alpha",
+      "score_hash": "2fb5b477fdc6e728eb81082ec5b173f92feda48b6a2945c2ef6a78e262985081",
+      "score_weights": {
+        "trend": 0.3333333333333333,
+        "rs": 0.3333333333333333,
+        "breakout": 0.3333333333333333
+      },
+      "score_coverage": 30992,
+      "notes": [
+        "canonical Alpha = 1/3*(trend+rs+breakout)，与 compute_alpha_score_v2 逐位一致"
+      ]
+    },
+    "ledger_contract_source": "gen2.backtest.ledger.LEDGER_CONTRACT",
+    "role_semantics": "gen2.baseline.rule_v2_ab.build_v2_roles"
+  },
+  "window": {
+    "calendar": {
+      "first_date": "2020-03-10",
+      "last_date": "2026-09-04",
+      "days": 1577,
+      "strategies": [
+        "gen2_v2_defended__0.0bps",
+        "gen2_v2_defended__10.0bps",
+        "gen2_v2_defended__20.0bps",
+        "gen2_v2_defended__5.0bps",
+        "gen2_v2_undefended__0.0bps",
+        "gen2_v2_undefended__10.0bps",
+        "gen2_v2_undefended__20.0bps",
+        "gen2_v2_undefended__5.0bps",
+        "main5_equal_weight__0.0bps",
+        "main5_equal_weight__10.0bps",
+        "main5_equal_weight__20.0bps",
+        "main5_equal_weight__5.0bps",
+        "market_510300__0.0bps",
+        "market_510300__10.0bps",
+        "market_510300__20.0bps",
+        "market_510300__5.0bps",
+        "universe_equal_weight__0.0bps",
+        "universe_equal_weight__10.0bps",
+        "universe_equal_weight__20.0bps",
+        "universe_equal_weight__5.0bps"
+      ]
+    },
+    "common_window": {
+      "per_strategy_signal_window": {
+        "gen2_v2_defended": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "gen2_v2_undefended": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "main5_equal_weight": {
+          "first": "2020-03-10",
+          "last": "2026-09-04",
+          "days": 1577
+        },
+        "universe_equal_weight": {
+          "first": "2018-04-03",
+          "last": "2026-09-04",
+          "days": 2046
+        },
+        "market_510300": {
+          "first": "2018-01-02",
+          "last": "2026-09-04",
+          "days": 2106
+        }
+      },
+      "naive_union_days": 3580,
+      "common_days": 1577,
+      "excluded_leading_days": 2003
+    }
+  },
+  "acceptance": {
+    "conservation_max_error": 0.0,
+    "cash_min": 0.0,
+    "gross_exposure_max": 1.0,
+    "over_allocated_days_total": 0,
+    "dropped_signal_days_total": 20,
+    "missing_quote_days_total": 20,
+    "ledgers": 20,
+    "strategies": [
+      "gen2_v2_defended",
+      "gen2_v2_undefended",
+      "main5_equal_weight",
+      "market_510300",
+      "universe_equal_weight"
+    ],
+    "gate_pass": true
+  },
+  "artifacts": [
+    {
+      "file": "ledger_daily.csv",
+      "exists": true,
+      "sha256": "c6ff697b36c84e6bd0324572261b20be9d5a6a7e5f6192463c4dfd5aa4772f51",
+      "bytes": 4951772
+    },
+    {
+      "file": "ledger_summary.csv",
+      "exists": true,
+      "sha256": "1bb10a755cad512070f9a03fa41d678b0dba92057a97453a2d63d64e1fef3567",
+      "bytes": 4105
+    },
+    {
+      "file": "calendar_meta.json",
+      "exists": true,
+      "sha256": "baebaf18d010300c1ba4ffe9c70a94e904bec4a081b57bf194982bbee15f6408",
+      "bytes": 3347
+    },
+    {
+      "file": "gen2_b1_ledger_baseline_20260914_frozen_v201.md",
+      "exists": true,
+      "sha256": "c9e8d6e0f4e99fc126b6365c2dc09b541d9f2deedddbf61626579ccb3106c5d3",
+      "bytes": 5011
+    }
+  ],
+  "attribution": {
+    "audit_baseline": {
+      "run_id": "b1_ledger_baseline_20260911",
+      "snapshot_file": "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json",
+      "snapshot_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+      "captured_from": "ml/gen2/outputs/b1_ledger_baseline_20260911/ledger_summary.csv",
+      "captured_from_sha256": "53327be86701460b34f6dff8fde354fc7b593b956f86c8eb3965f3f10bbd0780",
+      "window": {
+        "date_from": "2020-03-10",
+        "date_to": "2026-09-04",
+        "days": 1577,
+        "source": "ml/gen2/outputs/b1_ledger_baseline_20260911/calendar_meta.json + ledger_summary.csv"
+      },
+      "cost_levels": [
+        0.0,
+        5.0,
+        10.0,
+        20.0
+      ],
+      "code_state_timeline": {
+        "note": "旧基线产出时间 = 2026-09-11 14:21（ledger_summary.csv 文件 mtime）。据此判定四项已登记变更是否落在该基线之内。commit 时间取 git author date（+08:00）。",
+        "d001": {
+          "commit": "2349353",
+          "at": "2026-09-11T11:06:26+08:00",
+          "in_this_baseline": true,
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "D-001 裁决落地早于旧基线产出（11:06 < 14:21）⇒ 无条件终局约束检查已在旧基线内。"
+        },
+        "ledger_unified": {
+          "commit": "03cf814",
+          "at": "2026-09-11T14:58:45+08:00",
+          "in_this_baseline": true,
+          "files": [
+            "ml/gen2/backtest/ledger.py",
+            "ml/gen2/backtest/costs.py"
+          ],
+          "note": "WP-G2-02 之后 ledger.py / costs.py 再无提交（git log 验证）⇒ 旧基线与本次冻结运行使用**同一账本契约**；再由基准策略（main5 / universe / market_510300）逐位相同（换手比 1.00000、Δ净值 0.000000 @0/5/10/20bps）独立佐证。"
+        },
+        "f1f2": {
+          "commit": "363ad53",
+          "at": "2026-09-11T17:04:59+08:00",
+          "in_this_baseline": false,
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "WP-G2-05 落地晚于旧基线产出（17:04 > 14:21）⇒ 严格说不在旧基线内；但按设计（`role_thresholds` core 0.20/challenger 0.30/satellite 0.40 ≡ 旧默认 core 0.80/challenger 0.70/satellite 0.60，且 canonical Alpha 与旧内部重算逐值等价）对**默认跑法**的数值贡献为 0。"
+        },
+        "f4": {
+          "commits": [
+            "2b425b8",
+            "5ad7555"
+          ],
+          "at": [
+            "2026-09-14T11:52:13+08:00",
+            "2026-09-14T13:15:08+08:00"
+          ],
+          "in_this_baseline": false,
+          "files": [
+            "ml/gen2/portfolio/portfolio_builder.py",
+            "ml/gen2/portfolio/defense_gate.py"
+          ],
+          "note": "WP-G2-06（F4）晚于旧基线 ⇒ 构成本次 Δ 的唯一实现来源。"
+        }
+      },
+      "measured_mechanism": {
+        "old_candidate_weights": {
+          "finding": "旧基线的候选权重是 1/n 等权（丢弃 bundle 的单只/cluster/科技上限）",
+          "evidence": [
+            "ml/gen2/outputs/b1_ledger_baseline_20260911/research/rule_rotation/portfolio_candidates.csv",
+            "2020-05-27: CORE=1 → target_weight=1.0（= 1/1）",
+            "2023-06-30: CORE=3 → 每只 target_weight=0.333333（= 1/3），合计 1.0"
+          ]
+        },
+        "bundle_caps_ignored_by_old": {
+          "portfolio.max_single_weight": 0.25,
+          "portfolio.max_cluster_weight": 0.4,
+          "portfolio.max_tech_weight": 0.65,
+          "selection.max_core_count": 5
+        },
+        "exposure_evidence": {
+          "defended_0bps_old_nonzero_cash_days": 1107,
+          "defended_0bps_new_nonzero_cash_days": 1423,
+          "defended_0bps_old_mean_cash_weight": 0.42874,
+          "defended_0bps_new_mean_cash_weight": 0.58967,
+          "note": "旧基线在 CORE=1 的日子把 100% 押在单只（超 0.25 上限），因此敞口更高、换手更大；新基线受 0.25 单只上限约束 ⇒ 敞口更低、更分散。"
+        }
+      }
+    },
+    "changes": [
+      {
+        "id": "D-001",
+        "name": "规则实现修正：出口无条件终局约束检查",
+        "mechanism": "角色生成路径出口统一走 `finalizeRoles` / `finalize_roles`，**无条件**执行终局约束检查（CORE 数量上限 / 每 cluster CORE 上限 / NO_CORE 不可恢复 / 单资产·cluster·科技·现金约束）；此前「无 cap 降级现任且无替换」的交易日会**跳过**该检查。",
+        "metric_moved": "角色分布 / 降级日 → 换手、防守触发日、净值",
+        "in_audit_baseline": true,
+        "in_this_delta": false,
+        "evidence": {
+          "commit": "2349353",
+          "at": "2026-09-11T11:06:26+08:00",
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "D-001 裁决落地早于旧基线产出（11:06 < 14:21）⇒ 无条件终局约束检查已在旧基线内。"
+        },
+        "numeric_contribution": "none_already_in_audit_baseline"
+      },
+      {
+        "id": "F1/F2",
+        "name": "信号质量修复：Alpha 显式注入 + 角色阈值显式化",
+        "mechanism": "`build_v2_roles` 不再静默重算 Alpha（评分必须显式注入并带覆盖校验与内容哈希）；`top_quantile` 改为显式 `role_thresholds`。",
+        "metric_moved": "修复前「声明了旋钮、组合指标却与 baseline 逐位相同」的假读数消失",
+        "in_audit_baseline": false,
+        "in_this_delta": true,
+        "evidence": {
+          "commit": "363ad53",
+          "at": "2026-09-11T17:04:59+08:00",
+          "file": "ml/gen2/baseline/rule_v2_ab.py",
+          "note": "WP-G2-05 落地晚于旧基线产出（17:04 > 14:21）⇒ 严格说不在旧基线内；但按设计（`role_thresholds` core 0.20/challenger 0.30/satellite 0.40 ≡ 旧默认 core 0.80/challenger 0.70/satellite 0.60，且 canonical Alpha 与旧内部重算逐值等价）对**默认跑法**的数值贡献为 0。"
+        },
+        "numeric_contribution": "none_by_default_equivalence"
+      },
+      {
+        "id": "F4",
+        "name": "统一候选组合（WP-G2-06）",
+        "mechanism": "`build_portfolio_candidates` 不再把 CORE 重置为等权 `1/n`、不再丢弃单只 / cluster / 广义科技上限；`priority` 改为显式注入的未四舍五入 selection score；候选新增现金腿与防守腿；`main()` 接入唯一候选链路。",
+        "metric_moved": "候选权重语义（1/n 等权 → 权威 target_weight + 上限）→ 敞口、换手、费用、净值",
+        "in_audit_baseline": false,
+        "in_this_delta": true,
+        "evidence": {
+          "commits": [
+            "2b425b8",
+            "5ad7555"
+          ],
+          "at": [
+            "2026-09-14T11:52:13+08:00",
+            "2026-09-14T13:15:08+08:00"
+          ],
+          "files": [
+            "ml/gen2/portfolio/portfolio_builder.py",
+            "ml/gen2/portfolio/defense_gate.py"
+          ],
+          "note": "WP-G2-06（F4）晚于旧基线 ⇒ 构成本次 Δ 的唯一实现来源。"
+        },
+        "numeric_contribution": "material"
+      },
+      {
+        "id": "统一账本",
+        "name": "唯一权威账本（WP-G2-02）",
+        "mechanism": "换手 = **单边成交名义额** `Σ_证券|Δ|`（更早的实现在现金腿**重复计费**，最坏把换手与费用高估 2 倍）；公共日历强校验；T+1 执行 + 期初全现金。",
+        "metric_moved": "换手与费用口径（费用偏高 ⇒ 净收益偏低）",
+        "in_audit_baseline": true,
+        "in_this_delta": false,
+        "evidence": {
+          "commit": "03cf814",
+          "at": "2026-09-11T14:58:45+08:00",
+          "files": [
+            "ml/gen2/backtest/ledger.py",
+            "ml/gen2/backtest/costs.py"
+          ],
+          "note": "WP-G2-02 之后 ledger.py / costs.py 再无提交（git log 验证）⇒ 旧基线与本次冻结运行使用**同一账本契约**；再由基准策略（main5 / universe / market_510300）逐位相同（换手比 1.00000、Δ净值 0.000000 @0/5/10/20bps）独立佐证。"
+        },
+        "numeric_contribution": "none_already_in_audit_baseline"
+      }
+    ],
+    "controls": {
+      "comparable": true,
+      "window_mismatch": null,
+      "cost_level_mismatch": null,
+      "audit_baseline_window": {
+        "first_date": "2020-03-10",
+        "last_date": "2026-09-04",
+        "days": 1577
+      },
+      "run_window": {
+        "first_date": "2020-03-10",
+        "last_date": "2026-09-04",
+        "days": 1577
+      },
+      "benchmark_strategies": [
+        "main5_equal_weight",
+        "market_510300",
+        "universe_equal_weight"
+      ],
+      "benchmark_max_abs_cum_return_delta": 0.0,
+      "benchmark_bit_identical": true,
+      "note": "基准策略不经过规则实现 ⇒ 其 Δ 必须恰为 0；为 0 同时证明**账本契约与基准路径未变**（即「统一账本」不构成本次 Δ 的来源）。"
+    },
+    "rows": [
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 2.5777862286081676,
+          "cumulative_return": 1.5777862286081676,
+          "cagr": 0.16336516358417552,
+          "sharpe": 0.7916070970218252,
+          "mdd": -0.2610695356855185,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.8525257462161806,
+          "cumulative_return": 0.8525257462161806,
+          "cagr": 0.10353966165685713,
+          "sharpe": 0.684574992743875,
+          "mdd": -0.21503906781801596,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": -0.7252604824,
+          "cumulative_return": -0.7252604824,
+          "cagr": -0.0598255019,
+          "sharpe": -0.1070321043,
+          "mdd": 0.0460304679,
+          "total_turnover": -92.7872611823,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.9714747582637127,
+          "cumulative_return": 0.9714747582637127,
+          "cagr": 0.1145685317895282,
+          "sharpe": 0.5231303323228726,
+          "mdd": -0.3758261953092238,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.6369890042791717,
+          "cumulative_return": 0.6369890042791717,
+          "cagr": 0.08194177183733298,
+          "sharpe": 0.49557320618067957,
+          "mdd": -0.27696094305201924,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": -0.334485754,
+          "cumulative_return": -0.334485754,
+          "cagr": -0.03262676,
+          "sharpe": -0.0275571261,
+          "mdd": 0.0988652523,
+          "total_turnover": -91.4993008182,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 2.8451859445301264,
+          "cumulative_return": 1.8451859445301264,
+          "cagr": 0.18185870402627202,
+          "sharpe": 0.7479082975542212,
+          "mdd": -0.4581497797356837,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 2.8451859445301264,
+          "cumulative_return": 1.8451859445301264,
+          "cagr": 0.18185870402627202,
+          "sharpe": 0.7479082975542212,
+          "mdd": -0.4581497797356837,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.5934751994861425,
+          "cumulative_return": 0.5934751994861425,
+          "cagr": 0.07729387359350515,
+          "sharpe": 0.4215428527188233,
+          "mdd": -0.49724620311744117,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.5934751994861425,
+          "cumulative_return": 0.5934751994861425,
+          "cagr": 0.07729387359350515,
+          "sharpe": 0.4215428527188233,
+          "mdd": -0.49724620311744117,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 0.0,
+        "old": {
+          "terminal_nav": 1.3113636363636354,
+          "cumulative_return": 0.3113636363636354,
+          "cagr": 0.044267624736019195,
+          "sharpe": 0.3159640573133883,
+          "mdd": -0.447475872308835,
+          "total_turnover": 1.0,
+          "total_cost": 0.0
+        },
+        "new": {
+          "terminal_nav": 1.3113636363636354,
+          "cumulative_return": 0.3113636363636354,
+          "cagr": 0.044267624736019195,
+          "sharpe": 0.3159640573133883,
+          "mdd": -0.447475872308835,
+          "total_turnover": 1.0,
+          "total_cost": 0.0
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 2.294277341624173,
+          "cumulative_return": 1.294277341624173,
+          "cagr": 0.14190550172997285,
+          "sharpe": 0.7078270235366189,
+          "mdd": -0.27916758341106884,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.11655851634886645
+        },
+        "new": {
+          "terminal_nav": 1.7270678738655716,
+          "cumulative_return": 0.7270678738655716,
+          "cagr": 0.09124269838671495,
+          "sharpe": 0.6160584383334142,
+          "mdd": -0.22434480584828742,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.0701648857577245
+        },
+        "delta": {
+          "terminal_nav": -0.5672094678,
+          "cumulative_return": -0.5672094678,
+          "cagr": -0.0506628033,
+          "sharpe": -0.0917685852,
+          "mdd": 0.0548227776,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.0463936306
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.7833703973937487,
+          "cumulative_return": 0.7833703973937487,
+          "cagr": 0.09685108043892998,
+          "sharpe": 0.4667886218460528,
+          "mdd": -0.38861670715393193,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.10024744815764296
+        },
+        "new": {
+          "terminal_nav": 1.550138377827533,
+          "cumulative_return": 0.550138377827533,
+          "cagr": 0.07255765184990604,
+          "sharpe": 0.45169791039896406,
+          "mdd": -0.28314863381984556,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.05449779774854248
+        },
+        "delta": {
+          "terminal_nav": -0.2332320196,
+          "cumulative_return": -0.2332320196,
+          "cagr": -0.0242934286,
+          "sharpe": -0.0150907114,
+          "mdd": 0.1054680733,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.0457496504
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 2.8274115755813045,
+          "cumulative_return": 1.8274115755813045,
+          "cagr": 0.18067576977479938,
+          "sharpe": 0.7442394883795532,
+          "mdd": -0.45814977973568316,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0062627101115196645
+        },
+        "new": {
+          "terminal_nav": 2.8274115755813045,
+          "cumulative_return": 1.8274115755813045,
+          "cagr": 0.18067576977479938,
+          "sharpe": 0.7442394883795532,
+          "mdd": -0.45814977973568316,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.0062627101115196645
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.5775513828593668,
+          "cumulative_return": 0.5775513828593668,
+          "cagr": 0.07556630414767973,
+          "sharpe": 0.4151710388829825,
+          "mdd": -0.4986275723193332,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.010060137437188095
+        },
+        "new": {
+          "terminal_nav": 1.5775513828593668,
+          "cumulative_return": 0.5775513828593668,
+          "cagr": 0.07556630414767973,
+          "sharpe": 0.4151710388829825,
+          "mdd": -0.4986275723193332,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.010060137437188095
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 5.0,
+        "old": {
+          "terminal_nav": 1.3107079545454567,
+          "cumulative_return": 0.31070795454545674,
+          "cagr": 0.04418417174477507,
+          "sharpe": 0.31556586731775726,
+          "mdd": -0.44747587230883423,
+          "total_turnover": 1.0,
+          "total_cost": 0.0005
+        },
+        "new": {
+          "terminal_nav": 1.3107079545454567,
+          "cumulative_return": 0.31070795454545674,
+          "cagr": 0.04418417174477507,
+          "sharpe": 0.31556586731775726,
+          "mdd": -0.44747587230883423,
+          "total_turnover": 1.0,
+          "total_cost": 0.0005
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 2.041869734115976,
+          "cumulative_return": 1.0418697341159762,
+          "cagr": 0.1208347188698351,
+          "sharpe": 0.6239843903233268,
+          "mdd": -0.2968295184572597,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.2331170326977329
+        },
+        "new": {
+          "terminal_nav": 1.610082635588053,
+          "cumulative_return": 0.6100826355880531,
+          "cagr": 0.07908022446592744,
+          "sharpe": 0.5474842882567503,
+          "mdd": -0.23354213237881372,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.140329771515449
+        },
+        "delta": {
+          "terminal_nav": -0.4317870985,
+          "cumulative_return": -0.4317870985,
+          "cagr": -0.0417544944,
+          "sharpe": -0.0765001021,
+          "mdd": 0.0632873861,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.0927872612
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.6131494819526135,
+          "cumulative_return": 0.6131494819526135,
+          "cagr": 0.07940840980780872,
+          "sharpe": 0.4104313251557551,
+          "mdd": -0.40320449361629596,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.20049489631528591
+        },
+        "new": {
+          "terminal_nav": 1.467878842640957,
+          "cumulative_return": 0.467878842640957,
+          "cagr": 0.06325298212466612,
+          "sharpe": 0.4078153863421239,
+          "mdd": -0.2895711238735348,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.10899559549708496
+        },
+        "delta": {
+          "terminal_nav": -0.1452706393,
+          "cumulative_return": -0.1452706393,
+          "cagr": -0.0161554277,
+          "sharpe": -0.0026159388,
+          "mdd": 0.1136333697,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.0914993008
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 2.8097460929333073,
+          "cumulative_return": 1.8097460929333073,
+          "cagr": 0.17949387509215065,
+          "sharpe": 0.7405696259618294,
+          "mdd": -0.4581497797356826,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.012525420223039329
+        },
+        "new": {
+          "terminal_nav": 2.8097460929333073,
+          "cumulative_return": 1.8097460929333073,
+          "cagr": 0.17949387509215065,
+          "sharpe": 0.7405696259618294,
+          "mdd": -0.4581497797356826,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.012525420223039329
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.5617856982076457,
+          "cumulative_return": 0.5617856982076457,
+          "cagr": 0.07384139553299796,
+          "sharpe": 0.4087981207511964,
+          "mdd": -0.5000051615317853,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.02012027487437619
+        },
+        "new": {
+          "terminal_nav": 1.5617856982076457,
+          "cumulative_return": 0.5617856982076457,
+          "cagr": 0.07384139553299796,
+          "sharpe": 0.4087981207511964,
+          "mdd": -0.5000051615317853,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.02012027487437619
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 10.0,
+        "old": {
+          "terminal_nav": 1.3100522727272819,
+          "cumulative_return": 0.31005227272728186,
+          "cagr": 0.04410068366989539,
+          "sharpe": 0.3151673658904457,
+          "mdd": -0.4474758723088327,
+          "total_turnover": 1.0,
+          "total_cost": 0.001
+        },
+        "new": {
+          "terminal_nav": 1.3100522727272819,
+          "cumulative_return": 0.31005227272728186,
+          "cagr": 0.04410068366989539,
+          "sharpe": 0.3151673658904457,
+          "mdd": -0.4474758723088327,
+          "total_turnover": 1.0,
+          "total_cost": 0.001
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "gen2_v2_defended",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.6171172373536646,
+          "cumulative_return": 0.6171172373536646,
+          "cagr": 0.07983222509069976,
+          "sharpe": 0.45621015191280356,
+          "mdd": -0.34047309955367644,
+          "total_turnover": 233.1170326977329,
+          "total_cost": 0.4662340653954658
+        },
+        "new": {
+          "terminal_nav": 1.399286022613546,
+          "cumulative_return": 0.39928602261354595,
+          "cagr": 0.05515298640690691,
+          "sharpe": 0.41022035459859857,
+          "mdd": -0.25526076385970675,
+          "total_turnover": 140.329771515449,
+          "total_cost": 0.280659543030898
+        },
+        "delta": {
+          "terminal_nav": -0.2178312147,
+          "cumulative_return": -0.2178312147,
+          "cagr": -0.0246792387,
+          "sharpe": -0.0459897973,
+          "mdd": 0.0852123357,
+          "total_turnover": -92.7872611823,
+          "total_cost": -0.1855745224
+        }
+      },
+      {
+        "strategy": "gen2_v2_undefended",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.31974142486822,
+          "cumulative_return": 0.31974142486822,
+          "cagr": 0.045330847636747995,
+          "sharpe": 0.2977144843918053,
+          "mdd": -0.4484097110258912,
+          "total_turnover": 200.49489631528587,
+          "total_cost": 0.40098979263057183
+        },
+        "new": {
+          "terminal_nav": 1.3161785017650682,
+          "cumulative_return": 0.31617850176506823,
+          "cagr": 0.04487937305091205,
+          "sharpe": 0.32004897536549654,
+          "mdd": -0.30228310829191174,
+          "total_turnover": 108.99559549708496,
+          "total_cost": 0.21799119099416991
+        },
+        "delta": {
+          "terminal_nav": -0.0035629231,
+          "cumulative_return": -0.0035629231,
+          "cagr": -0.0004514746,
+          "sharpe": 0.022334491,
+          "mdd": 0.1461266027,
+          "total_turnover": -91.4993008182,
+          "total_cost": -0.1829986016
+        }
+      },
+      {
+        "strategy": "main5_equal_weight",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 2.7747391698762898,
+          "cumulative_return": 1.7747391698762898,
+          "cagr": 0.1771332009399864,
+          "sharpe": 0.7332268100831617,
+          "mdd": -0.45814977973568294,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.025050840446078658
+        },
+        "new": {
+          "terminal_nav": 2.7747391698762898,
+          "cumulative_return": 1.7747391698762898,
+          "cagr": 0.1771332009399864,
+          "sharpe": 0.7332268100831617,
+          "mdd": -0.45814977973568294,
+          "total_turnover": 12.525420223039328,
+          "total_cost": 0.025050840446078658
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "universe_equal_weight",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.5307224964561998,
+          "cumulative_return": 0.5307224964561998,
+          "cagr": 0.07039954486777766,
+          "sharpe": 0.396049081604843,
+          "mdd": -0.5027490411693222,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.04024054974875238
+        },
+        "new": {
+          "terminal_nav": 1.5307224964561998,
+          "cumulative_return": 0.5307224964561998,
+          "cagr": 0.07039954486777766,
+          "sharpe": 0.396049081604843,
+          "mdd": -0.5027490411693222,
+          "total_turnover": 20.120274874376186,
+          "total_cost": 0.04024054974875238
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      },
+      {
+        "strategy": "market_510300",
+        "cost_bps": 20.0,
+        "old": {
+          "terminal_nav": 1.3087409090909148,
+          "cumulative_return": 0.3087409090909148,
+          "cagr": 0.04393360213990127,
+          "sharpe": 0.3143694334957105,
+          "mdd": -0.44747587230883346,
+          "total_turnover": 1.0,
+          "total_cost": 0.002
+        },
+        "new": {
+          "terminal_nav": 1.3087409090909148,
+          "cumulative_return": 0.3087409090909148,
+          "cagr": 0.04393360213990127,
+          "sharpe": 0.3143694334957105,
+          "mdd": -0.44747587230883346,
+          "total_turnover": 1.0,
+          "total_cost": 0.002
+        },
+        "delta": {
+          "terminal_nav": 0.0,
+          "cumulative_return": 0.0,
+          "cagr": 0.0,
+          "sharpe": 0.0,
+          "mdd": 0.0,
+          "total_turnover": 0.0,
+          "total_cost": 0.0
+        }
+      }
+    ]
+  },
+  "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
+  "committed_manifest": "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json",
+  "report": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+  "source_mutation_check": {
+    "mutated": false,
+    "status_if_mutated": "ABORTED_SOURCE_MUTATED",
+    "head_at_attestation": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
+    "head_now": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
+    "modified": []
+  },
+  "self_check_pre_report": {
+    "checks": 52,
+    "passed": 52,
+    "failed": 0,
+    "all_pass": true,
+    "detail": []
+  },
+  "outputs": {
+    "run_dir": "ml/gen2/outputs/b1_ledger_baseline_20260914_frozen_v201",
+    "run_dir_artifacts": [
+      "ledger_daily.csv",
+      "ledger_summary.csv",
+      "calendar_meta.json",
+      "gen2_b1_ledger_baseline_20260914_frozen_v201.md"
+    ],
+    "committed_report": {
+      "file": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+      "exists": true,
+      "sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+      "bytes": 34057
+    }
+  },
+  "self_check": {
+    "checks": 53,
+    "passed": 53,
+    "failed": 0,
+    "all_pass": true,
+    "detail": []
+  }
+}

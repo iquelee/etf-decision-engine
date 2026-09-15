@@ -135,12 +135,21 @@ def build_unified_baselines(
     *,
     cost_levels: list | None = None,
     date_from: str | None = None,
+    config: dict | None = None,
+    run_id: str | None = None,
 ) -> dict:
     """重算 B1 基线。
 
     cost_levels / date_from 供测试裁剪（默认取配置的完整费用档与全窗口）。
+
+    config  / run_id 供「冻结运行」注入（B1 Frozen Run）：
+      * ``config``：显式传入运行配置。默认 ``load_gen2_config()``（研究配置）。
+        冻结运行会传入**由冻结 bundle 派生/校验过的**配置（见 ``b1_frozen_run.py``），
+        以保证 B1 的规则输入就是被锁定的那一份。
+      * ``run_id``：产物隔离目录名（默认 ``BASELINE_ID``）。
     """
-    cfg = load_gen2_config()
+    cfg = config if config is not None else load_gen2_config()
+    bid = run_id or BASELINE_ID
     universe = load_universe_definition()
     main5 = list(universe["incumbent_main5"])
 
@@ -192,12 +201,13 @@ def build_unified_baselines(
     summary = pd.DataFrame(rows)
     all_ledgers = pd.concat(ledger_frames, ignore_index=True)
 
-    out = Path(output_dir) if output_dir else GEN2_ROOT / "outputs" / BASELINE_ID
+    out = Path(output_dir) if output_dir else GEN2_ROOT / "outputs" / bid
     out.mkdir(parents=True, exist_ok=True)
     all_ledgers.to_csv(out / "ledger_daily.csv", index=False)
     summary.to_csv(out / "ledger_summary.csv", index=False)
     (out / "calendar_meta.json").write_text(json.dumps({
         "calendar": cal_meta,
+        "run_id": bid,
         "selection": selection.metadata(),
         "role_thresholds": load_role_thresholds(cfg).as_dict(),
         "common_window": window_meta,
@@ -223,17 +233,22 @@ def build_unified_baselines(
 
     rep_dir = Path(report_dir) if report_dir else GEN2_ROOT / "reports"
     rep_dir.mkdir(parents=True, exist_ok=True)
-    report = rep_dir / f"gen2_{BASELINE_ID}.md"
-    report.write_text(_render_report(summary, verification, cfg, main5), encoding="utf-8")
+    report = rep_dir / f"gen2_{bid}.md"
+    # 注意：边界文案按「是否注入 run_id」区分 —— 未注入 = 研究基线口径（旧文案），
+    # 注入 = 冻结运行口径。二者都写死「不得用于宣称经济表现」。
+    report.write_text(_render_report(summary, verification, cfg, main5, run_id=run_id), encoding="utf-8")
 
-    return {"output_dir": out, "report": report, "summary": summary, "verification": verification}
+    return {"output_dir": out, "report": report, "summary": summary, "verification": verification,
+            "run_id": bid, "config": cfg}
 
 
-def _render_report(summary: pd.DataFrame, verification: dict, cfg: dict, main5: list) -> str:
+def _render_report(summary: pd.DataFrame, verification: dict, cfg: dict, main5: list,
+                   *, run_id: str | None = None) -> str:
     cal = verification["calendar"]
     lines = [
         "# Gen-2 B1 回测账本基线（WP-G2-02）",
         "",
+        ("- **Run ID**：`%s`" % run_id) if run_id else "",
         "**口径**：唯一权威角色语义 `rule_v2_ab.build_v2_roles` + 唯一权威账本 `backtest/ledger.run_ledger`。",
         "",
         "- 公共日历：`%s` → `%s`，**%d 个交易日**（所有策略首日/末日/天数完全一致）" % (
@@ -289,14 +304,21 @@ def _render_report(summary: pd.DataFrame, verification: dict, cfg: dict, main5: 
         "",
         "## 边界",
         "",
-        "- 本基线**不**冻结 bundle/lock、**不**重跑 OOS（B3），也**不**改变 authority / 部署 / 正式仓位。",
-        "- 本基线**不**用于宣称 Rule V2 的经济表现：B3 Frozen OOS 才有资格给出该结论。",
+        *(["- **冻结运行**（Run ID `%s`）：规则输入 = `gen2-rule-v2.0.1` 冻结 bundle/实现锁；" % run_id,
+           "  运行前已做锁 ↔ 磁盘逐位核验，规则参数与冻结 bundle **逐值一致**（见同目录 `frozen_manifest.json`）。",
+           "  旧报告（`b1_ledger_baseline_20260911`）自本次起**只作审计基线**，不再作为比较对象。",
+           "- 本基线**不**改变 authority / 部署 / 正式仓位；继续 Shadow / CANARY。",
+           "- **B3 Frozen OOS 通过前**，本基线不得用于宣称 Rule V2 的经济表现。"]
+          if run_id else
+          ["- 本基线**不**冻结 bundle/lock、**不**重跑 OOS（B3），也**不**改变 authority / 部署 / 正式仓位。",
+           "- 本基线**不**用于宣称 Rule V2 的经济表现：B3 Frozen OOS 才有资格给出该结论。"]),
     ]
     return "\n".join(lines) + "\n"
 
 
 def main() -> int:
     r = build_unified_baselines()
+    print("[B1] run id     :", r["run_id"])
     print("[B1] output dir :", r["output_dir"])
     print("[B1] report     :", r["report"])
     v = r["verification"]
