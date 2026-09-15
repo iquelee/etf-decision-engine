@@ -20,7 +20,7 @@ import pandas as pd
 from gen2.baseline import b3_accept_record as acc
 from gen2.baseline import b3_frozen_oos as b3
 from gen2.baseline import b1_frozen_run as b1
-from gen2.baseline.b1_frozen_run import FrozenAttestationError
+from gen2.baseline.b1_frozen_run import FrozenAttestationError, _sha
 from gen2.data.loader import GEN2_ROOT
 
 MANIFEST = GEN2_ROOT / "manifests" / "GEN2_B3_FROZEN_OOS_MANIFEST_20260915.json"
@@ -90,11 +90,21 @@ class AnchorsTest(_Base):
 # ---------------------------------------------------------------- 正文可追溯
 
 class ReproductionTest(_Base):
-    def test_rerender_reproduces_committed_report(self):
-        """从 manifest 复原数据重渲染必须**逐字**等于磁盘上被承诺的那份报告。"""
-        self.assertEqual(self.disk, self.raw)
+    def test_disk_report_matches_current_status(self):
+        """磁盘报告必须与当前 `run_status` 对应的渲染结果**逐字**一致：
 
-    def test_assert_report_reproduces_passes_on_original(self):
+        接受**前** = `_render_raw`（「待裁决」）；接受**后** = `render_accepted_report`
+        （「失败取证已接受」）。这样本文件在接受记录写入**前后都绿**，且**始终**在验证
+        「从 manifest 复原数据 → 重渲染 == 磁盘」，而不是把某一版措辞写死。
+        """
+        expected = (self.raw if self.m["run_status"] == acc.STATUS_PENDING_REVIEW
+                    else acc.render_accepted_report(self.m, self.econ, self.yearly))
+        self.assertEqual(expected, self.disk)
+
+    def test_assert_report_reproduces_passes_on_pending_report(self):
+        """提交时那份「待裁决」报告必须能从 manifest 复原出来（接受后由 git 侧取证）。"""
+        if self.m["run_status"] != acc.STATUS_PENDING_REVIEW:
+            self.skipTest("磁盘报告已是改写版；追溯性由 bound_digests + 合并树 blob 证明")
         acc.assert_report_reproduces(self.m, self.econ, self.yearly, self.disk)
 
     def test_assert_report_reproduces_raises_on_tampered_text(self):
@@ -182,6 +192,22 @@ class EvidenceTest(_Base):
     def test_protocol_expected_is_not_none(self):
         """协议哈希是 B3「判据结果前冻结」的唯一凭据，不能缺。"""
         self.assertTrue(self.m["protocol"]["sha256"])
+
+    def test_accepted_tree_contains_pre_accept_report_blob(self):
+        """接受记录承诺的**接受前**报告哈希，必须仍能在**被接受的合并树**里找到 blob。
+
+        这是接受后仍可机器复核的追溯链：磁盘报告已被改写 ⇒ 原件的存在性只能由
+        「PR #33 合并提交的树里那个 blob」来证明，而不是靠磁盘。
+        """
+        rec = self.m.get("acceptance_record")
+        if not rec:
+            self.skipTest("尚未写入接受记录")
+        old = rec["bound_digests"]["committed_report_sha256"]
+        new = self.m["outputs"]["committed_report"]["sha256"]
+        self.assertNotEqual(old, new, "接受后报告哈希必须变化（措辞改写）")
+        path = acc._rel(acc._abs(self.m["outputs"]["committed_report"]["file"]))
+        self.assertEqual(old, b1._git_blob_sha256(rec["accepted_master_commit"], path))
+        self.assertEqual(new, _sha(REPORT))
 
 
 # ---------------------------------------------------------------- 接受记录结构
