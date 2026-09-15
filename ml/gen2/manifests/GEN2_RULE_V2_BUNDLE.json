@@ -1,6 +1,6 @@
 {
   "engine_id": "gen2-rule-v2",
-  "bundle_version": "gen2-rule-v2.0",
+  "bundle_version": "gen2-rule-v2.0.1",
   "universe_version": "universe_v1",
   "benchmark_code": "510300",
 
@@ -16,15 +16,24 @@
   },
 
   "selection": {
-    "core_pct": 0.80,
-    "challenger_pct": 0.70,
-    "satellite_pct": 0.60,
-    "top_quantile": 0.2,
+    "role_thresholds": {
+      "core_top_fraction": 0.2,
+      "challenger_top_fraction": 0.3,
+      "satellite_top_fraction": 0.4
+    },
     "promotion_persistence_days": 5,
     "demotion_persistence_days": 5,
     "max_core_count": 5,
     "max_core_per_cluster": 2,
-    "min_replacement_edge": 8.0
+    "min_replacement_edge": 8.0,
+    "legacy_migration_audit": {
+      "core_pct": 0.8,
+      "challenger_pct": 0.7,
+      "satellite_pct": 0.6,
+      "top_quantile": 0.2,
+      "status": "MIGRATION_AUDIT_ONLY",
+      "note": "WP-G2-04：旧字段一次性换算为 role_thresholds（core=1-top_quantile / challenger=1-challenger_pct / satellite=1-satellite_pct）。运行路径（Node main() / Python build_v2_roles）只读 selection.role_thresholds，本块仅为审计留痕。"
+    }
   },
 
   "portfolio": {
@@ -52,6 +61,7 @@
     "Gen-2 Rule V2 唯一权威配置（Python 回测 + Node runGen2ShadowEod 共用）。",
     "regime 契约 = market_score 55/45（RISK_ON>=55 / RISK_OFF<=45 / 其余 RANGE），替代旧 MA60<-2% 硬编码。",
     "engine_id = gen2-rule-v2（旧 gen2-rule-v1 已废弃）。",
-    "禁止在 Node 硬编码 PORTFOLIO_CFG/DEFENSE_CFG 作为独立真相。"
+    "禁止在 Node 硬编码 PORTFOLIO_CFG/DEFENSE_CFG 作为独立真相。",
+    "WP-G2-04（2026-09-14）：bundle_version 升为 gen2-rule-v2.0.1。selection 段新增显式 role_thresholds（= 旧 core_pct/challenger_pct/satellite_pct/top_quantile 的离线换算，语义等价），旧字段移入 legacy_migration_audit 且不再被任何运行路径读取。规则参数（alpha / regime / portfolio caps / defense / universe）一律未变。LOCK 同时锚定 JS/Python 实现与构建产物哈希。"
   ]
 }

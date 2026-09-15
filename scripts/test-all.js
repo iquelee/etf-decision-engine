@@ -78,7 +78,9 @@ function stageC() {
   const ok = r.status === 0;
   const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
-  report('C', 'Immutable SHA lock（8 项：Gen-1 frozen×3 + model_id + V3.6.1×2 + GEN2 bundle×2）', ok);
+  report('C', 'Immutable SHA lock（23 项：Gen-1 frozen×3 + model_id + V3.6.1×2 + GEN2 bundle/version/role_thresholds/legacy + '
+    + 'immutable_set 条目数 + id 必需集合 + 8 项实现（bundle·JS·Python 规则/候选/防守·阈值契约 role_thresholds.py'
+    + '·显式 Alpha selection_scores.py·统一 regime regime.py）+ 3 lock root-of-trust）', ok);
 
   // G1-11 Gate G1-B：Gen-1 Feature Pipeline Lock（指标/阶段/PARAMS/特征构建/RS20/schema/sector/健康/域策略）
   const p = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-gen1-pipeline.js')], { cwd: REPO, encoding: 'utf8' });
@@ -122,6 +124,15 @@ function stageF() {
   const ok = r.status === 0;
   const tail = (r.stdout + r.stderr).split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 200);
   report('F', 'build-cloudfunctions（11 函数 common SHA parity）', ok, ok ? undefined : tail);
+
+  // WP-G2-04：构建产物（云函数实际加载的 GEN2 bundle / index.js）必须与冻结锁**逐位一致**。
+  // 必须在 build 之后跑：dist-functions/ 是构建产物，不入库。
+  const a = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-gen2-build-artifacts.js')],
+    { cwd: REPO, encoding: 'utf8' });
+  const aOk = a.status === 0;
+  const aLines = (a.stdout + a.stderr).split('\n').filter(Boolean);
+  aLines.forEach((l) => console.log('  ' + l));
+  report('F', 'WP-G2-04 构建产物 vs 冻结锁逐位一致（云函数 bundle + index.js）', aOk);
 }
 
 /* ---------- Stage G: Gen-1 Production Gates（WP-G1 / G1-11） ---------- */

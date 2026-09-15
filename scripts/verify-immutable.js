@@ -71,17 +71,82 @@ addLock('ml/manifests/V361_IMMUTABLE_LOCK.json', [
   ['decision_sha256', 'src/common/utils/decision.js'],
 ]);
 
-// GEN2 Rule V2 bundle（1 文件 + version）
-const g2Lock = addLock('ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', [
-  ['bundle_sha256', 'ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json'],
-]);
+// GEN2 Rule V2（WP-G2-04 起：bundle SHA + 实现哈希 + 构建产物声明，共 1 lock 文件）
+const G2_LOCK_REL = 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json';
+const G2_BUNDLE_REL = 'ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json';
+const g2Lock = JSON.parse(fs.readFileSync(path.join(REPO, G2_LOCK_REL), 'utf8'));
 {
-  const bundle = JSON.parse(fs.readFileSync(path.join(REPO, 'ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json'), 'utf8'));
+  CHECKS.push({
+    name: `${G2_BUNDLE_REL} vs ${path.basename(G2_LOCK_REL)}.bundle_sha256`,
+    expected: g2Lock.bundle_sha256,
+    actual: sha256File(G2_BUNDLE_REL),
+    lockRef: G2_LOCK_REL,
+  });
+  const bundle = JSON.parse(fs.readFileSync(path.join(REPO, G2_BUNDLE_REL), 'utf8'));
   CHECKS.push({
     name: `bundle_version == lock.bundle_version`,
     expected: g2Lock.bundle_version,
     actual: bundle.bundle_version,
+    lockRef: G2_LOCK_REL,
   });
+  // 规则闸门的显式契约（WP-G2-04 的目的）：冻结 bundle 必须自带 selection.role_thresholds，
+  // 否则 Gen-2 Shadow 会（正确地）持续 blocked / RULE_BUNDLE_INCOMPLETE。
+  const rt = bundle.selection && bundle.selection.role_thresholds;
+  CHECKS.push({
+    name: `bundle.selection.role_thresholds 存在（冻结后规则闸门不再 blocked）`,
+    expected: 'present',
+    actual: rt && typeof rt === 'object' ? 'present' : 'missing',
+    lockRef: G2_LOCK_REL,
+  });
+  // 旧字段不得留在运行 selection 段（只允许在 legacy_migration_audit 里）
+  const legacyLeak = ['core_pct', 'challenger_pct', 'satellite_pct', 'top_quantile']
+    .filter((k) => bundle.selection && Object.prototype.hasOwnProperty.call(bundle.selection, k));
+  CHECKS.push({
+    name: `旧 selection 字段已退出运行段（只留 audit）`,
+    expected: 'none',
+    actual: legacyLeak.length ? legacyLeak.join(',') : 'none',
+    lockRef: G2_LOCK_REL,
+  });
+}
+
+// GEN2 Rule V2 冻结实现集合（裁决 2026-09-14：lock 必须同时覆盖实现哈希）。
+// 结构守卫：条目数固定，避免「lock 被静默删条目 → 少检查也算 PASS」。
+// lock_revision 2（2026-09-14 审查裁决扩围）：新增 python_role_thresholds
+//   （ml/gen2/portfolio/role_thresholds.py —— 线上阈值加载/校验契约；不锁会留下
+//    「bundle 字节未变、运行语义已变」的旁路）。
+// lock_revision 3（2026-09-14 审查裁决扩围）：新增 python_selection_scores
+//   （ml/gen2/baseline/selection_scores.py —— 显式 Alpha 计算/覆盖校验/内容哈希）与
+//   python_regime（ml/gen2/portfolio/regime.py —— 55/45 实际执行常量，bundle 仅是声明）。
+const G2_FROZEN_EXPECT = 8;
+const G2_REQUIRED_IDS = [
+  'bundle', 'js_implementation', 'python_rule', 'python_candidate', 'python_defense',
+  'python_role_thresholds', 'python_selection_scores', 'python_regime',
+];
+{
+  const entries = g2Lock.immutable_set || [];
+  CHECKS.push({
+    name: `lock.immutable_set 条目数（bundle + JS 实现 + Python 规则/候选/防守/阈值契约/评分/regime）`,
+    expected: String(G2_FROZEN_EXPECT),
+    actual: String(entries.length),
+    lockRef: G2_LOCK_REL,
+  });
+  // 必锁 id 集合：防止「拿别的文件顶替」（例如把 role_thresholds.py 换成同名占位）。
+  const gotIds = entries.map((e) => e.id).slice().sort();
+  const wantIds = G2_REQUIRED_IDS.slice().sort();
+  CHECKS.push({
+    name: `lock.immutable_set id 集合 == 必需集合（含 python_role_thresholds / selection_scores / regime）`,
+    expected: wantIds.join(','),
+    actual: gotIds.join(','),
+    lockRef: G2_LOCK_REL,
+  });
+  for (const e of entries) {
+    CHECKS.push({
+      name: `[${e.id}] ${e.file} —— ${e.role}`,
+      expected: e.sha256,
+      actual: sha256File(e.file),
+      lockRef: G2_LOCK_REL,
+    });
+  }
 }
 
 // Root-of-trust（M0 审批修复，2026-09-09）：LOCK 文件自身 SHA 硬锚定在本 verifier 内。
@@ -91,7 +156,7 @@ const g2Lock = addLock('ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', [
 const ROOT_ANCHORS = [
   { lock: 'ml/manifests/GEN1_IMMUTABLE_LOCK.json', sha256: '138fe886a9f50440f717eaa0739d3144fd5e6418fc8d3d2ad03d1643320501c0' },
   { lock: 'ml/manifests/V361_IMMUTABLE_LOCK.json', sha256: '1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd' },
-  { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: '3b419988f75857ac9b35cd45d18d73a59f091650554ecc095bf8be821d2177f9' },
+  { lock: 'ml/gen2/manifests/GEN2_RULE_V2_LOCK.json', sha256: 'd3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c' },
 ];
 for (const a of ROOT_ANCHORS) {
   CHECKS.push({
