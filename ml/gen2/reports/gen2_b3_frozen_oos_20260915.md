@@ -1,10 +1,14 @@
-# Gen-2 B3 Frozen OOS 报告（冻结规则 · 样本外验证 · 待裁决）
+# Gen-2 B3 Frozen OOS 报告（冻结规则 · 样本外验证 · 失败取证已接受）
 
-- **Run ID**：`b3_frozen_oos_20260915_frozen_v201` ｜ **状态**：`PENDING_REVIEW`（本地产出，待用户裁决）
+- **Run ID**：`b3_frozen_oos_20260915_frozen_v201` ｜ **状态**：`ACCEPTED_FAIL`（失败取证已接受；本报告为 Rule V2.0.1 的**经济失败基线**）
 - **判定**：**FAIL**（判据 Cost = 10 bps；协议 `ml/gen2/reports/gen2_b3_frozen_oos_plan_20260915.md`，判据在**结果前**定死）
 - **冻结规则**：`gen2-rule-v2.0.1` / `lock_revision 3` / bundle `fabd31d9b1c2…` / lock `d3d40f99dd3d…`
 - **OOS 窗口**：`2021-01-04` → `2026-09-04`，**1376 个交易日**（gen2.evaluation.walk_forward.WalkForwardConfig(train_years=3, purge_days=20, embargo_days=5)；与评价日历连续 = True）
 - **边界**：离线只读；不部署、不提 authority、不写正式仓位；未改规则/参数/实现/样本边界/成本口径。
+> **状态口径**：接受记录已写入 manifest（`acceptance_record.accepted_master_commit` /
+> `accepted_master_tree_sha` / `execution_head_commit`）。本报告的措辞由接受记录 PR
+> （分支 `chore/gen2-b3-accept-fail-v201`）改写；`run_status = ACCEPTED_FAIL` = **失败取证已接受归档**，
+> ⚠️ **不等于通过**：`verdict = FAIL` 不变，仍**不部署、不提 authority、不写正式仓位**。
 
 ## 1. 一句话结论
 
@@ -152,7 +156,7 @@
 
 ## 11. 处置
 
-- 本报告为**本地产出、待用户裁决**；`run_status = PENDING_REVIEW`。
+- 本报告**已随 B3 接受记录 PR 归档**为 Rule V2.0.1 的**经济失败基线**（`run_status = ACCEPTED_FAIL`）；归档的是**结论与证据**，**不是**「通过」。
 - FAIL ⇒ 按用户 09-15 授权：**维持 Shadow / CANARY**，另立新假设并新开研究任务书（新 `bundle_version` + 新 lock + 新审批门）；**禁止**根据本次结果回调参数后重跑。
 - PASS ⇒ 仅表示通过**本协议判据**；部署 / 提 authority 仍需**独立**裁决。
 - 无论 PASS/FAIL：**不部署、不提 authority、不写正式仓位**。
