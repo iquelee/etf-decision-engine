@@ -1,6 +1,6 @@
-# Gen-2 B1 冻结运行报告（Frozen Run）· 待合并
+# Gen-2 B1 冻结运行报告（Frozen Run）· 已接受
 
-**运行状态**：**待合并冻结运行**（PENDING-MERGE FROZEN RUN）
+**运行状态**：**Frozen B1 已接受**
 **日期**：2026-09-14 · **Run ID**：`b1_ledger_baseline_20260914_frozen_v201`
 **冻结输入**：`gen2-rule-v2.0.1`（lock SHA `d3d40f99dd3d…`，revision 3）
 **Manifest**：`ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json`（运行目录另有 `frozen_manifest.json` 副本）
@@ -16,9 +16,9 @@ canonical Alpha 等权）逐一核对通过；资金守恒误差 **0.000e+00**�
 > ⚠️ 这是**研发证据**，不是经济结论。B3 Frozen OOS 通过前，本报告的任何净值 / Sharpe / MDD
 > **不得**用于生产资格或 authority 提升。继续 Shadow / CANARY，未部署、未写正式仓位。
 >
-> **状态口径（本次复核结论）**：在 **① 冻结 PR 合并 → ② B1 PR 自动改基后合并 → ③ 独立的
-> 接受记录 PR 合并** 这三步完成之前，本产出的正确表述是「**待合并冻结运行**」，**不是**项目
-> 最终 Frozen B1；也因此**不得**据此启动 B3。接受条件、四项校验与流程见 **§12**。
+> **状态口径**：接受记录已写入 manifest（`acceptance_record.accepted_master_commit` /
+> `source_tree_sha`），本次产出的正确表述是「**Frozen B1 已接受**」。
+> 三类摘要未变 ⇒ 无需重跑；**此时才允许启动 B3 Frozen OOS**（B3 本身仍不得据此提升 authority）。
 >
 > **与旧 B1 读数差异很大？先看 §9「差异归因」** —— 那里给出**可审计的数值对照表**
 > （0/5/10/20bps × 逐策略 × 净值/CAGR/Sharpe/换手/成本/差异），并逐项标注
@@ -354,8 +354,9 @@ canonical Alpha 等权）逐一核对通过；资金守恒误差 **0.000e+00**�
 - **未改规则**：本次运行只**读**冻结 bundle 与冻结实现，未做任何参数或语义变更；
 - **旧报告降级**：`b1_ledger_baseline_20260911` / `gen2_b1_research_baselines_20260911.md`
   自本次起**只作审计基线**，不再作为比较对象。
-- **不据此启动 B3**：本产出是「待合并冻结运行」，在 §12 的接受记录写入之前不进入 B3 Frozen OOS；
-  `+61.01% / Sharpe 0.55` **不是**经济资格。
+- **Frozen B1 已接受**：接受记录已写入（§12）；**此时才允许启动 B3 Frozen OOS** ——
+  但 B3 本身仍不得据此提升 authority / 部署 / 写正式仓位。
+  `+61.01% / Sharpe 0.55`（候选读法）**不是**经济资格。
 
 ## 11. 复现
 
@@ -372,7 +373,7 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-comm
 > 任一门禁失配（锁 SHA / ROOT_ANCHORS / 配置漂移 / 跨实现常量 / manifest 自校验）时本入口
 > **直接拒绝运行**，因此不存在「在一份未冻结的规则上跑出 B1」这种形态。
 
-## 12. 合并接受条件（写入接受记录前，本产出只是「待合并冻结运行」）
+## 12. 合并接受条件（接受记录已写入；**仍须经接受记录 PR 合并方生效**）
 
 **顺序（不可跳）**：
 
@@ -399,24 +400,49 @@ PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-comm
 > 留痕、可评审。**该 PR 合并之后**，本产出才可正式称为「Frozen B1 已接受」，也才允许启动
 > **B3 Frozen OOS**。
 
-当前状态：**待合并**（接受记录尚未写入 → 措辞不得写「已接受」）
+当前状态：**Frozen B1 已接受**（生效以接受记录 PR 合并为准）
 
 | 项 | 值 |
 |---|---|
-| `run_status` | `PENDING_MERGE` |
+| `run_status` | `ACCEPTED` |
 | `execution_source_tree_sha`（**执行时**语义源码快照；**不要求** == `<SHA>^{tree}`） | `2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7` |
-| 待绑定的**组件摘要**（lock 8 项折叠） | `86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c` |
-| 待绑定的**输入摘要** | `7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191` |
-| 待绑定的**输出摘要** | 见 manifest `outputs.committed_report.sha256`（报告不含自身哈希） |
+| 已绑定的**组件摘要**（lock 8 项折叠） | `86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c` |
+| 已绑定的**输入摘要** | `7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191` |
+| 已绑定的**输出摘要** | 见 manifest `outputs.committed_report.sha256`（报告不含自身哈希） |
 
-> **在接受记录写入之前**：不进入 B3 Frozen OOS、不提升 authority、不部署、不写正式仓位；
-> 本报告全部净值 / Sharpe 只作**研发证据**。
+**接受记录（已写入 manifest `acceptance_record`）**
 
-> 接受记录命令（B1 PR 合并后，在**独立分支** `chore/gen2-b1-accept-v201` 上执行；会先做四项校验，
-> 任一不过即**拒绝**并要求重跑；随后开并合并该接受记录 PR）：
+| 字段 | 值 |
+|---|---|
+| `accepted_master_commit` | `be372bcbc9d97b23459fdf14704361cff10685aa` |
+| `accepted_master_commit_input` | `be372bcbc9d97b23459fdf14704361cff10685aa` |
+| `accepted_master_tree_sha`（**接受时**仓库快照） | `12e620fbdaa668da58f7c9a38555d12fe86b69dc` |
+| `execution_head_commit`（取证执行提交） | `e4d3a0605c9aad55e0be34834bbd704da2d7dbdb` |
+| `execution_source_tree_sha`（**执行时**语义源码快照） | `2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7` |
+| 两个 tree 是否要求相等 | ❌ **不要求**（产物在执行后才提交 ⇒ 应当不同；由摘要族 + 已承诺证据哈希关联） |
+| `master_ref`（**信息性**，不作拒绝条件） | `origin/master` |
+| `acceptance_branch`（须经该分支的 PR 合并才生效） | `chore/gen2-b1-accept-v201` |
+| `accepted_at` | `2026-09-15T05:43:00.644350+00:00` |
+| 四项校验 | ✅ `working_tree_clean_at_accept` / ✅ `working_tree_clean_at_attestation` / ✅ `execution_head_is_ancestor_of_accepted_master_commit` / ✅ `digests_unchanged` / ✅ `accepted_master_tree_contains_committed_evidence` |
+| 已承诺证据（在 `<SHA>` 树中逐个核对） | `run_report`=✅、`run_manifest`=✅、`audit_baseline`=✅ |
+| 摘要未变 | ✅ 是（无需重跑） |
+
+> **写入的前置与效果**：写入前入口 fail-closed 地校验 ⓪「工作树干净（接受 + 取证两态）」
+> ①「**执行提交**是 `<SHA>` 的祖先」②「锁定组件 / B1 工具链 / 输入 / **输出**摘要与 manifest
+> **逐项**逐位一致」③「`<SHA>` 的**树中**含报告 / manifest / 审计快照且**哈希匹配**」——
+> 任一不过即 `FrozenAttestationError` **拒绝写入并要求重跑 B1**。因此「内容哈希不变 ⇒
+> 无需重跑」在本文件中是**被校验的前提**，不是约定。
+>
+> ⚠️ **两个 tree 不要求相等**（早期版本要求「整棵树相等」，那会**必然失败**：报告 / manifest /
+> 审计快照在执行后才提交，`accepted_master_tree_sha` 里**必然**含有 `execution_source_tree_sha`
+> 所没有的路径 —— 这正是本次契约修正的原因）。
+
+> ⚠️ **本记录尚未生效**：`--accept-merge` 修改的是**受版本控制**的 manifest / 报告 ⇒ 必须经> `chore/gen2-b1-accept-v201` 这条**接受记录 PR** 合并进 `master`；**该 PR 合并之后**，本产出才可正式称为
+> 「Frozen B1 已接受」，也才允许启动 **B3 Frozen OOS**（B3 本身仍不得据此提升 authority /
+> 部署 / 写正式仓位）。
+>
+> 复核命令（可重跑；已接受状态下会重新核对四项校验并提示）：
 >
 > ```bash
-> git switch -c chore/gen2-b1-accept-v201 origin/master
 > PYTHONPATH=ml python -m gen2.baseline.b1_frozen_run --accept-merge --master-commit <sha>
-> # → 开「接受记录 PR」并合并；该 PR 合并后才可正式称「Frozen B1 已接受」
 > ```

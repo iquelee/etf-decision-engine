@@ -2,8 +2,7 @@
   "manifest_type": "GEN2_B1_FROZEN_RUN",
   "run_id": "b1_ledger_baseline_20260914_frozen_v201",
   "created_at": "2026-09-14T10:24:33.226015+00:00",
-  "run_status": "PENDING_MERGE",
-  "run_status_note": "**待合并冻结运行**：本运行已完成全部取证，但在「冻结 PR + B1 PR 合并 → 独立分支 `chore/gen2-b1-accept-v201` 写入接受记录 → 该接受记录 PR 合并」完成之前，**不得**表述为项目最终 Frozen B1，也不得据此启动 B3。",
+  "run_status": "ACCEPTED",
   "source_state": {
     "git_head_commit": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
     "source_tree_sha": "2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7",
@@ -1558,8 +1557,8 @@
     "committed_report": {
       "file": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
       "exists": true,
-      "sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
-      "bytes": 34057
+      "sha256": "b1249dd91e46ec8cdcdcbf85ffe15066197aa3300a6dc2a7a54ca41772f07d0f",
+      "bytes": 36208
     }
   },
   "self_check": {
@@ -1568,5 +1567,176 @@
     "failed": 0,
     "all_pass": true,
     "detail": []
+  },
+  "acceptance_record": {
+    "status": "ACCEPTED",
+    "accepted_master_commit": "be372bcbc9d97b23459fdf14704361cff10685aa",
+    "accepted_master_commit_input": "be372bcbc9d97b23459fdf14704361cff10685aa",
+    "accepted_master_tree_sha": "12e620fbdaa668da58f7c9a38555d12fe86b69dc",
+    "execution_head_commit": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
+    "execution_source_tree_sha": "2d1d5ba90b533ee10b8c5d9cfda6e6dea368a3c7",
+    "execution_head_is_ancestor_of_accepted_master_commit": true,
+    "trees_required_to_be_equal": false,
+    "tree_relation": "accepted_master_tree_contains_committed_evidence",
+    "tree_relation_note": "`accepted_master_tree_sha` = **接受时仓库快照**，`execution_source_tree_sha` = **执行时语义源码快照**。报告 / manifest / 审计快照是**执行之后**才被提交进 B1 分支的 ⇒ 两者**应当不同**；**不要求相等**。二者的关联由校验 ② 的摘要族与校验 ③ 的已承诺证据哈希建立。",
+    "accepted_manifest_input_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+    "committed_evidence": [
+      {
+        "role": "run_report",
+        "path": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+        "present_in_merge_tree": true,
+        "blob_sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+        "expected_sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+        "matches": true
+      },
+      {
+        "role": "run_manifest",
+        "path": "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json",
+        "present_in_merge_tree": true,
+        "blob_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+        "expected_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+        "matches": true
+      },
+      {
+        "role": "audit_baseline",
+        "path": "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json",
+        "present_in_merge_tree": true,
+        "blob_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+        "expected_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+        "matches": true
+      }
+    ],
+    "master_ref": "origin/master",
+    "master_ref_is_blocking": false,
+    "accepted_master_commit_reachable_from_master_ref": true,
+    "accepted_at": "2026-09-15T05:43:00.644350+00:00",
+    "digests_unchanged": true,
+    "no_rerun_required": true,
+    "verifications": [
+      {
+        "check": "working_tree_clean_at_accept",
+        "ok": true,
+        "dirty_tracked_paths": []
+      },
+      {
+        "check": "working_tree_clean_at_attestation",
+        "ok": true,
+        "dirty_tracked_paths": []
+      },
+      {
+        "check": "execution_head_is_ancestor_of_accepted_master_commit",
+        "execution_head_commit": "e4d3a0605c9aad55e0be34834bbd704da2d7dbdb",
+        "accepted_master_commit": "be372bcbc9d97b23459fdf14704361cff10685aa",
+        "ok": true
+      },
+      {
+        "check": "digests_unchanged",
+        "compared_items": [
+          "input.content_digest",
+          "input.daily[159570]",
+          "input.daily[159582]",
+          "input.daily[159770]",
+          "input.daily[159819]",
+          "input.daily[159852]",
+          "input.daily[159915]",
+          "input.daily[159928]",
+          "input.daily[159941]",
+          "input.daily[159992]",
+          "input.daily[159995]",
+          "input.daily[510300]",
+          "input.daily[510880]",
+          "input.daily[512000]",
+          "input.daily[512010]",
+          "input.daily[512400]",
+          "input.daily[512480]",
+          "input.daily[512660]",
+          "input.daily[512690]",
+          "input.daily[512760]",
+          "input.daily[512800]",
+          "input.daily[513180]",
+          "input.daily[513310]",
+          "input.daily[513500]",
+          "input.daily[515030]",
+          "input.daily[515050]",
+          "input.daily[515220]",
+          "input.daily[515790]",
+          "input.daily[515880]",
+          "input.daily[518880]",
+          "input.daily[588000]",
+          "input.daily[588080]",
+          "input.meta[etf_master]",
+          "input.meta[universe_definition]",
+          "lock.component[bundle]",
+          "lock.component[js_implementation]",
+          "lock.component[python_candidate]",
+          "lock.component[python_defense]",
+          "lock.component[python_regime]",
+          "lock.component[python_role_thresholds]",
+          "lock.component[python_rule]",
+          "lock.component[python_selection_scores]",
+          "lock.component_digest",
+          "lock.lock_sha256",
+          "output[calendar_meta.json]",
+          "output[committed_report]",
+          "output[gen2_b1_ledger_baseline_20260914_frozen_v201.md]",
+          "output[ledger_daily.csv]",
+          "output[ledger_summary.csv]",
+          "toolchain.digest",
+          "toolchain[b1_frozen_run]",
+          "toolchain[baseline_builder]",
+          "toolchain[cost_impl]",
+          "toolchain[ledger]"
+        ],
+        "ok": true
+      },
+      {
+        "check": "accepted_master_tree_contains_committed_evidence",
+        "committed_evidence": [
+          {
+            "role": "run_report",
+            "path": "ml/gen2/reports/gen2_b1_frozen_run_20260914.md",
+            "present_in_merge_tree": true,
+            "blob_sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+            "expected_sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+            "matches": true
+          },
+          {
+            "role": "run_manifest",
+            "path": "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json",
+            "present_in_merge_tree": true,
+            "blob_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+            "expected_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+            "matches": true
+          },
+          {
+            "role": "audit_baseline",
+            "path": "ml/gen2/manifests/GEN2_B1_AUDIT_BASELINE_20260911.json",
+            "present_in_merge_tree": true,
+            "blob_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+            "expected_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+            "matches": true
+          }
+        ],
+        "ok": true
+      }
+    ],
+    "bound_digests": {
+      "lock_sha256": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_component_digest": "86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c",
+      "toolchain_digest": "8f646eb50b8068b6b759e181748e87983bd7fa92be636a27d0c8136579c33ab3",
+      "input_content_digest": "7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191",
+      "committed_report_sha256": "62f6f63ade5ec04b0d1c70c9e5bac33692d499aa848a2710b4f8e94169ea42dc",
+      "accepted_manifest_input_sha256": "70c5e3fdc99f2ec190983e4c5ffcbecef212ef5245c760bdab96a7bdb7de0004",
+      "audit_baseline_sha256": "ff888278daf96b703fb7d120fac63416011ccae76e5df03b5eb5905173e2872e",
+      "run_dir_artifacts": {
+        "ledger_daily.csv": "c6ff697b36c84e6bd0324572261b20be9d5a6a7e5f6192463c4dfd5aa4772f51",
+        "ledger_summary.csv": "1bb10a755cad512070f9a03fa41d678b0dba92057a97453a2d63d64e1fef3567",
+        "calendar_meta.json": "baebaf18d010300c1ba4ffe9c70a94e904bec4a081b57bf194982bbee15f6408",
+        "gen2_b1_ledger_baseline_20260914_frozen_v201.md": "c9e8d6e0f4e99fc126b6365c2dc09b541d9f2deedddbf61626579ccb3106c5d3"
+      }
+    },
+    "acceptance_branch": "chore/gen2-b1-accept-v201",
+    "landed_via_pull_request_required": true,
+    "note": "本记录由 `--accept-merge` 写出，**会修改受版本控制的 manifest / 报告** ⇒ 必须落在独立分支 `chore/gen2-b1-accept-v201` 的**接受记录 PR** 上评审合并。该 PR 合并**之前**，本产出的措辞**仍不得**称为「Frozen B1 已接受」，也不得启动 B3。四项校验全过（⓪ 工作树干净（接受 + 取证两态）/ ① 执行提交 `e4d3a0605c9a` 是 `be372bcbc9d9` 的祖先 / ② 锁定组件·工具链·输入·输出摘要**逐项**一致 / ③ `<SHA>` 树含报告·manifest·审计快照且哈希匹配）⇒ **无需重跑**，只做绑定。⚠️ **不要求** `accepted_master_tree_sha == execution_source_tree_sha`（产物在执行后才提交 ⇒ 必然不同；二者的关联由摘要族 + 已承诺证据哈希建立）。"
   }
 }
