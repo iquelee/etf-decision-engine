@@ -2,8 +2,8 @@
   "manifest_type": "GEN2_B3_FROZEN_OOS",
   "run_id": "b3_frozen_oos_20260915_frozen_v201",
   "created_at": "2026-09-15T06:36:12.894396+00:00",
-  "run_status": "PENDING_REVIEW",
-  "run_status_note": "本地产出，**待用户裁决**：判据（协议 §7.2）在结果前定死；在用户按 §8 处置之前，不得自称「已获得经济资格」。",
+  "run_status": "ACCEPTED_FAIL",
+  "run_status_note": "**失败取证已接受归档**（见 `acceptance_record`）：本次运行绑定到 B3 PR #33 的合并提交 `f8ef523c9bb8`。⚠️ 接受的是**结论与证据**，**不是**「通过」——`verdict = FAIL` 不变，Rule V2.0.1 **不具备生产资格**；不部署、不提 authority、不写正式仓位。",
   "boundaries": {
     "stage": "SHADOW/CANARY",
     "deployed": false,
@@ -2994,8 +2994,8 @@
     "committed_report": {
       "file": "ml/gen2/reports/gen2_b3_frozen_oos_20260915.md",
       "exists": true,
-      "sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
-      "bytes": 13344
+      "sha256": "e679e13a96e3e78f9011f078d6190b9b395304326e11ee971b552eb7009cac8c",
+      "bytes": 13939
     }
   },
   "self_check": {
@@ -3004,5 +3004,182 @@
     "failed": 0,
     "all_pass": true,
     "detail": []
+  },
+  "acceptance_record": {
+    "status": "ACCEPTED_FAIL",
+    "accepted_master_commit": "f8ef523c9bb8b348ab8c94c5fed7ee72decd86c1",
+    "accepted_master_commit_input": "f8ef523c9bb8b348ab8c94c5fed7ee72decd86c1",
+    "accepted_master_tree_sha": "e8db236b07678029dfaca905634ea357727c9e88",
+    "execution_head_commit": "30943b2fbbf24c6a5e6dc651ac78f24bd8ed1236",
+    "execution_source_tree_sha": "37c7e846d01ecd2a6fdcaf0c5fc241ec8199497a",
+    "execution_head_is_ancestor_of_accepted_master_commit": true,
+    "trees_required_to_be_equal": false,
+    "tree_relation": "accepted_master_tree_contains_committed_evidence",
+    "tree_relation_note": "`accepted_master_tree_sha` = **接受时仓库快照**，`execution_source_tree_sha` = **执行时语义源码快照**。报告 / manifest 是**执行之后**才被提交进 B3 分支的 ⇒ 两者**应当不同**；**不要求相等**。二者的关联由校验 ② 的摘要族与校验 ③ 的已承诺证据哈希建立。",
+    "accepted_manifest_input_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+    "committed_evidence": [
+      {
+        "role": "run_report",
+        "path": "ml/gen2/reports/gen2_b3_frozen_oos_20260915.md",
+        "present_in_merge_tree": true,
+        "blob_sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
+        "expected_sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
+        "matches": true
+      },
+      {
+        "role": "run_manifest",
+        "path": "ml/gen2/manifests/GEN2_B3_FROZEN_OOS_MANIFEST_20260915.json",
+        "present_in_merge_tree": true,
+        "blob_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+        "expected_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+        "matches": true
+      },
+      {
+        "role": "protocol",
+        "path": "ml/gen2/reports/gen2_b3_frozen_oos_plan_20260915.md",
+        "present_in_merge_tree": true,
+        "blob_sha256": "36f208d3a876c1da0d32f69688b32c8debfe61c6e5e41e43a8439ba2c39544f5",
+        "expected_sha256": "36f208d3a876c1da0d32f69688b32c8debfe61c6e5e41e43a8439ba2c39544f5",
+        "matches": true
+      }
+    ],
+    "master_ref": "origin/master",
+    "master_ref_is_blocking": false,
+    "accepted_master_commit_reachable_from_master_ref": true,
+    "accepted_at": "2026-09-15T07:45:31.916080+00:00",
+    "digests_unchanged": true,
+    "no_rerun_required": true,
+    "verdict": "FAIL",
+    "verdict_unchanged_by_acceptance": true,
+    "economic_eligibility": "NOT_PRODUCTION_ELIGIBLE",
+    "verifications": [
+      {
+        "check": "working_tree_clean_at_accept",
+        "ok": true,
+        "dirty_tracked_paths": []
+      },
+      {
+        "check": "working_tree_clean_at_attestation",
+        "ok": true,
+        "dirty_tracked_paths": []
+      },
+      {
+        "check": "execution_head_is_ancestor_of_accepted_master_commit",
+        "execution_head_commit": "30943b2fbbf24c6a5e6dc651ac78f24bd8ed1236",
+        "accepted_master_commit": "f8ef523c9bb8b348ab8c94c5fed7ee72decd86c1",
+        "ok": true
+      },
+      {
+        "check": "digests_unchanged",
+        "compared_items": [
+          "input.content_digest",
+          "input.daily[159570]",
+          "input.daily[159582]",
+          "input.daily[159770]",
+          "input.daily[159819]",
+          "input.daily[159852]",
+          "input.daily[159915]",
+          "input.daily[159928]",
+          "input.daily[159941]",
+          "input.daily[159992]",
+          "input.daily[159995]",
+          "input.daily[510300]",
+          "input.daily[510880]",
+          "input.daily[512000]",
+          "input.daily[512010]",
+          "input.daily[512400]",
+          "input.daily[512480]",
+          "input.daily[512660]",
+          "input.daily[512690]",
+          "input.daily[512760]",
+          "input.daily[512800]",
+          "input.daily[513180]",
+          "input.daily[513310]",
+          "input.daily[513500]",
+          "input.daily[515030]",
+          "input.daily[515050]",
+          "input.daily[515220]",
+          "input.daily[515790]",
+          "input.daily[515880]",
+          "input.daily[518880]",
+          "input.daily[588000]",
+          "input.daily[588080]",
+          "input.meta[etf_master]",
+          "input.meta[universe_definition]",
+          "lock.component[bundle]",
+          "lock.component[js_implementation]",
+          "lock.component[python_candidate]",
+          "lock.component[python_defense]",
+          "lock.component[python_regime]",
+          "lock.component[python_role_thresholds]",
+          "lock.component[python_rule]",
+          "lock.component[python_selection_scores]",
+          "lock.component_digest",
+          "lock.lock_sha256",
+          "output[calendar_meta.json]",
+          "output[committed_report]",
+          "output[gen2_b3_frozen_oos_20260915_frozen_v201.md]",
+          "output[ledger_daily.csv]",
+          "output[ledger_summary.csv]",
+          "toolchain.digest",
+          "toolchain[b3_frozen_oos]",
+          "toolchain[baseline_builder]",
+          "toolchain[bootstrap]",
+          "toolchain[cost_impl]",
+          "toolchain[ledger]",
+          "toolchain[selection_scores]",
+          "toolchain[walk_forward]"
+        ],
+        "ok": true
+      },
+      {
+        "check": "accepted_master_tree_contains_committed_evidence",
+        "committed_evidence": [
+          {
+            "role": "run_report",
+            "path": "ml/gen2/reports/gen2_b3_frozen_oos_20260915.md",
+            "present_in_merge_tree": true,
+            "blob_sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
+            "expected_sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
+            "matches": true
+          },
+          {
+            "role": "run_manifest",
+            "path": "ml/gen2/manifests/GEN2_B3_FROZEN_OOS_MANIFEST_20260915.json",
+            "present_in_merge_tree": true,
+            "blob_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+            "expected_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+            "matches": true
+          },
+          {
+            "role": "protocol",
+            "path": "ml/gen2/reports/gen2_b3_frozen_oos_plan_20260915.md",
+            "present_in_merge_tree": true,
+            "blob_sha256": "36f208d3a876c1da0d32f69688b32c8debfe61c6e5e41e43a8439ba2c39544f5",
+            "expected_sha256": "36f208d3a876c1da0d32f69688b32c8debfe61c6e5e41e43a8439ba2c39544f5",
+            "matches": true
+          }
+        ],
+        "ok": true
+      }
+    ],
+    "bound_digests": {
+      "lock_sha256": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+      "lock_component_digest": "86fc2902f817c147ecf8d452fadbc5ad661a4d534a525bff16991e39d026dc8c",
+      "toolchain_digest": "f6615dd447e5d74c90c8bfe3b5a57ad5ff0dd9944ecd819d1597e101854457ce",
+      "input_content_digest": "7b5018e48b417b11e1624593c146f277f6c23f372698c98652c97e1dd347f191",
+      "committed_report_sha256": "e9050e1882a7ce907b2398cae1debcb93919bcdc5d0efe193f4c20dabc98d690",
+      "accepted_manifest_input_sha256": "5f73416d69f1a7655af34a45dd36a45af3a20e8fd78ea67bce48436bbcdd3e0f",
+      "protocol_sha256": "36f208d3a876c1da0d32f69688b32c8debfe61c6e5e41e43a8439ba2c39544f5",
+      "run_dir_artifacts": {
+        "ledger_daily.csv": "c6ff697b36c84e6bd0324572261b20be9d5a6a7e5f6192463c4dfd5aa4772f51",
+        "ledger_summary.csv": "1bb10a755cad512070f9a03fa41d678b0dba92057a97453a2d63d64e1fef3567",
+        "calendar_meta.json": "34bf1ec9252e1b4d96b7e9d35c6eb3d84de3f8f1006bd69e3038950c27e4358c",
+        "gen2_b3_frozen_oos_20260915_frozen_v201.md": "57052df7e7d3757132d00e635009f0ae9d6e9b87a3474ba62ccfe898374cfda2"
+      }
+    },
+    "acceptance_branch": "chore/gen2-b3-accept-fail-v201",
+    "landed_via_pull_request_required": true,
+    "note": "本记录由 `--accept-merge` 写出，**会修改受版本控制的 manifest / 报告** ⇒ 必须落在独立分支 `chore/gen2-b3-accept-fail-v201` 的**接受记录 PR** 上评审合并。该 PR 合并**之后**，本次运行才正式归档为「**Rule V2.0.1 已接受的经济失败基线**」。四项校验全过（⓪ 工作树干净（接受 + 取证两态）/ ① 执行提交 `30943b2fbbf2` 是 `f8ef523c9bb8` 的祖先 / ② 锁定组件·工具链·输入·输出摘要**逐项**一致 / ③ `<SHA>` 树含报告·manifest·协议且哈希匹配）⇒ **无需重跑**，只做绑定。⚠️ `run_status = ACCEPTED_FAIL` 表示**失败取证已接受归档**，**不表示通过**：`verdict = FAIL` 不变，Rule V2.0.1 **不具备生产资格**。"
   }
 }
