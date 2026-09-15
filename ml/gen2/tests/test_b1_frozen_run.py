@@ -37,9 +37,14 @@
   8. **执行窗口内源改动 = 正确的 fail-closed 中止**（`SourceMutationTest`）：`HEAD` 移动或
      `run_implementation` 文件被改 ⇒ `run_status` 记为 `ABORTED_SOURCE_MUTATED` 并中止产出。
      它不是「假失败」；**干净源上的重跑**才是可采信的门禁证据。
+  9. **无日线池的环境（CI）必须与本地得出同一结论**：`verify_manifest` 的
+     `input.content_digest` 只由**声明的** `files` / `meta_files` 重算（不读磁盘）⇒ 「无池」分支的
+     空输入声明必须自洽（`_aggregate_digest([])`）。写死魔数会让断言**只在本地有池时**成立，
+     在任何没有池子的环境恒判不一致 —— 那是**测试自身**的缺陷，不是被测代码的缺陷。
+     `GitBlobEvidenceTest` 以「当前是 git 检出」为前提，在没有 `.git` 的源码导出包上**显式跳过**。
 
 端到端跑 `run()` 需要本地日线池（未入库），在 CI 跳过 —— 与 `test_b1_baseline_contract`
-同策略：**显式跳过而不是伪造通过**。
+同策略：**显式跳过而不是伪造通过**（且「跳过」不得被当成「通过」的等价物）。
 
 运行::
 
@@ -74,6 +79,46 @@ def _b1_dataset_available() -> bool:
         return bars is not None and len(bars) > 0
     except Exception:  # noqa: BLE001
         return False
+
+
+def _empty_input_stub() -> dict:
+    """无本地日线池（CI）时的**自洽**空输入声明。
+
+    `verify_manifest` 的 `input.content_digest` 是由**声明的** `files` / `meta_files`
+    **重算**出来的（`_aggregate_digest`），它不看磁盘。所以空清单必须声明
+    `_aggregate_digest([])`；早期版本写死魔数 `"0" * 64`，于是这条断言**只在本地有日线池时**
+    通过（走真 `input_data_attestation`），在任何没有池子的环境（CI）恒判不一致。
+    """
+    return {
+        "daily_dir": "x",
+        "codes": [],
+        "rows_total": 0,
+        "date_range": {"first_date": None, "last_date": None},
+        "files": [],
+        "meta_files": [],
+        "content_digest": B._aggregate_digest([]),
+    }
+
+
+def _minimal_manifest(inputs: dict) -> dict:
+    """一份**最小但自洽**的 manifest —— 让 `verify_manifest` 的四类校验都真的跑起来。
+
+    锁定组件 / 运行实现 / 环境三块取**真实**attestation，只有输入数据由调用方给
+    （本地有池用真输入，无池用 `_empty_input_stub()`）。
+    """
+    att = B.verify_frozen_lock()
+    return {
+        "frozen_input": {
+            "lock": {"lock_file": att["lock_file"], "lock_sha256": att["lock_sha256"]},
+            "immutable_set": att["immutable_set"],
+            "lock_component_digest": att["lock_component_digest"],
+        },
+        "run_implementation": B.implementation_attestation(),
+        "environment": B.environment_version(),
+        "input_data": inputs,
+        "run_dir": "ml/gen2/outputs/__none__",
+        "artifacts": [],
+    }
 
 
 class FrozenAttestationTest(unittest.TestCase):
@@ -281,30 +326,27 @@ class RunInputHashTest(unittest.TestCase):
 
     def test_verify_manifest_detects_tampered_hash(self):
         """反例：manifest 里任一哈希被改 → 自校验必须报 not all_pass（不是默认通过）。"""
-        att = B.verify_frozen_lock()
-        env = B.environment_version()
-        inputs = B.input_data_attestation(load_gen2_config()) if _b1_dataset_available() else {
-            "daily_dir": "x", "codes": [], "rows_total": 0,
-            "date_range": {"first_date": None, "last_date": None},
-            "files": [], "meta_files": [], "content_digest": "0" * 64,
-        }
-        m = {
-            "frozen_input": {
-                "lock": {"lock_file": att["lock_file"], "lock_sha256": att["lock_sha256"]},
-                "immutable_set": att["immutable_set"],
-                "lock_component_digest": att["lock_component_digest"],
-            },
-            "run_implementation": B.implementation_attestation(),
-            "environment": env,
-            "input_data": inputs,
-            "run_dir": "ml/gen2/outputs/__none__",
-            "artifacts": [],
-        }
+        inputs = (B.input_data_attestation(load_gen2_config())
+                  if _b1_dataset_available() else _empty_input_stub())
+        m = _minimal_manifest(inputs)
         self.assertTrue(B.verify_manifest(m)["all_pass"], B.verify_manifest(m)["detail"])
         m["frozen_input"]["lock"]["lock_sha256"] = "0" * 64
         res = B.verify_manifest(m)
         self.assertFalse(res["all_pass"])
         self.assertEqual(res["detail"][0]["check"], "lock.sha256")
+
+    def test_empty_input_declaration_is_self_consistent(self):
+        """**回归（CI 全红）**：无日线池环境走的空输入声明分支必须自洽。
+
+        这条路径在**本地（有池）根本走不到**，只看本地门禁会留下「只有 CI 才失败」的盲区；
+        这里显式跑一遍，等价于在 CI 上跑（不依赖池）。修复前的症状：4 个 `test` job 全红，
+        失败项恰为 `input.content_digest`（声明 `"0"*64` vs 重算 `_aggregate_digest([])`）。
+        """
+        m = _minimal_manifest(_empty_input_stub())
+        res = B.verify_manifest(m)
+        self.assertTrue(res["all_pass"], res["detail"])
+        # 自洽性本身就是被测对象：空清单的摘要必须等于空聚合，而不是任何魔数
+        self.assertEqual(m["input_data"]["content_digest"], B._aggregate_digest([]))
 
 
 class FrozenRunEndToEndTest(unittest.TestCase):
@@ -1202,6 +1244,14 @@ class GitBlobEvidenceTest(unittest.TestCase):
 
     #: 测试从不改写它（冻结清单），所以「磁盘内容 == HEAD 内容」是稳定的。
     PROBE = "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json"
+
+    def setUp(self):
+        # 前提：当前目录是一个 git 工作区（本地检出、`git worktree`、CI 的 actions/checkout
+        # 都满足）。`git archive` 导出的源码包没有 `.git` ⇒ 该能力无从验证，
+        # 显式跳过而不是制造一条与实现无关的「失败」。
+        if B._git("rev-parse", "--is-inside-work-tree") != "true":
+            raise unittest.SkipTest(
+                "非 git 工作区（源码导出包）→ blob 证据能力在检出环境验证")
 
     def test_blob_hash_equals_disk_normalized_hash(self):
         self.assertTrue(B._abs(self.PROBE).is_file())
