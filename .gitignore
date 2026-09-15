@@ -34,6 +34,9 @@ __pycache__/
 *.zip
 *.tar.gz
 
+# 本地状态（WorkBuddy 会话内存/交接/PR 草稿，仅本机可见，严禁入库）
+/.workbuddy/
+
 # 系统
 .DS_Store
 Thumbs.db
