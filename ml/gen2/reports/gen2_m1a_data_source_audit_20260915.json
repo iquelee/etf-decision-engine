@@ -1,0 +1,4934 @@
+{
+  "audit": "M1-A 数据源能力与边界审计（10 只老 ETF）",
+  "generated_on": "2026-09-15",
+  "authority": {
+    "freeze": "ml/gen2/reports/gen2_data_boundary_freeze_20260915.md (FROZEN v1.1)",
+    "taskbook": "ml/gen2/reports/gen2_attack_side_taskbook_20260915.md (M0 rev5)",
+    "master": "ml/gen2/universe/etf_master.csv",
+    "universe": "ml/gen2/universe/universe_v1.json"
+  },
+  "source": {
+    "provider": "东方财富 push2his kline",
+    "endpoint": "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+    "klt": 101,
+    "fqt_adjusted": 1,
+    "fqt_raw": 0,
+    "calendar_secid": "1.000001",
+    "calendar": {
+      "first_date": "1990-12-19",
+      "last_date": "2026-09-15",
+      "days": 8726
+    },
+    "note": "前复权基准 = **序列最后一个交易日**（随抓取日漂移）⇒ 跨抓取日/跨源拼接会产生虚假跳变；原始 payload 的 sha256 只在 `generated_on` 当日有效。"
+  },
+  "thresholds": {
+    "warmup_days": 250,
+    "suspension_max": 20,
+    "liquidity_min_wan": 3000.0,
+    "roll_window": 60,
+    "distortion_ratio_max": 0.01,
+    "xsource_divergence_max_pp": 1.0
+  },
+  "observed_segments": [
+    {
+      "name": "B3_OOS",
+      "first": "2021-01-04",
+      "last": "2026-09-04"
+    },
+    {
+      "name": "SEG_2020",
+      "first": "2020-03-10",
+      "last": "2020-12-31"
+    },
+    {
+      "name": "SEG_2018_2020",
+      "first": "2018-04-03",
+      "last": "2020-03-06"
+    }
+  ],
+  "scoped_codes": [
+    "512010",
+    "512690",
+    "159928",
+    "510880",
+    "512800",
+    "512000",
+    "512400",
+    "515220",
+    "159941",
+    "513500"
+  ],
+  "symbols": [
+    {
+      "code": "512010",
+      "name": "医药ETF",
+      "em_name": "医药ETF易方达",
+      "sector": "healthcare",
+      "cluster": "healthcare",
+      "asset_class": "equity",
+      "listing_date": "2013-10-28",
+      "txn_eligible": true,
+      "local_first_date": "2013-10-28",
+      "local_last_date": "2026-09-15",
+      "rows": 3135,
+      "rows_raw": 3135,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 1,
+      "max_suspension_run": {
+        "from": "2017-01-12",
+        "to": "2017-01-12",
+        "days": 1
+      },
+      "avg_turnover_60d_wan": 6.7,
+      "avg_turnover_60d_window_end": "2017-03-09",
+      "avg_turnover_seg_wan": 23527.1,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1375
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "af3c121868d9ddc7a85bdd65f92b03772093fa34717ce7973a1d616de13d4562",
+        "raw_payload_sha256": "e6904526dd76607520fdd2aa5fb6f3d1e721d8cfba12acadf26cbe1a9e535a9d",
+        "payload_bytes": {
+          "qfq": 246733,
+          "raw": 246894
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2014-11-04",
+        "liquidity_adequate_from": "2019-09-05",
+        "merged_earliest_dev_start": "2019-09-05",
+        "pre_observed_days": 1083,
+        "dev_start_pre_observed_ok": "2014-11-04",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 3137,
+        "missing_trading_days": 2,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2014": 78.4,
+        "2015": 47.2,
+        "2016": 9.7,
+        "2017": 6.7,
+        "2018": 88.1,
+        "2019": 1695.2,
+        "2020": 5109.7,
+        "2021": 11377.4,
+        "2022": 37232.9,
+        "2023": 52217.1,
+        "2024": 34678.9,
+        "2025": 46489.8,
+        "2026": 43759.6
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2021-06-28",
+            "factor_ratio": 3.9975
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000319,
+        "return_distortion_gt1pp_by_year": {
+          "2021": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2021-06-28",
+            "diff_pp": 78.16,
+            "qfq_ret_pct": 4.24,
+            "raw_ret_pct": -73.92
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2021-06-28",
+          "raw_ret_pct": -73.92,
+          "qfq_ret_pct": 4.24,
+          "gap_pp": 78.16
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1658,
+        "diff_change_sample": [
+          {
+            "date": "2013-10-29",
+            "value": 0.712
+          },
+          {
+            "date": "2013-10-30",
+            "value": 0.721
+          },
+          {
+            "date": "2013-10-31",
+            "value": 0.707
+          },
+          {
+            "date": "2013-11-01",
+            "value": 0.715
+          },
+          {
+            "date": "2013-11-04",
+            "value": 0.701
+          },
+          {
+            "date": "2013-11-05",
+            "value": 0.704
+          },
+          {
+            "date": "2013-11-06",
+            "value": 0.694
+          },
+          {
+            "date": "2013-11-07",
+            "value": 0.679
+          }
+        ],
+        "ratio_change_points": 18,
+        "ratio_change_sample": [
+          {
+            "date": "2013-11-07",
+            "value": 0.2506
+          },
+          {
+            "date": "2013-11-13",
+            "value": 0.2497
+          },
+          {
+            "date": "2013-11-26",
+            "value": 0.2497
+          },
+          {
+            "date": "2013-12-20",
+            "value": 0.2505
+          },
+          {
+            "date": "2013-12-23",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-01-24",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-02-07",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-06-10",
+            "value": 0.2497
+          }
+        ],
+        "ratio_min": 0.2497,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": -1.3,
+        "tencent_pool_cum_pct": -1.3,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "512690",
+      "name": "酒ETF",
+      "em_name": "酒ETF鹏华",
+      "sector": "consumer",
+      "cluster": "consumer",
+      "asset_class": "equity",
+      "listing_date": "2019-05-06",
+      "txn_eligible": true,
+      "local_first_date": "2019-05-06",
+      "local_last_date": "2026-09-15",
+      "rows": 1790,
+      "rows_raw": 1790,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 1,
+      "max_suspension_run": {
+        "from": "2021-05-14",
+        "to": "2021-05-14",
+        "days": 1
+      },
+      "avg_turnover_60d_wan": 2031.3,
+      "avg_turnover_60d_window_end": "2019-12-31",
+      "avg_turnover_seg_wan": 51875.8,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1375
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 206
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "f91df7758231541ec8a06374cd4d353b68a7ffa02c2ed3cabfe22f0367e3cd9b",
+        "raw_payload_sha256": "ef5510af16bc3dbaf875da9b37affc9333b775efc263c149e12299d6bdf1ef79",
+        "payload_bytes": {
+          "qfq": 145212,
+          "raw": 145144
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "需人工裁决",
+      "include_reasons": [
+        "口径疑问：日频收益失真 >1pp 占比 17.27%（上限 1%）",
+        "复权变换类型 = C 未定（分段常数假设均不成立，变换机制未定，须人工裁决）"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2020-05-14",
+        "liquidity_adequate_from": "2020-02-19",
+        "merged_earliest_dev_start": "2020-05-14",
+        "pre_observed_days": 0,
+        "dev_start_pre_observed_ok": null,
+        "usable_under_strict_date_reading": false
+      },
+      "gaps": {
+        "calendar_days_in_span": 1791,
+        "missing_trading_days": 1,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2019": 2031.3,
+        "2020": 2064.4,
+        "2021": 27898.5,
+        "2022": 38599.1,
+        "2023": 46409.5,
+        "2024": 31695.6,
+        "2025": 57222.8,
+        "2026": 65957.9
+      },
+      "adj": {
+        "same_day_factor_bad_days": 649,
+        "same_day_factor_bad_sample": [
+          {
+            "date": "2019-05-06",
+            "fields": [
+              "open",
+              "high"
+            ]
+          },
+          {
+            "date": "2019-05-07",
+            "fields": [
+              "open",
+              "high",
+              "low"
+            ]
+          },
+          {
+            "date": "2019-05-08",
+            "fields": [
+              "open",
+              "high",
+              "low"
+            ]
+          }
+        ],
+        "factor_jump_gt1pct_count": 308,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2019-05-07",
+            "factor_ratio": 1.1568
+          },
+          {
+            "date": "2019-05-09",
+            "factor_ratio": 0.8857
+          },
+          {
+            "date": "2019-05-10",
+            "factor_ratio": 1.174
+          },
+          {
+            "date": "2019-05-14",
+            "factor_ratio": 0.9786
+          },
+          {
+            "date": "2019-05-15",
+            "factor_ratio": 1.1467
+          },
+          {
+            "date": "2019-05-16",
+            "factor_ratio": 1.0254
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 141,
+        "return_distortion_gt1pp_count": 309,
+        "return_distortion_gt1pp_ratio": 0.172722,
+        "return_distortion_gt1pp_by_year": {
+          "2019": 106,
+          "2020": 140,
+          "2021": 63
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2019-05-07",
+            "diff_pp": 16.42,
+            "qfq_ret_pct": 21.15,
+            "raw_ret_pct": 4.74
+          },
+          {
+            "date": "2019-05-09",
+            "diff_pp": 10.97,
+            "qfq_ret_pct": -14.96,
+            "raw_ret_pct": -3.99
+          },
+          {
+            "date": "2019-05-10",
+            "diff_pp": 18.39,
+            "qfq_ret_pct": 24.07,
+            "raw_ret_pct": 5.68
+          },
+          {
+            "date": "2019-05-15",
+            "diff_pp": 15.51,
+            "qfq_ret_pct": 21.21,
+            "raw_ret_pct": 5.71
+          },
+          {
+            "date": "2019-05-17",
+            "diff_pp": 6.63,
+            "qfq_ret_pct": -9.64,
+            "raw_ret_pct": -3.01
+          },
+          {
+            "date": "2019-05-20",
+            "diff_pp": 5.6,
+            "qfq_ret_pct": -8.0,
+            "raw_ret_pct": -2.4
+          },
+          {
+            "date": "2019-05-23",
+            "diff_pp": 8.77,
+            "qfq_ret_pct": -12.14,
+            "raw_ret_pct": -3.37
+          },
+          {
+            "date": "2019-06-04",
+            "diff_pp": 7.66,
+            "qfq_ret_pct": -10.4,
+            "raw_ret_pct": -2.74
+          },
+          {
+            "date": "2019-06-10",
+            "diff_pp": 6.37,
+            "qfq_ret_pct": 8.33,
+            "raw_ret_pct": 1.97
+          },
+          {
+            "date": "2019-06-11",
+            "diff_pp": 15.37,
+            "qfq_ret_pct": 20.51,
+            "raw_ret_pct": 5.14
+          },
+          {
+            "date": "2019-06-20",
+            "diff_pp": 10.89,
+            "qfq_ret_pct": 15.15,
+            "raw_ret_pct": 4.26
+          },
+          {
+            "date": "2019-06-27",
+            "diff_pp": 7.47,
+            "qfq_ret_pct": 10.98,
+            "raw_ret_pct": 3.51
+          },
+          {
+            "date": "2019-07-01",
+            "diff_pp": 9.66,
+            "qfq_ret_pct": 14.84,
+            "raw_ret_pct": 5.17
+          },
+          {
+            "date": "2019-08-12",
+            "diff_pp": 6.16,
+            "qfq_ret_pct": 9.03,
+            "raw_ret_pct": 2.87
+          },
+          {
+            "date": "2019-08-14",
+            "diff_pp": 5.27,
+            "qfq_ret_pct": 7.78,
+            "raw_ret_pct": 2.51
+          },
+          {
+            "date": "2019-09-11",
+            "diff_pp": 6.0,
+            "qfq_ret_pct": -9.81,
+            "raw_ret_pct": -3.81
+          },
+          {
+            "date": "2019-09-18",
+            "diff_pp": 6.31,
+            "qfq_ret_pct": 10.05,
+            "raw_ret_pct": 3.74
+          },
+          {
+            "date": "2019-12-30",
+            "diff_pp": 5.04,
+            "qfq_ret_pct": 8.33,
+            "raw_ret_pct": 3.29
+          },
+          {
+            "date": "2020-02-03",
+            "diff_pp": 15.12,
+            "qfq_ret_pct": -25.11,
+            "raw_ret_pct": -9.99
+          },
+          {
+            "date": "2020-02-20",
+            "diff_pp": 6.13,
+            "qfq_ret_pct": 9.86,
+            "raw_ret_pct": 3.73
+          },
+          {
+            "date": "2020-02-28",
+            "diff_pp": 7.25,
+            "qfq_ret_pct": -11.68,
+            "raw_ret_pct": -4.43
+          },
+          {
+            "date": "2020-03-02",
+            "diff_pp": 5.5,
+            "qfq_ret_pct": 8.47,
+            "raw_ret_pct": 2.97
+          },
+          {
+            "date": "2020-03-05",
+            "diff_pp": 8.4,
+            "qfq_ret_pct": 13.55,
+            "raw_ret_pct": 5.15
+          },
+          {
+            "date": "2020-03-09",
+            "diff_pp": 5.95,
+            "qfq_ret_pct": -10.0,
+            "raw_ret_pct": -4.05
+          },
+          {
+            "date": "2020-03-10",
+            "diff_pp": 5.67,
+            "qfq_ret_pct": 9.18,
+            "raw_ret_pct": 3.5
+          },
+          {
+            "date": "2020-03-16",
+            "diff_pp": 6.41,
+            "qfq_ret_pct": -10.05,
+            "raw_ret_pct": -3.64
+          },
+          {
+            "date": "2020-03-19",
+            "diff_pp": 8.35,
+            "qfq_ret_pct": -12.1,
+            "raw_ret_pct": -3.75
+          },
+          {
+            "date": "2020-03-20",
+            "diff_pp": 8.21,
+            "qfq_ret_pct": 11.59,
+            "raw_ret_pct": 3.38
+          },
+          {
+            "date": "2020-03-23",
+            "diff_pp": 6.66,
+            "qfq_ret_pct": -9.74,
+            "raw_ret_pct": -3.08
+          },
+          {
+            "date": "2020-03-24",
+            "diff_pp": 10.81,
+            "qfq_ret_pct": 15.11,
+            "raw_ret_pct": 4.3
+          },
+          {
+            "date": "2020-03-25",
+            "diff_pp": 6.33,
+            "qfq_ret_pct": 9.38,
+            "raw_ret_pct": 3.04
+          },
+          {
+            "date": "2020-07-01",
+            "diff_pp": 5.04,
+            "qfq_ret_pct": 10.97,
+            "raw_ret_pct": 5.93
+          },
+          {
+            "date": "2020-07-16",
+            "diff_pp": 5.17,
+            "qfq_ret_pct": -13.84,
+            "raw_ret_pct": -8.67
+          },
+          {
+            "date": "2021-05-17",
+            "diff_pp": 53.45,
+            "qfq_ret_pct": 5.45,
+            "raw_ret_pct": -48.0
+          },
+          {
+            "date": "2021-12-31",
+            "diff_pp": 26.24,
+            "qfq_ret_pct": -0.82,
+            "raw_ret_pct": -27.06
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2021-05-17",
+          "raw_ret_pct": -48.0,
+          "qfq_ret_pct": 5.45,
+          "gap_pp": 53.45
+        }
+      },
+      "transform": {
+        "transform_kind": "C 未定",
+        "consequence": "分段常数假设均不成立，变换机制未定，须人工裁决",
+        "diff_change_points": 435,
+        "diff_change_sample": [
+          {
+            "date": "2019-05-07",
+            "value": 0.825
+          },
+          {
+            "date": "2019-05-09",
+            "value": 0.807
+          },
+          {
+            "date": "2019-05-10",
+            "value": 0.833
+          },
+          {
+            "date": "2019-05-13",
+            "value": 0.836
+          },
+          {
+            "date": "2019-05-14",
+            "value": 0.832
+          },
+          {
+            "date": "2019-05-15",
+            "value": 0.859
+          },
+          {
+            "date": "2019-05-16",
+            "value": 0.865
+          },
+          {
+            "date": "2019-05-17",
+            "value": 0.85
+          }
+        ],
+        "ratio_change_points": 548,
+        "ratio_change_sample": [
+          {
+            "date": "2019-05-07",
+            "value": 0.1325
+          },
+          {
+            "date": "2019-05-09",
+            "value": 0.118
+          },
+          {
+            "date": "2019-05-10",
+            "value": 0.1386
+          },
+          {
+            "date": "2019-05-13",
+            "value": 0.1399
+          },
+          {
+            "date": "2019-05-14",
+            "value": 0.1369
+          },
+          {
+            "date": "2019-05-15",
+            "value": 0.157
+          },
+          {
+            "date": "2019-05-16",
+            "value": 0.161
+          },
+          {
+            "date": "2019-05-17",
+            "value": 0.15
+          }
+        ],
+        "ratio_min": 0.1145,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": -31.87,
+        "tencent_pool_cum_pct": -31.87,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "159928",
+      "name": "消费ETF",
+      "em_name": "消费ETF汇添富",
+      "sector": "consumer",
+      "cluster": "consumer",
+      "asset_class": "equity",
+      "listing_date": "2013-09-16",
+      "txn_eligible": true,
+      "local_first_date": "2013-09-16",
+      "local_last_date": "2026-09-15",
+      "rows": 3160,
+      "rows_raw": 3160,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 9.3,
+      "avg_turnover_60d_window_end": "2017-02-10",
+      "avg_turnover_seg_wan": 12764.4,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "46bd1deab7d341987697eb74fbbc2b46532f06f5c0400f2da7f06a6ba2698424",
+        "raw_payload_sha256": "d9f760c9ec8df97f7b39422061f55fedfb60c47634d2c8f868d80b5e10678c8a",
+        "payload_bytes": {
+          "qfq": 247566,
+          "raw": 247718
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2014-09-25",
+        "liquidity_adequate_from": "2019-12-27",
+        "merged_earliest_dev_start": "2019-12-27",
+        "pre_observed_days": 1107,
+        "dev_start_pre_observed_ok": "2014-09-25",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 3160,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2013": 889.2,
+        "2014": 133.8,
+        "2015": 27.4,
+        "2016": 11.2,
+        "2017": 9.3,
+        "2018": 275.1,
+        "2019": 464.1,
+        "2020": 3227.4,
+        "2021": 8978.9,
+        "2022": 12209.1,
+        "2023": 11981.7,
+        "2024": 6675.6,
+        "2025": 25883.5,
+        "2026": 32851.0
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2021-06-25",
+            "factor_ratio": 4.0
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000317,
+        "return_distortion_gt1pp_by_year": {
+          "2021": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2021-06-25",
+            "diff_pp": 76.58,
+            "qfq_ret_pct": 2.11,
+            "raw_ret_pct": -74.47
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2021-06-25",
+          "raw_ret_pct": -74.47,
+          "qfq_ret_pct": 2.11,
+          "gap_pp": 76.58
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1703,
+        "diff_change_sample": [
+          {
+            "date": "2013-09-17",
+            "value": 0.728
+          },
+          {
+            "date": "2013-09-18",
+            "value": 0.737
+          },
+          {
+            "date": "2013-09-23",
+            "value": 0.747
+          },
+          {
+            "date": "2013-09-24",
+            "value": 0.754
+          },
+          {
+            "date": "2013-09-25",
+            "value": 0.752
+          },
+          {
+            "date": "2013-09-26",
+            "value": 0.755
+          },
+          {
+            "date": "2013-09-27",
+            "value": 0.751
+          },
+          {
+            "date": "2013-09-30",
+            "value": 0.762
+          }
+        ],
+        "ratio_change_points": 9,
+        "ratio_change_sample": [
+          {
+            "date": "2014-02-26",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-02-27",
+            "value": 0.2505
+          },
+          {
+            "date": "2014-04-04",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-05-13",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-05-15",
+            "value": 0.2505
+          },
+          {
+            "date": "2014-06-10",
+            "value": 0.2497
+          },
+          {
+            "date": "2014-06-17",
+            "value": 0.2506
+          },
+          {
+            "date": "2014-07-04",
+            "value": 0.2505
+          }
+        ],
+        "ratio_min": 0.2497,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": -14.34,
+        "tencent_pool_cum_pct": -14.34,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "510880",
+      "name": "红利ETF",
+      "em_name": "红利ETF华泰柏瑞",
+      "sector": "defensive_dividend",
+      "cluster": "defensive_dividend",
+      "asset_class": "equity",
+      "listing_date": "2007-01-18",
+      "txn_eligible": true,
+      "local_first_date": "2007-01-18",
+      "local_last_date": "2026-09-15",
+      "rows": 4779,
+      "rows_raw": 4779,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 237.9,
+      "avg_turnover_60d_window_end": "2016-07-25",
+      "avg_turnover_seg_wan": 16108.1,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "4f51675f20bcc9f17c284a750eab91c9a3758caba6baa03e996a25c65c2dac39",
+        "raw_payload_sha256": "2184cd2b85e0bb387a701000e42b31ab0fa2b68a53431ff13d4c335d5b44b6ba",
+        "payload_bytes": {
+          "qfq": 378445,
+          "raw": 377467
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "需人工裁决",
+      "include_reasons": [
+        "口径疑问：日频收益失真 >1pp 占比 33.26%（上限 1%）",
+        "复权变换类型 = B 减法式（非事件日收益被系统性放大 P/(P−C) 倍，不可直接用于收益计算）",
+        "该源前复权序列出现 41 个交易日**负价**（最低 -0.279）⇒ 不是可用的价格序列"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2008-01-28",
+        "liquidity_adequate_from": "2020-01-09",
+        "merged_earliest_dev_start": "2020-01-09",
+        "pre_observed_days": 2726,
+        "dev_start_pre_observed_ok": "2008-01-28",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 4779,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2007": 10845.1,
+        "2008": 6203.3,
+        "2009": 7433.1,
+        "2010": 2785.5,
+        "2011": 653.8,
+        "2012": 530.0,
+        "2013": 705.8,
+        "2014": 426.0,
+        "2015": 385.8,
+        "2016": 237.9,
+        "2017": 861.3,
+        "2018": 1490.2,
+        "2019": 1892.4,
+        "2020": 2660.9,
+        "2021": 13903.5,
+        "2022": 21078.5,
+        "2023": 19898.4,
+        "2024": 21114.5,
+        "2025": 31482.9,
+        "2026": 45365.1
+      },
+      "adj": {
+        "same_day_factor_bad_days": 4219,
+        "same_day_factor_bad_sample": [
+          {
+            "date": "2007-01-18",
+            "fields": [
+              "open",
+              "high",
+              "low"
+            ]
+          },
+          {
+            "date": "2007-01-19",
+            "fields": [
+              "open",
+              "high",
+              "low"
+            ]
+          },
+          {
+            "date": "2007-01-22",
+            "fields": [
+              "open",
+              "low"
+            ]
+          }
+        ],
+        "factor_jump_gt1pct_count": 1590,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2007-01-19",
+            "factor_ratio": 1.0789
+          },
+          {
+            "date": "2007-01-22",
+            "factor_ratio": 1.1405
+          },
+          {
+            "date": "2007-01-23",
+            "factor_ratio": 1.0527
+          },
+          {
+            "date": "2007-01-24",
+            "factor_ratio": 1.0844
+          },
+          {
+            "date": "2007-01-25",
+            "factor_ratio": 0.8958
+          },
+          {
+            "date": "2007-01-26",
+            "factor_ratio": 1.0594
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 582,
+        "return_distortion_gt1pp_count": 1589,
+        "return_distortion_gt1pp_ratio": 0.332566,
+        "return_distortion_gt1pp_by_year": {
+          "2007": 139,
+          "2008": 200,
+          "2009": 187,
+          "2010": 158,
+          "2011": 140,
+          "2012": 187,
+          "2013": 171,
+          "2014": 160,
+          "2015": 121,
+          "2016": 57,
+          "2017": 4,
+          "2018": 31,
+          "2019": 13,
+          "2020": 14,
+          "2021": 1,
+          "2022": 2,
+          "2023": 1,
+          "2024": 1,
+          "2025": 1,
+          "2026": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2007-01-19",
+            "diff_pp": 8.06,
+            "qfq_ret_pct": 10.21,
+            "raw_ret_pct": 2.15
+          },
+          {
+            "date": "2007-01-22",
+            "diff_pp": 14.65,
+            "qfq_ret_pct": 18.97,
+            "raw_ret_pct": 4.31
+          },
+          {
+            "date": "2007-01-23",
+            "diff_pp": 5.37,
+            "qfq_ret_pct": 7.25,
+            "raw_ret_pct": 1.88
+          },
+          {
+            "date": "2007-01-24",
+            "diff_pp": 8.72,
+            "qfq_ret_pct": 11.99,
+            "raw_ret_pct": 3.27
+          },
+          {
+            "date": "2007-01-25",
+            "diff_pp": 9.98,
+            "qfq_ret_pct": -14.18,
+            "raw_ret_pct": -4.2
+          },
+          {
+            "date": "2007-01-26",
+            "diff_pp": 6.07,
+            "qfq_ret_pct": 8.26,
+            "raw_ret_pct": 2.19
+          },
+          {
+            "date": "2007-01-29",
+            "diff_pp": 7.7,
+            "qfq_ret_pct": 10.71,
+            "raw_ret_pct": 3.01
+          },
+          {
+            "date": "2007-01-31",
+            "diff_pp": 15.55,
+            "qfq_ret_pct": -22.41,
+            "raw_ret_pct": -6.87
+          },
+          {
+            "date": "2007-02-02",
+            "diff_pp": 12.64,
+            "qfq_ret_pct": -16.8,
+            "raw_ret_pct": -4.15
+          },
+          {
+            "date": "2007-02-05",
+            "diff_pp": 8.02,
+            "qfq_ret_pct": -10.21,
+            "raw_ret_pct": -2.19
+          },
+          {
+            "date": "2007-02-06",
+            "diff_pp": 7.26,
+            "qfq_ret_pct": 9.04,
+            "raw_ret_pct": 1.78
+          },
+          {
+            "date": "2007-02-07",
+            "diff_pp": 8.6,
+            "qfq_ret_pct": 10.9,
+            "raw_ret_pct": 2.3
+          },
+          {
+            "date": "2007-02-12",
+            "diff_pp": 13.15,
+            "qfq_ret_pct": 17.03,
+            "raw_ret_pct": 3.87
+          },
+          {
+            "date": "2007-02-14",
+            "diff_pp": 7.12,
+            "qfq_ret_pct": 9.72,
+            "raw_ret_pct": 2.6
+          },
+          {
+            "date": "2007-02-15",
+            "diff_pp": 10.16,
+            "qfq_ret_pct": 14.24,
+            "raw_ret_pct": 4.08
+          },
+          {
+            "date": "2007-02-26",
+            "diff_pp": 10.39,
+            "qfq_ret_pct": 15.3,
+            "raw_ret_pct": 4.91
+          },
+          {
+            "date": "2007-02-27",
+            "diff_pp": 16.95,
+            "qfq_ret_pct": -26.19,
+            "raw_ret_pct": -9.24
+          },
+          {
+            "date": "2007-02-28",
+            "diff_pp": 12.26,
+            "qfq_ret_pct": 17.19,
+            "raw_ret_pct": 4.93
+          },
+          {
+            "date": "2007-03-01",
+            "diff_pp": 5.49,
+            "qfq_ret_pct": -8.08,
+            "raw_ret_pct": -2.59
+          },
+          {
+            "date": "2007-03-07",
+            "diff_pp": 5.04,
+            "qfq_ret_pct": 7.22,
+            "raw_ret_pct": 2.17
+          },
+          {
+            "date": "2007-03-14",
+            "diff_pp": 5.14,
+            "qfq_ret_pct": -7.65,
+            "raw_ret_pct": -2.51
+          },
+          {
+            "date": "2007-03-16",
+            "diff_pp": 5.26,
+            "qfq_ret_pct": -7.78,
+            "raw_ret_pct": -2.53
+          },
+          {
+            "date": "2007-04-02",
+            "diff_pp": 6.43,
+            "qfq_ret_pct": 10.1,
+            "raw_ret_pct": 3.67
+          },
+          {
+            "date": "2007-04-19",
+            "diff_pp": 5.45,
+            "qfq_ret_pct": -10.24,
+            "raw_ret_pct": -4.79
+          },
+          {
+            "date": "2007-04-23",
+            "diff_pp": 6.83,
+            "qfq_ret_pct": 12.69,
+            "raw_ret_pct": 5.87
+          },
+          {
+            "date": "2007-05-30",
+            "diff_pp": 5.33,
+            "qfq_ret_pct": -12.78,
+            "raw_ret_pct": -7.46
+          },
+          {
+            "date": "2007-06-04",
+            "diff_pp": 8.15,
+            "qfq_ret_pct": -17.38,
+            "raw_ret_pct": -9.23
+          },
+          {
+            "date": "2007-07-05",
+            "diff_pp": 5.84,
+            "qfq_ret_pct": -11.87,
+            "raw_ret_pct": -6.03
+          },
+          {
+            "date": "2007-07-06",
+            "diff_pp": 5.01,
+            "qfq_ret_pct": 9.56,
+            "raw_ret_pct": 4.55
+          },
+          {
+            "date": "2007-07-23",
+            "diff_pp": 5.83,
+            "qfq_ret_pct": 12.13,
+            "raw_ret_pct": 6.31
+          },
+          {
+            "date": "2007-08-20",
+            "diff_pp": 5.59,
+            "qfq_ret_pct": 13.9,
+            "raw_ret_pct": 8.31
+          },
+          {
+            "date": "2008-02-04",
+            "diff_pp": 6.82,
+            "qfq_ret_pct": 16.82,
+            "raw_ret_pct": 10.0
+          },
+          {
+            "date": "2008-03-18",
+            "diff_pp": 5.19,
+            "qfq_ret_pct": -10.95,
+            "raw_ret_pct": -5.77
+          },
+          {
+            "date": "2008-04-01",
+            "diff_pp": 7.17,
+            "qfq_ret_pct": -14.26,
+            "raw_ret_pct": -7.09
+          },
+          {
+            "date": "2008-04-03",
+            "diff_pp": 5.03,
+            "qfq_ret_pct": 9.07,
+            "raw_ret_pct": 4.04
+          },
+          {
+            "date": "2008-04-07",
+            "diff_pp": 6.55,
+            "qfq_ret_pct": 12.29,
+            "raw_ret_pct": 5.75
+          },
+          {
+            "date": "2008-04-14",
+            "diff_pp": 6.47,
+            "qfq_ret_pct": -12.72,
+            "raw_ret_pct": -6.26
+          },
+          {
+            "date": "2008-04-18",
+            "diff_pp": 6.2,
+            "qfq_ret_pct": -10.77,
+            "raw_ret_pct": -4.57
+          },
+          {
+            "date": "2008-04-23",
+            "diff_pp": 7.44,
+            "qfq_ret_pct": 12.58,
+            "raw_ret_pct": 5.14
+          },
+          {
+            "date": "2008-04-24",
+            "diff_pp": 12.85,
+            "qfq_ret_pct": 22.84,
+            "raw_ret_pct": 9.99
+          },
+          {
+            "date": "2008-04-30",
+            "diff_pp": 5.31,
+            "qfq_ret_pct": 10.61,
+            "raw_ret_pct": 5.3
+          },
+          {
+            "date": "2008-06-10",
+            "diff_pp": 10.51,
+            "qfq_ret_pct": -20.03,
+            "raw_ret_pct": -9.52
+          },
+          {
+            "date": "2008-06-17",
+            "diff_pp": 6.03,
+            "qfq_ret_pct": -9.81,
+            "raw_ret_pct": -3.78
+          },
+          {
+            "date": "2008-06-18",
+            "diff_pp": 10.45,
+            "qfq_ret_pct": 16.37,
+            "raw_ret_pct": 5.92
+          },
+          {
+            "date": "2008-06-19",
+            "diff_pp": 12.72,
+            "qfq_ret_pct": -21.1,
+            "raw_ret_pct": -8.38
+          },
+          {
+            "date": "2008-06-23",
+            "diff_pp": 6.3,
+            "qfq_ret_pct": -9.78,
+            "raw_ret_pct": -3.48
+          },
+          {
+            "date": "2008-06-25",
+            "diff_pp": 10.39,
+            "qfq_ret_pct": 15.59,
+            "raw_ret_pct": 5.2
+          },
+          {
+            "date": "2008-06-27",
+            "diff_pp": 12.31,
+            "qfq_ret_pct": -19.55,
+            "raw_ret_pct": -7.23
+          },
+          {
+            "date": "2008-07-01",
+            "diff_pp": 7.39,
+            "qfq_ret_pct": -10.72,
+            "raw_ret_pct": -3.33
+          },
+          {
+            "date": "2008-07-03",
+            "diff_pp": 6.54,
+            "qfq_ret_pct": 9.23,
+            "raw_ret_pct": 2.7
+          },
+          {
+            "date": "2008-07-07",
+            "diff_pp": 13.56,
+            "qfq_ret_pct": 19.44,
+            "raw_ret_pct": 5.88
+          },
+          {
+            "date": "2008-07-09",
+            "diff_pp": 7.77,
+            "qfq_ret_pct": 11.9,
+            "raw_ret_pct": 4.14
+          },
+          {
+            "date": "2008-07-15",
+            "diff_pp": 6.08,
+            "qfq_ret_pct": -9.52,
+            "raw_ret_pct": -3.44
+          },
+          {
+            "date": "2008-07-16",
+            "diff_pp": 6.95,
+            "qfq_ret_pct": -10.52,
+            "raw_ret_pct": -3.57
+          },
+          {
+            "date": "2008-07-18",
+            "diff_pp": 9.14,
+            "qfq_ret_pct": 13.12,
+            "raw_ret_pct": 3.98
+          },
+          {
+            "date": "2008-07-21",
+            "diff_pp": 7.25,
+            "qfq_ret_pct": 10.82,
+            "raw_ret_pct": 3.57
+          },
+          {
+            "date": "2008-07-24",
+            "diff_pp": 5.24,
+            "qfq_ret_pct": 8.01,
+            "raw_ret_pct": 2.78
+          },
+          {
+            "date": "2008-07-31",
+            "diff_pp": 5.53,
+            "qfq_ret_pct": -8.47,
+            "raw_ret_pct": -2.94
+          },
+          {
+            "date": "2008-08-04",
+            "diff_pp": 5.82,
+            "qfq_ret_pct": -8.64,
+            "raw_ret_pct": -2.82
+          },
+          {
+            "date": "2008-08-05",
+            "diff_pp": 6.65,
+            "qfq_ret_pct": -9.6,
+            "raw_ret_pct": -2.95
+          },
+          {
+            "date": "2008-08-08",
+            "diff_pp": 12.35,
+            "qfq_ret_pct": -17.39,
+            "raw_ret_pct": -5.05
+          },
+          {
+            "date": "2008-08-11",
+            "diff_pp": 16.58,
+            "qfq_ret_pct": -22.18,
+            "raw_ret_pct": -5.6
+          },
+          {
+            "date": "2008-08-18",
+            "diff_pp": 18.91,
+            "qfq_ret_pct": -24.34,
+            "raw_ret_pct": -5.42
+          },
+          {
+            "date": "2008-08-20",
+            "diff_pp": 35.95,
+            "qfq_ret_pct": 44.17,
+            "raw_ret_pct": 8.21
+          },
+          {
+            "date": "2008-08-21",
+            "diff_pp": 15.94,
+            "qfq_ret_pct": -21.19,
+            "raw_ret_pct": -5.25
+          },
+          {
+            "date": "2008-08-22",
+            "diff_pp": 9.71,
+            "qfq_ret_pct": -12.22,
+            "raw_ret_pct": -2.52
+          },
+          {
+            "date": "2008-08-26",
+            "diff_pp": 17.24,
+            "qfq_ret_pct": -20.99,
+            "raw_ret_pct": -3.75
+          },
+          {
+            "date": "2008-08-28",
+            "diff_pp": 5.4,
+            "qfq_ret_pct": 6.32,
+            "raw_ret_pct": 0.92
+          },
+          {
+            "date": "2008-08-29",
+            "diff_pp": 14.5,
+            "qfq_ret_pct": 17.13,
+            "raw_ret_pct": 2.63
+          },
+          {
+            "date": "2008-09-01",
+            "diff_pp": 13.29,
+            "qfq_ret_pct": -16.12,
+            "raw_ret_pct": -2.83
+          },
+          {
+            "date": "2008-09-04",
+            "diff_pp": 6.16,
+            "qfq_ret_pct": 7.2,
+            "raw_ret_pct": 1.03
+          },
+          {
+            "date": "2008-09-05",
+            "diff_pp": 13.48,
+            "qfq_ret_pct": -15.9,
+            "raw_ret_pct": -2.42
+          },
+          {
+            "date": "2008-09-08",
+            "diff_pp": 27.38,
+            "qfq_ret_pct": -31.51,
+            "raw_ret_pct": -4.13
+          },
+          {
+            "date": "2008-09-09",
+            "diff_pp": 7.23,
+            "qfq_ret_pct": 7.98,
+            "raw_ret_pct": 0.75
+          },
+          {
+            "date": "2008-09-10",
+            "diff_pp": 8.18,
+            "qfq_ret_pct": 9.09,
+            "raw_ret_pct": 0.91
+          },
+          {
+            "date": "2008-09-11",
+            "diff_pp": 17.64,
+            "qfq_ret_pct": -19.79,
+            "raw_ret_pct": -2.15
+          },
+          {
+            "date": "2008-09-12",
+            "diff_pp": 10.06,
+            "qfq_ret_pct": 11.04,
+            "raw_ret_pct": 0.98
+          },
+          {
+            "date": "2008-09-16",
+            "diff_pp": 19.52,
+            "qfq_ret_pct": -21.64,
+            "raw_ret_pct": -2.12
+          },
+          {
+            "date": "2008-09-17",
+            "diff_pp": 22.7,
+            "qfq_ret_pct": -24.63,
+            "raw_ret_pct": -1.93
+          },
+          {
+            "date": "2008-09-18",
+            "diff_pp": 44.66,
+            "qfq_ret_pct": -47.52,
+            "raw_ret_pct": -2.86
+          },
+          {
+            "date": "2008-09-19",
+            "diff_pp": 297.54,
+            "qfq_ret_pct": 307.55,
+            "raw_ret_pct": 10.01
+          },
+          {
+            "date": "2008-09-22",
+            "diff_pp": 46.01,
+            "qfq_ret_pct": 52.31,
+            "raw_ret_pct": 6.31
+          },
+          {
+            "date": "2008-09-23",
+            "diff_pp": 24.89,
+            "qfq_ret_pct": -30.09,
+            "raw_ret_pct": -5.2
+          },
+          {
+            "date": "2008-09-24",
+            "diff_pp": 5.69,
+            "qfq_ret_pct": 6.52,
+            "raw_ret_pct": 0.83
+          },
+          {
+            "date": "2008-09-25",
+            "diff_pp": 23.67,
+            "qfq_ret_pct": 27.35,
+            "raw_ret_pct": 3.68
+          },
+          {
+            "date": "2008-10-06",
+            "diff_pp": 29.23,
+            "qfq_ret_pct": -35.28,
+            "raw_ret_pct": -6.05
+          },
+          {
+            "date": "2008-10-08",
+            "diff_pp": 20.72,
+            "qfq_ret_pct": -23.41,
+            "raw_ret_pct": -2.7
+          },
+          {
+            "date": "2008-10-09",
+            "diff_pp": 19.69,
+            "qfq_ret_pct": -21.66,
+            "raw_ret_pct": -1.96
+          },
+          {
+            "date": "2008-10-10",
+            "diff_pp": 55.81,
+            "qfq_ret_pct": -60.16,
+            "raw_ret_pct": -4.36
+          },
+          {
+            "date": "2008-10-13",
+            "diff_pp": 100.94,
+            "qfq_ret_pct": 104.08,
+            "raw_ret_pct": 3.14
+          },
+          {
+            "date": "2008-10-14",
+            "diff_pp": 42.32,
+            "qfq_ret_pct": -45.0,
+            "raw_ret_pct": -2.68
+          },
+          {
+            "date": "2008-10-15",
+            "diff_pp": 82.57,
+            "qfq_ret_pct": -85.45,
+            "raw_ret_pct": -2.88
+          },
+          {
+            "date": "2008-10-16",
+            "diff_pp": 920.33,
+            "qfq_ret_pct": -925.0,
+            "raw_ret_pct": -4.67
+          },
+          {
+            "date": "2008-10-17",
+            "diff_pp": 22.14,
+            "qfq_ret_pct": -21.21,
+            "raw_ret_pct": 0.93
+          },
+          {
+            "date": "2008-10-20",
+            "diff_pp": 97.45,
+            "qfq_ret_pct": -94.23,
+            "raw_ret_pct": 3.22
+          },
+          {
+            "date": "2008-10-21",
+            "diff_pp": 634.54,
+            "qfq_ret_pct": 633.33,
+            "raw_ret_pct": -1.21
+          },
+          {
+            "date": "2008-10-22",
+            "diff_pp": 193.61,
+            "qfq_ret_pct": 190.91,
+            "raw_ret_pct": -2.7
+          },
+          {
+            "date": "2008-10-24",
+            "diff_pp": 69.58,
+            "qfq_ret_pct": 66.67,
+            "raw_ret_pct": -2.91
+          },
+          {
+            "date": "2008-10-27",
+            "diff_pp": 117.28,
+            "qfq_ret_pct": 109.09,
+            "raw_ret_pct": -8.19
+          },
+          {
+            "date": "2008-10-28",
+            "diff_pp": 17.82,
+            "qfq_ret_pct": -15.22,
+            "raw_ret_pct": 2.6
+          },
+          {
+            "date": "2008-10-29",
+            "diff_pp": 31.6,
+            "qfq_ret_pct": 27.69,
+            "raw_ret_pct": -3.91
+          },
+          {
+            "date": "2008-10-30",
+            "diff_pp": 11.45,
+            "qfq_ret_pct": -9.64,
+            "raw_ret_pct": 1.81
+          },
+          {
+            "date": "2008-10-31",
+            "diff_pp": 10.89,
+            "qfq_ret_pct": 9.33,
+            "raw_ret_pct": -1.55
+          },
+          {
+            "date": "2008-11-03",
+            "diff_pp": 6.74,
+            "qfq_ret_pct": 5.69,
+            "raw_ret_pct": -1.05
+          },
+          {
+            "date": "2008-11-04",
+            "diff_pp": 8.75,
+            "qfq_ret_pct": 7.31,
+            "raw_ret_pct": -1.44
+          },
+          {
+            "date": "2008-11-05",
+            "diff_pp": 19.6,
+            "qfq_ret_pct": -16.13,
+            "raw_ret_pct": 3.47
+          },
+          {
+            "date": "2008-11-06",
+            "diff_pp": 9.03,
+            "qfq_ret_pct": 7.69,
+            "raw_ret_pct": -1.34
+          },
+          {
+            "date": "2008-11-10",
+            "diff_pp": 63.74,
+            "qfq_ret_pct": -53.91,
+            "raw_ret_pct": 9.83
+          },
+          {
+            "date": "2008-11-11",
+            "diff_pp": 20.18,
+            "qfq_ret_pct": 18.75,
+            "raw_ret_pct": -1.43
+          },
+          {
+            "date": "2008-11-12",
+            "diff_pp": 17.24,
+            "qfq_ret_pct": -15.79,
+            "raw_ret_pct": 1.46
+          },
+          {
+            "date": "2008-11-13",
+            "diff_pp": 79.78,
+            "qfq_ret_pct": -74.11,
+            "raw_ret_pct": 5.67
+          },
+          {
+            "date": "2008-11-14",
+            "diff_pp": 147.54,
+            "qfq_ret_pct": -144.83,
+            "raw_ret_pct": 2.71
+          },
+          {
+            "date": "2008-11-17",
+            "diff_pp": 350.95,
+            "qfq_ret_pct": 353.85,
+            "raw_ret_pct": 2.89
+          },
+          {
+            "date": "2008-11-18",
+            "diff_pp": 204.22,
+            "qfq_ret_pct": -211.86,
+            "raw_ret_pct": -7.65
+          },
+          {
+            "date": "2008-11-19",
+            "diff_pp": 167.63,
+            "qfq_ret_pct": -160.61,
+            "raw_ret_pct": 7.02
+          },
+          {
+            "date": "2008-11-20",
+            "diff_pp": 43.89,
+            "qfq_ret_pct": -45.0,
+            "raw_ret_pct": -1.11
+          },
+          {
+            "date": "2008-11-21",
+            "diff_pp": 53.79,
+            "qfq_ret_pct": -54.55,
+            "raw_ret_pct": -0.75
+          },
+          {
+            "date": "2008-11-24",
+            "diff_pp": 556.47,
+            "qfq_ret_pct": -560.0,
+            "raw_ret_pct": -3.53
+          },
+          {
+            "date": "2008-11-25",
+            "diff_pp": 31.35,
+            "qfq_ret_pct": 30.43,
+            "raw_ret_pct": -0.92
+          },
+          {
+            "date": "2008-11-26",
+            "diff_pp": 38.12,
+            "qfq_ret_pct": -36.67,
+            "raw_ret_pct": 1.45
+          },
+          {
+            "date": "2008-11-27",
+            "diff_pp": 78.2,
+            "qfq_ret_pct": -76.32,
+            "raw_ret_pct": 1.89
+          },
+          {
+            "date": "2008-11-28",
+            "diff_pp": 301.72,
+            "qfq_ret_pct": 300.0,
+            "raw_ret_pct": -1.72
+          },
+          {
+            "date": "2008-12-01",
+            "diff_pp": 68.23,
+            "qfq_ret_pct": -66.67,
+            "raw_ret_pct": 1.56
+          },
+          {
+            "date": "2008-12-02",
+            "diff_pp": 8.4,
+            "qfq_ret_pct": -8.33,
+            "raw_ret_pct": 0.06
+          },
+          {
+            "date": "2008-12-03",
+            "diff_pp": 677.46,
+            "qfq_ret_pct": -672.73,
+            "raw_ret_pct": 4.73
+          },
+          {
+            "date": "2008-12-04",
+            "diff_pp": 56.47,
+            "qfq_ret_pct": 58.73,
+            "raw_ret_pct": 2.26
+          },
+          {
+            "date": "2008-12-05",
+            "diff_pp": 9.4,
+            "qfq_ret_pct": 10.0,
+            "raw_ret_pct": 0.6
+          },
+          {
+            "date": "2008-12-08",
+            "diff_pp": 57.78,
+            "qfq_ret_pct": 61.82,
+            "raw_ret_pct": 4.03
+          },
+          {
+            "date": "2008-12-09",
+            "diff_pp": 22.72,
+            "qfq_ret_pct": -25.28,
+            "raw_ret_pct": -2.57
+          },
+          {
+            "date": "2008-12-10",
+            "diff_pp": 14.56,
+            "qfq_ret_pct": 15.79,
+            "raw_ret_pct": 1.23
+          },
+          {
+            "date": "2008-12-11",
+            "diff_pp": 32.54,
+            "qfq_ret_pct": -35.71,
+            "raw_ret_pct": -3.18
+          },
+          {
+            "date": "2008-12-12",
+            "diff_pp": 59.88,
+            "qfq_ret_pct": -63.64,
+            "raw_ret_pct": -3.76
+          },
+          {
+            "date": "2008-12-15",
+            "diff_pp": 48.88,
+            "qfq_ret_pct": 50.0,
+            "raw_ret_pct": 1.12
+          },
+          {
+            "date": "2008-12-16",
+            "diff_pp": 30.44,
+            "qfq_ret_pct": 31.48,
+            "raw_ret_pct": 1.04
+          },
+          {
+            "date": "2008-12-18",
+            "diff_pp": 24.99,
+            "qfq_ret_pct": 26.09,
+            "raw_ret_pct": 1.09
+          },
+          {
+            "date": "2008-12-19",
+            "diff_pp": 11.98,
+            "qfq_ret_pct": 12.64,
+            "raw_ret_pct": 0.66
+          },
+          {
+            "date": "2008-12-22",
+            "diff_pp": 32.66,
+            "qfq_ret_pct": -34.69,
+            "raw_ret_pct": -2.03
+          },
+          {
+            "date": "2008-12-23",
+            "diff_pp": 115.62,
+            "qfq_ret_pct": -120.31,
+            "raw_ret_pct": -4.7
+          },
+          {
+            "date": "2008-12-24",
+            "diff_pp": 255.96,
+            "qfq_ret_pct": 253.85,
+            "raw_ret_pct": -2.11
+          },
+          {
+            "date": "2008-12-25",
+            "diff_pp": 38.07,
+            "qfq_ret_pct": 36.96,
+            "raw_ret_pct": -1.11
+          },
+          {
+            "date": "2008-12-29",
+            "diff_pp": 9.92,
+            "qfq_ret_pct": 9.52,
+            "raw_ret_pct": -0.4
+          },
+          {
+            "date": "2008-12-30",
+            "diff_pp": 27.28,
+            "qfq_ret_pct": 26.09,
+            "raw_ret_pct": -1.19
+          },
+          {
+            "date": "2008-12-31",
+            "diff_pp": 26.76,
+            "qfq_ret_pct": 25.29,
+            "raw_ret_pct": -1.48
+          },
+          {
+            "date": "2009-01-05",
+            "diff_pp": 57.16,
+            "qfq_ret_pct": -53.21,
+            "raw_ret_pct": 3.95
+          },
+          {
+            "date": "2009-01-06",
+            "diff_pp": 107.4,
+            "qfq_ret_pct": -103.92,
+            "raw_ret_pct": 3.48
+          },
+          {
+            "date": "2009-01-07",
+            "diff_pp": 299.62,
+            "qfq_ret_pct": -300.0,
+            "raw_ret_pct": -0.38
+          },
+          {
+            "date": "2009-01-08",
+            "diff_pp": 726.84,
+            "qfq_ret_pct": 725.0,
+            "raw_ret_pct": -1.84
+          },
+          {
+            "date": "2009-01-09",
+            "diff_pp": 95.95,
+            "qfq_ret_pct": -93.94,
+            "raw_ret_pct": 2.01
+          },
+          {
+            "date": "2009-01-12",
+            "diff_pp": 550.7,
+            "qfq_ret_pct": -550.0,
+            "raw_ret_pct": 0.7
+          },
+          {
+            "date": "2009-01-13",
+            "diff_pp": 342.49,
+            "qfq_ret_pct": -344.44,
+            "raw_ret_pct": -1.96
+          },
+          {
+            "date": "2009-01-14",
+            "diff_pp": 230.49,
+            "qfq_ret_pct": -227.27,
+            "raw_ret_pct": 3.22
+          },
+          {
+            "date": "2009-01-15",
+            "diff_pp": 45.62,
+            "qfq_ret_pct": -46.43,
+            "raw_ret_pct": -0.81
+          },
+          {
+            "date": "2009-01-16",
+            "diff_pp": 277.36,
+            "qfq_ret_pct": 280.0,
+            "raw_ret_pct": 2.64
+          },
+          {
+            "date": "2009-01-19",
+            "diff_pp": 11.85,
+            "qfq_ret_pct": 12.28,
+            "raw_ret_pct": 0.43
+          },
+          {
+            "date": "2009-01-20",
+            "diff_pp": 16.52,
+            "qfq_ret_pct": 17.19,
+            "raw_ret_pct": 0.67
+          },
+          {
+            "date": "2009-01-21",
+            "diff_pp": 21.64,
+            "qfq_ret_pct": -22.67,
+            "raw_ret_pct": -1.03
+          },
+          {
+            "date": "2009-01-22",
+            "diff_pp": 34.92,
+            "qfq_ret_pct": 36.21,
+            "raw_ret_pct": 1.29
+          },
+          {
+            "date": "2009-02-02",
+            "diff_pp": 25.31,
+            "qfq_ret_pct": 26.58,
+            "raw_ret_pct": 1.27
+          },
+          {
+            "date": "2009-02-03",
+            "diff_pp": 42.32,
+            "qfq_ret_pct": 45.0,
+            "raw_ret_pct": 2.68
+          },
+          {
+            "date": "2009-02-04",
+            "diff_pp": 30.31,
+            "qfq_ret_pct": 33.1,
+            "raw_ret_pct": 2.79
+          },
+          {
+            "date": "2009-02-06",
+            "diff_pp": 32.77,
+            "qfq_ret_pct": 36.79,
+            "raw_ret_pct": 4.01
+          },
+          {
+            "date": "2009-02-09",
+            "diff_pp": 14.28,
+            "qfq_ret_pct": 16.67,
+            "raw_ret_pct": 2.39
+          },
+          {
+            "date": "2009-02-10",
+            "diff_pp": 6.52,
+            "qfq_ret_pct": 7.79,
+            "raw_ret_pct": 1.27
+          },
+          {
+            "date": "2009-02-13",
+            "diff_pp": 17.54,
+            "qfq_ret_pct": 21.17,
+            "raw_ret_pct": 3.63
+          },
+          {
+            "date": "2009-02-16",
+            "diff_pp": 15.18,
+            "qfq_ret_pct": 18.99,
+            "raw_ret_pct": 3.81
+          },
+          {
+            "date": "2009-02-17",
+            "diff_pp": 12.29,
+            "qfq_ret_pct": -15.96,
+            "raw_ret_pct": -3.67
+          },
+          {
+            "date": "2009-02-18",
+            "diff_pp": 20.45,
+            "qfq_ret_pct": -25.57,
+            "raw_ret_pct": -5.12
+          },
+          {
+            "date": "2009-02-19",
+            "diff_pp": 9.75,
+            "qfq_ret_pct": 11.56,
+            "raw_ret_pct": 1.82
+          },
+          {
+            "date": "2009-02-20",
+            "diff_pp": 11.61,
+            "qfq_ret_pct": 14.02,
+            "raw_ret_pct": 2.42
+          },
+          {
+            "date": "2009-02-23",
+            "diff_pp": 9.94,
+            "qfq_ret_pct": 12.3,
+            "raw_ret_pct": 2.36
+          },
+          {
+            "date": "2009-02-24",
+            "diff_pp": 17.48,
+            "qfq_ret_pct": -22.14,
+            "raw_ret_pct": -4.66
+          },
+          {
+            "date": "2009-02-26",
+            "diff_pp": 23.47,
+            "qfq_ret_pct": -28.31,
+            "raw_ret_pct": -4.84
+          },
+          {
+            "date": "2009-02-27",
+            "diff_pp": 26.17,
+            "qfq_ret_pct": -30.04,
+            "raw_ret_pct": -3.87
+          },
+          {
+            "date": "2009-03-02",
+            "diff_pp": 12.79,
+            "qfq_ret_pct": 14.11,
+            "raw_ret_pct": 1.32
+          },
+          {
+            "date": "2009-03-04",
+            "diff_pp": 57.17,
+            "qfq_ret_pct": 64.02,
+            "raw_ret_pct": 6.86
+          },
+          {
+            "date": "2009-03-06",
+            "diff_pp": 5.58,
+            "qfq_ret_pct": -6.69,
+            "raw_ret_pct": -1.11
+          },
+          {
+            "date": "2009-03-09",
+            "diff_pp": 17.56,
+            "qfq_ret_pct": -20.82,
+            "raw_ret_pct": -3.26
+          },
+          {
+            "date": "2009-03-10",
+            "diff_pp": 8.64,
+            "qfq_ret_pct": 9.91,
+            "raw_ret_pct": 1.27
+          },
+          {
+            "date": "2009-03-11",
+            "diff_pp": 6.75,
+            "qfq_ret_pct": -7.84,
+            "raw_ret_pct": -1.09
+          },
+          {
+            "date": "2009-03-13",
+            "diff_pp": 6.36,
+            "qfq_ret_pct": -7.3,
+            "raw_ret_pct": -0.94
+          },
+          {
+            "date": "2009-03-16",
+            "diff_pp": 7.33,
+            "qfq_ret_pct": 8.33,
+            "raw_ret_pct": 1.0
+          },
+          {
+            "date": "2009-03-17",
+            "diff_pp": 23.81,
+            "qfq_ret_pct": 27.35,
+            "raw_ret_pct": 3.54
+          },
+          {
+            "date": "2009-03-18",
+            "diff_pp": 6.49,
+            "qfq_ret_pct": 7.72,
+            "raw_ret_pct": 1.23
+          },
+          {
+            "date": "2009-03-19",
+            "diff_pp": 10.09,
+            "qfq_ret_pct": 12.15,
+            "raw_ret_pct": 2.06
+          },
+          {
+            "date": "2009-03-23",
+            "diff_pp": 9.12,
+            "qfq_ret_pct": 11.23,
+            "raw_ret_pct": 2.11
+          },
+          {
+            "date": "2009-03-24",
+            "diff_pp": 5.32,
+            "qfq_ret_pct": 5.17,
+            "raw_ret_pct": -0.15
+          },
+          {
+            "date": "2009-03-25",
+            "diff_pp": 9.73,
+            "qfq_ret_pct": -12.41,
+            "raw_ret_pct": -2.68
+          },
+          {
+            "date": "2009-03-26",
+            "diff_pp": 11.63,
+            "qfq_ret_pct": 14.44,
+            "raw_ret_pct": 2.8
+          },
+          {
+            "date": "2009-04-01",
+            "diff_pp": 7.0,
+            "qfq_ret_pct": 8.97,
+            "raw_ret_pct": 1.96
+          },
+          {
+            "date": "2009-04-08",
+            "diff_pp": 11.35,
+            "qfq_ret_pct": -14.93,
+            "raw_ret_pct": -3.58
+          },
+          {
+            "date": "2009-04-10",
+            "diff_pp": 7.95,
+            "qfq_ret_pct": 10.16,
+            "raw_ret_pct": 2.22
+          },
+          {
+            "date": "2009-04-13",
+            "diff_pp": 12.03,
+            "qfq_ret_pct": 15.72,
+            "raw_ret_pct": 3.7
+          },
+          {
+            "date": "2009-04-20",
+            "diff_pp": 5.02,
+            "qfq_ret_pct": 6.85,
+            "raw_ret_pct": 1.84
+          },
+          {
+            "date": "2009-04-22",
+            "diff_pp": 9.8,
+            "qfq_ret_pct": -13.54,
+            "raw_ret_pct": -3.73
+          },
+          {
+            "date": "2009-04-27",
+            "diff_pp": 10.26,
+            "qfq_ret_pct": -13.57,
+            "raw_ret_pct": -3.31
+          },
+          {
+            "date": "2009-04-29",
+            "diff_pp": 9.48,
+            "qfq_ret_pct": 12.19,
+            "raw_ret_pct": 2.71
+          },
+          {
+            "date": "2009-05-04",
+            "diff_pp": 12.61,
+            "qfq_ret_pct": 16.73,
+            "raw_ret_pct": 4.13
+          },
+          {
+            "date": "2009-05-11",
+            "diff_pp": 5.47,
+            "qfq_ret_pct": -7.74,
+            "raw_ret_pct": -2.27
+          },
+          {
+            "date": "2009-05-12",
+            "diff_pp": 6.55,
+            "qfq_ret_pct": 9.06,
+            "raw_ret_pct": 2.51
+          },
+          {
+            "date": "2009-06-01",
+            "diff_pp": 7.34,
+            "qfq_ret_pct": 10.21,
+            "raw_ret_pct": 2.87
+          },
+          {
+            "date": "2009-06-12",
+            "diff_pp": 6.0,
+            "qfq_ret_pct": -8.77,
+            "raw_ret_pct": -2.78
+          },
+          {
+            "date": "2009-07-06",
+            "diff_pp": 6.14,
+            "qfq_ret_pct": 9.72,
+            "raw_ret_pct": 3.58
+          },
+          {
+            "date": "2009-07-14",
+            "diff_pp": 5.18,
+            "qfq_ret_pct": 8.54,
+            "raw_ret_pct": 3.36
+          },
+          {
+            "date": "2009-08-12",
+            "diff_pp": 6.08,
+            "qfq_ret_pct": -11.31,
+            "raw_ret_pct": -5.23
+          },
+          {
+            "date": "2009-08-17",
+            "diff_pp": 9.68,
+            "qfq_ret_pct": -16.62,
+            "raw_ret_pct": -6.94
+          },
+          {
+            "date": "2009-08-19",
+            "diff_pp": 9.55,
+            "qfq_ret_pct": -15.7,
+            "raw_ret_pct": -6.15
+          },
+          {
+            "date": "2009-08-20",
+            "diff_pp": 8.3,
+            "qfq_ret_pct": 12.81,
+            "raw_ret_pct": 4.51
+          },
+          {
+            "date": "2009-08-31",
+            "diff_pp": 15.06,
+            "qfq_ret_pct": -23.97,
+            "raw_ret_pct": -8.91
+          },
+          {
+            "date": "2009-09-03",
+            "diff_pp": 13.43,
+            "qfq_ret_pct": 19.81,
+            "raw_ret_pct": 6.38
+          },
+          {
+            "date": "2009-09-18",
+            "diff_pp": 5.09,
+            "qfq_ret_pct": -8.58,
+            "raw_ret_pct": -3.48
+          },
+          {
+            "date": "2009-09-22",
+            "diff_pp": 5.16,
+            "qfq_ret_pct": -8.38,
+            "raw_ret_pct": -3.22
+          },
+          {
+            "date": "2009-09-28",
+            "diff_pp": 6.35,
+            "qfq_ret_pct": -9.72,
+            "raw_ret_pct": -3.37
+          },
+          {
+            "date": "2009-10-09",
+            "diff_pp": 10.78,
+            "qfq_ret_pct": 16.05,
+            "raw_ret_pct": 5.28
+          },
+          {
+            "date": "2009-11-30",
+            "diff_pp": 5.48,
+            "qfq_ret_pct": 9.46,
+            "raw_ret_pct": 3.98
+          },
+          {
+            "date": "2010-04-19",
+            "diff_pp": 7.02,
+            "qfq_ret_pct": -11.83,
+            "raw_ret_pct": -4.81
+          },
+          {
+            "date": "2010-05-06",
+            "diff_pp": 8.5,
+            "qfq_ret_pct": -13.0,
+            "raw_ret_pct": -4.49
+          },
+          {
+            "date": "2010-05-17",
+            "diff_pp": 9.17,
+            "qfq_ret_pct": -13.42,
+            "raw_ret_pct": -4.25
+          },
+          {
+            "date": "2010-05-18",
+            "diff_pp": 5.01,
+            "qfq_ret_pct": 7.01,
+            "raw_ret_pct": 2.01
+          },
+          {
+            "date": "2010-05-24",
+            "diff_pp": 8.12,
+            "qfq_ret_pct": 11.53,
+            "raw_ret_pct": 3.41
+          },
+          {
+            "date": "2010-05-31",
+            "diff_pp": 5.51,
+            "qfq_ret_pct": -7.99,
+            "raw_ret_pct": -2.48
+          },
+          {
+            "date": "2010-06-07",
+            "diff_pp": 6.49,
+            "qfq_ret_pct": -9.06,
+            "raw_ret_pct": -2.57
+          },
+          {
+            "date": "2010-06-09",
+            "diff_pp": 7.76,
+            "qfq_ret_pct": 10.59,
+            "raw_ret_pct": 2.83
+          },
+          {
+            "date": "2010-06-21",
+            "diff_pp": 5.99,
+            "qfq_ret_pct": 8.23,
+            "raw_ret_pct": 2.24
+          },
+          {
+            "date": "2010-06-29",
+            "diff_pp": 11.1,
+            "qfq_ret_pct": -15.32,
+            "raw_ret_pct": -4.22
+          },
+          {
+            "date": "2010-07-06",
+            "diff_pp": 8.12,
+            "qfq_ret_pct": 10.42,
+            "raw_ret_pct": 2.29
+          },
+          {
+            "date": "2010-07-09",
+            "diff_pp": 8.63,
+            "qfq_ret_pct": 11.32,
+            "raw_ret_pct": 2.69
+          },
+          {
+            "date": "2010-07-19",
+            "diff_pp": 6.51,
+            "qfq_ret_pct": 8.74,
+            "raw_ret_pct": 2.22
+          },
+          {
+            "date": "2010-07-28",
+            "diff_pp": 5.78,
+            "qfq_ret_pct": 8.17,
+            "raw_ret_pct": 2.39
+          },
+          {
+            "date": "2010-08-10",
+            "diff_pp": 5.74,
+            "qfq_ret_pct": -8.37,
+            "raw_ret_pct": -2.63
+          },
+          {
+            "date": "2010-08-16",
+            "diff_pp": 5.27,
+            "qfq_ret_pct": 7.5,
+            "raw_ret_pct": 2.23
+          },
+          {
+            "date": "2010-08-25",
+            "diff_pp": 5.44,
+            "qfq_ret_pct": -7.8,
+            "raw_ret_pct": -2.36
+          },
+          {
+            "date": "2010-09-06",
+            "diff_pp": 5.54,
+            "qfq_ret_pct": 7.87,
+            "raw_ret_pct": 2.33
+          },
+          {
+            "date": "2010-09-16",
+            "diff_pp": 5.78,
+            "qfq_ret_pct": -8.17,
+            "raw_ret_pct": -2.39
+          },
+          {
+            "date": "2010-10-08",
+            "diff_pp": 7.56,
+            "qfq_ret_pct": 10.62,
+            "raw_ret_pct": 3.06
+          },
+          {
+            "date": "2010-10-11",
+            "diff_pp": 6.53,
+            "qfq_ret_pct": 9.45,
+            "raw_ret_pct": 2.93
+          },
+          {
+            "date": "2010-10-15",
+            "diff_pp": 7.43,
+            "qfq_ret_pct": 11.44,
+            "raw_ret_pct": 4.01
+          },
+          {
+            "date": "2010-11-12",
+            "diff_pp": 7.23,
+            "qfq_ret_pct": -12.0,
+            "raw_ret_pct": -4.78
+          },
+          {
+            "date": "2010-11-16",
+            "diff_pp": 6.95,
+            "qfq_ret_pct": -11.05,
+            "raw_ret_pct": -4.1
+          },
+          {
+            "date": "2010-12-13",
+            "diff_pp": 6.36,
+            "qfq_ret_pct": 9.38,
+            "raw_ret_pct": 3.01
+          },
+          {
+            "date": "2011-01-17",
+            "diff_pp": 5.95,
+            "qfq_ret_pct": -8.81,
+            "raw_ret_pct": -2.86
+          },
+          {
+            "date": "2011-01-20",
+            "diff_pp": 5.94,
+            "qfq_ret_pct": -8.66,
+            "raw_ret_pct": -2.72
+          },
+          {
+            "date": "2011-02-14",
+            "diff_pp": 7.88,
+            "qfq_ret_pct": 11.66,
+            "raw_ret_pct": 3.77
+          },
+          {
+            "date": "2011-05-23",
+            "diff_pp": 5.36,
+            "qfq_ret_pct": -8.12,
+            "raw_ret_pct": -2.75
+          },
+          {
+            "date": "2011-06-24",
+            "diff_pp": 5.99,
+            "qfq_ret_pct": 8.65,
+            "raw_ret_pct": 2.65
+          },
+          {
+            "date": "2011-07-25",
+            "diff_pp": 5.65,
+            "qfq_ret_pct": -8.27,
+            "raw_ret_pct": -2.62
+          },
+          {
+            "date": "2011-08-05",
+            "diff_pp": 5.25,
+            "qfq_ret_pct": -7.43,
+            "raw_ret_pct": -2.18
+          },
+          {
+            "date": "2011-08-08",
+            "diff_pp": 9.2,
+            "qfq_ret_pct": -12.74,
+            "raw_ret_pct": -3.54
+          },
+          {
+            "date": "2011-08-25",
+            "diff_pp": 9.48,
+            "qfq_ret_pct": 12.85,
+            "raw_ret_pct": 3.37
+          },
+          {
+            "date": "2011-09-05",
+            "diff_pp": 5.41,
+            "qfq_ret_pct": -7.34,
+            "raw_ret_pct": -1.93
+          },
+          {
+            "date": "2011-09-07",
+            "diff_pp": 6.97,
+            "qfq_ret_pct": 9.21,
+            "raw_ret_pct": 2.24
+          },
+          {
+            "date": "2011-09-21",
+            "diff_pp": 7.5,
+            "qfq_ret_pct": 9.98,
+            "raw_ret_pct": 2.48
+          },
+          {
+            "date": "2011-09-22",
+            "diff_pp": 7.74,
+            "qfq_ret_pct": -10.56,
+            "raw_ret_pct": -2.81
+          },
+          {
+            "date": "2011-10-12",
+            "diff_pp": 9.64,
+            "qfq_ret_pct": 12.41,
+            "raw_ret_pct": 2.77
+          },
+          {
+            "date": "2011-10-18",
+            "diff_pp": 6.51,
+            "qfq_ret_pct": -8.64,
+            "raw_ret_pct": -2.13
+          },
+          {
+            "date": "2011-10-20",
+            "diff_pp": 7.7,
+            "qfq_ret_pct": -10.02,
+            "raw_ret_pct": -2.32
+          },
+          {
+            "date": "2011-10-24",
+            "diff_pp": 8.08,
+            "qfq_ret_pct": 7.97,
+            "raw_ret_pct": -0.11
+          },
+          {
+            "date": "2011-10-25",
+            "diff_pp": 5.82,
+            "qfq_ret_pct": 7.61,
+            "raw_ret_pct": 1.79
+          },
+          {
+            "date": "2011-11-14",
+            "diff_pp": 5.38,
+            "qfq_ret_pct": 7.31,
+            "raw_ret_pct": 1.93
+          },
+          {
+            "date": "2011-11-16",
+            "diff_pp": 6.59,
+            "qfq_ret_pct": -9.09,
+            "raw_ret_pct": -2.5
+          },
+          {
+            "date": "2011-11-18",
+            "diff_pp": 5.32,
+            "qfq_ret_pct": -7.16,
+            "raw_ret_pct": -1.84
+          },
+          {
+            "date": "2011-11-30",
+            "diff_pp": 9.72,
+            "qfq_ret_pct": -12.85,
+            "raw_ret_pct": -3.12
+          },
+          {
+            "date": "2011-12-01",
+            "diff_pp": 6.91,
+            "qfq_ret_pct": 8.85,
+            "raw_ret_pct": 1.94
+          },
+          {
+            "date": "2011-12-15",
+            "diff_pp": 7.24,
+            "qfq_ret_pct": -9.01,
+            "raw_ret_pct": -1.77
+          },
+          {
+            "date": "2011-12-16",
+            "diff_pp": 6.59,
+            "qfq_ret_pct": 8.05,
+            "raw_ret_pct": 1.46
+          },
+          {
+            "date": "2011-12-21",
+            "diff_pp": 5.64,
+            "qfq_ret_pct": -6.93,
+            "raw_ret_pct": -1.29
+          },
+          {
+            "date": "2012-01-09",
+            "diff_pp": 13.19,
+            "qfq_ret_pct": 16.03,
+            "raw_ret_pct": 2.83
+          },
+          {
+            "date": "2012-01-10",
+            "diff_pp": 9.95,
+            "qfq_ret_pct": 12.43,
+            "raw_ret_pct": 2.48
+          },
+          {
+            "date": "2012-01-17",
+            "diff_pp": 15.7,
+            "qfq_ret_pct": 19.61,
+            "raw_ret_pct": 3.91
+          },
+          {
+            "date": "2012-01-19",
+            "diff_pp": 6.12,
+            "qfq_ret_pct": 7.84,
+            "raw_ret_pct": 1.72
+          },
+          {
+            "date": "2012-01-30",
+            "diff_pp": 5.43,
+            "qfq_ret_pct": -7.16,
+            "raw_ret_pct": -1.72
+          },
+          {
+            "date": "2012-02-02",
+            "diff_pp": 6.72,
+            "qfq_ret_pct": 8.6,
+            "raw_ret_pct": 1.88
+          },
+          {
+            "date": "2012-02-07",
+            "diff_pp": 5.22,
+            "qfq_ret_pct": -6.84,
+            "raw_ret_pct": -1.63
+          },
+          {
+            "date": "2012-02-08",
+            "diff_pp": 7.71,
+            "qfq_ret_pct": 9.95,
+            "raw_ret_pct": 2.24
+          },
+          {
+            "date": "2012-03-14",
+            "diff_pp": 5.96,
+            "qfq_ret_pct": -8.09,
+            "raw_ret_pct": -2.13
+          },
+          {
+            "date": "2012-03-28",
+            "diff_pp": 6.33,
+            "qfq_ret_pct": -8.28,
+            "raw_ret_pct": -1.95
+          },
+          {
+            "date": "2012-04-05",
+            "diff_pp": 7.56,
+            "qfq_ret_pct": 9.62,
+            "raw_ret_pct": 2.06
+          },
+          {
+            "date": "2012-04-12",
+            "diff_pp": 7.1,
+            "qfq_ret_pct": 9.18,
+            "raw_ret_pct": 2.08
+          },
+          {
+            "date": "2012-04-18",
+            "diff_pp": 6.13,
+            "qfq_ret_pct": 8.02,
+            "raw_ret_pct": 1.89
+          },
+          {
+            "date": "2012-06-04",
+            "diff_pp": 6.94,
+            "qfq_ret_pct": -9.22,
+            "raw_ret_pct": -2.28
+          },
+          {
+            "date": "2012-06-21",
+            "diff_pp": 6.35,
+            "qfq_ret_pct": -8.22,
+            "raw_ret_pct": -1.86
+          },
+          {
+            "date": "2012-07-09",
+            "diff_pp": 7.77,
+            "qfq_ret_pct": -9.7,
+            "raw_ret_pct": -1.93
+          },
+          {
+            "date": "2012-07-23",
+            "diff_pp": 6.33,
+            "qfq_ret_pct": -7.78,
+            "raw_ret_pct": -1.45
+          },
+          {
+            "date": "2012-08-13",
+            "diff_pp": 8.22,
+            "qfq_ret_pct": -10.12,
+            "raw_ret_pct": -1.9
+          },
+          {
+            "date": "2012-08-27",
+            "diff_pp": 9.59,
+            "qfq_ret_pct": -11.28,
+            "raw_ret_pct": -1.7
+          },
+          {
+            "date": "2012-09-04",
+            "diff_pp": 5.91,
+            "qfq_ret_pct": -6.91,
+            "raw_ret_pct": -1.0
+          },
+          {
+            "date": "2012-09-07",
+            "diff_pp": 26.05,
+            "qfq_ret_pct": 30.04,
+            "raw_ret_pct": 4.0
+          },
+          {
+            "date": "2012-09-17",
+            "diff_pp": 9.09,
+            "qfq_ret_pct": -10.88,
+            "raw_ret_pct": -1.78
+          },
+          {
+            "date": "2012-09-18",
+            "diff_pp": 8.04,
+            "qfq_ret_pct": -9.45,
+            "raw_ret_pct": -1.41
+          },
+          {
+            "date": "2012-09-20",
+            "diff_pp": 8.1,
+            "qfq_ret_pct": -9.4,
+            "raw_ret_pct": -1.3
+          },
+          {
+            "date": "2012-09-27",
+            "diff_pp": 15.82,
+            "qfq_ret_pct": 18.05,
+            "raw_ret_pct": 2.23
+          },
+          {
+            "date": "2012-09-28",
+            "diff_pp": 11.34,
+            "qfq_ret_pct": 13.22,
+            "raw_ret_pct": 1.89
+          },
+          {
+            "date": "2012-10-09",
+            "diff_pp": 8.01,
+            "qfq_ret_pct": 9.47,
+            "raw_ret_pct": 1.46
+          },
+          {
+            "date": "2012-10-18",
+            "diff_pp": 5.07,
+            "qfq_ret_pct": 6.05,
+            "raw_ret_pct": 0.98
+          },
+          {
+            "date": "2012-10-23",
+            "diff_pp": 5.38,
+            "qfq_ret_pct": -6.51,
+            "raw_ret_pct": -1.14
+          },
+          {
+            "date": "2012-10-26",
+            "diff_pp": 8.26,
+            "qfq_ret_pct": -9.82,
+            "raw_ret_pct": -1.56
+          },
+          {
+            "date": "2012-11-01",
+            "diff_pp": 10.83,
+            "qfq_ret_pct": 12.65,
+            "raw_ret_pct": 1.83
+          },
+          {
+            "date": "2012-11-08",
+            "diff_pp": 5.96,
+            "qfq_ret_pct": -7.12,
+            "raw_ret_pct": -1.15
+          },
+          {
+            "date": "2012-11-13",
+            "diff_pp": 8.41,
+            "qfq_ret_pct": -9.92,
+            "raw_ret_pct": -1.52
+          },
+          {
+            "date": "2012-11-16",
+            "diff_pp": 8.22,
+            "qfq_ret_pct": -9.52,
+            "raw_ret_pct": -1.31
+          },
+          {
+            "date": "2012-11-19",
+            "diff_pp": 6.27,
+            "qfq_ret_pct": 7.18,
+            "raw_ret_pct": 0.9
+          },
+          {
+            "date": "2012-11-20",
+            "diff_pp": 6.19,
+            "qfq_ret_pct": -7.14,
+            "raw_ret_pct": -0.95
+          },
+          {
+            "date": "2012-11-21",
+            "diff_pp": 8.41,
+            "qfq_ret_pct": 9.62,
+            "raw_ret_pct": 1.2
+          },
+          {
+            "date": "2012-12-03",
+            "diff_pp": 5.65,
+            "qfq_ret_pct": -6.44,
+            "raw_ret_pct": -0.79
+          },
+          {
+            "date": "2012-12-04",
+            "diff_pp": 5.15,
+            "qfq_ret_pct": 5.82,
+            "raw_ret_pct": 0.67
+          },
+          {
+            "date": "2012-12-05",
+            "diff_pp": 25.05,
+            "qfq_ret_pct": 28.5,
+            "raw_ret_pct": 3.45
+          },
+          {
+            "date": "2012-12-07",
+            "diff_pp": 11.68,
+            "qfq_ret_pct": 13.73,
+            "raw_ret_pct": 2.05
+          },
+          {
+            "date": "2012-12-14",
+            "diff_pp": 25.84,
+            "qfq_ret_pct": 30.85,
+            "raw_ret_pct": 5.01
+          },
+          {
+            "date": "2012-12-25",
+            "diff_pp": 10.65,
+            "qfq_ret_pct": 13.54,
+            "raw_ret_pct": 2.9
+          },
+          {
+            "date": "2012-12-28",
+            "diff_pp": 5.9,
+            "qfq_ret_pct": 7.69,
+            "raw_ret_pct": 1.79
+          },
+          {
+            "date": "2013-01-11",
+            "diff_pp": 5.83,
+            "qfq_ret_pct": -7.88,
+            "raw_ret_pct": -2.05
+          },
+          {
+            "date": "2013-01-14",
+            "diff_pp": 13.43,
+            "qfq_ret_pct": 17.76,
+            "raw_ret_pct": 4.34
+          },
+          {
+            "date": "2013-01-28",
+            "diff_pp": 9.33,
+            "qfq_ret_pct": 13.0,
+            "raw_ret_pct": 3.66
+          },
+          {
+            "date": "2013-02-01",
+            "diff_pp": 6.4,
+            "qfq_ret_pct": 9.47,
+            "raw_ret_pct": 3.07
+          },
+          {
+            "date": "2013-02-21",
+            "diff_pp": 8.45,
+            "qfq_ret_pct": -12.33,
+            "raw_ret_pct": -3.88
+          },
+          {
+            "date": "2013-02-28",
+            "diff_pp": 8.32,
+            "qfq_ret_pct": 11.66,
+            "raw_ret_pct": 3.34
+          },
+          {
+            "date": "2013-03-04",
+            "diff_pp": 11.31,
+            "qfq_ret_pct": -16.32,
+            "raw_ret_pct": -5.01
+          },
+          {
+            "date": "2013-03-05",
+            "diff_pp": 11.72,
+            "qfq_ret_pct": 16.06,
+            "raw_ret_pct": 4.34
+          },
+          {
+            "date": "2013-03-20",
+            "diff_pp": 10.34,
+            "qfq_ret_pct": 14.29,
+            "raw_ret_pct": 3.95
+          },
+          {
+            "date": "2013-03-28",
+            "diff_pp": 11.0,
+            "qfq_ret_pct": -15.52,
+            "raw_ret_pct": -4.52
+          },
+          {
+            "date": "2013-04-19",
+            "diff_pp": 11.12,
+            "qfq_ret_pct": 14.67,
+            "raw_ret_pct": 3.54
+          },
+          {
+            "date": "2013-04-23",
+            "diff_pp": 7.83,
+            "qfq_ret_pct": -10.73,
+            "raw_ret_pct": -2.9
+          },
+          {
+            "date": "2013-04-24",
+            "diff_pp": 5.16,
+            "qfq_ret_pct": 6.87,
+            "raw_ret_pct": 1.7
+          },
+          {
+            "date": "2013-05-03",
+            "diff_pp": 5.37,
+            "qfq_ret_pct": 7.17,
+            "raw_ret_pct": 1.8
+          },
+          {
+            "date": "2013-06-13",
+            "diff_pp": 9.92,
+            "qfq_ret_pct": -13.35,
+            "raw_ret_pct": -3.42
+          },
+          {
+            "date": "2013-06-20",
+            "diff_pp": 9.98,
+            "qfq_ret_pct": -12.84,
+            "raw_ret_pct": -2.86
+          },
+          {
+            "date": "2013-06-24",
+            "diff_pp": 22.74,
+            "qfq_ret_pct": -28.37,
+            "raw_ret_pct": -5.62
+          },
+          {
+            "date": "2013-06-25",
+            "diff_pp": 7.48,
+            "qfq_ret_pct": -8.8,
+            "raw_ret_pct": -1.32
+          },
+          {
+            "date": "2013-06-26",
+            "diff_pp": 7.93,
+            "qfq_ret_pct": -9.21,
+            "raw_ret_pct": -1.28
+          },
+          {
+            "date": "2013-06-27",
+            "diff_pp": 7.58,
+            "qfq_ret_pct": 8.7,
+            "raw_ret_pct": 1.11
+          },
+          {
+            "date": "2013-06-28",
+            "diff_pp": 22.23,
+            "qfq_ret_pct": 25.78,
+            "raw_ret_pct": 3.54
+          },
+          {
+            "date": "2013-07-08",
+            "diff_pp": 7.64,
+            "qfq_ret_pct": -9.12,
+            "raw_ret_pct": -1.48
+          },
+          {
+            "date": "2013-07-10",
+            "diff_pp": 11.14,
+            "qfq_ret_pct": 13.18,
+            "raw_ret_pct": 2.04
+          },
+          {
+            "date": "2013-07-11",
+            "diff_pp": 28.66,
+            "qfq_ret_pct": 34.59,
+            "raw_ret_pct": 5.93
+          },
+          {
+            "date": "2013-07-12",
+            "diff_pp": 9.36,
+            "qfq_ret_pct": -11.96,
+            "raw_ret_pct": -2.6
+          },
+          {
+            "date": "2013-07-18",
+            "diff_pp": 9.55,
+            "qfq_ret_pct": -11.83,
+            "raw_ret_pct": -2.29
+          },
+          {
+            "date": "2013-07-19",
+            "diff_pp": 8.31,
+            "qfq_ret_pct": -10.07,
+            "raw_ret_pct": -1.75
+          },
+          {
+            "date": "2013-07-23",
+            "diff_pp": 10.88,
+            "qfq_ret_pct": 12.96,
+            "raw_ret_pct": 2.08
+          },
+          {
+            "date": "2013-07-24",
+            "diff_pp": 5.66,
+            "qfq_ret_pct": -6.89,
+            "raw_ret_pct": -1.22
+          },
+          {
+            "date": "2013-07-29",
+            "diff_pp": 13.09,
+            "qfq_ret_pct": -15.64,
+            "raw_ret_pct": -2.55
+          },
+          {
+            "date": "2013-07-30",
+            "diff_pp": 7.03,
+            "qfq_ret_pct": 8.19,
+            "raw_ret_pct": 1.16
+          },
+          {
+            "date": "2013-08-01",
+            "diff_pp": 9.59,
+            "qfq_ret_pct": 11.33,
+            "raw_ret_pct": 1.74
+          },
+          {
+            "date": "2013-08-12",
+            "diff_pp": 18.76,
+            "qfq_ret_pct": 22.54,
+            "raw_ret_pct": 3.77
+          },
+          {
+            "date": "2013-08-26",
+            "diff_pp": 7.83,
+            "qfq_ret_pct": 9.67,
+            "raw_ret_pct": 1.84
+          },
+          {
+            "date": "2013-09-03",
+            "diff_pp": 6.28,
+            "qfq_ret_pct": 7.87,
+            "raw_ret_pct": 1.58
+          },
+          {
+            "date": "2013-09-09",
+            "diff_pp": 21.03,
+            "qfq_ret_pct": 26.9,
+            "raw_ret_pct": 5.87
+          },
+          {
+            "date": "2013-09-24",
+            "diff_pp": 6.6,
+            "qfq_ret_pct": -8.87,
+            "raw_ret_pct": -2.27
+          },
+          {
+            "date": "2013-09-26",
+            "diff_pp": 5.4,
+            "qfq_ret_pct": -7.08,
+            "raw_ret_pct": -1.68
+          },
+          {
+            "date": "2013-10-10",
+            "diff_pp": 5.05,
+            "qfq_ret_pct": -6.62,
+            "raw_ret_pct": -1.57
+          },
+          {
+            "date": "2013-10-11",
+            "diff_pp": 5.5,
+            "qfq_ret_pct": 7.09,
+            "raw_ret_pct": 1.59
+          },
+          {
+            "date": "2013-10-30",
+            "diff_pp": 5.22,
+            "qfq_ret_pct": 6.67,
+            "raw_ret_pct": 1.44
+          },
+          {
+            "date": "2013-11-13",
+            "diff_pp": 9.03,
+            "qfq_ret_pct": -11.44,
+            "raw_ret_pct": -2.4
+          },
+          {
+            "date": "2013-11-15",
+            "diff_pp": 7.75,
+            "qfq_ret_pct": 9.54,
+            "raw_ret_pct": 1.78
+          },
+          {
+            "date": "2013-11-18",
+            "diff_pp": 16.38,
+            "qfq_ret_pct": 20.51,
+            "raw_ret_pct": 4.13
+          },
+          {
+            "date": "2013-12-11",
+            "diff_pp": 5.26,
+            "qfq_ret_pct": -6.88,
+            "raw_ret_pct": -1.62
+          },
+          {
+            "date": "2013-12-20",
+            "diff_pp": 6.42,
+            "qfq_ret_pct": -7.96,
+            "raw_ret_pct": -1.54
+          },
+          {
+            "date": "2013-12-26",
+            "diff_pp": 7.76,
+            "qfq_ret_pct": -9.49,
+            "raw_ret_pct": -1.74
+          },
+          {
+            "date": "2013-12-27",
+            "diff_pp": 7.85,
+            "qfq_ret_pct": 9.44,
+            "raw_ret_pct": 1.59
+          },
+          {
+            "date": "2014-01-03",
+            "diff_pp": 5.9,
+            "qfq_ret_pct": -7.23,
+            "raw_ret_pct": -1.33
+          },
+          {
+            "date": "2014-01-06",
+            "diff_pp": 9.81,
+            "qfq_ret_pct": -11.86,
+            "raw_ret_pct": -2.05
+          },
+          {
+            "date": "2014-01-17",
+            "diff_pp": 5.05,
+            "qfq_ret_pct": -5.95,
+            "raw_ret_pct": -0.9
+          },
+          {
+            "date": "2014-01-22",
+            "diff_pp": 12.39,
+            "qfq_ret_pct": 14.47,
+            "raw_ret_pct": 2.09
+          },
+          {
+            "date": "2014-02-10",
+            "diff_pp": 11.29,
+            "qfq_ret_pct": 13.46,
+            "raw_ret_pct": 2.17
+          },
+          {
+            "date": "2014-02-24",
+            "diff_pp": 7.22,
+            "qfq_ret_pct": -8.95,
+            "raw_ret_pct": -1.73
+          },
+          {
+            "date": "2014-02-25",
+            "diff_pp": 8.91,
+            "qfq_ret_pct": -10.85,
+            "raw_ret_pct": -1.94
+          },
+          {
+            "date": "2014-03-10",
+            "diff_pp": 15.39,
+            "qfq_ret_pct": -18.42,
+            "raw_ret_pct": -3.03
+          },
+          {
+            "date": "2014-03-13",
+            "diff_pp": 9.13,
+            "qfq_ret_pct": 10.6,
+            "raw_ret_pct": 1.46
+          },
+          {
+            "date": "2014-03-17",
+            "diff_pp": 5.39,
+            "qfq_ret_pct": 6.33,
+            "raw_ret_pct": 0.94
+          },
+          {
+            "date": "2014-03-20",
+            "diff_pp": 5.56,
+            "qfq_ret_pct": -6.56,
+            "raw_ret_pct": -1.0
+          },
+          {
+            "date": "2014-03-21",
+            "diff_pp": 13.51,
+            "qfq_ret_pct": 15.79,
+            "raw_ret_pct": 2.28
+          },
+          {
+            "date": "2014-04-08",
+            "diff_pp": 10.59,
+            "qfq_ret_pct": 12.69,
+            "raw_ret_pct": 2.1
+          },
+          {
+            "date": "2014-04-10",
+            "diff_pp": 6.42,
+            "qfq_ret_pct": 7.87,
+            "raw_ret_pct": 1.45
+          },
+          {
+            "date": "2014-04-15",
+            "diff_pp": 5.17,
+            "qfq_ret_pct": -6.42,
+            "raw_ret_pct": -1.25
+          },
+          {
+            "date": "2014-04-21",
+            "diff_pp": 5.46,
+            "qfq_ret_pct": -6.67,
+            "raw_ret_pct": -1.21
+          },
+          {
+            "date": "2014-04-28",
+            "diff_pp": 6.79,
+            "qfq_ret_pct": -8.15,
+            "raw_ret_pct": -1.36
+          },
+          {
+            "date": "2014-05-12",
+            "diff_pp": 10.28,
+            "qfq_ret_pct": 12.2,
+            "raw_ret_pct": 1.93
+          },
+          {
+            "date": "2014-05-21",
+            "diff_pp": 5.02,
+            "qfq_ret_pct": 5.95,
+            "raw_ret_pct": 0.93
+          },
+          {
+            "date": "2014-06-13",
+            "diff_pp": 5.77,
+            "qfq_ret_pct": 6.93,
+            "raw_ret_pct": 1.17
+          },
+          {
+            "date": "2014-06-19",
+            "diff_pp": 6.35,
+            "qfq_ret_pct": -7.69,
+            "raw_ret_pct": -1.34
+          },
+          {
+            "date": "2014-07-14",
+            "diff_pp": 5.8,
+            "qfq_ret_pct": 7.07,
+            "raw_ret_pct": 1.27
+          },
+          {
+            "date": "2014-07-22",
+            "diff_pp": 5.19,
+            "qfq_ret_pct": 6.39,
+            "raw_ret_pct": 1.2
+          },
+          {
+            "date": "2014-07-24",
+            "diff_pp": 6.18,
+            "qfq_ret_pct": 7.72,
+            "raw_ret_pct": 1.54
+          },
+          {
+            "date": "2014-07-28",
+            "diff_pp": 7.83,
+            "qfq_ret_pct": 10.03,
+            "raw_ret_pct": 2.19
+          },
+          {
+            "date": "2014-08-11",
+            "diff_pp": 5.36,
+            "qfq_ret_pct": 7.09,
+            "raw_ret_pct": 1.73
+          },
+          {
+            "date": "2014-10-31",
+            "diff_pp": 5.61,
+            "qfq_ret_pct": 7.95,
+            "raw_ret_pct": 2.34
+          },
+          {
+            "date": "2014-11-10",
+            "diff_pp": 5.88,
+            "qfq_ret_pct": 8.52,
+            "raw_ret_pct": 2.65
+          },
+          {
+            "date": "2014-12-02",
+            "diff_pp": 5.04,
+            "qfq_ret_pct": 8.14,
+            "raw_ret_pct": 3.11
+          },
+          {
+            "date": "2014-12-04",
+            "diff_pp": 6.22,
+            "qfq_ret_pct": 10.39,
+            "raw_ret_pct": 4.16
+          },
+          {
+            "date": "2015-01-19",
+            "diff_pp": 9.23,
+            "qfq_ret_pct": -18.37,
+            "raw_ret_pct": -9.14
+          },
+          {
+            "date": "2015-01-20",
+            "diff_pp": 6.31,
+            "qfq_ret_pct": 5.49,
+            "raw_ret_pct": -0.82
+          },
+          {
+            "date": "2015-06-26",
+            "diff_pp": 5.11,
+            "qfq_ret_pct": -15.01,
+            "raw_ret_pct": -9.9
+          },
+          {
+            "date": "2015-07-08",
+            "diff_pp": 7.62,
+            "qfq_ret_pct": -17.62,
+            "raw_ret_pct": -9.99
+          },
+          {
+            "date": "2015-07-09",
+            "diff_pp": 9.27,
+            "qfq_ret_pct": 19.27,
+            "raw_ret_pct": 10.01
+          },
+          {
+            "date": "2015-07-10",
+            "diff_pp": 7.75,
+            "qfq_ret_pct": 17.74,
+            "raw_ret_pct": 9.99
+          },
+          {
+            "date": "2015-07-27",
+            "diff_pp": 5.96,
+            "qfq_ret_pct": -15.26,
+            "raw_ret_pct": -9.3
+          },
+          {
+            "date": "2015-08-24",
+            "diff_pp": 7.93,
+            "qfq_ret_pct": -17.93,
+            "raw_ret_pct": -10.0
+          },
+          {
+            "date": "2015-08-25",
+            "diff_pp": 8.83,
+            "qfq_ret_pct": -17.98,
+            "raw_ret_pct": -9.15
+          },
+          {
+            "date": "2015-08-27",
+            "diff_pp": 7.46,
+            "qfq_ret_pct": 13.91,
+            "raw_ret_pct": 6.45
+          },
+          {
+            "date": "2015-09-16",
+            "diff_pp": 6.08,
+            "qfq_ret_pct": 11.76,
+            "raw_ret_pct": 5.68
+          },
+          {
+            "date": "2016-01-26",
+            "diff_pp": 6.08,
+            "qfq_ret_pct": -11.74,
+            "raw_ret_pct": -5.67
+          },
+          {
+            "date": "2016-03-02",
+            "diff_pp": 5.91,
+            "qfq_ret_pct": 10.67,
+            "raw_ret_pct": 4.76
+          },
+          {
+            "date": "2021-01-18",
+            "diff_pp": 5.36,
+            "qfq_ret_pct": 0.72,
+            "raw_ret_pct": -4.64
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2015-08-24",
+          "raw_ret_pct": -10.0,
+          "qfq_ret_pct": -17.93,
+          "gap_pp": -7.93
+        }
+      },
+      "transform": {
+        "transform_kind": "B 减法式",
+        "consequence": "非事件日收益被系统性放大 P/(P−C) 倍，不可直接用于收益计算",
+        "diff_change_points": 19,
+        "diff_change_sample": [
+          {
+            "date": "2009-03-24",
+            "value": 1.552
+          },
+          {
+            "date": "2009-10-22",
+            "value": 1.529
+          },
+          {
+            "date": "2010-07-15",
+            "value": 1.509
+          },
+          {
+            "date": "2010-10-22",
+            "value": 1.488
+          },
+          {
+            "date": "2011-10-24",
+            "value": 1.453
+          },
+          {
+            "date": "2012-12-18",
+            "value": 1.412
+          },
+          {
+            "date": "2014-01-21",
+            "value": 1.353
+          },
+          {
+            "date": "2015-01-20",
+            "value": 1.273
+          }
+        ],
+        "ratio_change_points": 3393,
+        "ratio_change_sample": [
+          {
+            "date": "2007-01-19",
+            "value": 0.2275
+          },
+          {
+            "date": "2007-01-22",
+            "value": 0.2594
+          },
+          {
+            "date": "2007-01-23",
+            "value": 0.2731
+          },
+          {
+            "date": "2007-01-24",
+            "value": 0.2961
+          },
+          {
+            "date": "2007-01-25",
+            "value": 0.2653
+          },
+          {
+            "date": "2007-01-26",
+            "value": 0.281
+          },
+          {
+            "date": "2007-01-29",
+            "value": 0.302
+          },
+          {
+            "date": "2007-01-30",
+            "value": 0.3063
+          }
+        ],
+        "ratio_min": -0.2151,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 41,
+        "negative_qfq_min": -0.279,
+        "negative_qfq_sample": [
+          "2008-10-16",
+          "2008-10-17",
+          "2008-10-20"
+        ],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 31.83,
+        "tencent_pool_cum_pct": 31.83,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "512800",
+      "name": "银行ETF",
+      "em_name": "银行ETF华宝",
+      "sector": "financial",
+      "cluster": "financial",
+      "asset_class": "equity",
+      "listing_date": "2017-08-03",
+      "txn_eligible": true,
+      "local_first_date": "2017-08-03",
+      "local_last_date": "2026-09-15",
+      "rows": 2215,
+      "rows_raw": 2215,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 859.3,
+      "avg_turnover_60d_window_end": "2018-01-05",
+      "avg_turnover_seg_wan": 33688.8,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "cadee6af3443508dfc0744bd076cdd768a3fb5530caa9f9b01e10ce1898a87eb",
+        "raw_payload_sha256": "8dd28bb54e5aade834eac393e21d417bfbfc308367e1326ee8f1b149c1784531",
+        "payload_bytes": {
+          "qfq": 178678,
+          "raw": 178754
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2018-08-10",
+        "liquidity_adequate_from": "2018-10-15",
+        "merged_earliest_dev_start": "2018-10-15",
+        "pre_observed_days": 162,
+        "dev_start_pre_observed_ok": null,
+        "usable_under_strict_date_reading": false
+      },
+      "gaps": {
+        "calendar_days_in_span": 2215,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2017": 880.2,
+        "2018": 859.3,
+        "2019": 3110.2,
+        "2020": 8786.9,
+        "2021": 26183.2,
+        "2022": 23286.1,
+        "2023": 13706.9,
+        "2024": 13555.5,
+        "2025": 41925.4,
+        "2026": 69755.6
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2025-07-07",
+            "factor_ratio": 1.9989
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000452,
+        "return_distortion_gt1pp_by_year": {
+          "2025": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2025-07-07",
+            "diff_pp": 50.25,
+            "qfq_ret_pct": 0.56,
+            "raw_ret_pct": -49.69
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2025-07-07",
+          "raw_ret_pct": -49.69,
+          "qfq_ret_pct": 0.56,
+          "gap_pp": 50.25
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1452,
+        "diff_change_sample": [
+          {
+            "date": "2017-08-07",
+            "value": 0.497
+          },
+          {
+            "date": "2017-08-09",
+            "value": 0.49
+          },
+          {
+            "date": "2017-08-10",
+            "value": 0.488
+          },
+          {
+            "date": "2017-08-11",
+            "value": 0.481
+          },
+          {
+            "date": "2017-08-15",
+            "value": 0.486
+          },
+          {
+            "date": "2017-08-16",
+            "value": 0.484
+          },
+          {
+            "date": "2017-08-22",
+            "value": 0.487
+          },
+          {
+            "date": "2017-08-23",
+            "value": 0.493
+          }
+        ],
+        "ratio_change_points": 1,
+        "ratio_change_sample": [
+          {
+            "date": "2025-07-07",
+            "value": 1.0
+          }
+        ],
+        "ratio_min": 0.5,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 59.7,
+        "tencent_pool_cum_pct": 59.7,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "512000",
+      "name": "券商ETF",
+      "em_name": "券商ETF华宝",
+      "sector": "financial",
+      "cluster": "financial",
+      "asset_class": "equity",
+      "listing_date": "2016-09-14",
+      "txn_eligible": true,
+      "local_first_date": "2016-09-14",
+      "local_last_date": "2026-09-15",
+      "rows": 2428,
+      "rows_raw": 2428,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 406.2,
+      "avg_turnover_60d_window_end": "2017-06-15",
+      "avg_turnover_seg_wan": 62116.5,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "71c7fc06bb4a5d6d152ac26bb07132a1a950ce29e7817ef2a11f48597222d52a",
+        "raw_payload_sha256": "09833b534672d5f991c43a14c6191b3f6afef1f7831a08c0d45275f39483307b",
+        "payload_bytes": {
+          "qfq": 196206,
+          "raw": 196307
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2017-09-25",
+        "liquidity_adequate_from": "2018-11-02",
+        "merged_earliest_dev_start": "2018-11-02",
+        "pre_observed_days": 375,
+        "dev_start_pre_observed_ok": "2017-09-25",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 2428,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2016": 1080.4,
+        "2017": 406.2,
+        "2018": 931.6,
+        "2019": 6139.9,
+        "2020": 28637.6,
+        "2021": 82099.5,
+        "2022": 50533.3,
+        "2023": 52473.6,
+        "2024": 36561.8,
+        "2025": 58124.3,
+        "2026": 91342.4
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2025-08-04",
+            "factor_ratio": 2.0
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000412,
+        "return_distortion_gt1pp_by_year": {
+          "2025": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2025-08-04",
+            "diff_pp": 50.26,
+            "qfq_ret_pct": 0.53,
+            "raw_ret_pct": -49.74
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2025-08-04",
+          "raw_ret_pct": -49.74,
+          "qfq_ret_pct": 0.53,
+          "gap_pp": 50.26
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1638,
+        "diff_change_sample": [
+          {
+            "date": "2016-09-21",
+            "value": 0.494
+          },
+          {
+            "date": "2016-09-23",
+            "value": 0.491
+          },
+          {
+            "date": "2016-09-26",
+            "value": 0.481
+          },
+          {
+            "date": "2016-09-27",
+            "value": 0.488
+          },
+          {
+            "date": "2016-09-28",
+            "value": 0.485
+          },
+          {
+            "date": "2016-09-29",
+            "value": 0.491
+          },
+          {
+            "date": "2016-10-10",
+            "value": 0.498
+          },
+          {
+            "date": "2016-10-14",
+            "value": 0.497
+          }
+        ],
+        "ratio_change_points": 5,
+        "ratio_change_sample": [
+          {
+            "date": "2018-10-11",
+            "value": 0.5008
+          },
+          {
+            "date": "2018-10-16",
+            "value": 0.5
+          },
+          {
+            "date": "2018-10-17",
+            "value": 0.5008
+          },
+          {
+            "date": "2018-10-18",
+            "value": 0.5
+          },
+          {
+            "date": "2025-08-04",
+            "value": 1.0
+          }
+        ],
+        "ratio_min": 0.5,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 29.1,
+        "tencent_pool_cum_pct": 29.1,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "512400",
+      "name": "有色金属ETF",
+      "em_name": "有色金属ETF南方",
+      "sector": "cyclical_resources",
+      "cluster": "cyclical_resources",
+      "asset_class": "equity",
+      "listing_date": "2017-09-01",
+      "txn_eligible": true,
+      "local_first_date": "2017-09-01",
+      "local_last_date": "2026-09-15",
+      "rows": 2194,
+      "rows_raw": 2194,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 99.3,
+      "avg_turnover_60d_window_end": "2018-10-25",
+      "avg_turnover_seg_wan": 27747.3,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "023a23d5b60c1d1112fbcfe812430b492a0dc43c881efa18f16695c9977ea195",
+        "raw_payload_sha256": "0e87f0da2df991934538250ccd589aca33cbee68b4c98e3971f7015ede588a01",
+        "payload_bytes": {
+          "qfq": 175083,
+          "raw": 175080
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "需人工裁决",
+      "include_reasons": [
+        "口径疑问：与既有腾讯池累计收益偏离 +10.63pp（上限 ±1pp）",
+        "复权变换类型 = B 减法式（非事件日收益被系统性放大 P/(P−C) 倍，不可直接用于收益计算）"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2018-09-10",
+        "liquidity_adequate_from": "2020-02-03",
+        "merged_earliest_dev_start": "2020-02-03",
+        "pre_observed_days": 141,
+        "dev_start_pre_observed_ok": null,
+        "usable_under_strict_date_reading": false
+      },
+      "gaps": {
+        "calendar_days_in_span": 2194,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2017": 699.8,
+        "2018": 99.3,
+        "2019": 119.3,
+        "2020": 1338.2,
+        "2021": 17845.4,
+        "2022": 8547.0,
+        "2023": 6918.2,
+        "2024": 6369.1,
+        "2025": 11855.2,
+        "2026": 98553.7
+      },
+      "adj": {
+        "same_day_factor_bad_days": 705,
+        "same_day_factor_bad_sample": [
+          {
+            "date": "2017-09-05",
+            "fields": [
+              "low"
+            ]
+          },
+          {
+            "date": "2017-09-06",
+            "fields": [
+              "open",
+              "high",
+              "low"
+            ]
+          },
+          {
+            "date": "2017-09-11",
+            "fields": [
+              "open",
+              "low"
+            ]
+          }
+        ],
+        "factor_jump_gt1pct_count": 14,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2018-06-19",
+            "factor_ratio": 0.9893
+          },
+          {
+            "date": "2018-10-11",
+            "factor_ratio": 0.9825
+          },
+          {
+            "date": "2018-10-22",
+            "factor_ratio": 1.0124
+          },
+          {
+            "date": "2018-11-23",
+            "factor_ratio": 0.9893
+          },
+          {
+            "date": "2019-02-25",
+            "factor_ratio": 1.0179
+          },
+          {
+            "date": "2019-03-08",
+            "factor_ratio": 0.9881
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 92,
+        "return_distortion_gt1pp_count": 11,
+        "return_distortion_gt1pp_ratio": 0.005016,
+        "return_distortion_gt1pp_by_year": {
+          "2018": 3,
+          "2019": 3,
+          "2020": 3,
+          "2024": 1,
+          "2026": 1
+        },
+        "return_distortion_gt5pp_events": [],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2026-02-02",
+          "raw_ret_pct": -10.0,
+          "qfq_ret_pct": -10.36,
+          "gap_pp": -0.35
+        }
+      },
+      "transform": {
+        "transform_kind": "B 减法式",
+        "consequence": "非事件日收益被系统性放大 P/(P−C) 倍，不可直接用于收益计算",
+        "diff_change_points": 3,
+        "diff_change_sample": [
+          {
+            "date": "2024-09-18",
+            "value": 0.095
+          },
+          {
+            "date": "2025-09-15",
+            "value": 0.08
+          },
+          {
+            "date": "2026-09-09",
+            "value": 0.0
+          }
+        ],
+        "ratio_change_points": 1302,
+        "ratio_change_sample": [
+          {
+            "date": "2017-09-04",
+            "value": 0.9006
+          },
+          {
+            "date": "2017-09-06",
+            "value": 0.9013
+          },
+          {
+            "date": "2017-09-07",
+            "value": 0.8996
+          },
+          {
+            "date": "2017-09-08",
+            "value": 0.9008
+          },
+          {
+            "date": "2017-09-11",
+            "value": 0.9038
+          },
+          {
+            "date": "2017-09-14",
+            "value": 0.9019
+          },
+          {
+            "date": "2017-09-15",
+            "value": 0.8993
+          },
+          {
+            "date": "2017-09-20",
+            "value": 0.9016
+          }
+        ],
+        "ratio_min": 0.8094,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 119.73,
+        "tencent_pool_cum_pct": 109.1,
+        "cum_divergence_pp": 10.63,
+        "price_ratio_min": 1.031809,
+        "price_ratio_max": 1.115108,
+        "identical": false
+      }
+    },
+    {
+      "code": "515220",
+      "name": "煤炭ETF",
+      "em_name": "煤炭ETF国泰",
+      "sector": "cyclical_resources",
+      "cluster": "cyclical_resources",
+      "asset_class": "equity",
+      "listing_date": "2020-03-02",
+      "txn_eligible": true,
+      "local_first_date": "2020-03-02",
+      "local_last_date": "2026-09-15",
+      "rows": 1590,
+      "rows_raw": 1590,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 1847.4,
+      "avg_turnover_60d_window_end": "2020-06-05",
+      "avg_turnover_seg_wan": 31552.7,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 5
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "187db3f48046bf69e120fe55925450e3c35ba280390461512d51f5120786ded7",
+        "raw_payload_sha256": "ddb3fdc9db51716d9d2b60b85dae2af08d30c43607a6fe7e21522b863f375a67",
+        "payload_bytes": {
+          "qfq": 128236,
+          "raw": 128240
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "需人工裁决",
+      "include_reasons": [
+        "口径疑问：日频收益失真 >1pp 占比 4.78%（上限 1%）",
+        "复权变换类型 = C 未定（分段常数假设均不成立，变换机制未定，须人工裁决）"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2021-03-11",
+        "liquidity_adequate_from": "2020-07-07",
+        "merged_earliest_dev_start": "2021-03-11",
+        "pre_observed_days": 0,
+        "dev_start_pre_observed_ok": null,
+        "usable_under_strict_date_reading": false
+      },
+      "gaps": {
+        "calendar_days_in_span": 1590,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2020": 1847.4,
+        "2021": 9282.2,
+        "2022": 24509.7,
+        "2023": 11994.3,
+        "2024": 11978.0,
+        "2025": 15382.3,
+        "2026": 58812.4
+      },
+      "adj": {
+        "same_day_factor_bad_days": 742,
+        "same_day_factor_bad_sample": [
+          {
+            "date": "2020-03-02",
+            "fields": [
+              "open",
+              "low"
+            ]
+          },
+          {
+            "date": "2020-03-03",
+            "fields": [
+              "open",
+              "high"
+            ]
+          },
+          {
+            "date": "2020-03-04",
+            "fields": [
+              "open",
+              "low"
+            ]
+          }
+        ],
+        "factor_jump_gt1pct_count": 75,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2020-03-09",
+            "factor_ratio": 0.981
+          },
+          {
+            "date": "2020-03-12",
+            "factor_ratio": 0.9894
+          },
+          {
+            "date": "2020-03-16",
+            "factor_ratio": 0.9894
+          },
+          {
+            "date": "2020-03-23",
+            "factor_ratio": 0.9846
+          },
+          {
+            "date": "2020-03-24",
+            "factor_ratio": 1.0156
+          },
+          {
+            "date": "2020-04-02",
+            "factor_ratio": 1.0112
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 167,
+        "return_distortion_gt1pp_count": 76,
+        "return_distortion_gt1pp_ratio": 0.047829,
+        "return_distortion_gt1pp_by_year": {
+          "2020": 36,
+          "2021": 34,
+          "2022": 2,
+          "2023": 1,
+          "2024": 2,
+          "2025": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2024-04-12",
+            "diff_pp": 49.61,
+            "qfq_ret_pct": -0.74,
+            "raw_ret_pct": -50.34
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2024-04-12",
+          "raw_ret_pct": -50.34,
+          "qfq_ret_pct": -0.74,
+          "gap_pp": 49.61
+        }
+      },
+      "transform": {
+        "transform_kind": "C 未定",
+        "consequence": "分段常数假设均不成立，变换机制未定，须人工裁决",
+        "diff_change_points": 912,
+        "diff_change_sample": [
+          {
+            "date": "2020-03-03",
+            "value": 0.677
+          },
+          {
+            "date": "2020-03-04",
+            "value": 0.682
+          },
+          {
+            "date": "2020-03-05",
+            "value": 0.69
+          },
+          {
+            "date": "2020-03-06",
+            "value": 0.682
+          },
+          {
+            "date": "2020-03-09",
+            "value": 0.663
+          },
+          {
+            "date": "2020-03-10",
+            "value": 0.671
+          },
+          {
+            "date": "2020-03-11",
+            "value": 0.666
+          },
+          {
+            "date": "2020-03-12",
+            "value": 0.658
+          }
+        ],
+        "ratio_change_points": 620,
+        "ratio_change_sample": [
+          {
+            "date": "2020-03-03",
+            "value": 0.3323
+          },
+          {
+            "date": "2020-03-04",
+            "value": 0.334
+          },
+          {
+            "date": "2020-03-05",
+            "value": 0.3365
+          },
+          {
+            "date": "2020-03-06",
+            "value": 0.3346
+          },
+          {
+            "date": "2020-03-09",
+            "value": 0.3283
+          },
+          {
+            "date": "2020-03-10",
+            "value": 0.3303
+          },
+          {
+            "date": "2020-03-11",
+            "value": 0.3293
+          },
+          {
+            "date": "2020-03-12",
+            "value": 0.3258
+          }
+        ],
+        "ratio_min": 0.3103,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 16.1,
+        "tencent_pool_cum_pct": 16.1,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "159941",
+      "name": "纳指ETF",
+      "em_name": "纳指ETF广发",
+      "sector": "overseas_equity",
+      "cluster": "overseas_equity",
+      "asset_class": "equity",
+      "listing_date": "2015-07-13",
+      "txn_eligible": true,
+      "local_first_date": "2015-07-13",
+      "local_last_date": "2026-09-15",
+      "rows": 2718,
+      "rows_raw": 2718,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 0,
+      "max_suspension_run": null,
+      "avg_turnover_60d_wan": 14.1,
+      "avg_turnover_60d_window_end": "2016-07-01",
+      "avg_turnover_seg_wan": 34460.6,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1376
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "f6450705f80d6b1c877f20ac92d71bbde99bdcbe9d4dd145e6a4b30bbf08ed96",
+        "raw_payload_sha256": "5e90d27b154c349eb3365fd08a17de9fe6f843e77946627f919b63200a776a98",
+        "payload_bytes": {
+          "qfq": 212516,
+          "raw": 212658
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2016-07-20",
+        "liquidity_adequate_from": "2021-12-21",
+        "merged_earliest_dev_start": "2021-12-21",
+        "pre_observed_days": 665,
+        "dev_start_pre_observed_ok": "2016-07-20",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 2718,
+        "missing_trading_days": 0,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2015": 68.3,
+        "2016": 14.1,
+        "2017": 27.2,
+        "2018": 20.5,
+        "2019": 48.9,
+        "2020": 111.5,
+        "2021": 1758.8,
+        "2022": 3240.5,
+        "2023": 34038.8,
+        "2024": 45273.3,
+        "2025": 85568.7,
+        "2026": 75923.4
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2022-07-05",
+            "factor_ratio": 4.0
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000368,
+        "return_distortion_gt1pp_by_year": {
+          "2022": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2022-07-05",
+            "diff_pp": 76.01,
+            "qfq_ret_pct": 1.34,
+            "raw_ret_pct": -74.66
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2022-07-05",
+          "raw_ret_pct": -74.66,
+          "qfq_ret_pct": 1.34,
+          "gap_pp": 76.01
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1481,
+        "diff_change_sample": [
+          {
+            "date": "2015-07-14",
+            "value": 0.725
+          },
+          {
+            "date": "2015-07-15",
+            "value": 0.722
+          },
+          {
+            "date": "2015-07-16",
+            "value": 0.724
+          },
+          {
+            "date": "2015-07-17",
+            "value": 0.742
+          },
+          {
+            "date": "2015-07-21",
+            "value": 0.745
+          },
+          {
+            "date": "2015-07-22",
+            "value": 0.751
+          },
+          {
+            "date": "2015-07-23",
+            "value": 0.754
+          },
+          {
+            "date": "2015-07-27",
+            "value": 0.745
+          }
+        ],
+        "ratio_change_points": 11,
+        "ratio_change_sample": [
+          {
+            "date": "2015-09-02",
+            "value": 0.2506
+          },
+          {
+            "date": "2015-10-13",
+            "value": 0.2505
+          },
+          {
+            "date": "2015-10-14",
+            "value": 0.2497
+          },
+          {
+            "date": "2015-10-15",
+            "value": 0.2505
+          },
+          {
+            "date": "2015-10-16",
+            "value": 0.2497
+          },
+          {
+            "date": "2016-01-22",
+            "value": 0.2497
+          },
+          {
+            "date": "2016-01-25",
+            "value": 0.2505
+          },
+          {
+            "date": "2016-02-17",
+            "value": 0.2505
+          }
+        ],
+        "ratio_min": 0.2497,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 80.09,
+        "tencent_pool_cum_pct": 80.09,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    },
+    {
+      "code": "513500",
+      "name": "标普500ETF",
+      "em_name": "标普500ETF博时",
+      "sector": "overseas_equity",
+      "cluster": "overseas_equity",
+      "asset_class": "equity",
+      "listing_date": "2014-01-15",
+      "txn_eligible": true,
+      "local_first_date": "2014-01-15",
+      "local_last_date": "2026-09-15",
+      "rows": 3080,
+      "rows_raw": 3080,
+      "first_day_matches_listing": true,
+      "warmup_ok": true,
+      "adj_source": "eastmoney push2his kline fqt=1（前复权）",
+      "adj_basis_date": "2026-09-15",
+      "splice_anchor": "n/a（单一源，无拼接）",
+      "max_suspension": 1,
+      "max_suspension_run": {
+        "from": "2022-03-29",
+        "to": "2022-03-29",
+        "days": 1
+      },
+      "avg_turnover_60d_wan": 56.1,
+      "avg_turnover_60d_window_end": "2016-04-18",
+      "avg_turnover_seg_wan": 13299.5,
+      "liquidity_ok_full_history": false,
+      "observed_overlap": [
+        {
+          "segment": "B3_OOS",
+          "days": 1375
+        },
+        {
+          "segment": "SEG_2020",
+          "days": 201
+        },
+        {
+          "segment": "SEG_2018_2020",
+          "days": 468
+        }
+      ],
+      "evidence": {
+        "qfq_payload_sha256": "d6c3902716a529a435085143d5de8d6f465398cad2078f4c59df8971865fd1fa",
+        "raw_payload_sha256": "a055ccce7eccd53809b612051929aed2976046d1f98923930bd41d9833475f29",
+        "payload_bytes": {
+          "qfq": 242435,
+          "raw": 242528
+        },
+        "command": "python scripts/ml/audit-m1a-etf-history.py"
+      },
+      "include_recommended": "可纳入",
+      "include_reasons": [
+        "复权完整性、缺口、暖机、流动性均可判定；未命中 X1–X6"
+      ],
+      "capability": {
+        "earliest_dev_start_250": "2015-01-23",
+        "liquidity_adequate_from": "2018-12-11",
+        "merged_earliest_dev_start": "2018-12-11",
+        "pre_observed_days": 1028,
+        "dev_start_pre_observed_ok": "2015-01-23",
+        "usable_under_strict_date_reading": true
+      },
+      "gaps": {
+        "calendar_days_in_span": 3081,
+        "missing_trading_days": 1,
+        "suspension_ok": true
+      },
+      "turnover_yearly_worst_60d_wan": {
+        "2014": 94.6,
+        "2015": 127.6,
+        "2016": 56.1,
+        "2017": 136.9,
+        "2018": 181.9,
+        "2019": 4813.7,
+        "2020": 5052.5,
+        "2021": 3778.3,
+        "2022": 6783.8,
+        "2023": 12992.8,
+        "2024": 15492.1,
+        "2025": 28986.8,
+        "2026": 27159.2
+      },
+      "adj": {
+        "same_day_factor_bad_days": 0,
+        "same_day_factor_bad_sample": [],
+        "factor_jump_gt1pct_count": 1,
+        "factor_jump_gt1pct_sample": [
+          {
+            "date": "2022-03-30",
+            "factor_ratio": 1.9993
+          }
+        ],
+        "factor_jump_0p5to1pct_count": 0,
+        "return_distortion_gt1pp_count": 1,
+        "return_distortion_gt1pp_ratio": 0.000325,
+        "return_distortion_gt1pp_by_year": {
+          "2022": 1
+        },
+        "return_distortion_gt5pp_events": [
+          {
+            "date": "2022-03-30",
+            "diff_pp": 50.79,
+            "qfq_ret_pct": 1.61,
+            "raw_ret_pct": -49.18
+          }
+        ],
+        "max_single_day_raw_vs_qfq": {
+          "date": "2022-03-30",
+          "raw_ret_pct": -49.18,
+          "qfq_ret_pct": 1.61,
+          "gap_pp": 50.79
+        }
+      },
+      "transform": {
+        "transform_kind": "A 比例式",
+        "consequence": "非事件日收益与不复权序列一致，可用于收益计算",
+        "diff_change_points": 1533,
+        "diff_change_sample": [
+          {
+            "date": "2014-01-16",
+            "value": 0.495
+          },
+          {
+            "date": "2014-01-17",
+            "value": 0.493
+          },
+          {
+            "date": "2014-01-20",
+            "value": 0.491
+          },
+          {
+            "date": "2014-01-22",
+            "value": 0.489
+          },
+          {
+            "date": "2014-01-23",
+            "value": 0.494
+          },
+          {
+            "date": "2014-01-27",
+            "value": 0.485
+          },
+          {
+            "date": "2014-01-28",
+            "value": 0.482
+          },
+          {
+            "date": "2014-01-29",
+            "value": 0.488
+          }
+        ],
+        "ratio_change_points": 1,
+        "ratio_change_sample": [
+          {
+            "date": "2022-03-30",
+            "value": 1.0
+          }
+        ],
+        "ratio_min": 0.5,
+        "ratio_max": 1.0,
+        "negative_qfq_days": 0,
+        "negative_qfq_min": null,
+        "negative_qfq_sample": [],
+        "note": "A: qfq=raw×k（k 分段常数，份额折算族）/ B: qfq=raw−C（C 分段常数，分红减法族）/ C: 两者均不成立"
+      },
+      "cross_source_vs_pool": {
+        "common_days": 640,
+        "first_common": "2024-01-15",
+        "last_common": "2026-09-04",
+        "eastmoney_cum_pct": 66.13,
+        "tencent_pool_cum_pct": 66.13,
+        "cum_divergence_pp": 0.0,
+        "price_ratio_min": 1.0,
+        "price_ratio_max": 1.0,
+        "identical": true
+      }
+    }
+  ],
+  "summary": {
+    "counts": {
+      "可纳入": 6,
+      "需人工裁决": 4
+    },
+    "by_class": {
+      "可纳入": [
+        "512010",
+        "159928",
+        "512800",
+        "512000",
+        "159941",
+        "513500"
+      ],
+      "需人工裁决": [
+        "512690",
+        "510880",
+        "512400",
+        "515220"
+      ]
+    },
+    "clusters_all": [
+      "consumer",
+      "cyclical_resources",
+      "defensive_dividend",
+      "financial",
+      "healthcare",
+      "overseas_equity"
+    ],
+    "clusters_of_included": [
+      "consumer",
+      "financial",
+      "healthcare",
+      "overseas_equity"
+    ],
+    "merged_earliest_dev_start_all": "2021-12-21",
+    "strict_date_reading_usable": [
+      "159928",
+      "159941",
+      "510880",
+      "512000",
+      "512010",
+      "513500"
+    ],
+    "strict_date_reading_common_dev_start": "2017-09-25",
+    "transform_kinds": {
+      "512010": "A 比例式",
+      "512690": "C 未定",
+      "159928": "A 比例式",
+      "510880": "B 减法式",
+      "512800": "A 比例式",
+      "512000": "A 比例式",
+      "512400": "B 减法式",
+      "515220": "C 未定",
+      "159941": "A 比例式",
+      "513500": "A 比例式"
+    }
+  },
+  "truncation_census": {
+    "total_in_master": 31,
+    "truncated": [
+      {
+        "code": "518880",
+        "name": "黄金ETF",
+        "listing_date": "2013-07-29",
+        "local_data_start": "2023-05-09"
+      },
+      {
+        "code": "512010",
+        "name": "医药ETF",
+        "listing_date": "2013-10-28",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "512690",
+        "name": "酒ETF",
+        "listing_date": "2019-05-06",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "159928",
+        "name": "消费ETF",
+        "listing_date": "2013-09-16",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "510880",
+        "name": "红利ETF",
+        "listing_date": "2007-01-18",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "512800",
+        "name": "银行ETF",
+        "listing_date": "2017-08-03",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "512000",
+        "name": "券商ETF",
+        "listing_date": "2016-09-14",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "512400",
+        "name": "有色金属ETF",
+        "listing_date": "2017-09-01",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "515220",
+        "name": "煤炭ETF",
+        "listing_date": "2020-03-02",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "159941",
+        "name": "纳指ETF",
+        "listing_date": "2015-07-13",
+        "local_data_start": "2024-01-15"
+      },
+      {
+        "code": "513500",
+        "name": "标普500ETF",
+        "listing_date": "2014-01-15",
+        "local_data_start": "2024-01-15"
+      }
+    ],
+    "universe_v1_data_note_lists": 10
+  },
+  "survivorship_note": "存活偏差专项（freeze §2.5）**未完成**：需要「区间内曾存在但已清盘/合并/转型」的 ETF 清单，本次未取到。按 §2.5，该清单缺失时，使用该段的结论**只能用于机制否证，不得用于资格判定**，且报告须声明「本段存在未量化的生存偏差」。"
+}
