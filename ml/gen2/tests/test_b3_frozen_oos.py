@@ -330,5 +330,209 @@ class CriteriaFrozenTest(unittest.TestCase):
         self.assertEqual(len(codes), 6)
 
 
+class ReportRenderContractTest(unittest.TestCase):
+    """报告渲染的**键名契约**回归。
+
+    背景（真实缺陷，2026-09-15）：`render_report` 曾对 `immutable_set` 条目取 `e['sha256']`
+    渲染锁定组件表，而该键**只存在于** `run_implementation` 条目（锁定组件条目用的是
+    `actual`/`expected`）。重算与判据全部通过后，**在写报告那一步**抛 `KeyError: 'sha256'`
+    ⇒ 整个运行白跑。教训：链路末端（渲染）的取值点也要有契约测试，不能只测重算。
+    """
+
+    B1_MANIFEST_REL = "ml/gen2/manifests/GEN2_B1_FROZEN_RUN_MANIFEST_20260914.json"
+
+    def test_immutable_set_entries_expose_actual_not_sha256(self):
+        """锁定组件条目的哈希键是 `actual`；`sha256` 是 `run_implementation` 的键。"""
+        p = b3._abs(self.B1_MANIFEST_REL)
+        if not p.is_file():
+            self.skipTest("已接受 B1 manifest 不在本工作区（源码导出包）")
+        m = json.loads(p.read_text(encoding="utf-8"))
+
+        for e in m["frozen_input"]["immutable_set"]:
+            self.assertIn("actual", e)
+            self.assertIn("expected", e)
+            self.assertNotIn("sha256", e,
+                             "`immutable_set` 无 `sha256` 键 —— 渲染时写 `e['sha256']` 会 KeyError")
+        for e in m["run_implementation"]:
+            self.assertIn("sha256", e)
+        # 两者键集必须不同，否则上面这条「别写错」的断言就没有区分力
+        self.assertNotEqual(set(m["frozen_input"]["immutable_set"][0]),
+                            set(m["run_implementation"][0]))
+
+    def test_frozen_lock_entries_are_what_render_report_reads(self):
+        """契约：`verify_frozen_lock` 产出的条目键集 == 报告渲染实际读取的键。"""
+        lock = b3.verify_frozen_lock()
+        self.assertTrue(lock["immutable_set"])
+        for e in lock["immutable_set"]:
+            for k in ("id", "file", "actual"):
+                self.assertIn(k, e)
+        # 报告 §4 表读的正是这三个键 —— 若实现改名，此处先红
+        rendered = "| ├ 组件 `%s` | `%s…` (%s) |" % (
+            lock["immutable_set"][0]["id"], lock["immutable_set"][0]["actual"][:16],
+            lock["immutable_set"][0]["file"])
+        self.assertIn(lock["immutable_set"][0]["actual"][:16], rendered)
+
+    # ---- 冒烟：整份报告能否渲染（真实键名，最小 manifest）----
+
+    def _econ(self) -> pd.DataFrame:
+        rows = []
+        for strat, cum, sharpe, turn in (
+                ("gen2_v2_defended", 0.3753722702946902, 0.428618972910738, 133.4241214776206),
+                ("main5_equal_weight", 2.4715009642419603, 0.9854811113915825, 11.52542022303929),
+                ("universe_equal_weight", 1.0, 0.5, 20.0),
+                ("market_510300", 0.3, 0.4, 5.0)):
+            for bps in (0.0, 5.0, 10.0, 20.0):
+                cost = turn * bps / 1e4
+                rows.append({"strategy": strat, "cost_bps": bps, "days": 1376,
+                             "terminal_nav": 1.0 + cum - cost, "cumulative_return": cum - cost,
+                             "cagr": 0.06, "sharpe": sharpe, "mdd": -0.23,
+                             "total_turnover": turn, "total_cost": cost,
+                             "conservation_max_error": 0.0, "cash_min": 0.0,
+                             "over_allocated_days": 0})
+        return pd.DataFrame(rows)
+
+    def _yearly(self) -> pd.DataFrame:
+        return pd.DataFrame({"year": [2021, 2022],
+                             "gen2_v2_defended": [0.0231, -0.19],
+                             "main5_equal_weight": [0.0686, 0.10],
+                             "universe_equal_weight": [0.157, 0.05],
+                             "market_510300": [-0.0432, 0.02]})
+
+    def _manifest(self) -> dict:
+        imm_actual = "a" * 64
+        imm_expected = "b" * 64          # 故意与 actual 不同：用错键会被断言抓到
+        return {
+            "run_id": "b3_frozen_oos_20260915_frozen_v201",
+            "run_status": b3.STATUS_PENDING_REVIEW,
+            "frozen_input": {
+                "lock": {"bundle_version": "gen2-rule-v2.0.1", "lock_revision": 3,
+                         "bundle_sha256": "f" * 64, "lock_sha256": "d" * 64,
+                         "root_anchor_in_sync": True},
+                "lock_component_digest": "8" * 64,
+                "immutable_set": [
+                    {"id": "bundle", "role": "rules", "file": "ml/gen2/manifests/x.json",
+                     "expected": imm_expected, "actual": imm_actual, "match": True},
+                ],
+            },
+            "input_data": {"content_digest": "7" * 64, "rows_total": 38083,
+                           "codes": [513310, 515880], "date_range": {
+                               "first_date": "2011-12-09", "last_date": "2026-09-04"}},
+            "environment": {"python": "3.13.14", "pandas": "3.0.5", "numpy": "2.5.3"},
+            "hard_gates": [
+                {"id": "H1", "name": "锁", "ok": True, "detail": {"lock_revision": 3}},
+                {"id": "H2", "name": "漂移", "ok": True, "detail": {"rules_checked": 17}},
+                {"id": "H5b", "name": "工具链", "ok": True,
+                 "detail": {"shared_ids": ["baseline_builder"],
+                            "rows": [{"id": "baseline_builder", "file": "x.py",
+                                      "b3_sha256": "c" * 64, "b1_sha256": "c" * 64,
+                                      "match": True}], "all_match": True}},
+            ],
+            "accepted_b1_reference": {"run_id": "b1_ledger_baseline_20260914_frozen_v201",
+                                      "run_status": "ACCEPTED", "manifest_sha256": "1" * 64,
+                                      "report_sha256": "2" * 64,
+                                      "lock_component_digest": "8" * 64},
+            "b1_reproduction": {"all_match": True, "compared_cells": 140,
+                                "mismatched_cells": 0},
+            "oos_gate": {"pass": True, "conservation_max_error": 0.0, "cash_min": 0.0,
+                         "over_allocated_days_total": 0},
+            "source_mutation_check": {"mutated": False, "head_now": "97f2d136a67f"},
+            "oos_window": {"source": "WalkForwardConfig(train_years=3, …)",
+                           "definition": "各 fold 的 test 段并集",
+                           "first_date": "2021-01-04", "last_date": "2026-09-04",
+                           "days": 1376, "contiguous_in_calendar": True,
+                           "folds": [{"fold": 0, "test_year": 2021, "test_start": "2021-01-04",
+                                      "test_end": "2021-12-31", "n_test": 243,
+                                      "train_end": "2020-12-31"}]},
+            "oos_slice": {"ledger_calendar": {"first_date": "2020-03-10",
+                                              "last_date": "2026-09-04", "days": 1577},
+                          "all_oos_days_present": True},
+            "oos_ic": {"score_col": "alpha_score_v2", "label_col": "y_rank_vs_market_20d",
+                       "aggregate": {"fold": 0, "test_year": "OOS_ALL", "n_days": 1376,
+                                     "rank_ic": 0.0271, "ic_pos": 0.5288,
+                                     "top_bottom_spread": 0.0061},
+                       "per_fold": []},
+            "increment_bootstrap": {"strategy": "gen2_v2_defended",
+                                    "reference": "main5_equal_weight", "cost_bps": 10.0,
+                                    "n": 1376, "mean": -0.000758, "ci_low": -0.001477,
+                                    "ci_high": -0.000148},
+            "criteria": {
+                "cost_bps": 10.0,
+                "rank_ic_oos": 0.0271, "nok_rule_applied": True,
+                "verdict": b3.VERDICT_FAIL,
+                "verdict_note": "未满足全部判据 ⇒ FAIL",
+                "checks": [
+                    {"id": "C1", "name": "n1", "ok": False, "defended": 0.3753722702946902,
+                     "main5": 2.4715009642419603, "delta": -2.09612869394727},
+                    {"id": "C2", "name": "n2", "ok": False, "defended": 0.428618972910738,
+                     "main5": 0.9854811113915825, "delta": -0.5568621384808444},
+                    {"id": "C3", "name": "n3", "ok": False, "ci_low": -0.0014772235,
+                     "ci_high": -0.0001478, "mean": -0.0007582, "threshold": -1e-4},
+                    {"id": "C4", "name": "n4", "ok": False, "worst_year_gap": -0.492989457,
+                     "threshold": -0.15},
+                ],
+            },
+            # 渲染发生在本字段之后、`self_check` 与 `outputs` 之前（三阶段写出）
+            "self_check_pre_report": {"checks": 52, "passed": 52, "failed": 0,
+                                      "all_pass": True, "detail": []},
+            "artifacts": [{"file": "ledger_daily.csv", "exists": True,
+                           "sha256": "e" * 64, "bytes": 4951772}],
+        }
+
+    def test_render_report_does_not_raise(self):
+        m = self._manifest()
+        text = b3.render_report(m, self._econ(), self._yearly())
+        self.assertIn("Gen-2 B3 Frozen OOS 报告", text)
+        # 硬门表 6 行（H1–H5b）+ 报告另行渲染的 H5c / H6 / H7
+        for gid in ("H1", "H2", "H5b", "H5c", "H6", "H7"):
+            self.assertIn(gid, text)
+        self.assertIn(b3.VERDICT_FAIL, text)
+
+    def test_render_report_uses_actual_sha_for_immutable_components(self):
+        """必须是 `actual`；若改回 `sha256` → KeyError，改成 `expected` → 断言失败。"""
+        m = self._manifest()
+        text = b3.render_report(m, self._econ(), self._yearly())
+        actual_prefix = m["frozen_input"]["immutable_set"][0]["actual"][:16]
+        expected_prefix = m["frozen_input"]["immutable_set"][0]["expected"][:16]
+        self.assertIn(actual_prefix, text)
+        self.assertNotIn(expected_prefix, text)
+
+    def test_render_report_requires_h5b_detail_rows(self):
+        m = self._manifest()
+        del m["hard_gates"][-1]["detail"]["rows"]
+        with self.assertRaises(KeyError):
+            b3.render_report(m, self._econ(), self._yearly())
+
+    def test_render_report_does_not_require_stage3_fields(self):
+        """渲染发生在阶段 2 末（写报告），此时 `self_check` / `outputs` **尚未写入**。
+
+        真实缺陷（2026-09-15）：报告 §13 曾读 `m['self_check']['passed']` —— 该字段是阶段 3
+        才写入的 ⇒ 修完 `immutable_set` 键名后仍会在**第二次**运行再崩一次。夹具刻意不含
+        `self_check` / `outputs`，以此把「渲染只依赖阶段 1–2 字段」钉成契约。
+        """
+        m = self._manifest()
+        self.assertNotIn("self_check", m)
+        self.assertNotIn("outputs", m)
+        text = b3.render_report(m, self._econ(), self._yearly())
+        self.assertIn("自校验（报告写出前执行", text)
+        self.assertIn("拒绝产出交付物", text)
+
+    def test_render_report_includes_own_hash_row_when_outputs_present(self):
+        """阶段 3 重写 manifest 后若再次渲染，应能带上报告自身哈希行（分支可用）。"""
+        m = self._manifest()
+        m["outputs"] = {"committed_report": {"file": "ml/gen2/reports/gen2_b3_frozen_oos_x.md",
+                                             "exists": True, "sha256": "9" * 64,
+                                             "bytes": 12345}}
+        text = b3.render_report(m, self._econ(), self._yearly())
+        self.assertIn("9" * 64, text)
+        self.assertIn("（本报告）", text)
+
+    def test_render_report_reports_pending_review_never_accepted(self):
+        """B3 是本地产出：报告不得自称已接受 / 已通过。"""
+        m = self._manifest()
+        text = b3.render_report(m, self._econ(), self._yearly())
+        self.assertIn(b3.STATUS_PENDING_REVIEW, text)
+        self.assertIn("维持 Shadow / CANARY", text)
+
+
 if __name__ == "__main__":
     unittest.main()

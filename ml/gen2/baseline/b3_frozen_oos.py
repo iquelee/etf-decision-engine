@@ -757,7 +757,9 @@ def render_report(m: dict, econ: pd.DataFrame, yearly: pd.DataFrame) -> str:
     add(f"| bundle SHA | `{m['frozen_input']['lock']['bundle_sha256']}` |")
     add(f"| ROOT_ANCHORS 自锚 | {m['frozen_input']['lock']['root_anchor_in_sync']} |")
     for e in m["frozen_input"]["immutable_set"]:
-        add(f"| ├ 组件 `{e['id']}` | `{e['sha256'][:16]}…` ({e['file']}) |")
+        # 键名契约：`immutable_set` 条目来自 `verify_frozen_lock`，其哈希键是 `actual`
+        # （`sha256` 只存在于 `run_implementation` 条目）—— 别写错，见 test_render_report_key_contract。
+        add(f"| ├ 组件 `{e['id']}` | `{e['actual'][:16]}…` ({e['file']}) |")
     add(f"| 输入内容摘要 | `{m['input_data']['content_digest']}` |")
     add(f"| 输入行数 / 代码数 | {m['input_data']['rows_total']} / {len(m['input_data']['codes'])} |")
     add(f"| 输入日期范围 | {m['input_data']['date_range']['first_date']} → "
@@ -883,10 +885,13 @@ def render_report(m: dict, econ: pd.DataFrame, yearly: pd.DataFrame) -> str:
     add("")
     add("## 13. 产物与自校验")
     add("")
-    add(f"- 自校验（报告写出前，不含报告自身哈希）：**{sc['passed']}/{sc['checks']}**"
-        f"（all_pass = {sc['all_pass']}）")
-    add(f"- 自校验（完整，含报告自身哈希）：**{m['self_check']['passed']}/{m['self_check']['checks']}**"
-        f"（all_pass = {m['self_check']['all_pass']}）")
+    add(f"- **自校验（报告写出前执行，不含报告自身哈希）**："
+        f"{'✅ 全部通过' if sc['all_pass'] else '❌ 存在失配'}"
+        f"（{sc['passed']}/{sc['checks']} 项哈希重算一致）")
+    add("- **完整自校验（含本报告哈希）**：结果写入 manifest `self_check`；`all_pass=false` 时"
+        "本入口抛 `FrozenAttestationError` 并**拒绝产出交付物** —— 因此本报告存在即等价于"
+        "「完整自校验已通过」，此处不重复断言（与 B1 报告同一约定）。")
+    add("- **本报告自身哈希**：见 manifest `outputs.committed_report`（报告不含自身哈希，避免自引用）。")
     add("")
     add("| 产物 | sha256 | bytes |")
     add("|---|---|---|")
