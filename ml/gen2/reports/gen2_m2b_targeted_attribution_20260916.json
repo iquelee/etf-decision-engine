@@ -1,0 +1,454 @@
+{
+ "attribution": "gen2_m2b_targeted_attribution",
+ "generated_on": "2026-09-16",
+ "protocol": "POSTMORTEM_NOT_FOR_CALIBRATION",
+ "ruling": "用户裁决 2026-09-16：① 合并 PR #37；② H2 **不批准**独立替代规则回测，只允许纯描述性诊断；③ H1/H3 暂缓至 M1-B 完成后验证；④ H4 允许继续但**只限归因**（不改手续费档 / 不改再平衡频率 / 不生成优化后的成本结果）；⑤ C→D 允许拆分，但必须是**会计式分解**且两段严格加总回原 C→D，残差不得重新分配给其他 ETF；⑥ cluster_taxonomy_v1 **暂不**纳入 immutable_set。未触碰规则 / 参数 / 数据版本 / lock / OOS 分割。",
+ "frozen_input": {
+  "bundle_version": "gen2-rule-v2.0.1",
+  "bundle_sha256": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+  "config_drift": [],
+  "regime_constants_crosscheck": {
+   "bundle": {
+    "risk_on_ge": 55,
+    "risk_off_le": 45
+   },
+   "locked_module": {
+    "risk_on_ge": 55.0,
+    "risk_off_le": 45.0
+   },
+   "source_of_truth": "ml/gen2/portfolio/regime.py（实际执行常量，已锁）",
+   "agree": true
+  },
+  "portfolio_caps": {
+   "max_single_weight": 0.25,
+   "max_cluster_weight": 0.4,
+   "max_tech_weight": 0.65,
+   "tech_clusters": [
+    "tech_hardware",
+    "software_ai"
+   ],
+   "max_core_count": 5,
+   "max_core_per_cluster": 2
+  },
+  "defense": {
+   "enabled": true,
+   "risk_off_exposure_scale": 0.5,
+   "risk_off_hedge_weight": 0.15,
+   "hedge_code": "518880",
+   "vol_target_enabled": true,
+   "vol_target_annualized": 0.17
+  },
+  "role_thresholds": {
+   "core_top_fraction": 0.2,
+   "challenger_top_fraction": 0.3,
+   "satellite_top_fraction": 0.4
+  }
+ },
+ "identity_check_vs_accepted_b1": {
+  "all_match": true,
+  "mismatched_cells": 0,
+  "note": "重算全窗口读数 == 已接受 B1 报告逐位 ⇒ 本诊断跑在同一条被接受的规则上"
+ },
+ "oos_window": {
+  "first": "2021-01-04",
+  "last": "2026-09-04",
+  "days": 1376
+ },
+ "common_calendar": {
+  "first": "2020-03-10",
+  "last": "2026-09-04",
+  "days": 1577,
+  "excluded_leading_days": 2003
+ },
+ "T1_cd_split": {
+  "pipeline": "relative_share = 1/|CORE| → ①min(·,0.25) → ②cluster 0.40 → ③科技 0.65",
+  "lines_0bps": [
+   {
+    "step": "C→D1",
+    "layer": "单只截断（min(1/|CORE|, 0.25)）及其新增残差现金",
+    "delta_pct": -14.83
+   },
+   {
+    "step": "D1→D2",
+    "layer": "cluster(0.40)/科技(0.65) 缩权及其新增残差现金",
+    "delta_pct": 8.02
+   }
+  ],
+  "closure": {
+   "C_to_D1_pct": -14.83,
+   "D1_to_D2_pct": 8.02,
+   "sum_pct": -6.82,
+   "C_to_D_pct_M2_baseline": -6.82,
+   "identity_gap_pct": 0.0,
+   "exact_identity": true,
+   "rounding_note": "`sum_pct` 由未取整两段相加后取整；与 `C_to_D_pct_M2_baseline` **必然相等**（二者是同一个数）。即便逐段先取整后相加出现 0.01 的显示差，`identity_gap_pct` 仍严格为 0。",
+   "note": "两段加总**恒等**于原 C→D；剩余权重全部留作现金，未重新分配给其他 ETF。"
+  },
+  "d2_reproduction_check": {
+   "n_core_rows": 3703,
+   "max_abs_diff_vs_authoritative_target_weight": 0.0,
+   "exact_match": true,
+   "note": "从 D1 复跑步②③ 得到的权重 vs `roles.target_weight`（权威 D2）。逐位一致 ⇒ C→D1→D2 拆分与冻结实现同源。"
+  },
+  "residual_cash_layers": {
+   "C_core_equal_weight": {
+    "avg_full_window": 0.3573,
+    "avg_oos": 0.2878,
+    "max": 1.0,
+    "days_with_zero_cash": 1315,
+    "days": 2046
+   },
+   "D1_single_cap_only": {
+    "avg_full_window": 0.578,
+    "avg_oos": 0.4618,
+    "max": 1.0,
+    "days_with_zero_cash": 378,
+    "days": 2046
+   },
+   "D2_undefended": {
+    "avg_full_window": 0.6055,
+    "avg_oos": 0.4992,
+    "max": 1.0,
+    "days_with_zero_cash": 269,
+    "days": 2046
+   },
+   "incremental_new_cash_pct_points": {
+    "C_to_D1": 22.07,
+    "D1_to_D2": 2.75,
+    "note": "全窗口均值口径；新增现金 = 该步被截断/缩减掉、未被再分配出去的权重。"
+   },
+   "oos_incremental_new_cash_pct_points": {
+    "C_to_D1": 17.41,
+    "D1_to_D2": 3.74
+   }
+  },
+  "d1_to_d2_internal_causes": {
+   "cluster_shrink_sum_w": -51.1,
+   "tech_shrink_sum_w": -5.25,
+   "note": "D1→D2 内部成因（权重层面，非账本分解，不参与主分解加总）：cluster 缩权 vs 科技缩权各缩掉多少 Σw。"
+  },
+  "layer_cum_net_pct_0bps": {
+   "main5_equal_weight": 251.18,
+   "universe_equal_weight": 30.6,
+   "core_equal_weight": 46.04,
+   "core_single_cap_only": 31.2,
+   "gen2_v2_undefended": 39.22,
+   "gen2_v2_defended": 57.16
+  },
+  "layer_cum_net_pct_10bps": {
+   "main5_equal_weight": 247.15,
+   "universe_equal_weight": 28.54,
+   "core_equal_weight": 22.03,
+   "core_single_cap_only": 17.73,
+   "gen2_v2_undefended": 25.63,
+   "gen2_v2_defended": 37.54
+  }
+ },
+ "T2_h2_core_zero_descriptive": {
+  "definition": "`CORE==0` = 当日 `role == 'CORE'` 的标的数为 0。此时 `rule_v2_ab` 的 `target_weight` 全为 0（CHALLENGER/SATELLITE 恒 0）⇒ **整仓现金**，`cash_weight = 1.0`（结构性，非防守所致）。",
+  "counts": {
+   "full_window_days": 2046,
+   "full_window_core_zero_days": 731,
+   "full_window_core_zero_pct": 35.73,
+   "oos_days": 1376,
+   "oos_core_zero_days": 396,
+   "oos_core_zero_pct": 28.78
+  },
+  "streaks_full_window": {
+   "segments": 26,
+   "max_len": 119,
+   "mean_len": 28.12,
+   "hist": {
+    "1": 1,
+    "5": 1,
+    "7": 1,
+    "8": 2,
+    "9": 1,
+    "10": 1,
+    "13": 1,
+    "15": 1,
+    "16": 1,
+    "17": 1,
+    "18": 1,
+    "19": 1,
+    "20": 1,
+    "21": 1,
+    "25": 1,
+    "27": 1,
+    "31": 1,
+    "33": 1,
+    "36": 2,
+    "42": 1,
+    "46": 1,
+    "58": 1,
+    "91": 1,
+    "119": 1
+   }
+  },
+  "streaks_oos": {
+   "segments": 15,
+   "max_len": 91,
+   "mean_len": 26.4,
+   "hist": {
+    "1": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1,
+    "15": 1,
+    "16": 1,
+    "17": 1,
+    "18": 1,
+    "27": 1,
+    "31": 1,
+    "33": 1,
+    "36": 1,
+    "42": 1,
+    "46": 1,
+    "91": 1
+   }
+  },
+  "cash_exposure": {
+   "value_on_core_zero_days": 1.0,
+   "note": "结构性整仓现金；未构造任何替代持仓、未跑任何账本。"
+  },
+  "market_ret_on_core_zero_days": {
+   "days": 396,
+   "mean_pct": -0.11,
+   "sum_pct": -37.55,
+   "pos_days": 175,
+   "neg_days": 214,
+   "best_pct": 4.77,
+   "worst_pct": -5.27
+  },
+  "pool_equal_weight_ret_on_core_zero_days": {
+   "days": 396,
+   "mean_pct": -0.09,
+   "sum_pct": -32.2,
+   "pos_days": 185,
+   "neg_days": 211,
+   "best_pct": 5.42,
+   "worst_pct": -6.33
+  },
+  "tech_cluster_ew_ret_on_core_zero_days": {
+   "days": 396,
+   "mean_pct": -0.1,
+   "sum_pct": -37.27,
+   "pos_days": 186,
+   "neg_days": 210,
+   "best_pct": 8.21,
+   "worst_pct": -7.62
+  },
+  "foresight_market_cum_ret_from_core_zero_days": {
+   "5d": {
+    "n": 396,
+    "mean_pct": -0.05,
+    "median_pct": -0.16,
+    "pos_share_pct": 48.48
+   },
+   "20d": {
+    "n": 396,
+    "mean_pct": 0.62,
+    "median_pct": -0.55,
+    "pos_share_pct": 46.21
+   }
+  },
+  "by_year": {
+   "2021": {
+    "core_zero_days": 50
+   },
+   "2022": {
+    "core_zero_days": 137
+   },
+   "2023": {
+    "core_zero_days": 92
+   },
+   "2024": {
+    "core_zero_days": 80
+   },
+   "2025": {
+    "core_zero_days": 22
+   },
+   "2026": {
+    "core_zero_days": 15
+   }
+  },
+  "state_machine_reasons_on_core_zero_days": {
+   "reason_code_token_counts": {
+    "PROMOTION_BLOCKED_BY_PERMISSION": 1498,
+    "PROMOTION_HYSTERESIS": 67,
+    "NO_CORE_TREND_GATE": 18,
+    "DEMOTION_HYSTERESIS": 10
+   },
+   "reason_token_days_present": {
+    "PROMOTION_BLOCKED_BY_PERMISSION": 1498,
+    "PROMOTION_HYSTERESIS": 67,
+    "NO_CORE_TREND_GATE": 18,
+    "DEMOTION_HYSTERESIS": 10
+   },
+   "trend_gate_true_count_stats": {
+    "mean": 2.28,
+    "min": 0,
+    "max": 15
+   },
+   "alpha_qualified_funnel": {
+    "core_pct_threshold_used": 0.8,
+    "threshold_source": "load_role_thresholds(cfg).core_pct（CONFIG_ROLE_THRESHOLDS；= 1 − core_top_fraction）",
+    "days": 396,
+    "mean_alpha_qualified": 4.27,
+    "min_alpha_qualified": 2,
+    "max_alpha_qualified": 7,
+    "days_with_zero_alpha_qualified": 0,
+    "mean_alpha_and_trend_gate": 1.79,
+    "max_alpha_and_trend_gate": 7,
+    "days_with_zero_alpha_and_trend_gate": 146,
+    "note": "「alpha 够格」= `alpha_pct >= core_pct`（前 `core_top_fraction` 比例）；第二列再叠加 `trend_gate`。阈值**取自冻结配置**，未自创、不用于调参。"
+   },
+   "selection_mode_on_core_zero_days": {
+    "DISABLED": 375,
+    "ACTIVE": 11,
+    "REDUCED": 10
+   },
+   "risk_off_cross_tab_oos": {
+    "risk_off_days": 636,
+    "risk_off_core_zero_days": 375,
+    "risk_off_core_zero_pct": 58.96,
+    "non_risk_off_days": 740,
+    "non_risk_off_core_zero_days": 21,
+    "non_risk_off_core_zero_pct": 2.84,
+    "note": "RISK_OFF 由被锁定的 `selection_permission.selection_mode` 判定（RISK_OFF → `DISABLED`：**仅禁新晋升、不清现任 CORE**）。"
+   },
+   "risk_state_on_core_zero_days": {
+    "RISK_OFF": 375,
+    "RISK_ON": 11,
+    "RANGE": 10
+   },
+   "note": "计数单位 = 「标的·日」出现次数。仅描述，不用于选择阈值或参数。"
+  },
+  "boundary_statement": "以上全部为**描述性统计**：只读原始收益序列与角色面板。**未**构造任何替代规则（未测『CORE==0 时改持有前仓 / 买入 challenger / 持有全池等权』等）；该类替代行为必须留给 O2 未观察段验证。"
+ },
+ "T3_h4_turnover_attribution": {
+  "strategy": "gen2_v2_defended",
+  "turnover_source_decomposition": {
+   "entry_sum": 44.7107,
+   "exit_sum": 37.8092,
+   "reweight_sum": 50.9043,
+   "total_sum": 133.4241,
+   "entry_share_pct": 33.51,
+   "exit_share_pct": 28.34,
+   "reweight_share_pct": 38.15,
+   "definition": "逐日 Δ = target − pre_trade（漂移后），单边证券腿口径；entry = 从 0 建仓，exit = 清到 0，reweight = 两侧皆 >0 的权重调整。现金腿不计费、不参与。"
+  },
+  "turnover_by_role_change": {
+   "role_change_driven_sum": 73.7792,
+   "role_unchanged_sum": 59.645,
+   "total_sum": 133.4241,
+   "role_change_share_pct": 55.3,
+   "role_unchanged_share_pct": 44.7,
+   "definition": "按**信号日**该 code 的 `role` 是否相对前一信号日变化，把其 `|delta|` 归入「角色切换驱动」或「非切换驱动」（后者含权重重整、cluster 缩权、|CORE| 数目变化引起的 1/|CORE| 变化等）。",
+   "m2_h4_criterion": "M2 §6 H4 判据：若非角色切换日的单边腿占比 > 60% ⇒ **H4 否证**（成本层不主要由角色进出驱动）。"
+  },
+  "replay_alignment_vs_ledger": {
+   "days": 1376,
+   "max_abs_turnover_gap": 1.1102230246251565e-16,
+   "exact_match": true,
+   "note": "自实现复现器逐日换手 vs 权威账本 `turnover` 的最大绝对差。"
+  },
+  "rebalance_frequency": {
+   "days_total": 1376,
+   "days_with_turnover": 1116,
+   "days_with_turnover_pct": 81.1,
+   "avg_turnover_on_active_days": 0.1196,
+   "median_gap_days_between_rebalances": 1.0,
+   "max_gap_days": 91,
+   "turnover_per_day_mean": 0.097
+  },
+  "cost_drag": {
+   "cost_bps_used": 10.0,
+   "cum_net_pct_0bps": 57.16,
+   "cum_net_pct_10bps": 37.54,
+   "cum_sum_of_costs_pct": 13.34,
+   "cost_drag_pp": -19.62,
+   "note": "只报告**现有 4 档费用**（0/5/10/20 bps）中的主判据口径；**不新增费用档、不生成任何『降低成本后』的结果**。",
+   "cost_attribution_by_source": {
+    "entry_cost_pct": 4.47,
+    "exit_cost_pct": 3.78,
+    "reweight_cost_pct": 5.09,
+    "sum_pct": 13.34,
+    "note": "合计应等于 `cum_sum_of_costs_pct`；只分摊**现有**成本档，未新增费用档。"
+   }
+  },
+  "cash_exposure": {
+   "avg_cash_weight_oos": 0.5671,
+   "avg_cash_weight_10bps_all": 0.5897,
+   "days_cash_ge_0p90": 282,
+   "days_cash_le_0p10": 246
+  },
+  "defense_trigger": {
+   "state_counts_oos": {
+    "NORMAL": 740,
+    "RISK_OFF": 636
+   },
+   "risk_off_days_oos": 636,
+   "risk_off_share_oos_pct": 46.22,
+   "vol_scale_lt_one_days_oos": 940,
+   "vol_scale_min_oos": 0.263,
+   "hedge_weight_positive_days_oos": 636,
+   "hedge_code": "518880",
+   "note": "只读调用被锁定的 `portfolio.defense_gate` 信号构造；未改任何防守参数。",
+   "state_counts_full_window": {
+    "NORMAL": 1210,
+    "RISK_OFF": 896
+   },
+   "gross_exposure_oos": {
+    "undefended_mean": 0.5009,
+    "defended_mean": 0.4329,
+    "days_defended_lt_undefended": 549
+   }
+  },
+  "turnover_by_year": {
+   "2021": {
+    "entry": 4.1887,
+    "exit": 2.8859,
+    "reweight": 10.3107,
+    "total": 17.3853,
+    "days": 243
+   },
+   "2022": {
+    "entry": 2.6928,
+    "exit": 2.3549,
+    "reweight": 5.8859,
+    "total": 10.9336,
+    "days": 242
+   },
+   "2023": {
+    "entry": 6.0303,
+    "exit": 4.7474,
+    "reweight": 8.0652,
+    "total": 18.8428,
+    "days": 242
+   },
+   "2024": {
+    "entry": 7.0801,
+    "exit": 5.5161,
+    "reweight": 5.6314,
+    "total": 18.2276,
+    "days": 242
+   },
+   "2025": {
+    "entry": 14.5328,
+    "exit": 12.9551,
+    "reweight": 9.6619,
+    "total": 37.1498,
+    "days": 243
+   },
+   "2026": {
+    "entry": 10.1861,
+    "exit": 9.3497,
+    "reweight": 11.3492,
+    "total": 30.885,
+    "days": 164
+   }
+  }
+ },
+ "no_calibration_statement": "本文件**未**产生任何新参数、新阈值、新 bundle/lock；未重跑 OOS 以寻找通过结果；未构造任何替代规则并回测（CORE==0 的替代行为留给 O2 未观察段）；未改动数据版本与 OOS 分割。Rule V2.0.1 仍为 ACCEPTED_FAIL / NOT_PRODUCTION_ELIGIBLE。"
+}
