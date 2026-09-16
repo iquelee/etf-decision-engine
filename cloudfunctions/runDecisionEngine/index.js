@@ -37,7 +37,7 @@ const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-
 const {
   readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION
 } = require('./common/utils/gen1-guarded-seal');
-const { selectGuardedResult, buildGuardedAudit } = require('./common/utils/gen1-guarded-selector');
+const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
 const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
 const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
@@ -567,7 +567,12 @@ exports.main = async (event = {}, context = {}) => {
       // source_sha256 / model_sha256：运行期无权威观测源（GE-04 晋升时须先提供），
       // 因此保持缺省 ⇒ FREEZE_SEAL_BINDING_UNVERIFIABLE，绝不「假设通过」。
     });
-    // 本轮真实采纳计数（GE-02 恒 0：选择器休眠，权威结果恒为 baseline）
+    // WP-G1-GE-02 复审 P1：本计数器语义 = **真实采纳次数**（selector 采用 guarded 结果），
+    // **不是**「资格成立次数」（effective_guarded === true）。两者是**不同**的事：
+    // 封印全部满足但 selector 仍处 BASELINE 时，「有资格」成立而「被采纳」为 0。
+    // GE-02 selector 恒 BASELINE ⇒ 本计数器**结构性恒为 0**。
+    // GE-03 若需统计 shadow 重跑 / eligibility 触发次数，必须**另开**字段
+    // （如 gen1_guarded_shadow_invocations / gen1_guarded_eligible_count），不得复用本计数器。
     let guardedEffectiveInvocations = 0;
     let guardedEffectiveActive = false;
     const gen1SignalByCode = {};
@@ -765,10 +770,18 @@ exports.main = async (event = {}, context = {}) => {
         }
         if (gen1Permission.effective_guarded === true) {
           guardedEffectiveActive = true;
-          guardedEffectiveInvocations += 1;
           console.warn(`[GEN1-GUARDED] ${etf.code} effective_guarded=true`
             + ` selector=${guardedSelection.authoritative_source}`
-            + '（GE-02 selector 休眠 ⇒ 仍按 baseline 落库）');
+            + '（GE-02 selector 休眠 ⇒ 仍按 baseline 落库；本处**不**计入采纳次数）');
+        }
+        // WP-G1-GE-02 复审 P1：**只有真实采纳**才 +1（selector 采用 guarded 结果且已通过
+        // 上方两条 dormant 断言）。GE-02 中 `gen1_adopted` 被硬断言为 false ⇒ 本分支**不可达**，
+        // 因此 `guardedEffectiveInvocations` 结构性恒为 0 —— 即使将来两把 Seal 全部满足，
+        // 只要 selector 仍是 BASELINE，就不会产生「adopted=false 但 invocations=1」的审计矛盾。
+        // 采用 guarded 结果后，还须等 decision_result 成功落库才算一次真实采纳（GE-03 落实）。
+        if (guardedSelection.authoritative_source === SELECTOR_SOURCE.GUARDED
+          && guardedAudit.gen1_adopted === true) {
+          guardedEffectiveInvocations += 1;
         }
 
         // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
@@ -929,8 +942,10 @@ exports.main = async (event = {}, context = {}) => {
       ? gen1GlobalGate.latched_health : null;
     const guardedEffectiveAuthorized = gen1Authority.guarded_effective_authorized === true;
     const guardedEffectiveEvidenceAllowed = guardedSeal.evidence_seal_pass === true;
+    // WP-G1-GE-02 复审 P0-1：gate_status **缺失/空串/null 一律不视为 ACTIVE**（fail-closed），
+    // 与 gen1-safety-permission 的 `healthGateActive` 同规则。此处只上报，不构成第二套判据。
     const guardedEffectiveHealthAllowed = String(guardedHealthObserved || '').toUpperCase() === 'OK'
-      && String(gen1GlobalGate.gate_status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      && String(gen1GlobalGate.gate_status || '').toUpperCase() === 'ACTIVE';
 
     // 写组合快照：snapshot_date 统一用「今天」（北京时间，组合快照时刻），
     // 与 decision_result.decision_date（数据最新日）语义分离，避免快照日期分裂。

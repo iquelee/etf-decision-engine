@@ -4,13 +4,17 @@
  * WP-G1-GE-02：`effective_guarded` 准入门单测（章程 §3.3 唯一准入表达式）。
  *
  * 覆盖：
- *   A. 封印 fail-closed 矩阵（missing / PENDING / REVOKED / 绑定不匹配 / 绑定不可验证 / 事件不足）
- *   B. **生产制品不得 APPROVED / PASS**（GE-02 dormant 硬守卫）
+ *   A. 封印 fail-closed 矩阵（missing / PENDING / REVOKED / 绑定不匹配 / 绑定不可验证 /
+ *      **Evidence 非 POSITIVE** / 事件不足）
+ *   A2. ★ Evidence Seal 三态真值表（PASS/false/30 ⇒ false；PASS/true/29 ⇒ false；
+ *      PASS/true/30 ⇒ true）—— 复审 P0-2
+ *   B. **生产制品不得 APPROVED / PASS / POSITIVE**（GE-02 dormant 硬守卫）
  *   C. 真实生产环境（CANARY + 生产制品）下 effective_guarded 恒 false
  *   D. 即使有人误改 param_config → GUARDED_EFFECTIVE，生产制品仍使 effective_guarded 为 false
  *      （★ 第二层保证：单靠改配置绝不能激活）
  *   E. synthetic 三钥匙 + 运行时门全开 → true（证明真值逻辑可用，不是恒 false 桩）
  *   F. 逐门负例：任一运行时门不成立 → false 且原因码正确
+ *      （含 ★ Health gate_status **缺失** 必须 fail-closed —— 复审 P0-1）
  *   G. CANARY 行为逐字段不变（新增档位/封印不得影响 effective_canary）
  */
 const assert = require('assert');
@@ -61,7 +65,11 @@ const ALL_BINDINGS = {
 };
 const SYNTH_SEAL = evaluateGuardedSeal({
   freeze: Object.assign({ status: FREEZE_STATUS.APPROVED }, ALL_BINDINGS),
-  evidence: { status: EVIDENCE_STATUS.PASS, independent_events: MIN_INDEPENDENT_EVENTS },
+  // WP-G1-GE-02 复审 P0-2：synthetic PASS **必须显式写** evidence_positive=true，不得省略。
+  evidence: {
+    status: EVIDENCE_STATUS.PASS, evidence_positive: true,
+    independent_events: MIN_INDEPENDENT_EVENTS
+  },
   runtime: ALL_BINDINGS
 });
 
@@ -81,7 +89,10 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   assert.strictEqual(pending.evidence_seal_reason_code, 'EVIDENCE_SEAL_NOT_PASS:PENDING');
 
   for (const st of ['REVOKED', 'PENDING', 'BOGUS', '']) {
-    const r = evaluateGuardedSeal({ freeze: { status: st }, evidence: { status: 'PASS', independent_events: 99 } });
+    const r = evaluateGuardedSeal({
+      freeze: { status: st },
+      evidence: { status: 'PASS', evidence_positive: true, independent_events: 99 }
+    });
     assert.strictEqual(r.freeze_seal_approved, false, `Freeze 状态 ${st} 必须不通过`);
     assert.strictEqual(r.evidence_seal_pass, true, 'Evidence 独立成立时不应被 Freeze 影响（便于归因）');
   }
@@ -89,7 +100,7 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   // APPROVED 但绑定不匹配
   const mismatch = evaluateGuardedSeal({
     freeze: Object.assign({ status: FREEZE_STATUS.APPROVED }, ALL_BINDINGS, { model_sha256: 'tampered' }),
-    evidence: { status: 'PASS', independent_events: 30 },
+    evidence: { status: 'PASS', evidence_positive: true, independent_events: 30 },
     runtime: ALL_BINDINGS
   });
   assert.strictEqual(mismatch.freeze_seal_approved, false, '★ 绑定不匹配必须不通过');
@@ -99,7 +110,7 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   // APPROVED 但运行期无法观测某项 ⇒ 不通过（绝不「假设通过」）
   const unverifiable = evaluateGuardedSeal({
     freeze: Object.assign({ status: FREEZE_STATUS.APPROVED }, ALL_BINDINGS),
-    evidence: { status: 'PASS', independent_events: 30 },
+    evidence: { status: 'PASS', evidence_positive: true, independent_events: 30 },
     runtime: { contract_version: GUARDED_CONTRACT_VERSION }
   });
   assert.strictEqual(unverifiable.freeze_seal_approved, false,
@@ -109,7 +120,7 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   // Evidence PASS 但事件不足
   const fewEvents = evaluateGuardedSeal({
     freeze: Object.assign({ status: FREEZE_STATUS.APPROVED }, ALL_BINDINGS),
-    evidence: { status: 'PASS', independent_events: MIN_INDEPENDENT_EVENTS - 1 },
+    evidence: { status: 'PASS', evidence_positive: true, independent_events: MIN_INDEPENDENT_EVENTS - 1 },
     runtime: ALL_BINDINGS
   });
   assert.strictEqual(fewEvents.evidence_seal_pass, false, '★ 独立事件 < 30 不得 PASS');
@@ -120,6 +131,70 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   assert.strictEqual(SYNTH_SEAL.evidence_seal_pass, true);
   assert.strictEqual(SYNTH_SEAL.freeze_seal_reason_code, null);
   assert.strictEqual(SYNTH_SEAL.evidence_seal_reason_code, null);
+}
+
+/* ============ A2. ★ Evidence Seal 三态真值表（复审 P0-2） ============
+ * 冻结契约：证据门 = `status==PASS` **且 `evidence_positive==true`** 且 `independent_events>=30`。
+ * 只盖章不证明方向（PASS + positive=false）必须 fail-closed。 */
+{
+  const freezeOk = Object.assign({ status: FREEZE_STATUS.APPROVED }, ALL_BINDINGS);
+
+  // ① PASS + positive=false + 30 ⇒ **FAIL**（自相矛盾的封印必须拒绝）
+  const contradictory = evaluateGuardedSeal({
+    freeze: freezeOk,
+    evidence: { status: 'PASS', evidence_positive: false, independent_events: 30 },
+    runtime: ALL_BINDINGS
+  });
+  assert.strictEqual(contradictory.evidence_seal_pass, false,
+    '★ status=PASS 但 evidence_positive=false 必须 fail-closed');
+  assert.strictEqual(contradictory.evidence_seal_reason_code, 'EVIDENCE_SEAL_NOT_POSITIVE');
+  assert.strictEqual(contradictory.evidence_positive, false);
+
+  // 省略 evidence_positive 字段 ≡ 未证明 ⇒ 同样拒绝（不得「缺省即真」）
+  const omitted = evaluateGuardedSeal({
+    freeze: freezeOk,
+    evidence: { status: 'PASS', independent_events: 30 },
+    runtime: ALL_BINDINGS
+  });
+  assert.strictEqual(omitted.evidence_seal_pass, false, '★ 缺 evidence_positive 字段不得通过');
+  assert.strictEqual(omitted.evidence_seal_reason_code, 'EVIDENCE_SEAL_NOT_POSITIVE');
+
+  // 非布尔真值（字符串/数字）不得被当成 true
+  for (const v of ['true', 1, 'YES']) {
+    const r = evaluateGuardedSeal({
+      freeze: freezeOk,
+      evidence: { status: 'PASS', evidence_positive: v, independent_events: 30 },
+      runtime: ALL_BINDINGS
+    });
+    assert.strictEqual(r.evidence_seal_pass, false, `evidence_positive=${JSON.stringify(v)} 不得视为 true`);
+  }
+
+  // ② PASS + positive=true + 29 ⇒ **FAIL**（事件数硬前置）
+  const short = evaluateGuardedSeal({
+    freeze: freezeOk,
+    evidence: { status: 'PASS', evidence_positive: true, independent_events: MIN_INDEPENDENT_EVENTS - 1 },
+    runtime: ALL_BINDINGS
+  });
+  assert.strictEqual(short.evidence_seal_pass, false);
+  assert.strictEqual(short.evidence_seal_reason_code, 'EVIDENCE_SEAL_INSUFFICIENT_EVENTS');
+
+  // ③ PASS + positive=true + 30 ⇒ **PASS**
+  const full = evaluateGuardedSeal({
+    freeze: freezeOk,
+    evidence: { status: 'PASS', evidence_positive: true, independent_events: MIN_INDEPENDENT_EVENTS },
+    runtime: ALL_BINDINGS
+  });
+  assert.strictEqual(full.evidence_seal_pass, true, '★ 三项同时成立才可通过');
+  assert.strictEqual(full.evidence_seal_reason_code, null);
+  assert.strictEqual(full.evidence_positive, true);
+
+  // 判定顺序：非 PASS 优先于非 POSITIVE（原因码必须指向「状态」而非「方向」）
+  const notPass = evaluateGuardedSeal({
+    freeze: freezeOk,
+    evidence: { status: 'PENDING', evidence_positive: false, independent_events: 0 },
+    runtime: ALL_BINDINGS
+  });
+  assert.strictEqual(notPass.evidence_seal_reason_code, 'EVIDENCE_SEAL_NOT_PASS:PENDING');
 }
 
 /* ========== B. ★ 生产制品不得 APPROVED / PASS（GE-02 dormant 守卫） ==========
@@ -134,6 +209,9 @@ const SYNTH_SEAL = evaluateGuardedSeal({
   assert.notStrictEqual(evidenceArtifact.status, 'PASS',
     '★ GE-02 阶段生产 Evidence 制品**不得**为 PASS');
   assert.strictEqual(evidenceArtifact.status, 'PENDING');
+  assert.notStrictEqual(evidenceArtifact.evidence_positive, true,
+    '★ GE-02 阶段生产 Evidence 制品**不得**为 evidence_positive=true（复审 P0-2）');
+  assert.strictEqual(evidenceArtifact.evidence_positive, false);
   assert.strictEqual(evidenceArtifact.independent_events, 0, '证据样本仍为 0');
   assert.strictEqual(evidenceArtifact.min_independent_events, MIN_INDEPENDENT_EVENTS);
 }
@@ -192,6 +270,27 @@ const synthBase = { params: guardedParams, guardedSeal: SYNTH_SEAL };
   assert.strictEqual(run(Object.assign({}, synthBase, {
     healthGate: Object.assign({}, healthOk, { gate_status: 'PENDING' })
   })).guarded.reason_code, 'GUARDED_HEALTH_NOT_ALLOWED');
+
+  // ★ 复审 P0-1：health=OK 但 gate_status **缺失/空串/null** 一律 fail-closed。
+  // 这是本修复的核心反例 —— 缺字段**不得**被默认成 ACTIVE。
+  for (const missing of [undefined, null, '']) {
+    const hg = Object.assign({}, healthOk);
+    if (missing === undefined) delete hg.gate_status; else hg.gate_status = missing;
+    const r = run(Object.assign({}, synthBase, { healthGate: hg }));
+    assert.strictEqual(r.guarded.checks.health_allows_guarded, false,
+      `★ gate_status=${JSON.stringify(missing)} 缺失时必须 health_allows_guarded=false`);
+    assert.strictEqual(r.effective_guarded, false,
+      `★ gate_status=${JSON.stringify(missing)} 缺失时必须 effective_guarded=false`);
+    assert.strictEqual(r.guarded.reason_code, 'GUARDED_HEALTH_NOT_ALLOWED');
+  }
+  // 对照：显式 ACTIVE 时该门成立（证明上面的反例不是因为「Health 恒 false」）
+  assert.strictEqual(run(Object.assign({}, synthBase, {
+    healthGate: Object.assign({}, healthOk, { gate_status: 'ACTIVE' })
+  })).guarded.checks.health_allows_guarded, true);
+  // 小写/带空格仍应被接受（词表归一化），但**空值不在此列**
+  assert.strictEqual(run(Object.assign({}, synthBase, {
+    healthGate: Object.assign({}, healthOk, { gate_status: 'active' })
+  })).guarded.checks.health_allows_guarded, true);
 
   // Data：DEGRADED / BLOCKED / UNKNOWN 全拒
   for (const st of ['DEGRADED', 'BLOCKED', 'UNKNOWN', 'DATA_DEGRADED']) {

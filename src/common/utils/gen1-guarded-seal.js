@@ -72,6 +72,7 @@ const SEAL_REASON = Object.freeze({
   FREEZE_BINDING_MISMATCH: 'FREEZE_SEAL_BINDING_MISMATCH',
   EVIDENCE_MISSING: 'EVIDENCE_SEAL_MISSING',
   EVIDENCE_NOT_PASS: 'EVIDENCE_SEAL_NOT_PASS',
+  EVIDENCE_NOT_POSITIVE: 'EVIDENCE_SEAL_NOT_POSITIVE',
   EVIDENCE_INSUFFICIENT_EVENTS: 'EVIDENCE_SEAL_INSUFFICIENT_EVENTS',
   READ_OK: 'SEAL_ARTIFACTS_READ_OK',
   READ_PARTIAL: 'SEAL_ARTIFACTS_PARTIAL',
@@ -102,9 +103,16 @@ function numOrNull(v) {
  *   freeze_seal_status: string, freeze_seal_approved: boolean, freeze_seal_reason_code: string|null,
  *   freeze_binding_checks: object, freeze_binding_complete: boolean,
  *   evidence_seal_status: string, evidence_seal_pass: boolean, evidence_seal_reason_code: string|null,
- *   evidence_independent_events: number|null, evidence_min_independent_events: number,
+ *   evidence_positive: boolean, evidence_independent_events: number|null,
+ *   evidence_min_independent_events: number,
  *   contract_version: string
  * }}
+ *
+ * Key 3（Evidence Seal）通过条件 = **三项同时成立**：
+ *   ① `status === PASS`
+ *   ② `evidence_positive === true`（章程 §5：Q1 ∧ Q2 ∧ 非 Q3）
+ *   ③ `independent_events >= 30`
+ * 任一不成立 ⇒ `evidence_seal_pass = false`（fail-closed）。
  */
 function evaluateGuardedSeal(input) {
   const src = input || {};
@@ -147,11 +155,21 @@ function evaluateGuardedSeal(input) {
     ? EVIDENCE_STATUS.MISSING
     : normStatus(evidence.status, EVIDENCE_STATUS, EVIDENCE_STATUS.MISSING);
   const events = numOrNull(evidence && evidence.independent_events);
+  // WP-G1-GE-02 复审 P0-2：必须**显式**证明 EVIDENCE_POSITIVE。
+  // 冻结契约（章程 §5 / GEN1_EVIDENCE_CONTRACT）规定证据门 =
+  //   EVIDENCE_POSITIVE（Q1 ∧ Q2 ∧ 非 Q3）**且** 独立事件 >= 30。
+  // 因此 `status=PASS` 只是「有人盖章」，**不足以**说明方向为正；
+  // 一个自相矛盾的封印（status=PASS + evidence_positive=false）必须 fail-closed。
+  // 本模块**不**重新解释 q1/q2/q3 的字段语义：只要求 `evidence_positive === true`
+  // 这一**确定性**事实，其余由证据工作包自己保证。
+  const evidencePositive = evidence != null && evidence.evidence_positive === true;
 
   let evidenceReason = null;
   if (evidence == null) evidenceReason = SEAL_REASON.EVIDENCE_MISSING;
   else if (evidenceStatus !== EVIDENCE_STATUS.PASS) {
     evidenceReason = `${SEAL_REASON.EVIDENCE_NOT_PASS}:${evidenceStatus}`;
+  } else if (!evidencePositive) {
+    evidenceReason = SEAL_REASON.EVIDENCE_NOT_POSITIVE;
   } else if (events == null || events < MIN_INDEPENDENT_EVENTS) {
     evidenceReason = SEAL_REASON.EVIDENCE_INSUFFICIENT_EVENTS;
   }
@@ -170,6 +188,7 @@ function evaluateGuardedSeal(input) {
     evidence_seal_status: evidenceStatus,
     evidence_seal_pass: evidencePass,
     evidence_seal_reason_code: evidenceReason,
+    evidence_positive: evidencePositive,
     evidence_independent_events: events,
     evidence_min_independent_events: MIN_INDEPENDENT_EVENTS,
     contract_version: GUARDED_CONTRACT_VERSION

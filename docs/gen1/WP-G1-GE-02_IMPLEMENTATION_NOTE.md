@@ -66,8 +66,18 @@ OFF(0) → SHADOW(1) → ADVISORY(2) → CANARY(3) → GUARDED_EFFECTIVE(4) → 
 
 四项绑定 = `source_sha256` / `model_sha256` / `threshold_version` / `contract_version`。
 
-**Evidence Seal 判定**：`status === PASS` **且** `independent_events >= 30`
-（`EVIDENCE_SEAL_NOT_PASS:<status>` / `EVIDENCE_SEAL_INSUFFICIENT_EVENTS`）。
+**Evidence Seal 判定**（三项须**同时**成立，任一不成立即 false）：
+
+```text
+① status !== PASS                 → EVIDENCE_SEAL_NOT_PASS:<status>
+② evidence_positive !== true      → EVIDENCE_SEAL_NOT_POSITIVE
+③ independent_events < 30         → EVIDENCE_SEAL_INSUFFICIENT_EVENTS
+```
+
+> ② 是**复审 P0-2 补入**的：`status = PASS` 只说明「有人盖章」，**不足以**证明方向为正
+> （冻结契约的证据门 = `EVIDENCE_POSITIVE`（Q1 ∧ Q2 ∧ 非 Q3）**且**独立事件 ≥ 30）。
+> 本模块**不**重新解释 `q1/q2/q3` 的语义，只要求 `evidence_positive === true` 这一**确定性**事实；
+> 缺字段（`undefined`）与字符串 `'true'` 一律**不**视为 true（绝不「缺省即真」）。
 
 新增两份制品（**状态恒不可通过**）：
 
@@ -88,12 +98,17 @@ effective_guarded =
       authority_guarded          # Key 1（authorityAllows GUARDED_EFFECTIVE_OVERRIDE）
    ∧ freeze_seal_approved        # Key 2
    ∧ evidence_seal_pass          # Key 3
-   ∧ health_allows_guarded       # 必须**显式** OK + gate ACTIVE（缺失 latch 不视为允许）
+   ∧ health_allows_guarded       # 必须**显式** health=OK 且 gate_status=ACTIVE
+                                 #   （缺 gate_status / 空串 / null 一律不视为 ACTIVE —— 复审 P0-1）
    ∧ data_ok                     # 必须 OK（DEGRADED/BLOCKED/UNKNOWN 全拒）
    ∧ domain_strict_in_domain     # 必须 IN_DOMAIN（PARTIAL_COVERAGE 亦拒）
    ∧ safety_pass
    ∧ model_candidate
 ```
+
+> ⚠️ `health_allows_guarded` **不得**沿用 `health` 审计信封里 `hg.gate_status || 'ACTIVE'`
+> 的**展示性**默认值。那是既有信封契约（保持逐字节不变），**不是**授权判据 ——
+> Health 是八重 Guard 中的硬门，缺字段必须 fail-closed。
 
 - **未修改** `effective_advisory` / `effective_canary` 的任何语义（含 canary 对
   `PARTIAL_COVERAGE` / `DEGRADED` 的既有宽松口径）。
@@ -225,16 +240,73 @@ out.final_action = prodAction;   // ← 一字未动
 | 生产制品不得 APPROVED/PASS 的断言 | `tests/gen1-guarded-effective-gates.test.js` §B | GE-04 晋升时改写 |
 | `GE_02_BASELINE_AUTHORITATIVE = true` | `src/common/utils/gen1-guarded-selector.js` | GE-04 翻转（须 Evidence PASS + 章程 v2.0） |
 | `guarded: null`（不重跑） | `cloudfunctions/runDecisionEngine/index.js` | GE-03 接入影子重跑 |
-| `gen1_guarded_effective_invocations` 口径 | `cloudfunctions/runDecisionEngine/index.js` | GE-03 落库改为**跨轮累计** |
+| `gen1_guarded_effective_invocations` 口径 | `cloudfunctions/runDecisionEngine/index.js` | GE-03 落实「真实采纳 + 落库成功后计数」与跨轮累计；若需 eligibility / shadow 计数，**另开字段**，不得复用本计数器 |
 | `source_sha256` / `model_sha256` 观测源 | `cloudfunctions/runDecisionEngine/index.js` + 封印读取 | GE-04 晋升**前**必须先提供，否则绑定恒 `UNVERIFIABLE` |
 
 ---
 
-## 7. 变更日志
+## 7. 复审修复记录（REQUEST CHANGES → FIX）
+
+首轮复审结论为 **REQUEST CHANGES**（架构方向认可，3 项代码级缺陷）。本轮修复如下。
+
+| # | 等级 | 缺陷 | 修复 |
+|---|---|---|---|
+| 1 | **P0** | Health 门 fail-**open**：`gate_status` 缺失被默认成 `ACTIVE`（`gen1-safety-permission` 与 `runDecisionEngine` 运行期聚合各一处） | 改为 `String(hg.gate_status \|\| '').toUpperCase() === 'ACTIVE'`；缺失 / 空串 / `null` 一律 false |
+| 2 | **P0** | Evidence Seal 只校验 `status===PASS ∧ events>=30`，**未证明 `EVIDENCE_POSITIVE`** ⇒ `{PASS, positive:false, 30}` 会被放行 | 增加 `evidence_positive === true` 校验 + 原因码 `EVIDENCE_SEAL_NOT_POSITIVE`；synthetic fixture 显式写 `evidence_positive: true` |
+| 3 | **P1** | `gen1_guarded_effective_invocations` 计的是 **eligibility**（`effective_guarded===true`）却命名为「真实采纳次数」⇒ 将来会出现 `adopted=false` 但 `invocations=1` 的审计矛盾 | 只在「selector 选择 `GUARDED` **且** `gen1_adopted===true`」时 +1；GE-02 因 dormant 断言而**结构性恒 0** |
+
+**未改动**（按复审要求）：V3.6.1、overlay production no-op、model / threshold、CANARY 行为、
+线上 authority、Gen-2、以及两份生产封印（保持 `PENDING`）。
+
+### 7.1 旧 / 新并排直读（把 fail-open 钉死）
+
+同一输入分别喂给 **GE-02 head（修复前）** 与本轮修复后的实现：
+
+```text
+health=OK + latched_health=OK + gate_status 缺失 + 完整 PASS 封印
+  旧(GE-02 head)  health_allows_guarded=true   effective_guarded=true   reason=null          ← fail-open
+  新(本修复)      health_allows_guarded=false  effective_guarded=false  reason=GUARDED_HEALTH_NOT_ALLOWED
+
+Evidence status=PASS + evidence_positive=false + events=30
+  旧(GE-02 head)  evidence_seal_pass=true      effective_guarded=true   reason=null          ← 误放行
+  新(本修复)      evidence_seal_pass=false     effective_guarded=false  reason=GUARDED_EVIDENCE_SEAL_NOT_PASS
+
+对照组：gate_status 显式 ACTIVE + 完整 PASS 封印
+  旧(GE-02 head)  effective_guarded=true
+  新(本修复)      effective_guarded=true      ← 证明修复不是「恒 false 桩」
+```
+
+`gate_status` 取值表（新实现）：
+
+| 取值 | `health_allows_guarded` |
+|---|---|
+| 缺失 | `false` |
+| `""` | `false` |
+| `"ACTIVE"` | `true` |
+| `"PENDING"` | `false` |
+
+### 7.2 新增 / 变更的测试
+
+| 测试 | 覆盖 |
+|---|---|
+| `gen1-guarded-effective-gates.test.js` **A2**（新） | Evidence 三态真值表：`PASS/false/30 ⇒ false`、`PASS/true/29 ⇒ false`、`PASS/true/30 ⇒ true`；缺字段 / `'true'` / `1` 一律不通过；判定顺序（非 PASS 优先于非 POSITIVE） |
+| 同上 **F**（增） | Health ★ `gate_status` 缺失 / 空串 / `null` ⇒ `health_allows_guarded=false` 且 `effective_guarded=false`；显式 `ACTIVE` / `active` ⇒ 该门成立（对照，排除「Health 恒 false」） |
+| 同上 **B**（增） | 生产 Evidence 制品 `evidence_positive !== true`（dormant 硬守卫） |
+| `gen1-guarded-selector-noop.test.js` **6.7**（新） | 采纳计数必须由「`SELECTOR_SOURCE.GUARDED` ∧ `gen1_adopted===true`」把关；严禁在 `effective_guarded===true` 分支内计数；字段名与落库位置不得改动 |
+| 两个既有测试的 synthetic fixture | 显式补 `evidence_positive: true`（不得省略） |
+
+**反例非空转已实证**：把新版测试跑在 GE-02 head 的旧实现上，`gen1-guarded-effective-gates`
+在 `★ status=PASS 但 evidence_positive=false 必须 fail-closed` 处变红；
+`gen1-guarded-selector-noop` 在 `★ 主链必须导入 SELECTOR_SOURCE` 处变红。
+
+---
+
+## 8. 变更日志
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | 1.0 | 2026-09-16 | GE-02 首次落地（dormant，生产结果逐字节不变） |
+| 1.1 | 2026-09-16 | 响应复审 REQUEST CHANGES：P0-1 Health 显式 fail-closed、P0-2 Evidence 必须 POSITIVE、P1 采纳计数语义修正 |
 
 ---
 

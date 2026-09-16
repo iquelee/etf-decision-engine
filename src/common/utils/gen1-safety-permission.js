@@ -17,8 +17,9 @@
  *   - 概率低于阈值（如 S2 + P=0.12）即使 Safety PERMIT，也不得 advisory/canary。
  *   - ml_fast=false 但 P>=阈值 → 信号自相矛盾，fail-closed（BLOCK）。
  *   - effective_canary 额外要求 authority >= CANARY（PRODUCTION 永久锁定）。
- *   - effective_guarded 更严格：额外要求 **Freeze Seal APPROVED + Evidence Seal PASS
- *     + Health==OK 且 gate ACTIVE + Data==OK + Domain==IN_DOMAIN**；
+ *   - effective_guarded 更严格：额外要求 **Freeze Seal APPROVED（且绑定可验证）**
+ *     + Evidence Seal `PASS` **且 `evidence_positive === true`** 且独立事件 >= 30
+ *     + Health==OK 且 gate_status **显式** ACTIVE + Data==OK + Domain==IN_DOMAIN；
  *     任一不成立即 false（fail-closed）。
  *     ⚠️ effective_guarded 只表示「可向 V3 提议受控阶段输入」，**不是生产写权限**；
  *        final_target / final_action 的唯一产出方仍是 V3.6.1 Safety Core。
@@ -249,17 +250,20 @@ function evaluateGen1Permission(input) {
     // 与 effective_canary **并列**，不替换。门槛**严格更严**（这是更高的权限档位）：
     //   Data 必须 OK（DEGRADED/BLOCKED/UNKNOWN 全拒）
     //   Domain 必须 IN_DOMAIN（PARTIAL_COVERAGE / OUT_OF_DOMAIN 全拒）
-    //   Health 必须有显式 OK + ACTIVE 的持久化 latch（缺失 latch 不视为「允许」）
+    //   Health 必须有**显式** OK + ACTIVE 的持久化 latch（缺失 latch / 缺 gate_status 均不视为「允许」）
     //   Freeze Seal 必须 APPROVED 且四项绑定与运行期实读一致
-    //   Evidence Seal 必须 PASS 且独立事件 >= 30
+    //   Evidence Seal 必须 status==PASS **且 evidence_positive==true** 且独立事件 >= 30
     // 任一不成立 ⇒ effective_guarded = false ⇒ 回退纯 V3.6.1 baseline（fail-closed）。
     const guardedSeal = src.guardedSeal || null;
     const healthObserved = hg
       ? (hg.health != null ? hg.health : (hg.latched_health != null ? hg.latched_health : null))
       : null;
-    const healthGateActive = hg
-      ? String(hg.gate_status == null ? 'ACTIVE' : hg.gate_status).toUpperCase() === 'ACTIVE'
-      : false;
+    // WP-G1-GE-02 复审 P0-1：**显式** `ACTIVE`，缺失/空串/null 一律**不**视为 ACTIVE。
+    // ⚠️ 不得沿用 healthEnvelope 里 `hg.gate_status || 'ACTIVE'` 的**展示性**默认值 ——
+    //    那是审计信封的既有契约（保持逐字节不变），**不是**授权判据。
+    //    Health 是八重 Guard 中的硬门 ⇒ 缺字段必须 fail-closed。
+    const healthGateActive = !!hg
+      && String(hg.gate_status || '').toUpperCase() === 'ACTIVE';
     const authorityGuarded = authorityAllows(authority.gen1_authority, 'GUARDED_EFFECTIVE_OVERRIDE');
     const freezeSealApproved = !!(guardedSeal && guardedSeal.freeze_seal_approved === true);
     const evidenceSealPass = !!(guardedSeal && guardedSeal.evidence_seal_pass === true);
@@ -345,6 +349,7 @@ function evaluateGen1Permission(input) {
         evidence_seal_reason_code: guardedSeal
           ? (guardedSeal.evidence_seal_reason_code || null)
           : SEAL_REASON.EVIDENCE_MISSING,
+        evidence_positive: !!(guardedSeal && guardedSeal.evidence_positive === true),
         evidence_independent_events: guardedSeal
           ? (guardedSeal.evidence_independent_events == null
             ? null : guardedSeal.evidence_independent_events)

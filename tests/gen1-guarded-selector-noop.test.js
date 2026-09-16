@@ -51,7 +51,8 @@ const BIND = {
 };
 const SYNTH_SEAL = evaluateGuardedSeal({
   freeze: Object.assign({ status: FREEZE_STATUS.APPROVED }, BIND),
-  evidence: { status: EVIDENCE_STATUS.PASS, independent_events: 30 },
+  // WP-G1-GE-02 复审 P0-2：synthetic PASS 必须**显式**证明方向为正。
+  evidence: { status: EVIDENCE_STATUS.PASS, evidence_positive: true, independent_events: 30 },
   runtime: BIND
 });
 
@@ -209,6 +210,19 @@ function perm(over) {
   assert.ok(/gen1_guarded_selector_source/.test(OVERLAY_SRC), 'overlay 必须写入选择器来源审计字段');
   // 6.6 Gen-2 目录零改动（源码级：不得出现 Gen-2 路径被本工作包写入的痕迹）
   assert.ok(!/ml\/gen2/.test(RDE), '★ runDecisionEngine 不得触碰 ml/gen2/**');
+
+  // 6.7 ★ 复审 P1：`gen1_guarded_effective_invocations` 语义 = **真实采纳次数**
+  //     （不是资格成立次数）。GE-02 selector 恒 BASELINE ⇒ 结构性恒为 0。
+  assert.ok(/const \{ selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE \}/.test(RDE),
+    '★ 主链必须导入 SELECTOR_SOURCE 才能表达「采纳」语义');
+  assert.ok(/SELECTOR_SOURCE\.GUARDED[\s\S]{0,60}gen1_adopted === true[\s\S]{0,60}guardedEffectiveInvocations \+= 1;/
+    .test(RDE_CODE),
+  '★ 采纳计数必须由「selector=GUARDED ∧ gen1_adopted=true」把关（缺一不得计数）');
+  assert.ok(!/effective_guarded === true\)\s*\{[^}]*guardedEffectiveInvocations \+= 1;/.test(RDE_CODE),
+    '★ 严禁在 effective_guarded=true 分支内计数（那是 eligibility，不是 adoption）');
+  // 字段名与落库位置保持不变（冻结契约 §6.2 的口径是「累计真实采纳次数」）
+  assert.ok(/gen1_guarded_effective_invocations: guardedEffectiveInvocations,/.test(RDE_CODE),
+    '★ 字段名与落库位置不得改动（契约 §6.2）');
 }
 
 console.log('gen1 guarded selector noop tests passed');

@@ -32,7 +32,8 @@
  *   G1-U Daily Data Finality         ready lane 不得重复抓 + 盘中不写当日 bar + 定稿标记
  *   —— WP-G1-GE-02 Guarded Effective（Dormant）——
  *   G1-V Guarded Effective Authority 新档位插入 + PRODUCTION 仍不可达 + 恒无生产写权限
- *   G1-W Guarded Effective Gates     三钥匙 + 运行时叠加门 fail-closed（含生产制品不得 APPROVED/PASS）
+ *   G1-W Guarded Effective Gates     三钥匙 + 运行时叠加门 fail-closed（含生产制品不得 APPROVED /
+ *                                    PASS / evidence_positive；Evidence 必须显式 POSITIVE）
  *   G1-X Guarded Selector No-op      authoritative selector 恒 BASELINE + production no-op 不变量
  *   G1-Y Authority Frozen Param      gen1_authority 入冻结清单（单靠改配置不能激活）
  *
