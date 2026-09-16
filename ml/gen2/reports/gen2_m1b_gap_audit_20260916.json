@@ -1,0 +1,398 @@
+{
+  "audit": "gen2_m1b_gap_audit",
+  "doc_type": "EVIDENCE_CHAIN_GAP_AUDIT",
+  "status": "COMPLETED",
+  "scope": "DOCS_ONLY",
+  "generated_on": "2026-09-16",
+  "human_readable": "ml/gen2/reports/gen2_m1b_gap_audit_20260916.md",
+
+  "base": {
+    "origin_master_sha": "6793d7f29ba161cf18166233d844f284696f7417",
+    "origin_master_sha_source": "git ls-remote origin refs/heads/master (read-only, no fetch)",
+    "verified_at": "2026-09-16T13:07+08:00",
+    "worktree": "etf-decision-gen2-gapaudit-20260916",
+    "worktree_outside_repo": true,
+    "branch": "docs/gen2-m1b-gap-audit",
+    "pr_created": false,
+    "pr_merged": false,
+    "pushed": true,
+    "stopped_at": "READY_FOR_PR_USER_MANUAL"
+  },
+
+  "rule_status": {
+    "bundle_version": "gen2-rule-v2.0.1",
+    "lock_revision": 3,
+    "immutable_set_count": 8,
+    "immutable_set_ids": [
+      "bundle",
+      "js_implementation",
+      "python_rule",
+      "python_candidate",
+      "python_defense",
+      "python_role_thresholds",
+      "python_selection_scores",
+      "python_regime"
+    ],
+    "verdict": "ACCEPTED_FAIL",
+    "economic_eligibility": "NOT_PRODUCTION_ELIGIBLE",
+    "changed_by_this_package": false
+  },
+
+  "hash_convention": {
+    "description": "项目内 verify-immutable.js::sha256File 的口径 = UTF-8 解码 + CRLF->LF 归一化后取 sha256，非原始字节 sha256。",
+    "formula": "sha256(fs.readFileSync(file).toString('utf8').replace(/\\r\\n/g, '\\n'))",
+    "verified_examples": [
+      {
+        "file": "ml/gen2/manifests/GEN2_RULE_V2_LOCK.json",
+        "sha256_raw_bytes": "dea4b092a1e7399b3115e60d8723243e95af58ccd84be0d0e962bcd556ae8910",
+        "sha256_normalized_project_convention": "d3d40f99dd3d766bd326bf11cc81dcc1168fde4d59693187f1154b2a9e7b2d9c",
+        "matches": "scripts/verify-immutable.js ROOT_ANCHORS"
+      },
+      {
+        "file": "ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json",
+        "sha256_raw_bytes": "3a8be7e7227f126c9b1ea7207a24c341e54f93257e308da23665afcd61d673f9",
+        "sha256_normalized_project_convention": "fabd31d9b1c2500e82f5f927fd24acdee63df2d01fce09053028c353426d6b37",
+        "matches": "GEN2_RULE_V2_LOCK.json.bundle_sha256"
+      }
+    ],
+    "warning": "后续报告引用 bundle_sha256 / lock_sha256 时必须声明该归一化口径，否则会产生「哈希不一致」的假告警。"
+  },
+
+  "frozen_inputs": [
+    {
+      "path": "ml/gen2/reports/gen2_m1b_o2_expansion_20260915.md",
+      "role": "上位对象",
+      "state": "FROZEN",
+      "modified_by_this_package": false
+    },
+    {
+      "path": "ml/gen2/reports/gen2_m1b_o2_candidates_20260915.json",
+      "role": "上位机器可读件",
+      "sha256_raw_bytes_prefix": "de0ceb76b8a68fff",
+      "size_bytes": 62170,
+      "modified_by_this_package": false
+    },
+    {
+      "path": "ml/gen2/universe/cluster_taxonomy_v1.json",
+      "role": "分类学冻结件",
+      "sha256_raw_bytes_prefix": "fd7f0e3fd125c53a",
+      "size_bytes": 19118,
+      "modified_by_this_package": false
+    },
+    {
+      "path": "ml/gen2/reports/gen2_data_boundary_freeze_20260915.md",
+      "role": "上位冻结（FROZEN v1.1）",
+      "modified_by_this_package": false
+    }
+  ],
+
+  "scope_snapshot": {
+    "designation": "AUDIT_SCOPE_SNAPSHOT",
+    "designation_zh": "待审计范围快照",
+    "artifact": "ml/gen2/reports/gen2_m1b_o2_candidates_20260915.json",
+    "artifact_sha256_raw_prefix": "de0ceb76b8a68fff",
+    "artifact_size_bytes": 62170,
+    "candidate_count": 92,
+    "source_payload_path": "C:/Users/iquel/AppData/Local/Temp/m1b/cache/etf_all_enumerated.json",
+    "source_payload_status": "LOST",
+    "source_payload_exists": false,
+    "independently_re_enumerable": false,
+    "related_caches_status": {
+      "~/.cache/gen2-o2-screen": "MISSING",
+      "%TEMP%/m1a_em_cache": "MISSING",
+      "%TEMP%/m1b": "MISSING"
+    },
+    "permitted_use": "仅作 M1-B 待审计范围界定（要审计哪些只）",
+    "forbidden_use": [
+      "不得作准入结论",
+      "不得作 freeze §2.6 段级判定依据",
+      "不得宣称满足任何门槛（15 只 / 6 cluster / 流动性 / 暖机 / 停牌）"
+    ],
+    "remedy_if_needed": "补跑一次枚举并持久化落盘（+17 次 clist 请求，未获批）；或长期接受「候选清单已冻结、不可重算」并在缺口表挂账。"
+  },
+
+  "gaps": [
+    {
+      "id": "GAP-01",
+      "title": "92 条 data_error 不构成「东财限流」的可复核证据",
+      "severity": "HIGH",
+      "status": "UNRESOLVED_EVIDENCE_GAP",
+      "evidence": {
+        "artifact": "ml/gen2/reports/gen2_m1b_o2_candidates_20260915.json",
+        "observed": "candidates_total=92, candidates_with_kline=0, candidates_pending_data=92, n_liquidity_pass=0; 92/92 data_ok=false",
+        "data_error_value": "FileNotFoundError: offline 且无缓存：https://push2his.eastmoney.com/api/qt/stock/kline/get?...",
+        "root_cause_code": "scripts/ml/screen-o2-candidates.py::cached() -> if offline: raise FileNotFoundError",
+        "interpretation": "该 JSON 是 --offline 且空缓存下的重跑产物 ⇒ 证明的是「从未发出请求」，而非「请求被限流」。"
+      },
+      "impact": "报告 §3.6 的「HTTP 000 / IP 限流」归因在机器可读件中无任何 HTTP 层留痕（无状态码、无 URLError/ConnectionResetError、无重试计数）。",
+      "required_action": "后续文档必须按「未复现 / 未留痕」处理，不得作既证事实引用；限流是否存在须由一次受控联网探测单独取证（未获批）。"
+    },
+    {
+      "id": "GAP-02",
+      "title": "枚举 payload 位于临时目录且已丢失 ⇒ 候选枚举不可复现",
+      "severity": "HIGH",
+      "status": "UNRESOLVED_STORAGE_DEFECT",
+      "evidence": {
+        "recorded_path": "C:/Users/iquel/AppData/Local/Temp/m1b/cache/etf_all_enumerated.json",
+        "path_exists": false,
+        "searched_roots": ["%TEMP%", "~/.cache", "Documents/ChatGPT/Tradingview"],
+        "found_residual": "仅 3 份内容逐位相同（62170 B）的候选 JSON 副本，源自同一次离线重跑；无任何 enumerated/m1b 枚举残留"
+      },
+      "impact": [
+        "92 只候选当前只能被信任、不能被复算",
+        "1604 只全表普查不可复算（仅分类聚合与 92 只逐只枚举字段留存，丢失其余 1512 只 f26/f6/f20 明细）",
+        "报告 §3.6 的重跑命令假设枚举可复用，真实重跑需额外 17 次 clist 请求且改变枚举来源"
+      ],
+      "required_action": "脚本默认缓存改出 %TEMP% / ~/.cache（见 next_step_plan.CACHE_ROOT）；92 只清单定性为 AUDIT_SCOPE_SNAPSHOT。"
+    },
+    {
+      "id": "GAP-03",
+      "title": "重试策略放大请求 8×，与「禁止循环重试」同构",
+      "severity": "HIGH",
+      "status": "UNRESOLVED_CODE_DEFECT",
+      "evidence": {
+        "file": "scripts/ml/screen-o2-candidates.py",
+        "code": "_get(url, hosts, tries=8, pause=0.5): for i in range(tries): u = url.replace(hosts[0], hosts[i % len(hosts)], 1); ... time.sleep(1.0*(i+1))",
+        "hosts_clist": 5,
+        "hosts_kline_effective": 4,
+        "request_volume_ideal": 110,
+        "request_volume_worst_case": 880
+      },
+      "impact": "在被限流时加深限流；且构成观测污染源——无法区分「本来就不通」与「因重试被加重封禁」。",
+      "required_action": "任何联网取数前必须改为 fail-fast + 稳定缓存 + 进度留痕（方案见 next_step_plan，均 NOT_APPROVED）。"
+    },
+    {
+      "id": "GAP-04",
+      "title": "92 只 / 7(或 5) 个 cluster 是候选池并集，不是 freeze §2.6 的逐段最小值",
+      "severity": "CRITICAL",
+      "status": "UNRESOLVED_METHOD_MISMATCH",
+      "evidence": {
+        "freeze_2_6_min_universe": "每段 ≥ 15 只，口径 = 该段每个交易日历日都满足条件的标的总数取最小值（非并集）",
+        "freeze_2_6_sector_coverage": "Dev/Val/OOS 各段分别 ≥ 6 个 cluster（8 个中）",
+        "m1b_reported": ["92 只候选（候选池并集）", "sector 覆盖 7/8（候选池并集）", "sector 覆盖 5/8（候选池并集 + 2026 今日成交额代理）"],
+        "offline_recompute": {
+          "network": false,
+          "input": "ml/gen2/reports/gen2_m1b_o2_candidates_20260915.json",
+          "result": "92 -> 43; 行业类 18; 覆盖 5/8; tech_hardware 与 defensive_dividend 归零",
+          "matches_report_3_4": "逐位一致"
+        }
+      },
+      "impact": "M1-B §5 的预判以池级并集回应段级最小值门槛 ⇒ 既不能证成也不能证伪 §2.6；并集恒 ≥ 任一子集最小值，两个方向都无逻辑蕴含 ⇒ 连预判力都受限。",
+      "required_action": "在 G/I 裁决前，任何候选数与 cluster 数均不得宣称满足 §2.6。"
+    },
+    {
+      "id": "GAP-05",
+      "title": "生存偏差全量清单未完成 + 悬空引用",
+      "severity": "HIGH",
+      "status": "UNRESOLVED",
+      "evidence": {
+        "done": [
+          "官方双源已定位且实测可取（上交所 ssenotice / 深交所 fund/dynamic）",
+          "抽取规则已定义 {code,name,delist_date,exchange,notice_url,notice_no}",
+          "已实测退市样本 6 条（6/6 不在东财现行 1604 只枚举内）；2/2 存续对照在内"
+        ],
+        "not_done": [
+          "全量清单（两所索引无总数、无类型筛选，需逐页翻十余年）",
+          "对 2005-2018（O2 窗口）的完备性未验证"
+        ],
+        "dangling_reference": {
+          "referenced_by": "scripts/ml/screen-o2-candidates.py docstring",
+          "target": "ml/gen2/reports/gen2_m1b_survivorship_20260915.md",
+          "target_exists": false
+        }
+      },
+      "impact": "按 freeze §2.5 / X6：存在未量化生存偏差 ⇒ O2 段结论只能用于机制否证，不得作资格判定。",
+      "required_action": "删除或改指悬空引用（方案 D）；生存偏差全量抽取的立项方式待裁决 J。"
+    },
+    {
+      "id": "GAP-06",
+      "title": "cluster 分母口径未闭合",
+      "severity": "MEDIUM",
+      "status": "UNRESOLVED_PENDING_RULING",
+      "evidence": {
+        "artifact": "ml/gen2/universe/cluster_taxonomy_v1.json",
+        "material_sha256_raw_prefix": "fd7f0e3fd125c53a"
+      },
+      "open_items": [
+        "「8」的原始出处全仓库无文件枚举过；本包给出可复算构造（11 - 3 非行业 = 8；etf_master.sector 10 - 2 = 8），待确认",
+        "若分母应取 9/10/11，只需改 coverage_denominator.value 与 members；阈值 >=6 不动",
+        "growth_broad 是否算「行业」（taxonomy 按 sector=broad 判为非行业，待裁决）"
+      ],
+      "required_action": "后续若进入 P1 / 资格计数，须单独提交「cluster 分母 + underlying 去重」裁决材料。"
+    },
+    {
+      "id": "GAP-07",
+      "title": "治理缺口：clusters_v1.json / universe_v1.json 不在 immutable_set",
+      "severity": "HIGH",
+      "status": "UNRESOLVED_GOVERNANCE",
+      "evidence": {
+        "immutable_set_count": 8,
+        "contains_clusters_v1": false,
+        "contains_universe_v1": false
+      },
+      "impact": "bundle 字节不变、LOCK 不改的前提下，改 cluster 成员关系即可改变运行语义（可绕开 max_cluster_weight=0.40 与 max_tech_weight=0.65），与已修补的 role_thresholds.py / regime.py 同类旁路。",
+      "required_action": "纳入 immutable_set 属新 lock revision，须用户批准（待裁决 H）。本包未擅自改动。"
+    },
+    {
+      "id": "GAP-08",
+      "title": "结构性天花板：software_ai 不可得 ⇒ O2 sector 覆盖上限 7/8",
+      "severity": "INFO",
+      "status": "ACCEPTED_STRUCTURAL",
+      "evidence": {
+        "reason": "2018 年前市场不存在 AI/软件主题 ETF（最早 159819 = 2020-09-23，且已在池内）",
+        "stressed_clusters": {
+          "tech_hardware": {"n": 4, "max_amount_wan_today": 2299.4, "after_proxy_filter": 0},
+          "defensive_dividend": {"n": 3, "max_amount_wan_today": 2188.4, "after_proxy_filter": 0},
+          "consumer": {"n": 4, "max_amount_wan_today": 4090.5, "after_proxy_filter": 1},
+          "healthcare": {"n": 4, "max_amount_wan_today": 3195.8, "after_proxy_filter": 1}
+        },
+        "proxy_note": "以上 amount_wan_today 仅作代理、不作准入；两簇距 3000 万门槛约 25-30%，最可能被流动性门槛整体淘汰。"
+      },
+      "required_action": "如实登记；不得据此放宽逐标的准入凑数（freeze §2.6 明令禁止）。"
+    }
+  ],
+
+  "stage_a": {
+    "approval_status": "NOT_APPROVED",
+    "executed": false,
+    "network_requests_sent": 0,
+    "eastmoney_requests_sent": 0,
+    "enumeration_rerun": false,
+    "purpose": "逐只数据质量取证（仅此一项）",
+    "scope_if_approved": {
+      "target_codes": 43,
+      "target_scope_zh": "行业类候选（7 个 cluster：consumer 4 / cyclical_resources 10 / defensive_dividend 3 / financial 11 / healthcare 4 / overseas_equity 7 / tech_hardware 4）",
+      "calendar_requests": 1,
+      "calendar_secid": "1.000001",
+      "fqt": 1,
+      "note": "fqt=1 与 M1-A 同源同法；日历用 fqt=0"
+    },
+    "request_budget": {"requests": 44, "hard_cap": 45},
+    "stage_b_if_continued": {
+      "approval_status": "NOT_APPROVED",
+      "target_codes": 49,
+      "composition": {"broad_beta": 42, "growth_broad": 4, "gold_commodity": 3},
+      "requests": 49,
+      "hard_cap": 50,
+      "note": "Stage B 仍不等于段级判定"
+    },
+    "may_claim": [
+      "逐只数据可得性与质量的事实读数（上市日 / 行数 / 缺口 / 成交额齐备性）",
+      "流动性与停牌两项的保守（充分不必要）结论 —— 整窗通过 ⇒ 其内任意子段通过"
+    ],
+    "must_not_claim": [
+      "不得宣称 §2.6 段级准入通过",
+      "不得宣称暖机达标",
+      "不得宣称标的数 >=15 / cluster >=6 达标",
+      "不得把今日成交额代理筛当作准入读数",
+      "不得用 fqt=0 顶替、不得跨源拼接",
+      "不得据 Stage A 结果改任何规则/参数/阈值/lock，也不得启动 Dev/Val/OOS"
+    ],
+    "preconditions_before_going_online": [
+      "三项改造已实现并通过测试（fail-fast / 稳定缓存 / 进度留痕）",
+      "用户批准请求上限（A: 45；如连做 B: 50）",
+      "明确一次性同日取齐（前复权基准日随抓取日漂移）",
+      "登记并批准 --candidates 与缓存根位置（如启用）"
+    ],
+    "note": "G / I 不再列为 Stage A 阻塞前置；但在 G / I 裁决前，任何候选数与 cluster 数均不得宣称满足 §2.6。"
+  },
+
+  "next_step_plan": {
+    "code_change": {
+      "approval_status": "NOT_APPROVED",
+      "implemented": false,
+      "target_files": ["scripts/ml/screen-o2-candidates.py"],
+      "changes": [
+        {"id": "A", "title": "fail-fast", "detail": "_get tries 8 -> 1；失败直接 raise；删除主机轮换与退避循环", "risk": "LOW"},
+        {"id": "B", "title": "stable cache root", "detail": "新增 --cache-root，默认改为仓库外固定路径（如 %USERPROFILE%\\gen2-o2-evidence\\<data_version>\\）；保留 --cache 覆盖", "risk": "LOW"},
+        {"id": "C", "title": "progress trail", "detail": "新增 --progress <path>，每只成功即刻 append 一行 JSONL（code/url/payload_sha256/generated_on/host_index/http_status）+ 请求计数器", "risk": "MEDIUM"},
+        {"id": "D", "title": "fix dangling reference", "detail": "删 docstring 对 gen2_m1b_survivorship_20260915.md 的引用，或改指向本审计 §5.1", "risk": "NONE"},
+        {"id": "E", "title": "--candidates <json> resume entry (OPTIONAL, separate approval)", "detail": "支持从已入库 JSON 读 code/listing_date_vendor，避免重新枚举 17 页；须在进度文件记录来源 artifact sha256", "risk": "LOW", "approval_required_separately": true}
+      ],
+      "explicitly_not_doing": [
+        "不改 --offline / --enum / --out 现有语义",
+        "不改任何输出 JSON 的既有字段名",
+        "不触碰 ml/gen2/manifests/**、ml/gen2/universe/**、cloudfunctions/**"
+      ]
+    },
+    "test_plan": {
+      "approval_status": "NOT_APPROVED",
+      "implemented": false,
+      "all_offline": true,
+      "suggested_location": "ml/gen2/tests/",
+      "tests": [
+        {"id": "T1", "title": "_get 失败时只调用 1 次且无 sleep", "type": "unit"},
+        {"id": "T2", "title": "_get 失败时不换主机（URL 恒含 hosts[0]）", "type": "unit"},
+        {"id": "T3", "title": "缓存默认根不在 %TEMP% / ~/.cache", "type": "unit"},
+        {"id": "T4", "title": "--offline 且无缓存 -> FileNotFoundError（保留既有语义）", "type": "regression"},
+        {"id": "T5", "title": "进度文件为 JSONL append：第 3 只失败中止时恰好 3 行", "type": "integration"},
+        {"id": "T6", "title": "进度行 payload_sha256 归一化口径正确", "type": "unit"},
+        {"id": "T7", "title": "请求计数 == 1×N（不是 8×N）", "type": "integration"},
+        {"id": "T8", "title": "golden 回归：--offline 空缓存输出与改造前逐字段一致", "type": "regression"},
+        {"id": "T9", "title": "悬空引用已消除（grep 为空或指向存在文件）", "type": "static"}
+      ]
+    }
+  },
+
+  "rulings": [
+    {"id": 1, "item": "本审计正式入库（仅限文档审计包）", "decision": "APPROVED", "executed": true},
+    {"id": 2, "item": "Stage A 取数", "decision": "NOT_APPROVED", "executed": false},
+    {"id": 3, "item": "G：§2.6 分母 8/9/10/11 且 growth_broad 是否算行业", "decision": "DEFERRED", "blocking_stage_a": false},
+    {"id": 4, "item": "I：同 L2 cluster 内按 underlying 去重", "decision": "DEFERRED", "blocking_stage_a": false},
+    {"id": 5, "item": "代码改造（screen-o2-candidates.py）", "decision": "PENDING_SEPARATE_APPROVAL", "executed": false}
+  ],
+
+  "unresolved_rulings": {
+    "G": {"question": "§2.6 分母取 8/9/10/11？growth_broad 算不算行业？", "m1b_recommendation": "取 8；判非行业", "status": "DEFERRED"},
+    "H": {"question": "是否把 clusters_v1.json 纳入 immutable_set（＝新 lock revision）？", "m1b_recommendation": "建议纳入", "status": "OPEN_NOT_BLOCKING"},
+    "I": {"question": "同 L2 cluster 内是否按 underlying 去重？", "m1b_recommendation": "建议启用", "status": "DEFERRED"},
+    "J": {"question": "生存偏差全量抽取：立 M1-C 独立包还是 P1 内前置子任务？", "m1b_recommendation": "建议立 M1-C", "status": "OPEN_NOT_BLOCKING"},
+    "K": {"question": "限流解除后是否立即补跑流动性读数？", "m1b_recommendation": "建议补跑（P1 硬前置）", "status": "OPEN"},
+    "L": {"question": "是否接受 O2 的 Frozen OOS 早于 B3 的外推限制？", "m1b_recommendation": "建议接受并写入 P1 regime 声明", "status": "OPEN_NOT_BLOCKING"}
+  },
+
+  "freeze_gates": {
+    "purpose": "证明本包为纯文档变更，未使任何冻结对象漂移",
+    "environment": {
+      "node": "22.22.2 (managed)",
+      "python": "3.13.14 (managed venv envs/default, pandas 3.0.5)"
+    },
+    "results": [
+      {"id": "G1", "name": "verify-immutable.js", "command": "node scripts/verify-immutable.js", "result": "PASS", "detail": "23/23 项锁定", "exit_code": 0},
+      {"id": "G2", "name": "verify-gen2-build-artifacts.js", "command": "node scripts/verify-gen2-build-artifacts.js", "result": "PASS", "detail": "7/7 项", "exit_code": 0, "precondition": "全新 worktree 需先跑 node scripts/build-cloudfunctions.js（dist-functions/ 命中 .gitignore:6）；未构建时仅 1/3 项"},
+      {"id": "G3", "name": "gen2-rule-freeze.test.js", "command": "node tests/gen2-rule-freeze.test.js", "result": "PASS", "detail": "37 通过 / 0 失败", "exit_code": 0},
+      {"id": "G4", "name": "test_wp_g2_04_freeze.py", "command": "python ml/gen2/tests/test_wp_g2_04_freeze.py", "result": "PASS", "detail": "18 tests OK", "exit_code": 0, "precondition": "需要 pandas"}
+    ],
+    "all_pass": true
+  },
+
+  "changed_files": [
+    {"path": "ml/gen2/reports/gen2_m1b_gap_audit_20260916.md", "change": "ADDED", "kind": "doc"},
+    {"path": "ml/gen2/reports/gen2_m1b_gap_audit_20260916.json", "change": "ADDED", "kind": "doc"},
+    {"path": "ml/gen2/reports/README.md", "change": "MODIFIED", "kind": "doc", "detail": "新增本报告索引行 + 对 M1-B 行 §3.6 加勘误指针"}
+  ],
+
+  "not_changed": [
+    "ml/gen2/reports/gen2_m1b_o2_expansion_20260915.md (FROZEN, 一字未改)",
+    "scripts/ml/screen-o2-candidates.py",
+    "ml/gen2/manifests/** (bundle / lock / manifests)",
+    "ml/gen2/universe/** (cluster_taxonomy_v1 / clusters_v1 / universe_v1)",
+    "cloudfunctions/** , src/** , web/**",
+    "任何 data_version / 缓存 payload / 新数据"
+  ],
+
+  "no_calibration_statement": "本包为只读证据链与口径缺口审计（DOCS_ONLY）：不含任何新数据、不发起任何联网请求、不改任何代码/参数/阈值/bundle/lock/immutable_set/OOS 分割。Rule V2.0.1 归档状态 ACCEPTED_FAIL / NOT_PRODUCTION_ELIGIBLE 不变；本包任何内容均不得用于生产资格主张。",
+
+  "change_log": [
+    {
+      "date": "2026-09-16",
+      "revision": 1,
+      "content": "初版（仓库外草稿）：只读取证 —— 校正 HEAD 前设、证否 HTTP 000 可复核性、定位枚举 payload 丢失、量化重试放大 8×、指出 §2.6 口径层级错配、梳理未闭合项。未入库、未联网。"
+    },
+    {
+      "date": "2026-09-16",
+      "revision": 2,
+      "content": "正式入库（文档审计包）：新增 scope_snapshot（AUDIT_SCOPE_SNAPSHOT）、next_step_plan（文件级改造 + 测试方案，均 NOT_APPROVED）、rulings 状态登记、freeze_gates 结果、hash_convention 澄清。仍为纯文档。"
+    }
+  ]
+}
