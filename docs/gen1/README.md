@@ -12,7 +12,14 @@
 > ⚠️ **运行状态勘误（2026-09-16）**：
 > Gen-1 每日只读巡检的**自动化任务已于 2026-09-14 停止**；
 > `GEN1_DAILY_PRODUCTION_WATCH.md` 的 7 项现为 **手工 / 按需协议**，不再是自动任务。
-> 详见 **[`GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md`](./GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md)**（追加型勘误，不改历史正文）。
+> 详见 **[`GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md`](./GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md)**（追加型勘误，不改历史正文；当前 **v1.1**）。
+
+> ⚠️ **放行规则（2026-09-16 澄清，v1.1 新增 §7）**：
+> 项目级**阶段许可**来自 `WP-G1-GE-RULING_20260916.md` §1.4（`RULING-WP-G1-GE`，批准方 = 项目所有人）；
+> 但 **「阶段许可」≠「单个 PR 自动合并许可」** ——
+> **P2** 每个 PR 须各自持有 P2 放行记录；**P3** 须待 P2 合并 + 休眠态反例测试通过后再单独放行；
+> **P4** 仍**严格禁止**。`#43` 当前状态 = **`P2_PENDING_PR_RELEASE`**（挂起）。
+> 详见 **[勘误 §7 附录](./GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md#7-附录--阶段许可与逐-pr-放行澄清记录v112026-09-16)**。
 
 ---
 
@@ -21,7 +28,7 @@
 | # | 文件 | 是什么 | as-of | 现在是否仍有效 |
 |---|---|---|---|---|
 | 1 | [`GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md`](./GEN1_EVIDENCE_MONITOR_STATUS_ERRATUM_20260916.md) | **运行状态勘误 / 补充**（追加型） | 2026-09-16 | ✅ **有效**（最新事实，优先读） |
-| 2 | [`GEN1_GUARDED_EFFECTIVE_CHARTER.md`](./GEN1_GUARDED_EFFECTIVE_CHARTER.md) | Guarded Effective 章程 / **设计契约**（`WP-G1-GE-CH-1.0`） | 2026-09-16 | ⚠️ **有效但须按勘误收紧**：§2.1/§2.2「整份继续有效」读作「监控字段与判定规则继续有效，自动执行频率不继续有效」；§5.1 的 P1/P2/P3 ✅ **不构成编码/验证/部署授权** |
+| 2 | [`GEN1_GUARDED_EFFECTIVE_CHARTER.md`](./GEN1_GUARDED_EFFECTIVE_CHARTER.md) | Guarded Effective 章程 / **设计契约**（`WP-G1-GE-CH-1.0`） | 2026-09-16 | ⚠️ **有效但须按勘误收紧**：§2.1/§2.2「整份继续有效」读作「监控字段与判定规则继续有效，自动执行频率不继续有效」；§5.1 的 P1/P2/P3 ✅ 是**阶段计划**（阶段许可来自 RULING §1.4），**每个实施 PR 仍须单独放行**（见勘误 §7） |
 | 3 | [`WP-G1-GE-RULING_20260916.md`](./WP-G1-GE-RULING_20260916.md) | WP-G1-GE 立项裁决记录（`RULING-WP-G1-GE`） | 2026-09-16 | ✅ 有效（立项事实） |
 | 4 | [`GEN1_EVIDENCE_CONTRACT.md`](./GEN1_EVIDENCE_CONTRACT.md) | 证据契约：17 字段口径 + 纳入规则 + Q1/Q2/Q3 阈值 | 2026-09-10 | 🔒 **FROZEN v1.0**，一字不改 |
 | 5 | [`GEN1_DAILY_PRODUCTION_WATCH.md`](./GEN1_DAILY_PRODUCTION_WATCH.md) | 监控清单：W1–W7 + 异常处置原则 + 首触发里程碑 M1–M6 | 2026-09-10 | ✅ **内容有效**；⚠️ **执行方式为手工 / 按需**（自动化已于 2026-09-14 停止） |
@@ -52,6 +59,8 @@
 - 本目录文档**不授予任何写入权限**：`final_target` / `final_action` / `suggested_position` 的产出方始终是 V3.6.1 Safety Core。
 - 本目录的「✅ 允许」类标记（如 Guarded Effective 章程 §5.1 的 P1/P2/P3）是**阶段准入条件自述**，
   **不是**编码授权 / 验证授权 / 部署授权。
+- **项目级阶段许可 ≠ 单个 PR 的合并许可**：P1/P2/P3 的阶段许可由 `RULING-WP-G1-GE` §1.4 授予，
+  但**每个实施 PR 必须单独放行**；`P4` 真切换仍严格禁止。见勘误 §7。
 - Gen-2 相关内容不在此目录（见 `ml/gen2/reports/`）。
 
 ---
