@@ -3,9 +3,10 @@
 **文档编号**：`GEN1-P2RG-1.0`
 **性质**：放行前门禁留痕（current-master compatibility gate）—— 全部证据**只读**取得；**放行 → 合并 → Attestation → D1 结案**四段均已留痕于本文件；本文件自身**不构成任何权限或部署授权**
 **as-of**：2026-09-16T14:23:28+0800（⑧ 门禁**实跑**时刻）
-**最近更新**：2026-09-16T16:48:24+0800+0800（**第九轮**：**D1 裁定结案**（等价替换 / `CLOSED`）；`master` **再次**被外部推进为 `44b59b8`（PR #45，**零 Gen-1 文件**，已在新树复跑门禁）；新增 **§9.4 P2 Closure docs-only PR 放行** 与 **§18 第九轮写入范围**）
-**上一轮更新**：2026-09-16T16:21:06+0800（**第八轮**：**合并已由项目所有人于 16:06:26 以 `Create a merge commit` 完成** ⇒ `master = c9af16b1`；§11 Attestation **已实跑**，结果见 §0.c 与 §11.1）
-**更早更新**：2026-09-16T15:2x+0800（**第七轮**：用户**废止「方案 A」并授权 agent 代合**；agent 已实际尝试 ⇒ **被令牌 403 阻却**）
+**最近更新**：2026-09-16T17:2x+0800（**第十轮**：**E26 改写为「通道 × 凭据权限 × 时点」条件式**、**新增勘误 E27**（过期能力结论）；同步修正 §0 执行通道结论、**§9.1**（含新增 **⑥**）、**§9.3**、**§19**；新增 **§20**）
+**上一轮更新**：2026-09-16T16:48:24+0800（**第九轮**：**D1 裁定结案**（等价替换 / `CLOSED`）；`master` **再次**被外部推进为 `44b59b8`（PR #45，**零 Gen-1 文件**，已在新树复跑门禁）；新增 **§9.4 P2 Closure docs-only PR 放行** 与 **§18 第九轮写入范围**）
+**更早更新**：2026-09-16T16:21:06+0800（**第八轮**：**合并已由项目所有人于 16:06:26 以 `Create a merge commit` 完成** ⇒ `master = c9af16b1`；§11 Attestation **已实跑**，结果见 §0.c 与 §11.1）
+**更早更新（2）**：2026-09-16T15:2x+0800（**第七轮**：用户**废止「方案 A」并授权 agent 代合**；agent 已实际尝试 ⇒ **被令牌 403 阻却**）
 **放行对象**：`feat/wp-g1-ge-02-dormant` = `b7247f9dcec116b5d12daf17a1320683a7dbc5ed`（= PR #43）
 **放行时目标基线**：`master` = `2e8cb7da752aaab37deea4cfa27f937e1839f92c`（**as-of 值，非当前值**；当前实读见 §0.d）
 **上一轮审计基线**：`6793d7f29ba161cf18166233d844f284696f7417`（⑦ PR #43 只读审计所用）
@@ -57,7 +58,7 @@ D1 归档口径                    ✅ 已裁定 = 等价替换（第九轮，20
 > 不重开 ⑧、不回滚 #43、不改变 `P2_COMPLETE_DORMANT`。
 > 见 `GEN1_P2_POST_MERGE_ATTESTATION_20260916.md` §2.4 与 §6 R1。
 
-**0.d 第九轮状态（as-of `2026-09-16T16:48:24+0800+0800`）**
+**0.d 第九轮状态（as-of `2026-09-16T16:48:24+0800`）**
 
 ```text
 D1                             CLOSED（等价替换；PROCESS DEVIATION / CONTENT-PRESERVING / RE-ATTESTED / NON-SAFETY）
@@ -97,9 +98,14 @@ production_write / auto_exec   false / false
 > 与最初下达给本任务的硬边界「不得修改 `gen1_authority` / `FROZEN_PARAM_KEYS` / `lock` / `immutable_set`」正面相遇。
 > 该变更已证明**正是冻结章程 §3.4 要求的 GE-02 P0 安全措施**，但**不以「后续讨论似乎默认接受」反推边界失效**，
 > 故一直停留在待授权 —— 直至 §9.2 的一次性例外到位。
-> ⚠️ **执行通道结论已三次变动（末次为实证）**：① 上一轮「本机令牌只读」的**依据不成立**（该结论后被证实为真，但依据仍错 —— 结论对 ≠ 推理对）；
-> ② 本轮初稿「令牌具备写权限」**亦超出证据**；③ **末次实证：写已证否**（授权写动作返回 `403`）。
-> 执行者另有变更：用户 **2026-09-16T15:21 废止「方案 A」并授权 agent 代合** —— 但受该 `403` 阻却。见 §9.1 / §9.3。
+> ⚠️ **执行通道结论已四次变动；现行口径 = 按「通道 × 凭据权限 × 时点」限定**：
+> ① 上一轮「本机令牌只读」的**依据不成立**（该结论后被证实为真，但依据仍错 —— 结论对 ≠ 推理对）；
+> ② 初稿「令牌具备写权限」**亦超出证据**；③ 第七轮「**写已证否**」（授权写动作返回 `403`，**`as-of 2026-09-16T15:2x`**）；
+> ④ **第十轮更正**：③ 的 `403` 只对「**当时**那组权限」成立 —— 该令牌在 **`16:32`** 对**同一个** merge 动作返回
+> **`200` / `merged=true`** ⇒ ③ 属**过期能力结论**，已登记为勘误 **E27**；限定轴由「通道 × 动作」补全为
+> 「**通道 × 凭据权限 × 时点**」（勘误 **E26** 已同步改写）。
+> 执行者另有变更：用户 **2026-09-16T15:21 废止「方案 A」并授权 agent 代合**（当次受 `403` 阻却；补权后已可代做）。
+> 见 §9.1 / §9.3 / §19。
 
 ---
 
@@ -244,8 +250,8 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 ## 9. Owner Release Gate（放行前置 —— **未满足即不得合并**）
 
 **性质**：**一次性授权请求 + 实际放行记录**。§9 定义「放行语句必须覆盖什么」；
-**§9.2 为实际放行记录（已到位）**；§9.1 为执行通道事实（**已三处更正，末次含「写被证否」实证**）；
-§9.3 为执行者（**用户 2026-09-16T15:21 授权 agent 代合；受令牌无写权限阻却**）。
+**§9.2 为实际放行记录（已到位）**；§9.1 为执行通道事实（**经多次更正，现行口径 = 按「通道 × 凭据权限 × 时点」限定**）；
+§9.3 为执行者（**用户 2026-09-16T15:21 授权 agent 代合；当次受令牌权限阻却，补权后已可代做**）。
 
 **须被显式解锁的边界项**：`FROZEN_PARAM_KEYS` 由 **6 项**扩为 **7 项**（新增 `gen1_authority`）。
 
@@ -264,16 +270,16 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 > ⚠️ 放行语句本身**不构成**推进线上状态的授权：合并后线上仍应为
 > `gen1_authority = CANARY`、`ml_effective = false`、`P2 = P2_PENDING_PR_RELEASE`。
 
-### 9.1 合并动作的可执行性（**事实，非授权** —— 本轮经三处更正/实证，末次为「**写被证否**」实证）
+### 9.1 合并动作的可执行性（**事实，非授权** —— 经四次更正/实证；**现行口径 = 按「通道 × 凭据权限 × 时点」限定**）
 
-| 项 | 状态（2026-09-16T14:56 实读） |
+| 项 | 状态（**能力结论一律带 `as-of` 与权限前提；不得用作无条件结论**） |
 |---|---|
 | 本机 `gh_token.txt` PAT —— **读路径** | **可用**：本轮 3 次 GET 全部 `200` |
-| 本机 `gh_token.txt` PAT —— **写路径（merge 动作）** | ⛔ **已实证：merge 不可用**。2026-09-16T15:2x 执行**用户已授权的目的动作** `PUT /repos/iquelee/etf-decision-engine/pulls/43/merge`（`merge_method=merge` + `sha=b7247f9…`）⇒ **`403 Resource not accessible by personal access token`**。该写请求**不是探测**（它就是用户授权的合并本身）⇒ 其 `403` 是**合法的「该动作被证否」证据** |
-| 本机 `gh_token.txt` PAT —— **写路径（建 PR 动作）** | ✅ **已实证：可用**。2026-09-16T16:59 执行**用户已授权的目的动作** `POST /repos/iquelee/etf-decision-engine/pulls`（`head=docs/gen1-p2-closure`）⇒ **`201 Created`**（建成 **PR #46**）⇒ 同一 PAT 的 `Pull requests: write` **可用**；merge 的 `403` 应归因于 **`Contents` 侧不足**（merge 会在 base 分支上写提交） |
+| 本机 `gh_token.txt` PAT —— **写路径（merge 动作）** | ⚠️ **结论依权限状态而变，必须带 `as-of` 读**：<br>• **`as-of 2026-09-16T15:2x`（令牌补权**之前**）**：执行**用户已授权的目的动作** `PUT /repos/…/pulls/43/merge` ⇒ **`403 Resource not accessible by personal access token`** ⇒ 仅证明「**该时点、该权限状态下**，该动作不可用」；<br>• **`as-of 2026-09-16T16:32`+（owner 为令牌补 `Contents: Read and write` **之后**）**：**同一个** merge 动作返回 **`200` / `merged=true`**（产出的 merge commit = 当时 `master`）⇒ **补权后 merge 本机可用**。<br>⛔ 两次写请求**都不是探测**，均为**用户已授权的目的动作** ⇒ 其结果均为合法证据；<br>⛔ 但⛔ **不得**用其中任一条下「**无条件的当前能力**」结论 |
+| 本机 `gh_token.txt` PAT —— **写路径（建 PR 动作）** | ✅ **已实证：可用**。2026-09-16T16:59 执行**用户已授权的目的动作** `POST /repos/iquelee/etf-decision-engine/pulls`（`head=docs/gen1-p2-closure`）⇒ **`201 Created`**（建成 **PR #46**）⇒ 同一 PAT 的 `Pull requests: write` **可用**。<br>⚠️ 「merge 的 `403` 归因于 **`Contents` 侧不足**（merge 会在 base 分支上写提交）」属**推断**：补权后 merge 即成功，与该推断**同向**，但⛔ **未逐项验证**该令牌的授权明细 ⇒ 只能写作推断，⛔ 不得写成实证 |
 | **git / SSH 通道**（`git@github.com:iquelee/etf-decision-engine.git`） | ✅ **已实证：可写**。2026-09-16T16:59 `git push -u origin docs/gen1-p2-closure` ⇒ **成功**（远端 SHA 与本地 HEAD 逐位一致） |
 | MCP GitHub App 连接器 | 写入路径返回 `403`（本轮**已复查**：`POST /pulls` ⇒ `403 Resource not accessible by integration`） |
-| ⇒ **执行通道（结论，按「通道 × 动作」分层；2026-09-16T17:0x 更新）** | **分支推送（SSH）**：✅ 可用；**建 PR（fine-grained PAT）**：✅ 可用；**merge（fine-grained PAT）**：⛔ 不可用；**MCP App 写路径**：⛔ 不可用。<br>⇒ 分支推送与 **PR 创建** agent 可代做；**merge** 需 ① 给该 PAT 补 `Contents: Read and write`，或 ② 由所有人在 Web UI 执行 |
+| ⇒ **执行通道（结论；**必须带前提**；2026-09-16T17:2x 第十轮更正）** | **分支推送（SSH）**：✅ 可用；**建 PR（fine-grained PAT）**：✅ 可用；**merge（fine-grained PAT）**：⚠️ **条件可用** —— **前提 = 该令牌具 `Contents: Read and write`**（补权前 `403`、补权后 `200`）；**MCP App 写路径**：⛔ 不可用。<br>⇒ 分支推送 / PR 创建 / **PR merge** **三项 agent 均可代做**；merge 的**前提**是令牌已具 `Contents: RW`，且**每次代合仍须以 `sha` 锁定已审计 head**（防 TOCTOU）。<br>⛔ 「**条件可用**」⛔ **不得**读成「无条件随时可合」 |
 
 > 📌 **更正留痕（三处：前两处方向相反、均已撤回；第三处为末次实证）**
 > **① 上一轮**：「本机令牌为**只读** ⇒ merge 必须在 Web UI 执行」。其**唯一依据**是「无 `X-OAuth-Scopes` 头」；
@@ -284,7 +290,7 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 > 当时须由所有人在 GitHub Settings → Fine-grained tokens **页面侧**核对。
 > **④ 末次实证（2026-09-16T15:2x —— 写已证否）**：用户授权 agent 代合后，执行
 > `PUT …/pulls/43/merge` ⇒ **`403 Resource not accessible by personal access token`**
-> ⇒ 「**写被证否**」由**授权的写动作**合法取得。
+> ⇒ 「**写被证否**」这一表述由**授权的写动作**合法取得（⚠️ **其作用域已由 ⑤ 补「通道 × 动作」、并由 ⑥ 再补「凭据权限 × 时点」** ⇒ 单独引用此句**不成立**，须读作条件式）。
 > ⚠️ **「结论对 ≠ 推理对」**：**①** 那条「只读」的**结论现已被证实正确**，但其**依据仍属错误** —— 不得据错误依据重写历史。
 > ⛔ **取得「写被证否」的唯一合法途径**就是**执行已被授权的写动作**；**不得**用「故意发写请求探测」。
 > 上述更正**不改变** §9 的 5 要点与 §10 的已审计对约束。
@@ -295,6 +301,15 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 > ⇒ 「写被证否」只是**某一通道上某一动作**的结论，⛔ **不得**推广成「整个身份写被证否」。
 > ⚠️ 这与 **④ 的「结论对 ≠ 推理对」不是同一类问题**：④ 是**依据错、结论对**；⑤ 是**结论本身过强，必须加限定**。
 > 📌 已登记为勘误 **E26**。
+>
+> **⑥ 第十轮更正（2026-09-16T17:2x —— ③ 属「过期能力结论」）**：
+> ③（第七轮「写已证否」）与 ④ 一样，**只对当时的状态成立** —— 该令牌在 **`16:32`** 对**同一个** merge 动作
+> 返回 **`200` / `merged=true`**（owner 期间为其补 `Contents: Read and write`；owner release 原文亦已批准代合）。
+> ⇒ 「merge 不可用」**在本文档落笔时已经过期**；已登记为勘误 **E27**
+> （`P1+` / `STALE CAPABILITY CONCLUSION` / runtime risk `NONE` / `FIX IN PR #46 BEFORE MERGE`）。
+> ⛔ **不删** ③ 的 `403` 记录 —— 它仍是「当时那组权限下该动作不可用」的**合法证据**；
+> 只给它加**显式时间边界**，并补**后续正证据**（④ 的 `201`、⑥ 的 `200`，**均标明属后续权限状态**）。
+> 📌 ⑤ 的限定轴（通道 × 动作）因此**再补一维** ⇒ 现行口径 = 「**通道 × 凭据权限 × 时点**」（见勘误 **E26** 改写后的版本）。
 
 ### 9.2 放行记录（owner release，2026-09-16）
 
@@ -331,14 +346,17 @@ P2_COMPLETE_DORMANT。
 
 | 候选 | 说明 | 判定（as-of 2026-09-16T15:2x+0800） |
 |---|---|---|
-| **(A) agent 以本机 PAT 调合并 API**（`PUT /repos/…/pulls/43/merge`，`merge_method=merge` + `sha=b7247f9` 锁定已审计 head） | 用户**已明确授权**（原「方案 A」废止）；`sha` 参数使 GitHub 对 head 已变的请求返回 `409` ⇒ **无法误合并非审计对象**，亦无法误用 squash | ⛔ **实测受阻 —— 令牌无写权限**：`403 Resource not accessible by personal access token`（2026-09-16T15:2x） |
-| (B) 用户在 GitHub Web UI 点 *Create a merge commit* | 不需令牌写权限 | ✅ **merge 动作的唯一当前可执行路径**（除非先给该 PAT 补 `Contents: Read and write`）。⚠️ 本行**只针对 merge** —— 分支推送与 **PR 创建** agent 均可代做（实证见 §9.1 ⑤ / §19 / 勘误 **E26**） |
+| **(A) agent 以本机 PAT 调合并 API**（`PUT /repos/…/pulls/43/merge`，`merge_method=merge` + `sha=b7247f9` 锁定已审计 head） | 用户**已明确授权**（原「方案 A」废止）；`sha` 参数使 GitHub 对 head 已变的请求返回 `409` ⇒ **无法误合并非审计对象**，亦无法误用 squash | ⚠️ **当次受阻 —— 令牌当时缺写权限**：`403 Resource not accessible by personal access token`（**`as-of 2026-09-16T15:2x`**）。⚠️ 此后 owner 已补 `Contents: Read and write` ⇒ **该动作已可用**（`200` / `merged=true`，见 §9.1 ⑥ 与勘误 **E27**） |
+| (B) 用户在 GitHub Web UI 点 *Create a merge commit* | 不需令牌写权限 | ✅ **`as-of 15:2x` 当时 merge 动作的可执行路径**（⚠️ 补权后 (A) 亦可用 ⇒ 「唯一」**已不再成立**，见 §9.1 ⑥）。⚠️ 本行**只针对 merge** —— 分支推送 / **PR 创建** / **PR merge** agent 均可代做（实证见 §9.1 ⑤/⑥ / §19 / 勘误 **E26**） |
 
 > **（A）解阻条件**：用户在 Settings → Fine-grained tokens 为该令牌补 `Pull requests: Read and write`
 > **且** `Contents: Read and write`（merge 会写 base 分支）；之后 agent 可执行
 > `PUT /repos/iquelee/etf-decision-engine/pulls/43/merge`，body `{"merge_method":"merge","sha":"b7247f9dcec116b5d12daf17a1320683a7dbc5ed"}`。
 > ⛔ 无论由谁执行，均**不得**先点 `Update branch`、**不得** squash、**不得** rebase。
 > ⚠️ 因 `mergeable_state=behind`，Web UI 上**会出现** `Update branch` 按钮 —— **不要点它**，直接点 **`Create a merge commit`** 即可（`behind` 不影响 merge commit 方式合并）。
+>
+> 🔁 **第十轮更新**：本表 (A) 行的「受阻」是 **`as-of 15:2x` 的当时结论**；上述解阻条件**已于 `2026-09-16T16:32`+ 被满足**
+> （owner 为令牌补 `Contents: Read and write`）⇒ **agent 代合已可用**；但 ⛔ 前提仍在：**每次代合**须确认该令牌权限、并以 `sha` 锁定 head。见 §9.1 ⑥ / §19 / 勘误 **E26**、**E27**。
 
 ---
 
@@ -604,6 +622,9 @@ ETF 仓库：
                                     `IMPLEMENTATION_AUTHORIZATION = NOT GRANTED`
 6) D1 归档口径裁定                   ✅ 第九轮裁定 = 等价替换（PROCESS DEVIATION / NON-SAFETY / CLOSED）
 7) P2 Closure docs-only PR           ✅ 已获放行**建 PR**（§9.4）；⛔ merge 未授权
+8) PR #46 内的 docs 修正（第十轮）    ✅ 已获**编辑**放行（`EDIT AUTHORIZATION = GRANTED`）：
+                                    新增勘误 **E27** + 改写 **E26** + 修正 §9.1 / §9.3 / §19；
+                                    ⛔ merge 仍未授权；⛔ GE-03 实施未授权
 ```
 
 ---
@@ -634,27 +655,45 @@ ETF 仓库：
 
 ---
 
-## 19. 第九轮追加：写入能力的「通道 × 动作」结论（含 PR #46 建单实证）
+## 19. 写入能力的「通道 × 凭据权限 × 时点」结论（含 PR #46 建单与 PR #45 合并实证）
 
-| 通道 | 动作 | 结果 | 证据（均为**已获授权动作**的副产物） |
-|---|---|---|---|
-| **git / SSH**（`git@github.com:iquelee/etf-decision-engine.git`） | `git push` 新分支 | ✅ **可用** | `docs/gen1-p2-closure` 推送成功；远端 SHA 与本地 HEAD 逐位一致（`9b401c1…`） |
-| **fine-grained PAT**（`~/.workbuddy/gh_token.txt`，经 `gh.sh`） | `POST /repos/…/pulls`（建 PR） | ✅ **可用** | `201 Created` ⇒ **PR #46** |
-| 同上 | `PUT /repos/…/pulls/43/merge` | ⛔ **不可用** | `403 Resource not accessible by personal access token` |
-| **MCP GitHub App 连接器** | `POST /repos/…/pulls` | ⛔ **不可用** | `403 Resource not accessible by integration` |
+> 🔁 **第十轮更正**：本节初稿的限定轴为「**通道 × 动作**」—— **不足以**排除「**用旧证据下当前结论**」：
+> 同一条「fine-grained PAT × merge」在**同一天**先后给出 `403`（`15:2x`）与 `200 / merged=true`（`16:32`）。
+> 已补全为 **「通道 × 凭据权限 × 时点」**（勘误 **E26** 改写版），并把「补权前的 `403` 被当成当前能力」单独立为勘误 **E27**。
 
-**可执行分工（结论）**：
+| 通道 | 动作 | 凭据权限状态 / 时点 | 结果 | 证据（均为**已获授权动作**的副产物） |
+|---|---|---|---|---|
+| **git / SSH**（`git@github.com:iquelee/etf-decision-engine.git`） | `git push` 新分支 | — | ✅ **可用** | `docs/gen1-p2-closure` 推送成功；远端 SHA 与本地 HEAD 逐位一致 |
+| **fine-grained PAT**（`~/.workbuddy/gh_token.txt`，经 `gh.sh`） | `POST /repos/…/pulls`（建 PR） | 补权前后均可用 | ✅ **可用** | `201 Created` ⇒ **PR #46** |
+| 同上 | `PUT /repos/…/pulls/43/merge` | **`as-of 2026-09-16T15:2x`；令牌**尚未**具 `Contents: RW`** | ⛔ **当时不可用** | `403 Resource not accessible by personal access token` |
+| 同上 | `PUT /repos/…/pulls/45/merge` | **`as-of 2026-09-16T16:32`+；owner 已补 `Contents: Read and write`** | ✅ **可用** | **`200` / `merged=true`**；产出 merge commit = 当时 `master` |
+| **MCP GitHub App 连接器** | `POST /repos/…/pulls` | — | ⛔ **不可用** | `403 Resource not accessible by integration` |
+
+**可执行分工（结论 —— **每一条都带前提**）**：
 
 ```text
-分支推送            agent 可代做（SSH）
+分支推送            agent 可代做（SSH，无额外前提）
 PR 创建             agent 可代做（fine-grained PAT）
-PR merge            ⛔ agent 不可代做 —— 需 ① 给该 PAT 补 Contents: Read and write，或 ② 所有人 Web UI
+PR merge            agent 可代做 —— 前提 = 该令牌具 `Contents: Read and write`
+                    ⛔ 前提未满足时不可用（`as-of 15:2x` 即属该情形）；
+                       且每次代合仍须以 `sha` 锁定已审计 head（防 TOCTOU）
 ```
 
-⚠️ 本节**修正了 §9.1 ④ 的表述口径**：原「写被证否」未限定通道与动作 ⇒ 已登记为勘误 **E26**。
-⛔ 本节结论**仅覆盖上表 4 条「通道 × 动作」组合**，⛔ **不得外推**到其他通道或动作。
+⚠️ 本节**修正了 §9.1 ④ 的表述口径**：原「写被证否」未限定**通道、动作、凭据权限与时点** ⇒ 已登记为勘误 **E26**（第十轮改写）与 **E27**。
+⛔ 本节结论**仅覆盖上表 5 条「通道 × 动作 × 权限时点」组合**，⛔ **不得外推**到其他通道 / 其他动作 / **其他时点**。
+⛔ **「✅」一律是「带前提的条件可用」**，⛔ **不得**读成「无条件随时可合」。
 
-**P2 Closure docs-only PR 的落地情况（本轮）**：
+**PR #45 合并的「代合」闭合证据（第十轮补充，全只读）**：
+
+```text
+凭证脚本落盘 2026-09-16T16:32:14   →  该 merge commit 的 committer 时间 16:32:50（相隔 36 秒）
+脚本内 EXPECT_SHA                  →  恰为该 merge commit 的**第二父**
+⛔ merge commit 的 author / committer 字段**无法**区分通道
+   （Web UI 与 API 均记为 `GitHub <noreply@github.com>`）
+   ⇒ 该闭合由「脚本 + 时间戳 + 父子关系」三者相互印证得出，⛔ **不依赖** committer 字段。
+```
+
+**P2 Closure docs-only PR 的落地情况**：
 
 ```text
 载体分支     docs/gen1-p2-closure（基于 44b59b8 创建）
@@ -665,10 +704,48 @@ PR           #46  https://github.com/iquelee/etf-decision-engine/pull/46
              写下的那一刻即过期；一律以远端实读为准。"Base + PR 编号" 才是稳定标识。
 含           4 份文档（Gate / Attestation / ⑦ 只读审计 / 勘误表）
 ⛔ 不含      GE-03 设计文档（§9.4 ③ 排除项）
+edit         ✅ AUTHORIZED（第十轮：**仅 docs 修正**；见 §20 与勘误 E26 / E27）
 merge        ⛔ NOT AUTHORIZED（owner 放行原文：「只授权建 PR，不自动授权 merge」）
 ```
 
 > ⚠️ **本节记录的是「放行 → 落地」的事实**，⛔ **不构成 merge 授权**。
+
+---
+
+## 20. 第十轮（PR #46 内 docs 修正：E27 新增 + E26 改写）实际写入范围（四块式）
+
+```text
+ETF 仓库：
+- Git 跟踪文件：零修改（git diff --stat HEAD 空）
+- Git 历史/分支/远端：① 载体分支 docs/gen1-p2-closure 追加**一个 docs-only 提交** ⇒ head 前进；
+      按勘误 E25 的**前向规则**，原冻结对象即刻失效 ⇒ 须**重新冻结新 head 并对新 head 重新验收**
+      （重跑内容断言 + 等 required CI 全绿）之后才可以 merge；
+      ⛔ head SHA / 提交数 / 行数一律**不入档**（自指状态，以远端实读为准）；
+      ⛔ 未 merge（MERGE AUTHORIZATION 仍未授予）
+    （远端 master 未变；此前两次推进均为**外部**产生，⛔ 非本轮）
+- 未跟踪本地草稿：本轮**未新增、未修改**任何未跟踪草稿
+      （gen1 草稿台仍保留前几轮留下的 5 份未跟踪副本，本轮状态未变）
+- 本机 GitHub API 调用：只读 GET 若干（PR #46 现状核对）
+其他本机文件：
+- WorkBuddy 技能文档有修改（github-pr-ops-windows）
+- 本地记忆文件有修改（.workbuddy/memory/2026-09-16.md、项目级 MEMORY.md）
+生产侧：
+- 代码 / 配置 / Authority / FROZEN_PARAM_KEYS / lock / immutable_set：零修改
+- 线上 `runtime_status`：零写入
+```
+
+> ⛔ **不得简写为「仅修改本机技能文档与本地记忆」**（漏掉本轮**确实产生了远端 docs 提交**）；
+> ⛔ **不得简写为「本轮零文件修改」**（本工作目录确实发生过本地写入）。
+
+**本轮授权状态（不改其他任何边界）**：
+
+```text
+PR #46 EDIT AUTHORIZATION     GRANTED      （仅 docs 修正）
+PR #46 MERGE AUTHORIZATION    NOT GRANTED
+GE-03 IMPLEMENTATION          NOT GRANTED
+```
+
+⛔ **未做**：不改 D1、E22–E25 的既定结论；⛔ 不加入 GE-03 设计文档；⛔ 不改任何运行时代码。
 
 ---
 

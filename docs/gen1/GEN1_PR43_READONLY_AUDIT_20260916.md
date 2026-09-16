@@ -309,15 +309,22 @@ P2 release                     P2_PENDING_PR_RELEASE（截至放行记录 as-of�
 ⚠️ **「结论对 ≠ 推理对」**：该「只读」**结论后来确被证实为真**，但其**依据仍属错误**，不得据错误依据重写推导链。
 本轮初稿又据 `permissions = {admin:true, maintain:true, push:true, triage:true, pull:true}`
 反推「**具备仓库写权限**」——**同样超出证据**（该对象是**用户在该仓库的角色**，与令牌被授予的权限无关）；该断言**随后被 `403` 实证证否**。
-⇒ **末次实证（2026-09-16T15:2x）：写已证否** —— 执行**用户授权的**合并动作返回
-`403 Resource not accessible by personal access token`。**「写被证否」的唯一合法来源就是这种「已被授权的写动作」**，
+⇒ **`as-of 2026-09-16T15:2x`：该合并动作在该令牌「当时」的权限下被拒** —— 执行**用户授权的**合并动作返回
+`403 Resource not accessible by personal access token`。**这类能力结论的唯一合法来源就是这种「已被授权的写动作」**，
 ⛔ **不得**用「故意发写请求探测」取得（详见门禁文档 §9.1）。
+> 🔁 **第十轮更正（2026-09-16T17:2x）**：原写「**末次实证：写已证否**」属**过期能力结论（stale capability conclusion）**——
+> 该 `403` **只对「当时那组权限」成立**：owner 为令牌补 `Contents: Read and write` 后，**同一个** merge 动作
+> 在 **`16:32`** 返回 **`200` / `merged=true`**（产出的 merge commit = 当时 `master`）。
+> ⇒ 已登记为勘误 **E27**（`P1+` / `STALE CAPABILITY CONCLUSION` / runtime risk `NONE` / `FIX IN PR #46 BEFORE MERGE`）；
+> 限定轴补全为「**通道 × 凭据权限 × 时点**」（勘误 **E26** 改写版）。
+> ⛔ **不删**该 `403` 记录 —— 它仍是「当时那组权限下该动作不可用」的合法证据；只加**显式时间边界**并补**后续正证据**（标明属后续权限状态）。
 
 **执行者结论（用户 2026-09-16T15:21 授权变更）**：用户**废止「方案 A」**，改为**由 agent 代合**。
 ⇒ agent 已按授权**实际执行** `PUT /repos/iquelee/etf-decision-engine/pulls/43/merge`
 （`merge_method=merge` + `sha=b7247f9…` 锁定已审计 head）⇒ **被 `403` 阻却，合并未发生**。
-⇒ **当前唯一可执行路径 = 用户在 Web UI 点 *Create a merge commit***；若先补
-`Pull requests: RW` + `Contents: RW`，agent 即可代合（详见门禁文档 §9.3）。
+⇒ **`as-of 15:2x` 当时**的可执行路径 = 用户在 Web UI 点 *Create a merge commit*；若补
+`Pull requests: RW` + `Contents: RW`，agent 即可代合 —— ✅ **该解阻条件已于 `2026-09-16T16:32`+ 被满足**
+（owner 为令牌补 `Contents: Read and write`）⇒ ⚠️「唯一」**已不再成立**（详见门禁文档 §9.3）。
 ⚠️ 因 `mergeable_state=behind`，页面上会出现 `Update branch` 按钮 —— **不要点它**。
 
 **放行前实时复核（2026-09-16T14:56:37+0800）**：`master` 与 `#43 head` 逐位未变；
@@ -375,7 +382,7 @@ ETF 仓库：
 | 前向规则 | ✅ 已确立：**head 变化 ⇒ 原审计对象失效，必须重新冻结新 head、并对新 head 重新验收后才能 merge**（取代「父 SHA 恒等」绝对式） | 门禁文档 §10；勘误 **E25** |
 | 本报告与门禁文档的入库 | ✅ owner 已授权 **P2 Closure docs-only PR**（4 份文档，含本报告；**只授权建 PR**，⛔ merge 未授权） | 门禁文档 §9.4 |
 | **入库落地** | ✅ 载体分支 `docs/gen1-p2-closure`（基于 `44b59b8`）已 push；**PR #46** 已建成（open、`merged=false`、**4 个新增文件**）；⛔ **本 PR 未合并**。改动的**行数与提交数不入档**（随追加提交变化）。⚠️ 该分支 head SHA **不入档**（随追加提交前进，属自指状态） | 门禁文档 §19 |
-| **§11「写已证否」的通道限定更正** | ⚠️ 该结论**未限定通道与动作** ⇒ 须改为「**merge 动作**在 fine-grained PAT 通道被证否」。第八轮实测：**git push（SSH）可用**、**建 PR（同一 PAT）`201` 可用**、**MCP App 写路径 `403`** | 勘误 **E26**；门禁文档 §9.1 ⑤ / §19 |
+| **§11「写已证否」的更正（第十轮升级为条件式）** | ⚠️ 该结论**未限定通道、动作、凭据权限与时点** ⇒ 已改为**带前提的条件式**：「**merge 动作**在 fine-grained PAT 通道，**`as-of 15:2x` 且令牌未具 `Contents: RW` 时**被拒（`403`）；**补权后（`16:32`+）同一动作可用（`200` / `merged=true`）**」。其余实测：**git push（SSH）可用**、**建 PR（同一 PAT）`201` 可用**、**MCP App 写路径 `403`** | 勘误 **E26**（第十轮改写）+ **E27**（**过期能力结论**，第十轮新增）；门禁文档 **§9.1 ⑤/⑥** / §19 |
 
 > ⛔ **本报告的分类一 / 二 / 五结论不受影响**：D1 发生在**合并动作**层面，不改动 #43 的代码内容，
 > 故「符合边界」「需证明」「merge blocker = 无」三项判定全部**维持原值**。
@@ -396,6 +403,39 @@ ETF 仓库：
 - 代码 / 配置 / Authority / FROZEN_PARAM_KEYS / lock / immutable_set：零修改
 - 线上 `runtime_status`：零写入
 ```
+
+---
+
+## 13. 第十轮（PR #46 内 docs 修正）实际写入范围（四块式）
+
+本轮按 owner 放行，在 **P2 Closure docs-only PR（PR #46）** 内追加 docs 修正：
+新增勘误 **E27**（过期能力结论）、把 **E26** 改写为「通道 × 凭据权限 × 时点」条件式，
+并同步修正本报告 §11 的同一过期结论与 §12 的对应行。
+
+```text
+ETF 仓库：
+- Git 跟踪文件：零修改（git diff --stat HEAD 空）
+- Git 历史/分支/远端：载体分支 docs/gen1-p2-closure 追加**一个 docs-only 提交** ⇒ head 前进；
+      按勘误 E25 的**前向规则**，原冻结对象即刻失效 ⇒ 须重新冻结新 head 并对新 head 重新验收；
+      ⛔ head SHA / 提交数 / 行数一律**不入档**（自指状态，以远端实读为准）；
+      ⛔ 未 merge（MERGE AUTHORIZATION 仍未授予）
+    （远端 master 未变；此前两次推进均为**外部**产生，⛔ 非本轮）
+- 未跟踪本地草稿：本轮**未新增、未修改**任何未跟踪草稿
+      （gen1 草稿台仍保留前几轮留下的 5 份未跟踪副本，本轮状态未变）
+- 本机 GitHub API 调用：只读 GET 若干（PR #46 现状核对）
+其他本机文件：
+- WorkBuddy 技能文档有修改（github-pr-ops-windows）
+- 本地记忆文件有修改（.workbuddy/memory/2026-09-16.md、项目级 MEMORY.md）
+生产侧：
+- 代码 / 配置 / Authority / FROZEN_PARAM_KEYS / lock / immutable_set：零修改
+- 线上 `runtime_status`：零写入
+```
+
+> ⛔ **不得简写为「仅修改本机技能文档与本地记忆」**（漏掉本轮**确实产生了远端 docs 提交**）；
+> ⛔ **不得简写为「本轮零文件修改」**（本工作目录确实发生过本地写入）。
+
+⛔ **本轮未做**：不改 D1、E22–E25 的既定结论；⛔ 不加入 GE-03 设计文档；⛔ 不改任何运行时代码。
+⛔ **本报告的分类一 / 二 / 五结论不受影响** —— 本轮只改**能力结论的表述**，不触任何代码判定。
 
 ---
 
