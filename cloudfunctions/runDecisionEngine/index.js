@@ -33,6 +33,11 @@ const {
   counterfactualSectorRemaining, stepCounterfactualLedger
 } = require('./common/utils/gen1-canary');
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
+// WP-G1-GE-02：守卫封印（Key 2/3）+ baseline-authoritative 选择器（休眠）
+const {
+  readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION
+} = require('./common/utils/gen1-guarded-seal');
+const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
 const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
 const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
@@ -551,6 +556,25 @@ exports.main = async (event = {}, context = {}) => {
     // 权限一律 fail-closed：未知/非法取值不得获得高于 ADVISORY 的权限；
     // production_write / auto_execution 恒 false（见 gen1-authority）。
     const gen1Authority = resolveAuthority(merged);
+    // ---- WP-G1-GE-02：Guarded Effective 封印读取（Key 2 Freeze Seal + Key 3 Evidence Seal）----
+    // fail-closed：读不到 / 解析失败 / 状态非 APPROVED(PASS) / 绑定缺失或不一致 ⇒ 一律 false。
+    // 生产制品当前为 PENDING（见 ml/manifests/GEN1_GUARDED_EFFECTIVE_*.json），
+    // 且运行期尚无可观测的 source/model SHA ⇒ freeze 绑定为 UNVERIFIABLE。
+    // ⇒ 即使有人误把 param_config.gen1_authority 改成 GUARDED_EFFECTIVE，本值仍为 false。
+    const guardedSeal = readProductionSeals({
+      contract_version: GUARDED_CONTRACT_VERSION,
+      threshold_version: GUARDED_THRESHOLD_VERSION
+      // source_sha256 / model_sha256：运行期无权威观测源（GE-04 晋升时须先提供），
+      // 因此保持缺省 ⇒ FREEZE_SEAL_BINDING_UNVERIFIABLE，绝不「假设通过」。
+    });
+    // WP-G1-GE-02 复审 P1：本计数器语义 = **真实采纳次数**（selector 采用 guarded 结果），
+    // **不是**「资格成立次数」（effective_guarded === true）。两者是**不同**的事：
+    // 封印全部满足但 selector 仍处 BASELINE 时，「有资格」成立而「被采纳」为 0。
+    // GE-02 selector 恒 BASELINE ⇒ 本计数器**结构性恒为 0**。
+    // GE-03 若需统计 shadow 重跑 / eligibility 触发次数，必须**另开**字段
+    // （如 gen1_guarded_shadow_invocations / gen1_guarded_eligible_count），不得复用本计数器。
+    let guardedEffectiveInvocations = 0;
+    let guardedEffectiveActive = false;
     const gen1SignalByCode = {};
     try {
       const sigRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: latestDate });
@@ -715,9 +739,50 @@ exports.main = async (event = {}, context = {}) => {
           dataHealth: gen1DataHealth,
           domainPermission: gen1Domain,
           healthGate: gen1Gate,
-          signalHealthSnapshot: gen1SignalHealthSnapshot
+          signalHealthSnapshot: gen1SignalHealthSnapshot,
+          // WP-G1-GE-02：Key 2/3（缺失 ⇒ effective_guarded 恒 false）
+          guardedSeal
         });
         result.gen1_canary_source = 'V361_RERUN_S4';
+
+        // ---- WP-G1-GE-02：Guarded 选择器（dormant）----
+        // 章程 §4 拓扑：① baseline V3 → ② Gen-1 合成门 → ③ effective_guarded →
+        //   ④ guarded V3 重跑（GE-03）→ ⑤ V3 自算 → ⑥ 显式选择器 → ⑦ 唯一落库。
+        // GE-02 只落地 ③ 与 ⑥ 的**休眠版**：guarded 结果为 null（不重跑），
+        // 选择器**无条件**返回 baseline ⇒ 逐字节等于 GE-02 之前的生产结果。
+        const guardedSelection = selectGuardedResult({
+          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
+          guarded: null,
+          effectiveGuarded: gen1Permission.effective_guarded === true
+        });
+        const guardedAudit = buildGuardedAudit({
+          permission: gen1Permission,
+          signal: gen1Signal,
+          code: etf.code,
+          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
+          selection: guardedSelection
+        });
+        if (guardedSelection.authoritative_source !== 'BASELINE') {
+          throw new Error('[SECURITY] GE-02 selector 必须 baseline-authoritative');
+        }
+        if (guardedAudit.gen1_adopted === true) {
+          throw new Error('[SECURITY] GE-02 不得采纳 Gen-1 候选（dormant）');
+        }
+        if (gen1Permission.effective_guarded === true) {
+          guardedEffectiveActive = true;
+          console.warn(`[GEN1-GUARDED] ${etf.code} effective_guarded=true`
+            + ` selector=${guardedSelection.authoritative_source}`
+            + '（GE-02 selector 休眠 ⇒ 仍按 baseline 落库；本处**不**计入采纳次数）');
+        }
+        // WP-G1-GE-02 复审 P1：**只有真实采纳**才 +1（selector 采用 guarded 结果且已通过
+        // 上方两条 dormant 断言）。GE-02 中 `gen1_adopted` 被硬断言为 false ⇒ 本分支**不可达**，
+        // 因此 `guardedEffectiveInvocations` 结构性恒为 0 —— 即使将来两把 Seal 全部满足，
+        // 只要 selector 仍是 BASELINE，就不会产生「adopted=false 但 invocations=1」的审计矛盾。
+        // 采用 guarded 结果后，还须等 decision_result 成功落库才算一次真实采纳（GE-03 落实）。
+        if (guardedSelection.authoritative_source === SELECTOR_SOURCE.GUARDED
+          && guardedAudit.gen1_adopted === true) {
+          guardedEffectiveInvocations += 1;
+        }
 
         // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
         // G1.2-03：必须继承生产调用的**完整** Safety context（含 slowBreak、trendStage、shock、bars、portfolio）。
@@ -780,8 +845,9 @@ exports.main = async (event = {}, context = {}) => {
             + ` 低于 baseline ${baselineTarget}（共享 tech cap 优先，组合约束所致，非模型降级）`);
         }
         // G1-11 No-op 不变量：overlay 前后 final_target / final_action 必须逐字段一致
+        // WP-G1-GE-02：第 4 参只带**审计字段**，硬还原与运行期断言原样保留（不得削弱）
         const noopBefore = { final_target: result.final_target, final_action: result.final_action };
-        Object.assign(result, applyGen1Overlay(result, gen1Permission, canary));
+        Object.assign(result, applyGen1Overlay(result, gen1Permission, canary, guardedAudit));
         const noopCheck = verifyProductionNoop(noopBefore, result);
         if (!noopCheck.ok) {
           throw new Error(`Gen-1 overlay violated production No-op: ${noopCheck.diffs.join(', ')}`);
@@ -868,6 +934,18 @@ exports.main = async (event = {}, context = {}) => {
     const cfAuthorized = authorityAllows(gen1Authority.gen1_authority, 'CANARY_OVERRIDE');
     const cfHealthAllowed = gen1GlobalGate.allow_canary === true;
     const cfActive = cfAuthorized && cfHealthAllowed && counterfactualLedgerOk;
+
+    // ---- WP-G1-GE-02：Guarded Effective 运行期门 + 聚合（**dormant**）----
+    // 与 gen1-safety-permission 的合成**同源同规则**（health 必须显式 OK + ACTIVE），
+    // 此处只做进程级上报，不构成第二套判据。
+    const guardedHealthObserved = gen1GlobalGate.latched_health != null
+      ? gen1GlobalGate.latched_health : null;
+    const guardedEffectiveAuthorized = gen1Authority.guarded_effective_authorized === true;
+    const guardedEffectiveEvidenceAllowed = guardedSeal.evidence_seal_pass === true;
+    // WP-G1-GE-02 复审 P0-1：gate_status **缺失/空串/null 一律不视为 ACTIVE**（fail-closed），
+    // 与 gen1-safety-permission 的 `healthGateActive` 同规则。此处只上报，不构成第二套判据。
+    const guardedEffectiveHealthAllowed = String(guardedHealthObserved || '').toUpperCase() === 'OK'
+      && String(gen1GlobalGate.gate_status || '').toUpperCase() === 'ACTIVE';
 
     // 写组合快照：snapshot_date 统一用「今天」（北京时间，组合快照时刻），
     // 与 decision_result.decision_date（数据最新日）语义分离，避免快照日期分裂。
@@ -1032,6 +1110,19 @@ exports.main = async (event = {}, context = {}) => {
     gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
     // 信息性：Σ 反事实战略目标（**不受 cap 约束**，不得用作 cap 合规证据）
     gen1_counterfactual_target_sum: Math.round(counterfactualTargetSum * 1e6) / 1e6,
+    // WP-G1-GE-02：Guarded Effective（dormant）—— 审计字段；**不含**任何生产写权限语义
+    gen1_guarded_effective_authorized: guardedEffectiveAuthorized,
+    gen1_guarded_effective_evidence_allowed: guardedEffectiveEvidenceAllowed,
+    gen1_guarded_effective_health_allowed: guardedEffectiveHealthAllowed,
+    gen1_guarded_effective_active: guardedEffectiveActive,
+    gen1_guarded_effective_invocations: guardedEffectiveInvocations,
+    gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
+    gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
+    gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
+    gen1_guarded_evidence_seal_reason_code: guardedSeal.evidence_seal_reason_code,
+    gen1_guarded_evidence_independent_events: guardedSeal.evidence_independent_events,
+    gen1_guarded_selector_source: 'BASELINE',
+    gen1_guarded_contract_version: guardedSeal.contract_version,
       note: mlFastPathEnabled
         ? 'ml_fast_path_enabled ignored while Gen-1 in SHADOW; production stays V3.6.1'
         : 'ML observing only — no authority to change production decisions'
@@ -1045,7 +1136,10 @@ exports.main = async (event = {}, context = {}) => {
       decision_engine: shadowEngineVer,
       stage_engine: merged.v3_6_persistence ? 'v3.6' : (merged.v3_5_enabled ? 'v3.5' : 'v3'),
       ml_model_id: mlModelId,
-      ml_effective: false,
+      // WP-G1-GE-02（章程 §6.3）：`ml_effective` 降级为 legacy/summary alias，
+      // **单向**派生自 gen1_guarded_effective_active；严禁反向派生。
+      // GE-02 及线上现状下该值恒为 false（与旧硬编码 false 逐字节一致）。
+      ml_effective: guardedEffectiveActive,
       ml_advisory_enabled: merged.ml_advisory_enabled !== false,
       // G1-09：自动执行永久硬关 —— 即使数据库 ml_execution_enabled=true 亦不得开启
       ml_execution_enabled: gen1Execution.execution_enabled,
@@ -1082,6 +1176,21 @@ exports.main = async (event = {}, context = {}) => {
       gen1_counterfactual_tech_cap: effectiveTechMax,
       gen1_counterfactual_ledger_ok: counterfactualLedgerOk,
       gen1_counterfactual_target_sum: Math.round(counterfactualTargetSum * 1e6) / 1e6,
+      // WP-G1-GE-02：Guarded Effective 运行状态（章程 §6.2 五字段 + 封印可观测字段）
+      // ⚠️ 这些字段**不代表**生产写权限；`gen1_production_write` / `gen1_auto_execution` 仍恒 false。
+      gen1_guarded_effective_authorized: guardedEffectiveAuthorized,
+      gen1_guarded_effective_evidence_allowed: guardedEffectiveEvidenceAllowed,
+      gen1_guarded_effective_health_allowed: guardedEffectiveHealthAllowed,
+      gen1_guarded_effective_active: guardedEffectiveActive,
+      // 本轮真实采纳次数（GE-02 selector 休眠 ⇒ 恒 0；跨轮累计口径待 GE-03 落库）
+      gen1_guarded_effective_invocations: guardedEffectiveInvocations,
+      gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
+      gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
+      gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
+      gen1_guarded_evidence_seal_reason_code: guardedSeal.evidence_seal_reason_code,
+      gen1_guarded_evidence_independent_events: guardedSeal.evidence_independent_events,
+      gen1_guarded_selector_source: 'BASELINE',
+      gen1_guarded_contract_version: guardedSeal.contract_version,
       ml_gen1_frozen: merged.ml_gen1_frozen !== false,
       ml_shadow_observe: mlShadowObserve,
       trend_stage_enabled: trendStageEnabled,
@@ -1105,7 +1214,8 @@ exports.main = async (event = {}, context = {}) => {
       v3_6_1_enabled: merged.v3_6_1_enabled === true,
       v3_6_1_shadow: merged.v3_6_1_shadow === true,
       ml_shadow: mlMeta,
-      ml_effective: false, // 顶层冗余语义：生产决策不受 ML 影响
+      // WP-G1-GE-02：legacy alias ← gen1_guarded_effective_active（单向派生，见章程 §6.3）
+      ml_effective: guardedEffectiveActive,
       results,
       shadow_log: shadowLog ? {
         snap_date: shadowLog.snap_date,

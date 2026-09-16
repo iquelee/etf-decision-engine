@@ -1,0 +1,19 @@
+{
+  "seal_id": "GUARDED_EFFECTIVE_EVIDENCE",
+  "contract_version": "WP-G1-GE-CH-1.0",
+  "work_package": "WP-G1-GE",
+  "charter": "docs/gen1/GEN1_GUARDED_EFFECTIVE_CHARTER.md",
+  "evidence_charter": "docs/gen1/WP-G1-EVIDENCE_CHARTER.md",
+  "evidence_contract": "docs/gen1/GEN1_EVIDENCE_CONTRACT.md",
+  "status": "PENDING",
+  "evidence_positive": false,
+  "q1_pass": null,
+  "q2_pass": null,
+  "q3_pass": null,
+  "independent_events": 0,
+  "min_independent_events": 30,
+  "evaluated_at": null,
+  "as_of": "2026-09-16",
+  "note": "WP-G1-GE-02 落地为 PENDING / independent_events=0：证据门（EVIDENCE_POSITIVE 且独立事件 >= 30）**未满足**。本阶段不得伪造 PASS；样本仍待独立工作包产出。SP4 真切换前本文件必须保持非 PASS。",
+  "change_rule": "只能由证据工作包在满足硬前置后通过 PR 显式置 PASS，不得运行时改写；任何提前置 PASS 等同 GOVERNANCE DEVIATION，须单独留痕。"
+}

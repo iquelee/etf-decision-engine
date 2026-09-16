@@ -9,11 +9,20 @@
  *   safety           —— 规则层：Safety Core 是否放行（风险/F5/结构/阶段/数据/域/健康）。
  *                       **Safety PERMIT 只表示「规则允许」，绝不等于「模型触发」。**
  *   effective_*      —— 合成层：model_candidate AND safety AND 数据/域/健康/authority。
+ *                       WP-G1-GE-02 起有**两条并列**合成（不互相替代）：
+ *                         effective_canary  = 反事实 Canary（不影响生产）
+ *                         effective_guarded = 受控阶段输入资格（章程 §3.3 唯一准入表达式）
  *
  * 关键不变量：
  *   - 概率低于阈值（如 S2 + P=0.12）即使 Safety PERMIT，也不得 advisory/canary。
  *   - ml_fast=false 但 P>=阈值 → 信号自相矛盾，fail-closed（BLOCK）。
  *   - effective_canary 额外要求 authority >= CANARY（PRODUCTION 永久锁定）。
+ *   - effective_guarded 更严格：额外要求 **Freeze Seal APPROVED（且绑定可验证）**
+ *     + Evidence Seal `PASS` **且 `evidence_positive === true`** 且独立事件 >= 30
+ *     + Health==OK 且 gate_status **显式** ACTIVE + Data==OK + Domain==IN_DOMAIN；
+ *     任一不成立即 false（fail-closed）。
+ *     ⚠️ effective_guarded 只表示「可向 V3 提议受控阶段输入」，**不是生产写权限**；
+ *        final_target / final_action 的唯一产出方仍是 V3.6.1 Safety Core。
  *
  * 纯函数；不 require DB。阈值由调用方传入（`thresholdSignalP`，默认 0.65，与 frozen-manifest 一致）。
  *
@@ -22,6 +31,11 @@
 'use strict';
 
 const { resolveAuthority, authorityAllows, AUTHORITY } = require('./gen1-authority');
+const {
+  GUARDED_CONTRACT_VERSION,
+  MIN_INDEPENDENT_EVENTS,
+  SEAL_REASON
+} = require('./gen1-guarded-seal');
 
 const SAFETY_SOURCE = 'SAFETY_CORE';
 const EOD_SOURCE = 'EOD_STAGE_PRECHECK';
@@ -70,6 +84,9 @@ function makeResult(permission, code, reason) {
  * @param {object} [input.risk] / [input.fundamental] / [input.snapshot]
  * @param {string} [input.today]
  * @param {object} [input.dataHealth] / [input.domainPermission] / [input.healthGate]
+ * @param {object} [input.guardedSeal] WP-G1-GE-02：`evaluateGuardedSeal()` 结果
+ *        （Key 2 Freeze Seal + Key 3 Evidence Seal）。**缺失即 fail-closed** ⇒
+ *        `effective_guarded = false`。
  */
 function evaluateGen1Permission(input) {
   const src = input || {};
@@ -229,6 +246,58 @@ function evaluateGen1Permission(input) {
     const effectiveAdvisory = candidate && safetyPass && dataNotBlocked && healthAllowsAdvisory;
     const effectiveCanary = candidate && safetyPass && dataOk && domainOk && healthAllowsCanary && authorityCanary;
 
+    // ---- WP-G1-GE-02：Guarded Effective 合成（章程 §3.3 单一准入表达式）----
+    // 与 effective_canary **并列**，不替换。门槛**严格更严**（这是更高的权限档位）：
+    //   Data 必须 OK（DEGRADED/BLOCKED/UNKNOWN 全拒）
+    //   Domain 必须 IN_DOMAIN（PARTIAL_COVERAGE / OUT_OF_DOMAIN 全拒）
+    //   Health 必须有**显式** OK + ACTIVE 的持久化 latch（缺失 latch / 缺 gate_status 均不视为「允许」）
+    //   Freeze Seal 必须 APPROVED 且四项绑定与运行期实读一致
+    //   Evidence Seal 必须 status==PASS **且 evidence_positive==true** 且独立事件 >= 30
+    // 任一不成立 ⇒ effective_guarded = false ⇒ 回退纯 V3.6.1 baseline（fail-closed）。
+    const guardedSeal = src.guardedSeal || null;
+    const healthObserved = hg
+      ? (hg.health != null ? hg.health : (hg.latched_health != null ? hg.latched_health : null))
+      : null;
+    // WP-G1-GE-02 复审 P0-1：**显式** `ACTIVE`，缺失/空串/null 一律**不**视为 ACTIVE。
+    // ⚠️ 不得沿用 healthEnvelope 里 `hg.gate_status || 'ACTIVE'` 的**展示性**默认值 ——
+    //    那是审计信封的既有契约（保持逐字节不变），**不是**授权判据。
+    //    Health 是八重 Guard 中的硬门 ⇒ 缺字段必须 fail-closed。
+    const healthGateActive = !!hg
+      && String(hg.gate_status || '').toUpperCase() === 'ACTIVE';
+    const authorityGuarded = authorityAllows(authority.gen1_authority, 'GUARDED_EFFECTIVE_OVERRIDE');
+    const freezeSealApproved = !!(guardedSeal && guardedSeal.freeze_seal_approved === true);
+    const evidenceSealPass = !!(guardedSeal && guardedSeal.evidence_seal_pass === true);
+    const healthAllowsGuarded = !!hg
+      && String(healthObserved || '').toUpperCase() === 'OK'
+      && healthGateActive;
+    const domainStrictInDomain = domainPermission === 'ALLOW' && domainStatus === 'IN_DOMAIN';
+
+    const guardedChecks = {
+      authority_guarded: authorityGuarded,
+      freeze_seal_approved: freezeSealApproved,
+      evidence_seal_pass: evidenceSealPass,
+      health_allows_guarded: healthAllowsGuarded,
+      data_ok: dataOk,
+      domain_strict_in_domain: domainStrictInDomain,
+      safety_pass: safetyPass,
+      model_candidate: candidate
+    };
+    const effectiveGuarded = Object.keys(guardedChecks).every((k) => guardedChecks[k] === true);
+    // 原因码只作**可解释性**细化，不新增合取项（§3.3 的 8 项表达式不得增减）。
+    // safety.permission === null 表示「不可用」（信号缺失/过期/model_id 不符/基线不存在），
+    // 与「Safety 明确 BLOCK」是不同性质 ⇒ 分开报，避免审计把不可用误记成规则否决。
+    const guardedReason = effectiveGuarded ? null
+      : (!authorityGuarded ? 'GUARDED_AUTHORITY_NOT_EFFECTIVE'
+        : (!freezeSealApproved ? 'GUARDED_FREEZE_SEAL_NOT_APPROVED'
+          : (!evidenceSealPass ? 'GUARDED_EVIDENCE_SEAL_NOT_PASS'
+            : (!healthAllowsGuarded ? 'GUARDED_HEALTH_NOT_ALLOWED'
+              : (!dataOk ? 'GUARDED_DATA_NOT_OK'
+                : (!domainStrictInDomain ? 'GUARDED_DOMAIN_NOT_IN_DOMAIN'
+                  : (!safetyPass
+                    ? (safety.permission == null
+                      ? 'GUARDED_SIGNAL_UNAVAILABLE' : 'GUARDED_SAFETY_NOT_PASS')
+                    : 'GUARDED_MODEL_CANDIDATE_NOT_PASS')))))));
+
     const modelReason = candidate ? null
       : (!checks.stage_s2_only ? 'STAGE_NOT_S2'
         : (!checks.ml_fast_true ? 'ML_FAST_FALSE'
@@ -263,6 +332,29 @@ function evaluateGen1Permission(input) {
         : { status: 'UNKNOWN', permission: 'UNKNOWN', reason_code: null },
       effective_advisory: effectiveAdvisory,
       effective_canary: effectiveCanary,
+      // WP-G1-GE-02：受控阶段输入资格（**不是**生产写权限；不改变 final_target）
+      effective_guarded: effectiveGuarded,
+      guarded: {
+        effective_guarded: effectiveGuarded,
+        checks: guardedChecks,
+        // 首个不成立的门的稳定原因码（全成立时 null）
+        reason_code: guardedReason,
+        contract_version: GUARDED_CONTRACT_VERSION,
+        min_independent_events: MIN_INDEPENDENT_EVENTS,
+        freeze_seal_status: guardedSeal ? (guardedSeal.freeze_seal_status || null) : 'MISSING',
+        freeze_seal_reason_code: guardedSeal
+          ? (guardedSeal.freeze_seal_reason_code || null)
+          : SEAL_REASON.FREEZE_MISSING,
+        evidence_seal_status: guardedSeal ? (guardedSeal.evidence_seal_status || null) : 'MISSING',
+        evidence_seal_reason_code: guardedSeal
+          ? (guardedSeal.evidence_seal_reason_code || null)
+          : SEAL_REASON.EVIDENCE_MISSING,
+        evidence_positive: !!(guardedSeal && guardedSeal.evidence_positive === true),
+        evidence_independent_events: guardedSeal
+          ? (guardedSeal.evidence_independent_events == null
+            ? null : guardedSeal.evidence_independent_events)
+          : null
+      },
       // WP-G1.2 G1.2-01：实时权限健康（唯一真相 = 持久化 latch）
       health: healthEnvelope,
       gen1_health_status: hg ? (hg.health != null ? hg.health : (hg.latched_health || null)) : null,
