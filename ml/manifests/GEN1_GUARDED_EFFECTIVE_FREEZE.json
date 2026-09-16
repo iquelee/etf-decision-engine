@@ -1,0 +1,16 @@
+{
+  "seal_id": "GUARDED_EFFECTIVE_FREEZE",
+  "contract_version": "WP-G1-GE-CH-1.0",
+  "work_package": "WP-G1-GE",
+  "charter": "docs/gen1/GEN1_GUARDED_EFFECTIVE_CHARTER.md",
+  "status": "PENDING",
+  "approved_at": null,
+  "approved_by": null,
+  "source_sha256": null,
+  "model_sha256": null,
+  "threshold_version": null,
+  "bindings_status": "INCOMPLETE",
+  "as_of": "2026-09-16",
+  "note": "WP-G1-GE-02（Dormant Implementation）落地为 PENDING：实现已落码但 selector 恒选 baseline，实现未激活。**本阶段不得改为 APPROVED**：四项绑定中 source SHA 在 GE-02 自身合并前不存在，model SHA 亦未随 runDecisionEngine 部署。真晋升须走 WP-G1-GE-04 显式裁决 + 专门 promotion runbook。",
+  "change_rule": "升级/回退只能通过 PR 显式修改本文件（等同显式审批动作），不得运行时改写。"
+}

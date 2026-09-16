@@ -30,6 +30,12 @@
  *   G1-T Benchmark Pipeline         510300 独立 Lane + 两条 Lane 分别幂等 + 基准失败不阻断生产
  *   —— WP-G1-DATA-02 Daily Data Finality & Lane Execution ——
  *   G1-U Daily Data Finality         ready lane 不得重复抓 + 盘中不写当日 bar + 定稿标记
+ *   —— WP-G1-GE-02 Guarded Effective（Dormant）——
+ *   G1-V Guarded Effective Authority 新档位插入 + PRODUCTION 仍不可达 + 恒无生产写权限
+ *   G1-W Guarded Effective Gates     三钥匙 + 运行时叠加门 fail-closed（含生产制品不得 APPROVED /
+ *                                    PASS / evidence_positive；Evidence 必须显式 POSITIVE）
+ *   G1-X Guarded Selector No-op      authoritative selector 恒 BASELINE + production no-op 不变量
+ *   G1-Y Authority Frozen Param      gen1_authority 入冻结清单（单靠改配置不能激活）
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -63,11 +69,16 @@ const GATES = [
   { id: 'G1-R', name: 'Counterfactual Ledger Guard', script: 'tests/gen1-counterfactual-ledger-static.test.js' },
   { id: 'G1-S', name: 'Schema/Collections Parity', script: 'tests/schema-collections-parity.test.js' },
   { id: 'G1-T', name: 'Benchmark Pipeline', script: 'tests/gen1-benchmark-pipeline.test.js' },
-  { id: 'G1-U', name: 'Daily Data Finality & Lane Execution', script: 'tests/gen1-daily-finality.test.js' }
+  { id: 'G1-U', name: 'Daily Data Finality & Lane Execution', script: 'tests/gen1-daily-finality.test.js' },
+  // —— WP-G1-GE-02 Guarded Effective（Dormant）——
+  { id: 'G1-V', name: 'Guarded Effective Authority', script: 'tests/gen1-guarded-effective-authority.test.js' },
+  { id: 'G1-W', name: 'Guarded Effective Gates', script: 'tests/gen1-guarded-effective-gates.test.js' },
+  { id: 'G1-X', name: 'Guarded Selector No-op', script: 'tests/gen1-guarded-selector-noop.test.js' },
+  { id: 'G1-Y', name: 'Authority Frozen Param', script: 'tests/gen1-authority-frozen-param.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-U）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-Y）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {
