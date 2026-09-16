@@ -657,9 +657,11 @@ PR merge            ⛔ agent 不可代做 —— 需 ① 给该 PAT 补 Content
 **P2 Closure docs-only PR 的落地情况（本轮）**：
 
 ```text
-载体分支     docs/gen1-p2-closure @ 9b401c1923b4aac32058e84954590b2d01a03547（base = 44b59b8）
+载体分支     docs/gen1-p2-closure（基于 44b59b8 创建）
 PR           #46  https://github.com/iquelee/etf-decision-engine/pull/46
              （open；merged = false；changed_files = 4；+1979 −0）
+⚠️ head SHA  本文件**不记录该分支的 head SHA** —— 它会随追加提交不断前进，属**自指状态**，
+             写下的那一刻即过期；一律以远端实读为准。"Base + PR 编号" 才是稳定标识。
 含           4 份文档（Gate / Attestation / ⑦ 只读审计 / 勘误表）
 ⛔ 不含      GE-03 设计文档（§9.4 ③ 排除项）
 merge        ⛔ NOT AUTHORIZED（owner 放行原文：「只授权建 PR，不自动授权 merge」）

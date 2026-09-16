@@ -752,7 +752,9 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
   ETF 仓库：
   - Git 跟踪文件：零修改（git diff --stat HEAD 空）
   - Git 历史/分支/远端：**本轮产生远端变化（已获 owner 放行）**：
-      ① 新分支 docs/gen1-p2-closure @ 9b401c1923b4aac32058e84954590b2d01a03547（基于 44b59b8）已 push（SSH 通道）；
+      ① 新分支 docs/gen1-p2-closure（基于 44b59b8）已 push（SSH 通道）；
+        ⚠️ 该分支的 head SHA 不入档 —— 随追加提交前进，属自指状态；以远端实读为准
+        （对应「Base + PR 编号」才是稳定标识）；
       ② 建成 **PR #46**（open；merged = false；4 文件 +1979）
       （另：远端 master 此前被**外部**推进为 44b59b8，**非本轮**产生）
   - 未跟踪本地草稿：GEN1_DOC_ERRATA_20260916.md 有修改（新增 E26 + 批次 7 + 归属表 + 本 §6.8）；
