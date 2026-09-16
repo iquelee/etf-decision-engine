@@ -7,6 +7,10 @@
  * 抽成纯函数的目的：让「Production No-op」（G1-11 Gate G1-H）可以在无 DB 环境下直接单测：
  *   applyGen1Overlay(x, ...).final_target === x.final_target  恒成立。
  *
+ * WP-G1-GE-02 补充：本模块**只**附加审计字段（含 Guarded Effective 采纳/拒绝审计），
+ * **不**教它直接修改 final_target。overlay 的 production no-op 语义对**所有**档位
+ * （OFF / SHADOW / ADVISORY / CANARY / GUARDED_EFFECTIVE）继续成立。
+ *
  * @module gen1-overlay
  */
 'use strict';
@@ -17,9 +21,15 @@ const PRODUCTION_FIELDS = Object.freeze(['final_target', 'final_action']);
  * @param {object} result      V3.6.1 decision_result（会被浅拷贝，不原地修改）
  * @param {object} permission  G1-02 evaluateGen1Permission 输出
  * @param {object} canary      G1-03 buildCanaryCounterfactual 输出
+ * @param {object} [guardedAudit] WP-G1-GE-02：`buildGuardedAudit()` 输出（**纯审计字段**）
  * @returns {object} 装饰后的副本
+ *
+ * ⚠️ WP-G1-GE-02 边界（章程 §4.3，不得削弱）：
+ *   本函数对 production 字段（final_target / final_action）的 **no-op 语义对所有档位继续成立**，
+ *   含 `GUARDED_EFFECTIVE`。进入生产路径的是「guarded V3 result → 权威 selector」，
+ *   **不是** overlay output。第 4 参只往结果上附加审计字段，绝不参与 production 计算。
  */
-function applyGen1Overlay(result, permission, canary) {
+function applyGen1Overlay(result, permission, canary, guardedAudit) {
   const out = Object.assign({}, result || {});
   // 先冻结生产字段（无论后续写入什么，最后强制还原）
   const prodTarget = out.final_target == null ? null : out.final_target;
@@ -88,6 +98,34 @@ function applyGen1Overlay(result, permission, canary) {
   out.v361_baseline_stage = c.v361_baseline_stage != null ? c.v361_baseline_stage : null;
   out.v361_baseline_target = c.v361_baseline_target != null ? c.v361_baseline_target : null;
   out.v361_baseline_action = c.v361_baseline_action != null ? c.v361_baseline_action : null;
+
+  // ---- WP-G1-GE-02：Guarded Effective 审计字段（章程 §6.1，**纯审计**）----
+  // 只描述「Gen-1 候选是否被采纳 / 为什么没被采纳 / 权威结果来自哪里」，
+  // 不参与任何 production 字段计算（下面仍有硬还原兜底）。
+  const ga = guardedAudit || null;
+  out.decision_source = ga && ga.decision_source != null ? ga.decision_source : 'V361_SAFETY_CORE';
+  out.gen1_run_id = ga && ga.gen1_run_id != null ? ga.gen1_run_id : null;
+  out.gen1_candidate_hash = ga && ga.gen1_candidate_hash != null ? ga.gen1_candidate_hash : null;
+  out.gen1_adopted = ga ? ga.gen1_adopted === true : false;
+  out.gen1_reject_reason_code = ga && ga.gen1_reject_reason_code != null ? ga.gen1_reject_reason_code : null;
+  out.gen1_safety_core_adjust_reason = ga && ga.gen1_safety_core_adjust_reason != null
+    ? ga.gen1_safety_core_adjust_reason : null;
+  out.gen1_guarded_baseline_stage = ga && ga.gen1_guarded_baseline_stage != null
+    ? ga.gen1_guarded_baseline_stage : null;
+  out.gen1_guarded_effective_stage = ga && ga.gen1_guarded_effective_stage != null
+    ? ga.gen1_guarded_effective_stage : null;
+  out.gen1_guarded_baseline_target = ga && ga.gen1_guarded_baseline_target != null
+    ? ga.gen1_guarded_baseline_target : null;
+  out.gen1_guarded_result_target = ga && ga.gen1_guarded_result_target != null
+    ? ga.gen1_guarded_result_target : null;
+  out.gen1_guarded_delta = ga && ga.gen1_guarded_delta != null ? ga.gen1_guarded_delta : null;
+  out.gen1_guarded_selector_source = ga && ga.gen1_guarded_selector_source != null
+    ? ga.gen1_guarded_selector_source : 'BASELINE';
+  // Gen-1 受控阶段输入资格（**不是**生产写权限；不会改变上面两个生产字段）
+  out.gen1_effective_guarded = p.effective_guarded === true;
+  out.gen1_guarded_reason_code = (p.guarded && p.guarded.reason_code) || null;
+  out.gen1_guarded_freeze_seal_status = (p.guarded && p.guarded.freeze_seal_status) || null;
+  out.gen1_guarded_evidence_seal_status = (p.guarded && p.guarded.evidence_seal_status) || null;
 
   // === 硬不变量：生产字段必须与输入逐字段相同 ===
   out.final_target = prodTarget;

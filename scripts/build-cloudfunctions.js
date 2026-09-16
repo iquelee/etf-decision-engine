@@ -34,8 +34,14 @@ const FUNCTIONS = [
 const SKIP_TOP = new Set(['common', 'MANIFEST.json', 'node_modules']);
 
 // 额外复制到 dist 的文件（相对 REPO）。Gen-2 Rule V2 bundle 是 Node/Python 共用单一真相源。
+// WP-G1-GE-02：Guarded Effective 两把封印（Freeze / Evidence）必须随 runDecisionEngine
+// 一起部署，否则云函数读不到制品 ⇒ fail-closed 恒 false（语义正确但 GE-04 无法晋升）。
 const EXTRA_FILES = {
   runGen2ShadowEod: ['ml/gen2/manifests/GEN2_RULE_V2_BUNDLE.json'],
+  runDecisionEngine: [
+    'ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json',
+    'ml/manifests/GEN1_GUARDED_EFFECTIVE_EVIDENCE.json',
+  ],
 };
 
 function sha256(buf) {

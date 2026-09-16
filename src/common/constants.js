@@ -65,7 +65,12 @@ const FROZEN_PARAM_KEYS = [
   'ml_fast_path_enabled',
   'ml_challenger_model_id',
   'ml_gen1_frozen',
-  'ml_shadow_bundle_id'
+  'ml_shadow_bundle_id',
+  // WP-G1-GE-02（P0）：Gen-1 权限档位入冻结清单。
+  // 引入 GUARDED_EFFECTIVE 后，「改一条 param_config 即取得向 V3 提议受控输入的资格」
+  // 是不可接受的旁路 ⇒ 必须冻结。提权 / 回退一律走**专门、可审计**的 promotion 脚本
+  // （scripts/promote-*.js 一类，直接写库且留痕），不得从普通参数编辑器切换。
+  'gen1_authority'
 ];
 
 /** trade_log 更新允许写入的字段 */
