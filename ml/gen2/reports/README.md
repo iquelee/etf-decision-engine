@@ -50,3 +50,9 @@
 |---|---|
 | `gen2_p0_batchA_fixes.md` / `gen2_p0_batchB_fixes.md` / `gen2_p0_experiment_framework_fixes.md` | P0 修复记录 |
 | `universe_data_quality_v0.md` | 数据质量报告 |
+
+## Gen-2 机制假设登记（**仅假设，未验证**）
+
+| 报告 | 内容 |
+|---|---|
+| `gen2_h6_risk_off_zero_core_20260916.md` | **`H6_RISK_OFF_ZERO_CORE_ABSORPTION`**（用户裁决 2026-09-16 **N3** 立档；`HYPOTHESIS_REGISTERED` / **未验证**）。**假设**：RISK_OFF 的**晋升禁令**与**既有 CORE 耗尽**共同作用，可能造成持续零 CORE / 高现金暴露。**机制链条**（读源码 + 读 M 层读数）：`RISK_OFF → selection_mode = DISABLED`（**禁新晋升、不清现任 CORE**；`max_core_count` 返回 `None`）→ 既有 CORE 因 **`NO_CORE` 趋势硬门槛**（`px_ma60 > 0` 不成立 ⇒ `NO_CORE_TREND_GATE`）或 **demotion 滞后**（`≥ 5` 日）归零 → 归零后**无回补路径**（`PROMOTION_BLOCKED_BY_PERMISSION`）→ `rule_v2_ab` 下只有 `CORE` 拿非零权重 ⇒ **整仓现金**，持续到 `market_score ≥ 55` 解冻。**M 层读数（证据力 0）**：OOS `CORE==0` **396/1376 = 28.78%**、最长 **91 连续日**；RISK_OFF 636 日中 **375（58.96%）** vs 非 RISK_OFF 仅 2.84%；`PROMOTION_BLOCKED_BY_PERMISSION` 主因 **1,498**；漏斗 **`days_with_zero_alpha_qualified = 0`**（396 天每天都有 alpha 够格标的、日均 4.27 只）⇒ **不是「选不出」**。**验证路径唯一**：O2 **未观察段**（三段全落 `≤ 2018-04-02`，且须待 M1-B 逐只流动性审计完成 + P1 分割冻结之后）或 **O1 前瞻段**；**数值阈值不在本档预设**，须于 P1 pre-registration 与 H2 判据一并冻结（纪律：不自创阈值）。**禁令**：不设计替代规则、不在已观察 B3 OOS 测试替代行为、不产参数/阈值/lock、不改归档状态（`ACCEPTED_FAIL` / `NOT_PRODUCTION_ELIGIBLE`）。与 **H2** 为**机制细化关系**，并存不替代。**互链**：`gen2_m2b_targeted_attribution_20260916.md` §4/§4.5（证据来源）｜`gen2_m2_h3_erratum_20260916.md`（H3 勘误） |
