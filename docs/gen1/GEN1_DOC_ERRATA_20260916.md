@@ -423,6 +423,19 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 第 2 层回答「**下一次该怎么走**」（必须重冻 + 重验收，不能直接合）。
 ⛔ **不得把第 1 层的判据当成第 2 层的放行依据** —— 那是把「事后可证」误读成「事前免检」。
 
+### E26 —【P1】「写被证否」未限定**通道 / 动作**，属过强结论（第八轮新增）
+
+| 项 | 内容 |
+|---|---|
+| 位置 | `GEN1_P2_RELEASE_GATE_20260916.md` §9.1（执行通道表 + 「更正留痕 ④」）与 §9.3（(B) 行「当前唯一可执行路径」）；`GEN1_PR43_READONLY_AUDIT_20260916.md` §11「**末次实证：写已证否**」 |
+| 原表述 | 由一次 `PUT /repos/…/pulls/43/merge` 返回 `403` 推得「**写被证否**」—— **既未限定通道，也未限定动作** |
+| 新证据（第八轮实跑，2026-09-16T16:5x–17:0x） | ① **`git push`（SSH 通道）⇒ 成功**：新分支 `docs/gen1-p2-closure` 推上远端，远端 SHA 与本地 HEAD 逐位一致（`9b401c1923b4aac32058e84954590b2d01a03547`）；<br>② 用**项目自带 fine-grained PAT**（`~/.workbuddy/gh_token.txt`，经 `gh.sh`）执行 `POST /repos/…/pulls` ⇒ **`201 Created`**（建成 PR #46）；<br>③ 用 **MCP GitHub App 连接器**执行同一 `POST /pulls` ⇒ **`403 Resource not accessible by integration`**；<br>④ 上一轮用 fine-grained PAT 执行 `PUT /pulls/43/merge` ⇒ **`403 Resource not accessible by personal access token`** |
+| 事实更正 | 写入能力**既非「全有」也非「全无」**，而是**按「通道 × 动作」分层**：<br>• **SSH（git）通道** —— **可写**（push 成功实证）；<br>• **项目 fine-grained PAT（`gh.sh`）** —— **`Pull requests: write` 可用**（建 PR `201` 实证）；**但不足以完成 merge**（merge `403` 实证；merge 会在 base 分支上写提交 ⇒ 缺口在 `Contents` 侧）；<br>• **MCP GitHub App 连接器** —— **写路径 `403`**（建 PR 与 merge 两次均拒） |
+| 定性 | 原结论对 **SSH 通道**与 **PAT 的「建 PR」动作**均不成立 ⇒ 属**未限定作用域的过强表述**。<br>⚠️ 与 §9.1 已登记的「**结论对 ≠ 推理对**」**不是同一类问题**：那一条是**依据错、结论对**；这一条是**结论本身过强，必须加限定**。 |
+| 建议修正 | 「写被证否」一律改写为**带「通道 + 动作」限定的条件式**：<br>• 「**merge 动作**在 fine-grained PAT 通道被证否（`403`）」；<br>• 「**建 PR 动作**在同一 PAT 通道**可用**（`201`）」；<br>• 「**git push** 在 SSH 通道**可用**」；<br>• 「MCP App 通道**写路径不可用**（`403 by integration`）」。<br>「当前唯一可执行路径」相应改为：「分支推送与 **PR 创建** agent 均可代做；**merge** 需 ① 给该 PAT 补 `Contents: Read and write`，或 ② 由所有人在 Web UI 执行。」 |
+| 教训 | ⛔ **不得把「某条通道上某个动作写失败」写成「整个身份写被证否」**。<br>任何能力结论**必须同时限定「通道」与「动作」**；跨通道 / 跨动作推断一律禁止（与 §9.1 的跨依据推断同属一类错误）。 |
+| 附注 | 本项由第八轮的**实际建 PR 动作**暴露 —— 属「已授权动作的合法副产物」，⛔ **不是**写探测。 |
+
 ---
 
 ## 3. 未发现问题的部分（可放心引用）
@@ -471,7 +484,7 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 | **批次 4** | E6 —— RUNBOOK 字段名前缀 | 实操性纠错，需与 runner 侧字段命名一并确认 |
 | **批次 5** | E10、E11 —— 缺陷/测试状态回填 | 需先对剩余条目做一次状态盘点（E10 涉 Gen-2 条目，建议另立） |
 | **批次 6** | E12 ~ E17、E19、E20 —— 表述与锚点精修 | 低风险，可合并为一个 docs-only PR |
-| **批次 7（下次 docs 批次）** | E22 —— `ml_effective` 术语口径收紧；E23 —— `CURRENT_STATE_20260910.md` 冻结清单枚举落后（**已于 2026-09-16T16:06:26 合并后转为现实过期**）；**E24** —— P2 Gate §2 A3 的行尾探针前提修正；**E25** —— P2 Gate 放行条款由绝对措辞改为**等价替换条件式** | E22 载体在 `docs/gen1-monitor-status-clarify` 的 §0.2（`a8bf76d`）⇒ 须**新 commit**、⛔ 不 amend、⛔ 不改 FROZEN 章程；E23 ⛔ **不改 2026-09-10 历史快照正文**，只允许加 forward-pointer 或由新版 `CURRENT_STATE` 承接；E24/E25 载体为 P2 Gate 文档 ⇒ 已获 owner 放行进入 **P2 Closure docs-only PR**（该放行只覆盖**建 PR**，⛔ 不授权 merge，见 `GEN1_P2_RELEASE_GATE_20260916.md` §9.4） |
+| **批次 7（下次 docs 批次）** | E22 —— `ml_effective` 术语口径收紧；E23 —— `CURRENT_STATE_20260910.md` 冻结清单枚举落后（**已于 2026-09-16T16:06:26 合并后转为现实过期**）；**E24** —— P2 Gate §2 A3 的行尾探针前提修正；**E25** —— P2 Gate 放行条款由绝对措辞改为**等价替换条件式** | E22 载体在 `docs/gen1-monitor-status-clarify` 的 §0.2（`a8bf76d`）⇒ 须**新 commit**、⛔ 不 amend、⛔ 不改 FROZEN 章程；E23 ⛔ **不改 2026-09-10 历史快照正文**，只允许加 forward-pointer 或由新版 `CURRENT_STATE` 承接；E24/E25 载体为 P2 Gate 文档 ⇒ 已获 owner 放行进入 **P2 Closure docs-only PR**（该放行只覆盖**建 PR**，⛔ 不授权 merge，见 `GEN1_P2_RELEASE_GATE_20260916.md` §9.4）；**E26** —— 写入能力结论须按「**通道 × 动作**」限定 |
 
 **纪律建议**：每批次一个 docs-only PR；不做 squash（沿用本仓既有惯例，保留「Gen-1 如何取得权限」的审计链）。
 
@@ -490,6 +503,7 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 | **E24（`git archive` 行尾转换 ⇒ blob 等价性证明手法须改）** | 本报告 + `GEN1_P2_RELEASE_GATE_20260916.md` §2 A3 | P2 Closure docs-only PR | 归入**批次 7**；✅ 第九轮裁定「保留」 |
 | **E25（放行条款绝对措辞 → 等价替换条件式 **+ 前向重冻规则**）** | 本报告 + `GEN1_P2_RELEASE_GATE_20260916.md` §0 条件② / §9.2 ④ / §10 / §11 A1 | P2 Closure docs-only PR | 归入**批次 7**；✅ 第九轮裁定「保留」并增补前向规则 |
 | **D1（`Update branch` 使已审计 head 前进）** | `GEN1_P2_POST_MERGE_ATTESTATION_20260916.md` §2.4 / §6 | P2 Closure docs-only PR | ✅ 第九轮裁定 = `PROCESS DEVIATION / CONTENT-PRESERVING / RE-ATTESTED / NON-SAFETY / **CLOSED**`；不重开 ⑧ |
+| **E26（写入能力须按「通道 × 动作」限定）** | 本报告 + `GEN1_P2_RELEASE_GATE_20260916.md` §9.1 ⑤ / §9.3 / §19 + `GEN1_PR43_READONLY_AUDIT_20260916.md` §12 | P2 Closure docs-only PR | 第八轮由**实际建 PR 动作**暴露；⛔ 不改写历史结论，只**加限定并给出新证据** |
 
 > ⚠️ **合并顺序提示**：既有分支 `4ea8363` 的父提交 = `6793d7f`，与本 worktree HEAD 相同 ⇒ 两个 worktree 各自新增文件时**不冲突**；但两份「勘误」文档若同时合并，读者需能分辨「运行状态勘误」与「引用健全性勘误」——已在各自 §0/§3 互链注明。
 
@@ -716,6 +730,47 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 
 > 📌 **GE-03 文档说明**：`GEN1_GE03_DESIGN_GATE_DRAFT_20260916.md` 已按 Q1–Q6 裁定收为**最终版**并改名；
 > ⛔ 该文档**不进** P2 Closure docs-only PR（P2 是已完成的历史闭环，GE-03 是下一阶段的未来授权，两者分开）。
+
+---
+
+### 6.8 第八轮（2026-09-16 P2 Closure PR 与 GE-03 设计终版）边界
+
+- ✅ **ETF 仓库被跟踪文件零修改**：`git diff --stat HEAD` 空。（**不是**「本轮零文件修改」—— 见下方四块式）
+- ⚠️ **本轮首次产生远端变化（均已获 owner 放行）**：
+  ① 新建**仓库外**独立 worktree `etf-decision-engine-p2closure`（分支 `docs/gen1-p2-closure`，基于 `44b59b8`）；
+  ② `git push` **成功**（**SSH 通道**）；③ 经项目 fine-grained PAT `POST /pulls` 建成 **PR #46**（`201`）。
+  ⛔ **merge 未获授权** —— 本轮**未合并任何东西**。
+- ⚠️ **新增 E26**：写入能力结论须按「**通道 × 动作**」限定（见 §2 E26）。本项由**已授权动作的合法副产物**暴露，⛔ 不是写探测。
+- ✅ **§9.4 ③ 的排除项已落实**：PR #46 只含 **4 份**文档，⛔ **不含** GE-03 设计文档。
+- ✅ **GE-03 设计文档已收为最终版**：`GEN1_GE03_DESIGN_GATE_20260916.md`（`GEN1-GE03-DG-1.0`，前身 DRAFT 已删除）；
+  `GE03_DESIGN_GATE FINAL = PENDING FINAL DOC REVIEW`、`IMPLEMENTATION_AUTHORIZATION = NOT GRANTED`。
+- ⛔ **本轮不得做**：不改 `GEN1_CURRENT_STATE_20260910.md` 正文、不改 FROZEN 章程、不改 `a8bf76d`、
+  不改 #43 任何字节、**不 merge PR #46**、不部署、不写线上、不进入 GE-03 代码阶段。
+- ⚠️ **本轮实际写入范围（四块式，勿简写）**：
+
+  ```text
+  ETF 仓库：
+  - Git 跟踪文件：零修改（git diff --stat HEAD 空）
+  - Git 历史/分支/远端：**本轮产生远端变化（已获 owner 放行）**：
+      ① 新分支 docs/gen1-p2-closure @ 9b401c1923b4aac32058e84954590b2d01a03547（基于 44b59b8）已 push（SSH 通道）；
+      ② 建成 **PR #46**（open；merged = false；4 文件 +1979）
+      （另：远端 master 此前被**外部**推进为 44b59b8，**非本轮**产生）
+  - 未跟踪本地草稿：GEN1_DOC_ERRATA_20260916.md 有修改（新增 E26 + 批次 7 + 归属表 + 本 §6.8）；
+      GEN1_P2_RELEASE_GATE_20260916.md 有修改（§9.1 ⑤ + §9.3 + §19）；
+      GEN1_PR43_READONLY_AUDIT_20260916.md 有修改（§12 追加通道结论行）；
+      GEN1_GE03_DESIGN_GATE_20260916.md 新增（最终版）；旧 DRAFT 文件已删除
+  - 本机 GitHub API：GET 若干 + **1 次已授权的写**（`POST /pulls` ⇒ `201`）
+  其他本机文件：
+  - WorkBuddy 技能文档有修改（gen1-pr-readonly-audit、github-pr-ops-windows、gen1-doc-errata-dedup）
+  - 本地记忆文件有修改（.workbuddy/memory/2026-09-16.md、项目级 MEMORY.md）
+  - %TEMP% 展开树：g1-master44-tree（44b59b8 树 524 blob，不含 .git，可删）
+  生产侧：
+  - 代码 / 配置 / Authority / FROZEN_PARAM_KEYS / lock / immutable_set：零修改
+  - 线上 `runtime_status`：零写入
+  ```
+
+  > ⛔ **不得简写为「仅修改本机技能文档与本地记忆」**（漏掉仓库内未跟踪草稿被写过、且本轮**确实产生了远端分支与 PR**）；
+  > ⛔ **不得简写为「本轮零文件修改」**（本工作目录确实发生过本地写入）。
 
 ---
 

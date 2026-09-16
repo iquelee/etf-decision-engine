@@ -269,9 +269,11 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 | 项 | 状态（2026-09-16T14:56 实读） |
 |---|---|
 | 本机 `gh_token.txt` PAT —— **读路径** | **可用**：本轮 3 次 GET 全部 `200` |
-| 本机 `gh_token.txt` PAT —— **写路径** | ⛔ **已实证：无写权限**。2026-09-16T15:2x 执行**用户已授权的目的动作** `PUT /repos/iquelee/etf-decision-engine/pulls/43/merge`（`merge_method=merge` + `sha=b7247f9…`）⇒ **`403 Resource not accessible by personal access token`**。该写请求**不是探测**（它就是用户授权的合并本身）⇒ 其 `403` 是**合法的「写被证否」证据** |
-| MCP GitHub App 连接器 | 写入路径返回 `403`（沿用上一轮实测，本轮未复查） |
-| ⇒ **执行通道（结论，2026-09-16T15:21 起）** | ① 用户已**废止「方案 A」**并授权 **agent 代合**（见 §9.3）；② 但**受令牌无写权限阻却** ⇒ ⛔ 代合**当前不可执行**；③ **当前唯一可执行路径 = 用户在 Web UI 点 *Create a merge commit***；④ 若先补 `Pull requests: RW` + `Contents: RW`，agent 即可代合 |
+| 本机 `gh_token.txt` PAT —— **写路径（merge 动作）** | ⛔ **已实证：merge 不可用**。2026-09-16T15:2x 执行**用户已授权的目的动作** `PUT /repos/iquelee/etf-decision-engine/pulls/43/merge`（`merge_method=merge` + `sha=b7247f9…`）⇒ **`403 Resource not accessible by personal access token`**。该写请求**不是探测**（它就是用户授权的合并本身）⇒ 其 `403` 是**合法的「该动作被证否」证据** |
+| 本机 `gh_token.txt` PAT —— **写路径（建 PR 动作）** | ✅ **已实证：可用**。2026-09-16T16:59 执行**用户已授权的目的动作** `POST /repos/iquelee/etf-decision-engine/pulls`（`head=docs/gen1-p2-closure`）⇒ **`201 Created`**（建成 **PR #46**）⇒ 同一 PAT 的 `Pull requests: write` **可用**；merge 的 `403` 应归因于 **`Contents` 侧不足**（merge 会在 base 分支上写提交） |
+| **git / SSH 通道**（`git@github.com:iquelee/etf-decision-engine.git`） | ✅ **已实证：可写**。2026-09-16T16:59 `git push -u origin docs/gen1-p2-closure` ⇒ **成功**（远端 SHA 与本地 HEAD 逐位一致） |
+| MCP GitHub App 连接器 | 写入路径返回 `403`（本轮**已复查**：`POST /pulls` ⇒ `403 Resource not accessible by integration`） |
+| ⇒ **执行通道（结论，按「通道 × 动作」分层；2026-09-16T17:0x 更新）** | **分支推送（SSH）**：✅ 可用；**建 PR（fine-grained PAT）**：✅ 可用；**merge（fine-grained PAT）**：⛔ 不可用；**MCP App 写路径**：⛔ 不可用。<br>⇒ 分支推送与 **PR 创建** agent 可代做；**merge** 需 ① 给该 PAT 补 `Contents: Read and write`，或 ② 由所有人在 Web UI 执行 |
 
 > 📌 **更正留痕（三处：前两处方向相反、均已撤回；第三处为末次实证）**
 > **① 上一轮**：「本机令牌为**只读** ⇒ merge 必须在 Web UI 执行」。其**唯一依据**是「无 `X-OAuth-Scopes` 头」；
@@ -286,6 +288,13 @@ P2 release                      STILL P2_PENDING_PR_RELEASE（改判条件见 §
 > ⚠️ **「结论对 ≠ 推理对」**：**①** 那条「只读」的**结论现已被证实正确**，但其**依据仍属错误** —— 不得据错误依据重写历史。
 > ⛔ **取得「写被证否」的唯一合法途径**就是**执行已被授权的写动作**；**不得**用「故意发写请求探测」。
 > 上述更正**不改变** §9 的 5 要点与 §10 的已审计对约束。
+>
+> **⑤ 第八轮更正（2026-09-16T17:0x ——「写被证否」必须限定「通道 × 动作」）**：本轮执行两件**均已获授权**的写动作，结果**不一致** ——
+> `git push`（SSH 通道）⇒ **成功**；`POST /repos/…/pulls`（fine-grained PAT）⇒ **`201`**；
+> 而同一轮 `POST /repos/…/pulls`（MCP App 通道）⇒ **`403 by integration`**。
+> ⇒ 「写被证否」只是**某一通道上某一动作**的结论，⛔ **不得**推广成「整个身份写被证否」。
+> ⚠️ 这与 **④ 的「结论对 ≠ 推理对」不是同一类问题**：④ 是**依据错、结论对**；⑤ 是**结论本身过强，必须加限定**。
+> 📌 已登记为勘误 **E26**。
 
 ### 9.2 放行记录（owner release，2026-09-16）
 
@@ -323,7 +332,7 @@ P2_COMPLETE_DORMANT。
 | 候选 | 说明 | 判定（as-of 2026-09-16T15:2x+0800） |
 |---|---|---|
 | **(A) agent 以本机 PAT 调合并 API**（`PUT /repos/…/pulls/43/merge`，`merge_method=merge` + `sha=b7247f9` 锁定已审计 head） | 用户**已明确授权**（原「方案 A」废止）；`sha` 参数使 GitHub 对 head 已变的请求返回 `409` ⇒ **无法误合并非审计对象**，亦无法误用 squash | ⛔ **实测受阻 —— 令牌无写权限**：`403 Resource not accessible by personal access token`（2026-09-16T15:2x） |
-| (B) 用户在 GitHub Web UI 点 *Create a merge commit* | 不需令牌写权限 | ✅ **当前唯一可执行路径**（除非先补 scope） |
+| (B) 用户在 GitHub Web UI 点 *Create a merge commit* | 不需令牌写权限 | ✅ **merge 动作的唯一当前可执行路径**（除非先给该 PAT 补 `Contents: Read and write`）。⚠️ 本行**只针对 merge** —— 分支推送与 **PR 创建** agent 均可代做（实证见 §9.1 ⑤ / §19 / 勘误 **E26**） |
 
 > **（A）解阻条件**：用户在 Settings → Fine-grained tokens 为该令牌补 `Pull requests: Read and write`
 > **且** `Contents: Read and write`（merge 会写 base 分支）；之后 agent 可执行
@@ -622,6 +631,41 @@ ETF 仓库：
 - 代码 / 配置 / Authority / FROZEN_PARAM_KEYS / lock / immutable_set：零修改
 - 线上 `runtime_status`：零写入
 ```
+
+---
+
+## 19. 第九轮追加：写入能力的「通道 × 动作」结论（含 PR #46 建单实证）
+
+| 通道 | 动作 | 结果 | 证据（均为**已获授权动作**的副产物） |
+|---|---|---|---|
+| **git / SSH**（`git@github.com:iquelee/etf-decision-engine.git`） | `git push` 新分支 | ✅ **可用** | `docs/gen1-p2-closure` 推送成功；远端 SHA 与本地 HEAD 逐位一致（`9b401c1…`） |
+| **fine-grained PAT**（`~/.workbuddy/gh_token.txt`，经 `gh.sh`） | `POST /repos/…/pulls`（建 PR） | ✅ **可用** | `201 Created` ⇒ **PR #46** |
+| 同上 | `PUT /repos/…/pulls/43/merge` | ⛔ **不可用** | `403 Resource not accessible by personal access token` |
+| **MCP GitHub App 连接器** | `POST /repos/…/pulls` | ⛔ **不可用** | `403 Resource not accessible by integration` |
+
+**可执行分工（结论）**：
+
+```text
+分支推送            agent 可代做（SSH）
+PR 创建             agent 可代做（fine-grained PAT）
+PR merge            ⛔ agent 不可代做 —— 需 ① 给该 PAT 补 Contents: Read and write，或 ② 所有人 Web UI
+```
+
+⚠️ 本节**修正了 §9.1 ④ 的表述口径**：原「写被证否」未限定通道与动作 ⇒ 已登记为勘误 **E26**。
+⛔ 本节结论**仅覆盖上表 4 条「通道 × 动作」组合**，⛔ **不得外推**到其他通道或动作。
+
+**P2 Closure docs-only PR 的落地情况（本轮）**：
+
+```text
+载体分支     docs/gen1-p2-closure @ 9b401c1923b4aac32058e84954590b2d01a03547（base = 44b59b8）
+PR           #46  https://github.com/iquelee/etf-decision-engine/pull/46
+             （open；merged = false；changed_files = 4；+1979 −0）
+含           4 份文档（Gate / Attestation / ⑦ 只读审计 / 勘误表）
+⛔ 不含      GE-03 设计文档（§9.4 ③ 排除项）
+merge        ⛔ NOT AUTHORIZED（owner 放行原文：「只授权建 PR，不自动授权 merge」）
+```
+
+> ⚠️ **本节记录的是「放行 → 落地」的事实**，⛔ **不构成 merge 授权**。
 
 ---
 
