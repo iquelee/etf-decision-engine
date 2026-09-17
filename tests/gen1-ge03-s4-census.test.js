@@ -55,9 +55,6 @@ const RDE_CODE = codeOnly(read(RDE_REL));
 const CANARY_CODE = codeOnly(read(CANARY_REL));
 const count = (src, re) => (src.match(re) || []).length;
 
-const LEGACY_REL = './common/utils/decision.js';
-const V3_REL = './common/utils/decision-v3.js';
-
 /* ==================================================================== *
  * G0. 自注册：本文件必须作为 G1-AF 挂进 CI 门禁台账（否则再严的断言也不会跑）
  * ==================================================================== */
@@ -80,12 +77,14 @@ const V3_REL = './common/utils/decision-v3.js';
  * G1. 全量 `runDecision(` 调用点分类
  * ==================================================================== */
 {
-  /* G1a. 两个引擎的 require 来源必须可区分（census 的前提：别把 legacy 当 V3） */
-  assert.ok(RDE_CODE.indexOf(`require('${V3_REL}')`) >= 0,
-    '★ census：immutable V3 引擎必须由 decision-v3.js 提供');
-  assert.ok(new RegExp(`require\\('${LEGACY_REL.replace(/\./g, '\\.')}'\\)`).test(RDE_CODE)
-    || /require\('\.\/common\/utils\/decision'\)/.test(RDE_CODE),
-    '★ census：legacy 引擎（decision.js）必须由可区分的路径提供');
+  /* G1a. 两个引擎的 require 来源必须可区分（census 的前提：别把 legacy 当 V3）。
+   * ⚠️ 断言一律用**静态正则**逐条枚举；⛔ 不用字符串拼接构造 RegExp —— 拼接若只转义部分
+   *    元字符而漏掉反斜杠，会触发 CodeQL `js/incomplete-sanitization`（此处静态枚举本就足够，
+   *    拼接属无谓风险面）。绑定名一并钉死，防「悄悄换引擎」。 */
+  assert.ok(/const decisionV3 = require\('\.\/common\/utils\/decision-v3\.js'\)\(\);/.test(RDE_CODE),
+    '★ census：immutable V3 引擎必须由 decision-v3.js 提供并绑定到 decisionV3');
+  assert.ok(/const decision = require\('\.\/common\/utils\/decision'\);/.test(RDE_CODE),
+    '★ census：legacy 引擎（decision.js）必须绑定到 decision（⛔ 不得与 decisionV3 混淆）');
 
   /* G1b. immutable V3 调用点恒 2 处（① baseline / ② 既有 Canary S4 rerun） */
   assert.strictEqual(count(RDE_CODE, /decisionV3\.runDecision\(/g), 2,
