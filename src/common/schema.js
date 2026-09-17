@@ -287,6 +287,51 @@ const SCHEMAS = [
       next_add_condition: { type: 'string', required: false, desc: '下一加仓条件' },
       explain_chain: { type: 'array', required: true, desc: '[{step,condition,result}] 决策链' },
       rule_hits: { type: 'array', required: false, desc: '命中 P0~P7 规则' },
+      // ---- GE03-02：Gen-1 runtime 写入字段登记补齐（registered ↔ actual write 对齐）----
+      // 来源：src/common/utils/gen1-overlay.js 的显式写入（本轮前仅存在于运行期、未登记）。
+      // ⛔ 纯登记（字段可发现性与契约完整性），不参与任何 production 计算。
+      // —— Safety Core Permission（唯一许可来源）
+      ml_rule_permission: { type: 'string', required: false, desc: 'Safety Core 许可（PERMIT/BLOCK 等）—— 对外唯一许可来源' },
+      ml_rule_permission_reason_code: { type: 'string', required: false, desc: 'Safety Core 许可原因码' },
+      ml_rule_permission_reason: { type: 'string', required: false, desc: 'Safety Core 许可原因文本' },
+      ml_rule_permission_source: { type: 'string', required: false, desc: '许可来源（默认 SAFETY_CORE）' },
+      // —— EOD 阶段预检（与 Safety 分列，避免混淆）
+      eod_precheck_permission: { type: 'string', required: false, desc: 'EOD 阶段预检许可' },
+      eod_precheck_reason_code: { type: 'string', required: false, desc: 'EOD 预检原因码' },
+      eod_precheck_reason: { type: 'string', required: false, desc: 'EOD 预检原因文本' },
+      // —— G1.1-01 Model Candidate（Safety PERMIT ≠ 模型触发）
+      gen1_model_candidate: { type: 'boolean', required: false, desc: '模型是否真的触发' },
+      gen1_model_candidate_reason_code: { type: 'string', required: false, desc: '模型未触发原因码' },
+      gen1_model_probability: { type: 'number', required: false, desc: '模型校准概率' },
+      gen1_model_threshold_p: { type: 'number', required: false, desc: '模型触发阈值 P' },
+      // —— Gen-1 授权档 / canary 输入资格
+      gen1_authority: { type: 'string', required: false, desc: 'Gen-1 authority 档（OFF/SHADOW/ADVISORY/CANARY/GUARDED_EFFECTIVE）' },
+      gen1_canary_eligible: { type: 'boolean', required: false, desc: 'canary 输入资格（effective_canary）' },
+      // —— G1.2-01 健康唯一真相（持久化 latch）+ 信号快照分列
+      gen1_health_status: { type: 'string', required: false, desc: '持久化 latch 健康（唯一对外真相）' },
+      gen1_health_source: { type: 'string', required: false, desc: '健康来源（默认 GEN1_HEALTH_STATE_LATCH）' },
+      gen1_health_gate_status: { type: 'string', required: false, desc: '健康闸 ACTIVE/PENDING/READ_ERROR' },
+      gen1_health_manual_review_required: { type: 'boolean', required: false, desc: '健康降级需人工复核' },
+      gen1_health_economic_status: { type: 'string', required: false, desc: '经济健康 PENDING/OK/WARNING/DEGRADED/ML_OFF' },
+      gen1_health_read_reason_code: { type: 'string', required: false, desc: '健康读取原因码' },
+      gen1_signal_health_snapshot: { type: 'object', required: false, desc: '当日信号侧健康快照（与 latch 分列）' },
+      // —— Canary 反事实（单只意图）
+      gen1_canary_target: { type: 'number', required: false, desc: 'canary 单只意图 target' },
+      gen1_canary_action: { type: 'string', required: false, desc: 'canary 动作' },
+      gen1_canary_delta: { type: 'number', required: false, desc: 'canary − baseline' },
+      gen1_canary_effective: { type: 'boolean', required: false, desc: 'canary 是否生效' },
+      gen1_canary_reason_code: { type: 'string', required: false, desc: 'canary 未生效原因码' },
+      gen1_canary_clamped: { type: 'boolean', required: false, desc: '组合层科技额度 clamp' },
+      gen1_canary_sector_remaining: { type: 'number', required: false, desc: 'clamp 后赛道剩余额度' },
+      gen1_canary_suggested_position: { type: 'number', required: false, desc: 'canary 建议执行仓（实际占用口径）' },
+      // —— G1.3-01/04 完整组合反事实（共享 cap 后、账本实际采用）
+      gen1_counterfactual_target: { type: 'number', required: false, desc: '组合一致后的实际 target（可能 ≠ 单只意图）' },
+      gen1_counterfactual_delta: { type: 'number', required: false, desc: '反事实 − baseline' },
+      gen1_counterfactual_suggested_position: { type: 'number', required: false, desc: '反事实建议执行仓（账本占用依据）' },
+      gen1_counterfactual_clamped: { type: 'boolean', required: false, desc: '反事实是否被 clamp' },
+      gen1_counterfactual_sector_remaining: { type: 'number', required: false, desc: '反事实赛道剩余额度' },
+      gen1_counterfactual_stage_changed: { type: 'boolean', required: false, desc: '阶段是否被共享硬约束改变' },
+      gen1_counterfactual_baseline_floor_breached: { type: 'boolean', required: false, desc: '目标被压到 baseline 之下（组合所致，非模型降级）' },
       // ---- WP-G1-GE-02：Guarded Effective 采纳审计（章程 §6.1，纯审计，不参与 production 计算）----
       decision_source: { type: 'string', required: false, desc: 'V361_SAFETY_CORE | V361_SAFETY_CORE_WITH_GEN1' },
       gen1_run_id: { type: 'string', required: false, desc: '当日 Gen-1 EOD 运行标识（ml_shadow_signal.signal_run_id）' },
@@ -302,6 +347,8 @@ const SCHEMAS = [
       gen1_guarded_selector_source: { type: 'string', required: false, desc: 'BASELINE | GUARDED（GE-02 恒 BASELINE）' },
       gen1_effective_guarded: { type: 'boolean', required: false, desc: '受控阶段输入资格是否成立（≠ 生产写权限）' },
       gen1_guarded_reason_code: { type: 'string', required: false, desc: '守住门未通过时的首个原因码' },
+      gen1_guarded_freeze_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/APPROVED/REVOKED（与 runtime_status 同名登记）' },
+      gen1_guarded_evidence_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/PASS/FAIL（与 runtime_status 同名登记）' },
       version: { type: 'number', required: true, desc: '参数版本' }
     },
     indexes: [
