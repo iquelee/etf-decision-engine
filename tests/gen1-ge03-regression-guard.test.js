@@ -109,14 +109,15 @@ const VI_REL = 'scripts/verify-immutable.js';
     ['G1-X', 'tests/gen1-guarded-selector-noop.test.js'],
     ['G1-Y', 'tests/gen1-authority-frozen-param.test.js']
   ];
-  /* GE-03 新增 6 门：与 GE-03 的 6 个测试文件一一对应（逐 ID 独立门控） */
+  /* GE-03 新增 7 门：与 GE-03 的 7 个测试文件一一对应（逐 ID 独立门控） */
   const GE03_GATES = [
     ['G1-Z', 'tests/gen1-shadow-eligibility.test.js'],
     ['G1-AA', 'tests/gen1-guarded-shadow-rerun.test.js'],
     ['G1-AB', 'tests/gen1-guarded-shadow-invocations.test.js'],
     ['G1-AC', 'tests/gen1-ge03-replay-determinism.test.js'],
     ['G1-AD', 'tests/gen1-ge03-selector-security.test.js'],
-    ['G1-AE', 'tests/gen1-ge03-regression-guard.test.js']
+    ['G1-AE', 'tests/gen1-ge03-regression-guard.test.js'],
+    ['G1-AF', 'tests/gen1-ge03-s4-census.test.js']
   ];
 
   const GATES_SRC = read(GATES_REL);
@@ -126,7 +127,7 @@ const VI_REL = 'scripts/verify-immutable.js';
   const ids = pairs.map((p) => p[0]);
 
   assert.strictEqual(pairs.length, LEGACY_GATES.length + GE03_GATES.length,
-    '★ D8：Gate 总数必须 = 25 既有 + 6 GE-03 新增（⛔ 不得以新增门替代/顶掉旧门）');
+    '★ D8：Gate 总数必须 = 25 既有 + 7 GE-03 新增（⛔ 不得以新增门替代/顶掉旧门）');
   assert.strictEqual(new Set(ids).size, ids.length, '★ D8：Gate ID 不得重复');
 
   /* ① 既有 25 门必须是**原序前缀**（顺序即身份：⛔ 禁删除 / 改名 / 重排） */
@@ -151,8 +152,8 @@ const VI_REL = 'scripts/verify-immutable.js';
     assert.ok(exists(p[2]), `★ D8：门禁脚本必须存在：${p[2]}（${p[0]}）`);
     assert.ok(String(p[1]).length > 0, `★ D8：${p[0]} 必须有 name`);
   }
-  assert.ok(/G1-A ~ G1-AE/.test(GATES_SRC),
-    '★ D8：门禁横幅必须同步为 G1-A ~ G1-AE（⛔ 不得只加门不改横幅）');
+  assert.ok(/G1-A ~ G1-AF/.test(GATES_SRC),
+    '★ D8：门禁横幅必须同步为 G1-A ~ G1-AF（⛔ 不得只加门不改横幅）');
   assert.ok(/GATES\.length - failed/.test(GATES_SRC),
     '★ D8：通过数必须动态取值（⛔ 禁硬编码 25，防「加门后仍报 25/25」）');
 }
@@ -483,5 +484,5 @@ function parseRuntimeStatusKeys(src) {
 }
 
 console.log('gen1 ge03 regression guard tests passed'
-  + '（D8 门禁身份 25+6 / D9 allowlist 逐字段冻结 / D12 N4 已收口 + 前向 fail-closed'
+  + '（D8 门禁身份 25+7 / D9 allowlist 逐字段冻结 / D12 N4 已收口 + 前向 fail-closed'
   + ' / R6 V3 不可变 / R8·D11 证据通道零写入 / D5·D6 口径与 no-op）');

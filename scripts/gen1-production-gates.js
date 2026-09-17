@@ -43,6 +43,7 @@
  *   G1-AC GE03 Replay Determinism    本地/CI replay harness + 7 类反例矩阵（D3/D4/D7）
  *   G1-AD GE03 Selector Security     选择器结构隔离 + 不可回退 + 权威路径零污染（R4/D2）
  *   G1-AE GE03 Regression Guard      门禁身份（D8）+ 静态 allowlist（D9②）+ 登记集合（D12）
+ *   G1-AF GE03 S4 Invocation Census  §2.1 census：调用点分类 + input delta + ③ 零调用（共享 ②）
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -88,11 +89,12 @@ const GATES = [
   { id: 'G1-AB', name: 'Guarded Shadow Counters', script: 'tests/gen1-guarded-shadow-invocations.test.js' },
   { id: 'G1-AC', name: 'GE03 Replay Determinism', script: 'tests/gen1-ge03-replay-determinism.test.js' },
   { id: 'G1-AD', name: 'GE03 Selector Security', script: 'tests/gen1-ge03-selector-security.test.js' },
-  { id: 'G1-AE', name: 'GE03 Regression Guard', script: 'tests/gen1-ge03-regression-guard.test.js' }
+  { id: 'G1-AE', name: 'GE03 Regression Guard', script: 'tests/gen1-ge03-regression-guard.test.js' },
+  { id: 'G1-AF', name: 'GE03 S4 Invocation Census', script: 'tests/gen1-ge03-s4-census.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-AE）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-AF）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {
