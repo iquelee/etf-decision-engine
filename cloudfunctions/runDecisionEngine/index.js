@@ -38,6 +38,8 @@ const {
   readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION
 } = require('./common/utils/gen1-guarded-seal');
 const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
+// WP-G1-GE-03（设计 Gate §0.3）：P3-only guardedShadowEligible 派生（唯一输入 = permission 信封）
+const { deriveGuardedShadowEligibility } = require('./common/utils/gen1-shadow-eligibility');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
 const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
 const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
@@ -575,6 +577,9 @@ exports.main = async (event = {}, context = {}) => {
     // （如 gen1_guarded_shadow_invocations / gen1_guarded_eligible_count），不得复用本计数器。
     let guardedEffectiveInvocations = 0;
     let guardedEffectiveActive = false;
+    // GE-03（§0.3）：本轮满足 guardedShadowEligible 的次数。
+    // ⛔ 与「真实采纳次数」（gen1_guarded_effective_invocations）及 Evidence 独立事件**无关**。
+    let guardedShadowEligibleCount = 0;
     const gen1SignalByCode = {};
     try {
       const sigRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: latestDate });
@@ -744,6 +749,14 @@ exports.main = async (event = {}, context = {}) => {
           guardedSeal
         });
         result.gen1_canary_source = 'V361_RERUN_S4';
+
+        // ---- GE-03（设计 Gate §0.3）：P3-only guardedShadowEligible 派生 ----
+        // 唯一来源 = 上面的 permission 信封（⇒ 零改动 evaluator、天然同源）。
+        // ⛔ 不属于 effective_guarded 的组成项（8 项表达式不增减）；
+        // ⛔ 绝不传给 Guarded Selector（其入参语义是**采纳资格**）；
+        // ⛔ 不得据以推导 gen1_adopted；⛔ 不得增加 gen1_guarded_effective_invocations。
+        const shadowEligibility = deriveGuardedShadowEligibility(gen1Permission);
+        if (shadowEligibility.eligible) guardedShadowEligibleCount += 1;
 
         // ---- WP-G1-GE-02：Guarded 选择器（dormant）----
         // 章程 §4 拓扑：① baseline V3 → ② Gen-1 合成门 → ③ effective_guarded →
@@ -1116,6 +1129,7 @@ exports.main = async (event = {}, context = {}) => {
     gen1_guarded_effective_health_allowed: guardedEffectiveHealthAllowed,
     gen1_guarded_effective_active: guardedEffectiveActive,
     gen1_guarded_effective_invocations: guardedEffectiveInvocations,
+    gen1_guarded_shadow_eligible_count: guardedShadowEligibleCount,
     gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
     gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
     gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
@@ -1184,6 +1198,8 @@ exports.main = async (event = {}, context = {}) => {
       gen1_guarded_effective_active: guardedEffectiveActive,
       // 本轮真实采纳次数（GE-02 selector 休眠 ⇒ 恒 0；跨轮累计口径待 GE-03 落库）
       gen1_guarded_effective_invocations: guardedEffectiveInvocations,
+      // GE-03：本轮 shadow eligibility 计数（⛔ 不是采纳次数 / 不是 evidence 事件）
+      gen1_guarded_shadow_eligible_count: guardedShadowEligibleCount,
       gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
       gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
       gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
