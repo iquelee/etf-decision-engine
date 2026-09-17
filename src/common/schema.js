@@ -613,6 +613,7 @@ const SCHEMAS = [
       gen1_guarded_effective_active: { type: 'boolean', required: false, desc: 'effective_guarded 合成结果' },
       gen1_guarded_effective_invocations: { type: 'number', required: false, desc: '真实采纳次数（selector 采纳 guarded 结果）；**不是**资格成立次数。GE-02 恒 0' },
       gen1_guarded_shadow_eligible_count: { type: 'number', required: false, desc: 'GE-03：本轮满足 guarded shadow eligibility 的次数（⛔ 不是采纳次数、⛔ 不是 Evidence 事件）' },
+      gen1_guarded_shadow_invocations: { type: 'number', required: false, desc: 'GE-03：本轮实际完成 Guarded Shadow V3 rerun 的次数（⛔ 不是采纳次数、⛔ 不是 Evidence 事件）' },
       gen1_guarded_freeze_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/APPROVED/REVOKED' },
       gen1_guarded_freeze_seal_reason_code: { type: 'string', required: false, desc: 'Freeze Seal 未通过原因码' },
       gen1_guarded_evidence_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/PASS/FAIL' },

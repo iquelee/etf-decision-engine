@@ -580,6 +580,13 @@ exports.main = async (event = {}, context = {}) => {
     // GE-03（§0.3）：本轮满足 guardedShadowEligible 的次数。
     // ⛔ 与「真实采纳次数」（gen1_guarded_effective_invocations）及 Evidence 独立事件**无关**。
     let guardedShadowEligibleCount = 0;
+    // GE-03（§0.2）：本轮**实际完成**Guarded Shadow V3 rerun 的次数。
+    // 三个计数器互不推导（§0.2.1 / §3.3）：
+    //   eligible_count  = 资格成立次数（能不能算）
+    //   shadow_invocations（本对象）= 实际完成 shadow rerun 次数
+    //   effective_invocations = 真实采纳且落库成功次数（§0.2.1 正常态恒 0）
+    // ⛔ 本对象**不读、不写** `guardedEffectiveInvocations`（D5）。
+    let guardedShadowInvocations = 0;
     const gen1SignalByCode = {};
     try {
       const sigRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: latestDate });
@@ -845,6 +852,10 @@ exports.main = async (event = {}, context = {}) => {
         // ⛔ 不在此重算：`claimGuardedShadowResult` 只**认领**上面已算出的那一次 S4 rerun
         //   （`eligibility.eligible !== true` 或 rerun 未执行 ⇒ null，双向 fail-closed）。
         const guardedShadowResult = claimGuardedShadowResult(shadowEligibility, canaryS4Rerun);
+        // GE-03（§0.2）：只有**真的认领到**那一次 S4 rerun 结果，才算一次 shadow invocation。
+        // ⛔ 与 gen1_guarded_effective_invocations（真实采纳）无关；
+        // ⛔ eligible 成立但 rerun 未执行 ⇒ **不**计数（与 §0.2.1 “eligible 增、invocation 不增”一致）。
+        if (guardedShadowResult != null) guardedShadowInvocations += 1;
         const guardedSelection = selectGuardedResult({
           baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
           guarded: guardedShadowResult,
@@ -1113,6 +1124,16 @@ exports.main = async (event = {}, context = {}) => {
     const mlModelId = merged.ml_challenger_model_id || 'HVT-A-ET-20260830';
     const productionEngine = trendStageEnabled ? shadowEngineVer : 'v3.8';
     const shadowEngine = runV3Path ? (trendStageEnabled ? 'v3.8' : shadowEngineVer) : null;
+    // ---- GE-03（§0.2.1）shadow 计数器不变量（正常态）----
+    //   eligible_count >= shadow_invocations >= 0
+    // 结构保证：shadow_invocations 只在 eligibility 成立**且**该次 S4 rerun 确实执行时 +1
+    //   ⇒ 每一次 invocation 必然先贡献 1 次 eligibility；
+    // ⛔ 反向不成立（允许 eligible 增而 invocation 不增：rerun 未执行 / fail-closed）。
+    // ⛔ 本断言**不涉及** gen1_guarded_effective_invocations（采纳口径，不得与 shadow 计数混用）。
+    if (!(guardedShadowInvocations >= 0 && guardedShadowEligibleCount >= guardedShadowInvocations)) {
+      throw new Error('[GEN1-SHADOW] shadow 计数不变量被破坏：'
+        + ` eligible_count=${guardedShadowEligibleCount} / shadow_invocations=${guardedShadowInvocations}`);
+    }
     const mlMeta = {
       enabled: mlShadowObserve,          // Shadow 观察开
       effective: false,                  // 明确：无生产写权限（即使误开 fast_path）
@@ -1153,6 +1174,7 @@ exports.main = async (event = {}, context = {}) => {
     gen1_guarded_effective_active: guardedEffectiveActive,
     gen1_guarded_effective_invocations: guardedEffectiveInvocations,
     gen1_guarded_shadow_eligible_count: guardedShadowEligibleCount,
+    gen1_guarded_shadow_invocations: guardedShadowInvocations,
     gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
     gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
     gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
@@ -1223,6 +1245,8 @@ exports.main = async (event = {}, context = {}) => {
       gen1_guarded_effective_invocations: guardedEffectiveInvocations,
       // GE-03：本轮 shadow eligibility 计数（⛔ 不是采纳次数 / 不是 evidence 事件）
       gen1_guarded_shadow_eligible_count: guardedShadowEligibleCount,
+      // GE-03（§0.2.1）不变量：eligible_count >= shadow_invocations >= 0（下方有运行期硬断言）
+      gen1_guarded_shadow_invocations: guardedShadowInvocations,
       gen1_guarded_freeze_seal_status: guardedSeal.freeze_seal_status,
       gen1_guarded_freeze_seal_reason_code: guardedSeal.freeze_seal_reason_code,
       gen1_guarded_evidence_seal_status: guardedSeal.evidence_seal_status,
