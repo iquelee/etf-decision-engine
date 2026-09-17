@@ -345,6 +345,7 @@ const SCHEMAS = [
       gen1_guarded_result_target: { type: 'number', required: false, desc: 'guarded V3 重算 target' },
       gen1_guarded_delta: { type: 'number', required: false, desc: 'guarded − baseline' },
       gen1_guarded_selector_source: { type: 'string', required: false, desc: 'BASELINE | GUARDED（GE-02 恒 BASELINE）' },
+      gen1_guarded_shadow_source: { type: 'string', required: false, desc: 'GE-03：Guarded Shadow 并行来源标识（V361_RERUN_S4_GUARDED_SHADOW）；未产出 shadow 时 null' },
       gen1_effective_guarded: { type: 'boolean', required: false, desc: '受控阶段输入资格是否成立（≠ 生产写权限）' },
       gen1_guarded_reason_code: { type: 'string', required: false, desc: '守住门未通过时的首个原因码' },
       gen1_guarded_freeze_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/APPROVED/REVOKED（与 runtime_status 同名登记）' },

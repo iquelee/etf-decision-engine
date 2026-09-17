@@ -171,7 +171,12 @@ function buildGuardedAudit(input) {
     gen1_guarded_delta: (guardedTarget == null || baselineTarget == null)
       ? null : guardedTarget - baselineTarget,
     gen1_guarded_selector_source: selection
-      ? selection.authoritative_source : SELECTOR_SOURCE.BASELINE
+      ? selection.authoritative_source : SELECTOR_SOURCE.BASELINE,
+    // ---- GE-03（设计 Gate §2.1）：Guarded Shadow 的**并行来源**标识 ----
+    // 仅当 shadow 结果确实产出（= 该次 immutable V3 S4 rerun 被认领）时非空。
+    // ⛔ 它只标注「这份 shadow 审计结果来自哪条通道」，不参与任何计算、不改变任何既有字段。
+    gen1_guarded_shadow_source: selection && selection.guarded_result
+      ? 'V361_RERUN_S4_GUARDED_SHADOW' : null
   };
 }
 

@@ -128,10 +128,39 @@ function isGuardedShadowEligible(permission) {
   return deriveGuardedShadowEligibility(permission).eligible === true;
 }
 
+/**
+ * GE-03（设计 Gate §2.1）：**认领**本次 immutable V3 的 S4 rerun 结果作为 Guarded Shadow result。
+ *
+ * 输入 `rerun` 由调用方传入 —— 它必须是**既有 Canary 反事实重跑**（`V361_RERUN_S4`）在同一次
+ * `runDecisionEngine` 执行中**已经算出的那一个**结果对象。§2.1 的同形关系要求：
+ *   若 ②（Canary rerun）与 ③（Guarded Shadow rerun）的 V3 输入**逐项相同** ⇒ 共享同一 rerun result，
+ *   ⛔ 不得重复计算两次、⛔ 不得复制或改写 V3 逻辑。本函数正是「**认领**」而非「重算」。
+ *
+ * 语义（双向 fail-closed）：
+ *   - `eligibility.eligible !== true` ⇒ `null`（无计算资格，不得认领）
+ *   - `rerun == null`                ⇒ `null`（该次 S4 rerun 未执行 ⇒ 没有可认领的结果）
+ * ✅ 设计 Gate §0.2.1 明确：允许 `eligible_count` 增加而 shadow 结果为 `null`
+ *    （rerun 未执行 / fail-closed）—— 这是**有用的审计信号**，不是缺陷。
+ *
+ * ⛔ 返回值只是 **shadow audit payload**（→ `buildGuardedAudit`），
+ *    **永不**进入 authoritative result（D2 / R1）；⛔ 不推导 `gen1_adopted`；
+ *    ⛔ 不增加 `gen1_guarded_effective_invocations`；⛔ 不增加 Evidence 的独立事件。
+ *
+ * @param {{eligible: boolean}} eligibility `deriveGuardedShadowEligibility()` 输出
+ * @param {{target: *, action: *, stage: *}|null} rerun 本次已执行的 S4 rerun 结果（可共享）
+ * @returns {{target: *, action: *, stage: *}|null}
+ */
+function claimGuardedShadowResult(eligibility, rerun) {
+  const eligible = !!(eligibility && eligibility.eligible === true);
+  if (!eligible || rerun == null) return null;
+  return { target: rerun.target, action: rerun.action, stage: rerun.stage };
+}
+
 module.exports = {
   SHADOW_COMPONENTS,
   SHADOW_COMPONENT_KEYS,
   SHADOW_REASON,
   deriveGuardedShadowEligibility,
-  isGuardedShadowEligible
+  isGuardedShadowEligible,
+  claimGuardedShadowResult
 };

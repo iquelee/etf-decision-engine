@@ -175,6 +175,8 @@ for (const truthy of [1, 'true', 'OK', {}, []]) {
 
 /* ---- E) §0.3 三条结构禁令：静态源码守卫 ---- */
 const RDE = fs.readFileSync(path.join(REPO, 'cloudfunctions/runDecisionEngine/index.js'), 'utf8');
+/** ⚠️ 定位源码切片必须先剔除注释：注释里也会出现同名调用，会污染 indexOf 的第一处命中。 */
+const RDE_CODE = RDE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 const PERM_SRC = fs.readFileSync(path.join(REPO, 'src/common/utils/gen1-safety-permission.js'), 'utf8');
 const SEL_SRC = fs.readFileSync(path.join(REPO, 'src/common/utils/gen1-guarded-selector.js'), 'utf8');
 const ELI_SRC = fs.readFileSync(path.join(REPO, 'src/common/utils/gen1-shadow-eligibility.js'), 'utf8');
@@ -203,7 +205,7 @@ assert.ok(/const effectiveGuarded = Object\.keys\(guardedChecks\)\.every\(\(k\) 
 
 /* 禁令 ③：绝不把 guardedShadowEligible 传给 Guarded Selector */
 {
-  const call = RDE.slice(RDE.indexOf('selectGuardedResult({'));
+  const call = RDE_CODE.slice(RDE_CODE.indexOf('selectGuardedResult({'));
   const args = call.slice(0, call.indexOf('});'));
   assert.ok(/effectiveGuarded:\s*gen1Permission\.effective_guarded === true/.test(args),
     '★ Selector 的 effectiveGuarded 入参必须仍是**采纳资格** effective_guarded');

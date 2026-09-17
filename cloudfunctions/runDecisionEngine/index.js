@@ -39,7 +39,7 @@ const {
 } = require('./common/utils/gen1-guarded-seal');
 const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
 // WP-G1-GE-03（设计 Gate §0.3）：P3-only guardedShadowEligible 派生（唯一输入 = permission 信封）
-const { deriveGuardedShadowEligibility } = require('./common/utils/gen1-shadow-eligibility');
+const { deriveGuardedShadowEligibility, claimGuardedShadowResult } = require('./common/utils/gen1-shadow-eligibility');
 const { evaluateDomainPermission } = require('./common/utils/gen1-domain-permission');
 const { readHealthState, healthStateToGate, defaultHealthState } = require('./common/utils/gen1-health-state');
 const { resolveExecution } = require('./common/utils/gen1-execution-boundary');
@@ -758,45 +758,11 @@ exports.main = async (event = {}, context = {}) => {
         const shadowEligibility = deriveGuardedShadowEligibility(gen1Permission);
         if (shadowEligibility.eligible) guardedShadowEligibleCount += 1;
 
-        // ---- WP-G1-GE-02：Guarded 选择器（dormant）----
-        // 章程 §4 拓扑：① baseline V3 → ② Gen-1 合成门 → ③ effective_guarded →
-        //   ④ guarded V3 重跑（GE-03）→ ⑤ V3 自算 → ⑥ 显式选择器 → ⑦ 唯一落库。
-        // GE-02 只落地 ③ 与 ⑥ 的**休眠版**：guarded 结果为 null（不重跑），
-        // 选择器**无条件**返回 baseline ⇒ 逐字节等于 GE-02 之前的生产结果。
-        const guardedSelection = selectGuardedResult({
-          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
-          guarded: null,
-          effectiveGuarded: gen1Permission.effective_guarded === true
-        });
-        const guardedAudit = buildGuardedAudit({
-          permission: gen1Permission,
-          signal: gen1Signal,
-          code: etf.code,
-          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
-          selection: guardedSelection
-        });
-        if (guardedSelection.authoritative_source !== 'BASELINE') {
-          throw new Error('[SECURITY] GE-02 selector 必须 baseline-authoritative');
-        }
-        if (guardedAudit.gen1_adopted === true) {
-          throw new Error('[SECURITY] GE-02 不得采纳 Gen-1 候选（dormant）');
-        }
-        if (gen1Permission.effective_guarded === true) {
-          guardedEffectiveActive = true;
-          console.warn(`[GEN1-GUARDED] ${etf.code} effective_guarded=true`
-            + ` selector=${guardedSelection.authoritative_source}`
-            + '（GE-02 selector 休眠 ⇒ 仍按 baseline 落库；本处**不**计入采纳次数）');
-        }
-        // WP-G1-GE-02 复审 P1：**只有真实采纳**才 +1（selector 采用 guarded 结果且已通过
-        // 上方两条 dormant 断言）。GE-02 中 `gen1_adopted` 被硬断言为 false ⇒ 本分支**不可达**，
-        // 因此 `guardedEffectiveInvocations` 结构性恒为 0 —— 即使将来两把 Seal 全部满足，
-        // 只要 selector 仍是 BASELINE，就不会产生「adopted=false 但 invocations=1」的审计矛盾。
-        // 采用 guarded 结果后，还须等 decision_result 成功落库才算一次真实采纳（GE-03 落实）。
-        if (guardedSelection.authoritative_source === SELECTOR_SOURCE.GUARDED
-          && guardedAudit.gen1_adopted === true) {
-          guardedEffectiveInvocations += 1;
-        }
-
+        // ---- WP-G1-GE-02：Guarded 选择器（dormant）→ GE-03 下移 ----
+        // ⚠️ GE-03：本块**下移**至"Canary 反事实（S4 rerun）"之后 —— 因为拓扑 ④（guarded V3 重跑）
+        //   必须先于 ⑥（显式选择器）；而 §2.1 要求 shadow rerun **共享**既有 Canary 的 S4 rerun
+        //   结果。选择器本身仍是纯函数、语义不变。见下方
+        //   `const guardedSelection = selectGuardedResult({ guarded: guardedShadowResult, ... })`。
         // Canary 反事实：authority < CANARY（默认 ADVISORY）时不重算 → 生产零成本/零风险。
         // G1.2-03：必须继承生产调用的**完整** Safety context（含 slowBreak、trendStage、shock、bars、portfolio）。
         // G1.3-01：**完整组合反事实** —— 所有科技 ETF 共享同一 canary 账本与 cap（cap 优先）。
@@ -807,6 +773,10 @@ exports.main = async (event = {}, context = {}) => {
           effectiveTechMax
         });
         let canarySuggestedPosition = null;
+        // GE-03：本次 Canary 重算**实际执行的那一次 S4 rerun** 的完整结果。
+        // §2.1：Guarded Shadow 与既有 Canary rerun 的 V3 输入逐项相同 ⇒ **共享**该结果，
+        // ⛔ 不得为 shadow 再算第二遍（不得复制 / 改写 V3）。
+        let canaryS4Rerun = null;
         const canary = buildCanaryCounterfactual({
           permission: gen1Permission,
           baseline: { stage: baselineStage, target: baselineTarget, action: baselineAction },
@@ -823,6 +793,10 @@ exports.main = async (event = {}, context = {}) => {
               advisoryStageOverride: stage
             });
             canarySuggestedPosition = c.suggested_position != null ? c.suggested_position : null;
+            // GE-03：把这一次 S4 rerun 的结果留给 Guarded Shadow 共享（同一 immutable V3）
+            // stage 取回调实参（= canary 的 advisoryStageOverride，当前恒为 'S4'），
+            // ⛔ 不写死字面量，保证 shadow 与 canary 永远指向**同一次**重跑。
+            canaryS4Rerun = { target: c.final_target, action: c.final_action, stage: stage };
             return { target: c.final_target, action: c.final_action, suggested_position: canarySuggestedPosition };
           }
         });
@@ -857,6 +831,55 @@ exports.main = async (event = {}, context = {}) => {
           console.warn(`[GEN1-CF] ${etf.code} 反事实目标 ${cfStep.counterfactualTarget}`
             + ` 低于 baseline ${baselineTarget}（共享 tech cap 优先，组合约束所致，非模型降级）`);
         }
+        // ---- WP-G1-GE-02：Guarded 选择器（dormant）+ GE-03 Guarded Shadow result ----
+        // 章程 §4 拓扑：① baseline V3 → ② Gen-1 合成门 → ③ effective_guarded →
+        //   ④ guarded V3 重跑（GE-03）→ ⑤ V3 自算 → ⑥ 显式选择器 → ⑦ 唯一落库。
+        // GE-02 只落地 ③ 与 ⑥ 的**休眠版**（guarded 结果为 null、选择器无条件返回 baseline）。
+        // GE-03 补上 ④：把 guarded shadow result 交给**同一个**选择器。
+        //   ⛔ 传入的是 **shadow 结果对象**，**不是** shadow 资格（设计 Gate §0.3 禁令 ③）；
+        //   `effectiveGuarded` 入参语义仍是**采纳资格**（P3 恒 false ⇒ 权威来源仍为 BASELINE）。
+        // §2.1 同形关系：shadow 的 S4 rerun 与既有 Canary rerun 的 V3 输入**逐项相同**
+        //   （同一个 immutable V3 / 同一 stage=S4 / 同一 canaryCtx / 同一 sectorRemainingLimit）
+        //   ⇒ 必须**共享同一 rerun result**，⛔ 不得重复计算两次。
+        // 仅在 shadow eligibility 成立、且该次 S4 rerun 确实执行过时才认领（否则保持 null）。
+        // ⛔ 不在此重算：`claimGuardedShadowResult` 只**认领**上面已算出的那一次 S4 rerun
+        //   （`eligibility.eligible !== true` 或 rerun 未执行 ⇒ null，双向 fail-closed）。
+        const guardedShadowResult = claimGuardedShadowResult(shadowEligibility, canaryS4Rerun);
+        const guardedSelection = selectGuardedResult({
+          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
+          guarded: guardedShadowResult,
+          effectiveGuarded: gen1Permission.effective_guarded === true
+        });
+        const guardedAudit = buildGuardedAudit({
+          permission: gen1Permission,
+          signal: gen1Signal,
+          code: etf.code,
+          baseline: { target: baselineTarget, action: baselineAction, stage: baselineStage },
+          selection: guardedSelection
+        });
+        if (guardedSelection.authoritative_source !== 'BASELINE') {
+          throw new Error('[SECURITY] GE-02 selector 必须 baseline-authoritative');
+        }
+        if (guardedAudit.gen1_adopted === true) {
+          throw new Error('[SECURITY] GE-02 不得采纳 Gen-1 候选（dormant）');
+        }
+        if (gen1Permission.effective_guarded === true) {
+          guardedEffectiveActive = true;
+          console.warn(`[GEN1-GUARDED] ${etf.code} effective_guarded=true`
+            + ` selector=${guardedSelection.authoritative_source}`
+            + '（GE-02 selector 休眠 ⇒ 仍按 baseline 落库；本处**不**计入采纳次数）');
+        }
+        // WP-G1-GE-02 复审 P1：**只有真实采纳**才 +1（selector 采用 guarded 结果且已通过
+        // 上方两条 dormant 断言）。GE-02 中 `gen1_adopted` 被硬断言为 false ⇒ 本分支**不可达**，
+        // 因此 `guardedEffectiveInvocations` 结构性恒为 0 —— 即使将来两把 Seal 全部满足，
+        // 只要 selector 仍是 BASELINE，就不会产生「adopted=false 但 invocations=1」的审计矛盾。
+        // ⛔ GE-03 的 shadow 通道**不**触碰本计数器（§0.2 / Q1 硬裁定）。
+        // 采用 guarded 结果后，还须等 decision_result 成功落库才算一次真实采纳（GE-03 落实）。
+        if (guardedSelection.authoritative_source === SELECTOR_SOURCE.GUARDED
+          && guardedAudit.gen1_adopted === true) {
+          guardedEffectiveInvocations += 1;
+        }
+
         // G1-11 No-op 不变量：overlay 前后 final_target / final_action 必须逐字段一致
         // WP-G1-GE-02：第 4 参只带**审计字段**，硬还原与运行期断言原样保留（不得削弱）
         const noopBefore = { final_target: result.final_target, final_action: result.final_action };
