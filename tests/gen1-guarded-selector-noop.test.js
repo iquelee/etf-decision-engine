@@ -195,7 +195,13 @@ function perm(over) {
     '★ 生产链必须保留 no-op 违反即抛错的断言');
   // 6.3 主链必须使用 dormant 选择器，且不得采纳
   assert.ok(/selectGuardedResult\(\{/.test(RDE_CODE), '★ 主链必须经显式选择器');
-  assert.ok(/guarded: null,/.test(RDE_CODE), '★ GE-02 不得提供 guarded 结果（不重跑）');
+  assert.ok(/guarded: guardedShadowResult,/.test(RDE_CODE),
+    '★ GE-03：主链必须把 **shadow 结果对象** 交给显式选择器（设计 Gate §2.1 拓扑 ④）'
+    + '；GE-02 的「不得提供 guarded 结果（不重跑）」旧判据已由 GE-03 显式取代**—— GE-03 的授权范围正是做这一次 shadow 重跑**，但「采用」仍被两层断言封死');
+  assert.ok(/guardedShadowResult = claimGuardedShadowResult\(/.test(RDE_CODE),
+    '★ shadow 结果必须由「认领」产生（⛔ 不得重复计算 / 不得复制 V3）');
+  assert.ok(!/guarded:\s*[^,\n]*shadowEligib/i.test(RDE_CODE),
+    '★ ⛔ 绝不把 guardedShadowEligible（计算资格）当作 guarded 结果传给选择器（§0.3 禁令 ③）');
   assert.ok(/authoritative_source !== 'BASELINE'/.test(RDE_CODE),
     '★ 主链必须断言 selector 恒 BASELINE');
   assert.ok(/GE-02 不得采纳 Gen-1 候选/.test(RDE), '★ 主链必须断言不得采纳');

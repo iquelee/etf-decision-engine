@@ -121,6 +121,9 @@ function applyGen1Overlay(result, permission, canary, guardedAudit) {
   out.gen1_guarded_delta = ga && ga.gen1_guarded_delta != null ? ga.gen1_guarded_delta : null;
   out.gen1_guarded_selector_source = ga && ga.gen1_guarded_selector_source != null
     ? ga.gen1_guarded_selector_source : 'BASELINE';
+  // GE-03（设计 Gate §2.1）：Guarded Shadow 并行来源标识（shadow 未产出时恒 null）
+  out.gen1_guarded_shadow_source = ga && ga.gen1_guarded_shadow_source != null
+    ? ga.gen1_guarded_shadow_source : null;
   // Gen-1 受控阶段输入资格（**不是**生产写权限；不会改变上面两个生产字段）
   out.gen1_effective_guarded = p.effective_guarded === true;
   out.gen1_guarded_reason_code = (p.guarded && p.guarded.reason_code) || null;

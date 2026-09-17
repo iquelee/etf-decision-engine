@@ -63,7 +63,9 @@ const OVERLAY_NEW_KEYS = [
   'gen1_guarded_baseline_stage', 'gen1_guarded_effective_stage',
   'gen1_guarded_baseline_target', 'gen1_guarded_result_target', 'gen1_guarded_delta',
   'gen1_guarded_selector_source', 'gen1_effective_guarded', 'gen1_guarded_reason_code',
-  'gen1_guarded_freeze_seal_status', 'gen1_guarded_evidence_seal_status'
+  'gen1_guarded_freeze_seal_status', 'gen1_guarded_evidence_seal_status',
+  // GE-03：shadow-only audit 字段（D9② 静态 allowlist，逐字段显式列出；⛔ 禁 wildcard）
+  'gen1_guarded_shadow_source'
 ];
 
 const TO = '2026-09-10';
