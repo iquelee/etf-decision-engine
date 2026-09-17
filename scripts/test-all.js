@@ -137,12 +137,12 @@ function stageF() {
 
 /* ---------- Stage G: Gen-1 Production Gates（WP-G1 / G1-11） ---------- */
 function stageG() {
-  console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-Y）==');
+  console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-AE）==');
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'gen1-production-gates.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
   const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
-  report('G', 'Gen-1 Production Gates G1-A~Y（含 Model Candidate/Sector Contract/Persistent Latch/Economic Health/Canary Portfolio/Health Single Truth/Fail-Closed/Context Parity/Event Contract/Benchmark Pipeline/Daily Finality/Guarded Effective Authority+Gates+Selector No-op+Frozen Param）', ok);
+  report('G', 'Gen-1 Production Gates G1-A~AE（含 Model Candidate/Sector Contract/Persistent Latch/Economic Health/Canary Portfolio/Health Single Truth/Fail-Closed/Context Parity/Event Contract/Benchmark Pipeline/Daily Finality/Guarded Effective Authority+Gates+Selector No-op+Frozen Param + GE-03 Shadow Eligibility/Rerun/Counters/Replay/Selector Security/Regression Guard）', ok);
 }
 
 /* ---------- 主流程 ---------- */

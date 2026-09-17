@@ -36,6 +36,13 @@
  *                                    PASS / evidence_positive；Evidence 必须显式 POSITIVE）
  *   G1-X Guarded Selector No-op      authoritative selector 恒 BASELINE + production no-op 不变量
  *   G1-Y Authority Frozen Param      gen1_authority 入冻结清单（单靠改配置不能激活）
+ *   —— WP-G1-GE-03 Shadow Guarded Rerun / Replay / Negative Gates ——
+ *   G1-Z  Guarded Shadow Eligibility guardedShadowEligible 6 项合取 + §0.3 结构禁令静态守卫
+ *   G1-AA Guarded Shadow Rerun       共享既有 S4 rerun（⛔ 不得重算 V3）+ D2 两层阻断
+ *   G1-AB Guarded Shadow Counters    三计数器口径独立（D5）+ §0.2.1 运行期不变量
+ *   G1-AC GE03 Replay Determinism    本地/CI replay harness + 7 类反例矩阵（D3/D4/D7）
+ *   G1-AD GE03 Selector Security     选择器结构隔离 + 不可回退 + 权威路径零污染（R4/D2）
+ *   G1-AE GE03 Regression Guard      门禁身份（D8）+ 静态 allowlist（D9②）+ 登记集合（D12）
  *
  * 用法：node scripts/gen1-production-gates.js
  * 任何一门失败 → exit 1。
@@ -74,11 +81,18 @@ const GATES = [
   { id: 'G1-V', name: 'Guarded Effective Authority', script: 'tests/gen1-guarded-effective-authority.test.js' },
   { id: 'G1-W', name: 'Guarded Effective Gates', script: 'tests/gen1-guarded-effective-gates.test.js' },
   { id: 'G1-X', name: 'Guarded Selector No-op', script: 'tests/gen1-guarded-selector-noop.test.js' },
-  { id: 'G1-Y', name: 'Authority Frozen Param', script: 'tests/gen1-authority-frozen-param.test.js' }
+  { id: 'G1-Y', name: 'Authority Frozen Param', script: 'tests/gen1-authority-frozen-param.test.js' },
+  // —— WP-G1-GE-03 Shadow Guarded Rerun / Replay / Negative Gates（⛔ 只追加，不改既有 25 门）——
+  { id: 'G1-Z', name: 'Guarded Shadow Eligibility', script: 'tests/gen1-shadow-eligibility.test.js' },
+  { id: 'G1-AA', name: 'Guarded Shadow Rerun', script: 'tests/gen1-guarded-shadow-rerun.test.js' },
+  { id: 'G1-AB', name: 'Guarded Shadow Counters', script: 'tests/gen1-guarded-shadow-invocations.test.js' },
+  { id: 'G1-AC', name: 'GE03 Replay Determinism', script: 'tests/gen1-ge03-replay-determinism.test.js' },
+  { id: 'G1-AD', name: 'GE03 Selector Security', script: 'tests/gen1-ge03-selector-security.test.js' },
+  { id: 'G1-AE', name: 'GE03 Regression Guard', script: 'tests/gen1-ge03-regression-guard.test.js' }
 ];
 
 function main() {
-  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-Y）==');
+  console.log('\n== Gen-1 Production Gates（G1-A ~ G1-AE）==');
   let failed = 0;
   const rows = [];
   for (const gate of GATES) {
