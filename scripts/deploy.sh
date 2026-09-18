@@ -13,9 +13,9 @@ NODE="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-2/node.exe"
 NPM_CLI="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-2/node_modules/npm/bin/npm-cli.js"
 PY="C:/Users/iquel/.workbuddy/binaries/python/versions/3.13.12/python.exe"
 CLI="C:/Users/iquel/.workbuddy/binaries/node/workspace/node_modules/@cloudbase/cli/dist/standalone/cli.js"
-REPO="C:/Users/iquel/Documents/ChatGPT/Tradingview/etf-decision-engine"
+REPO="D:/AI-Projects/Codex/etf-decision-engine/etf-decision-engine"
 # 前端 node_modules 本地快照（仓库不存 node_modules，首次部署从这复制，避免 npm install 慢）
-AUDIT_WEB_NM="C:/Users/iquel/Documents/ChatGPT/Tradingview/audit-20260830/web/node_modules"
+AUDIT_WEB_NM="D:/AI-Projects/Codex/etf-decision-engine/audit-20260830/web/node_modules"
 
 FNS="runGen2ShadowEod runGen1ShadowEod runDecisionEngine adminGateway apiGateway extractFundamental fetchDailyData fetchFundamentalNews fetchRealtimeData materializeIndicators"
 

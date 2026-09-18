@@ -54,7 +54,7 @@ NO_BASELINE_DEPS_FROM = {
 }
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASELINE_DEFAULT = r"C:/Users/iquel/Documents/ChatGPT/Tradingview/_gen2-online-baseline"
+BASELINE_DEFAULT = r"D:/AI-Projects/Codex/etf-decision-engine/_gen2-online-baseline"
 
 
 def main():
