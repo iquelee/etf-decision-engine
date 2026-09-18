@@ -9,8 +9,8 @@
 set -e
 
 ENV_ID="tradingview-etf-d0fa42yy57cbc11b"
-NODE="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-2/node.exe"
-NPM_CLI="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-2/node_modules/npm/bin/npm-cli.js"
+NODE="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-3/node.exe"
+NPM_CLI="C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-3/node_modules/npm/bin/npm-cli.js"
 PY="C:/Users/iquel/.workbuddy/binaries/python/versions/3.13.12/python.exe"
 CLI="C:/Users/iquel/.workbuddy/binaries/node/workspace/node_modules/@cloudbase/cli/dist/standalone/cli.js"
 REPO="D:/AI-Projects/Codex/etf-decision-engine/etf-decision-engine"
