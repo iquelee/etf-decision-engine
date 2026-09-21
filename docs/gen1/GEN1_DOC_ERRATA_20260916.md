@@ -488,6 +488,41 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 
 ---
 
+### E28 —【P2】字段名误写：`gen1_guarded_evidence_allowed` 不存在（第十一轮新增）
+
+| 项 | 内容 |
+|---|---|
+| severity | **P2** |
+| type | `FIELD NAME ERRATUM` |
+| runtime risk | **NONE**（仅文档字段名，不触及运行时代码 / Authority / 锁 / 线上字段） |
+| scope | docs / governance evidence |
+| status | **`PENDING`**（待 docs-only 授权后登记） |
+| 位置 | `.workbuddy/memory/2026-09-21.md`（工作日志，**非**冻结档案） |
+| 原表述 | `gen1_guarded_evidence_allowed = false` |
+| 事实 | `runtime_status` 字段集（62 含 `_id` / 61 不含）中**不存在**该字段名；真名为 **`gen1_guarded_effective_evidence_allowed`**（实读 `false`），与 `GEN1_GUARDED_EFFECTIVE_CHARTER.md` §6.2 命名一致 |
+| ✅ 修正方式 | 字段名按真名书写；⛔ 不改任何冻结档案 |
+| 教训 | 跨文档借用字段名时必须**回原始来源实读**，⛔ 不得顺手搬。 |
+
+---
+
+### E29 —【P1】FNR v1.1 的「未读云端 trigger metadata」限制已不成立（第十一轮新增）
+
+| 项 | 内容 |
+|---|---|
+| severity | **P1** |
+| type | `STALE CAPABILITY CONCLUSION` |
+| runtime risk | **NONE**（只涉及文档 / 治理留痕，不触及运行时代码、Authority、锁或线上字段） |
+| scope | docs / governance evidence |
+| status | **`PENDING`**（待 docs-only 授权后登记；⛔ FNR v1.1 已冻结，**不得回改**） |
+| 位置 | `outputs/ge03-deploy-20260917/GEN1_GE03_FIRST_NATURAL_RUN_ATTESTATION_20260918.md`（v1.1 · **FROZEN**）「未访问」行与 §4 |
+| 原表述 | 「⛔ 未读云端 trigger metadata（本 Gate 不要求）⇒ 窗口时点证据等级仍为 `repo-configured`」 |
+| 事实（**2026-09-21 只读实测**） | 云端 trigger metadata **可只读获取**：`tcb fn detail <fn> -e <env> --json` 返回 `Triggers[]`（含 `TriggerName` / `Type` / `Enable` / `BindStatus` / **`TriggerDesc`（含 cron）**）。实测：`materializeIndicators` = `dailyPipeline-0800`（cron **`0 0 8 * * 1-5 *`**）；`runGen1ShadowEod` = `gen1-eod-weekdays-2220`（cron **`0 20 22 * * 1-5 *`**）；`runDecisionEngine` **无 trigger**（`Triggers: []`） |
+| 为何是缺陷 | 该限制是**时点性能力观测**被写成**当前能力结论** ⇒ 与 **E27** 同类（`STALE CAPABILITY`）。<br>⚠️ 另注：`tcb fn trigger` 只有 `create` / `delete`，**无 list** ⇒ 查触发器一律走 `fn detail` |
+| ✅ 修正方式 | ⛔ **不回改** FNR v1.1（已冻结）；在本勘误表登记，并在**下一版本**（v1.2+）中改写为**带判据的条件式** |
+| 教训 | 能力轴 = **通道 × 凭据权限 × 时点**；凡「不可获取 / 不可用」类断言，须同时给出 **观测时刻 + 当时通道与权限 + 枚举域**。 |
+
+---
+
 ## 3. 未发现问题的部分（可放心引用）
 
 > 明确列出，避免"勘误＝全盘可疑"的误读。
