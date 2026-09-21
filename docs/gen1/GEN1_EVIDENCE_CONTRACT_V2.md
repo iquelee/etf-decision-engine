@@ -1,23 +1,24 @@
 # Gen-1 Evidence Contract v2.0（证据契约 · 正式草案）
 
 **文档编号**：`WP-G1-EVIDENCE-CH-2.0`
-**版本**：v2.0 **DRAFT**
-**状态**：⛔ **DRAFT — NOT FROZEN — NOT AUTHORIZED FOR EXECUTION**
+**版本**：v2.0（**FROZEN**）
+**状态**：🔒 **FROZEN 2026-09-21（北京时间）** — 冻结在先，采样在后
 **as-of**：2026-09-21（北京时间）
-**授权依据**：owner 2026-09-21 裁定 —— 授权**生成**本文件（**不含冻结**）；「生成正式契约」与「冻结正式契约」为**两个分开的授权步骤**。
+**授权依据**：owner 2026-09-21 裁定 —— 先授权**生成**，后**单独授权冻结**；「生成」与「冻结」为两个分开的授权步骤（**均已执行**）。
 **生成自**：`outputs/evidence-watch-20260921/V2_PREREGISTRATION_PROPOSAL_20260921.md`（v0.3，`ede8bdfd…042d`）+ `V2_FREEZE_READINESS_ADDENDUM_v0.4_20260921.md`（v0.4 FINAL，`e6570e6f…a294`）
-**冻结源**：`eefbedf2`（= `origin/master`）
+**冻结源**：生成轮基线 `eefbedf2`；冻结轮基线 = `24677422`（PR #48 合并后的 `origin/master`）
 
 ```text
 V2.0 CONTRACT GENERATION      ✅ DONE（本文件）
-V2.0 CONTRACT FREEZE          ⛔ NOT YET
+V2.0 CONTRACT FREEZE          ✅ DONE（2026-09-21）
 EVIDENCE EXECUTION            ⛔ NOT YET
 HISTORICAL BACKFILL           ⛔ PROHIBITED
 GE-04                         ⛔ NOT AUTHORIZED
 ```
 
-> ⚠️ **本文件不得被当作执行契约使用**。在 §12 的未决项全部闭合、且 owner **单独授权冻结**之前，
-> 本文件仅为文本草案。⛔ 不得据此启动任何样本累计、不得据此改 Seal、不得据此改 Authority。
+> ✅ **本文件已于 2026-09-21（北京时间）冻结**，自**冻结后首个交易日**起作为正式采样执行契约。
+> ⛔ 仍不得据此改 Seal、不得据此改 Authority；`EVIDENCE EXECUTION` 与 `GE-04` 仍须**单独授权**。
+> 冻结指纹记于 **PR body 与独立 attestation 工件**，⛔ **不写入本文件**（避免自指矛盾）。
 
 ---
 
@@ -57,8 +58,9 @@ GE-04                         ⛔ NOT AUTHORIZED
 - L255–L256 `intendedTarget = canaryEffective ? canaryTarget : baselineTarget`；`suggested = canaryEffective ? canarySuggested : baselineSuggested`
   ⇒ 非 Candidate 日**回落 baseline**，天然产出 `delta = 0` 对照组。实读 **35 行**。
 
-**登记**：`CD-01`（`CONTRACT SEMANTIC DEFECT`），**remedy = 本文件**，**OPEN UNTIL V2 FREEZE**。
-⛔ 在 v2.0 真正冻结前，`CD-01` 保持 **OPEN**，⛔ 不得在勘误表中写成 `FIXED`。
+**登记**：`CD-01`（`CONTRACT SEMANTIC DEFECT`），**remedy = 本文件**。
+✅ **本文件已于 2026-09-21 冻结 ⇒ `CD-01` 随之 CLOSED**（关闭条件 = v2.0 真正冻结）。
+⛔ 冻结**之前**不得在勘误表中写成 `FIXED`（避免「勘误已修复但 v2.0 尚不存在」的治理假象）。
 
 ---
 
@@ -525,6 +527,7 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 | v1.0 | 2026-09-10 | 首次冻结（WP-G1-EVIDENCE 启动） | — |
 | **v2.0** | 2026-09-21 | ① 主列改绑 `gen1_counterfactual_suggested_position`（修 `CD-01`）；② 引入 E1 daily full-sample；③ 引入 C-1 provenance + 五源 bundle + coherence gate；④ `regime` 精确绑定 + 双日期双组；⑤ 引入 `NATURAL_RUN_PROVENANCE`（CHAIN PROOF）；⑥ 新增 `≥30 ≠ Q1 可判定` 防误读条款 | **是** —— 显式作废 v1.0 全部样本（实测 = **0 行**） |
 | v2.0-draft rev.1 | 2026-09-21 | 闭合冻结前置：① `CANONICAL_CAPTURE_CHECKPOINT` 定为**工作日 09:00（北京）**（依 cron 实测）；② C-1 归档落点/命名与 append-only 规则定稿；③ 多 capture 冲突定为「**先到先得 + 后到 NON-SCORING**」；④ 补记 coherence gate 只读 dry-run 验证（**9/9 PASS**） | **否**（草案修订；未冻结、未采样） |
+| **v2.0 FROZEN** | 2026-09-21 | 冻结（**仅**状态头 / §12 / 变更日志；⛔ 未改字段名、字段定义、纳入排除规则、判定阈值） | **否**（仍未采样） |
 
 ---
 
@@ -532,28 +535,31 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | **本文件冻结授权** | ⛔ **NOT YET**（生成 ≠ 冻结） |
+| 1 | **本文件冻结授权** | ✅ **已授权并完成（2026-09-21）** |
 | 2 | `CANONICAL_CAPTURE_CHECKPOINT` 具体时点 | ✅ **已裁定 = 工作日 09:00（北京）** —— 依据见 §5.8 |
 | 3 | C-1 归档的**具体落点与命名** | ✅ **已裁定**：仓库外 `_evidence-capture-YYYYMMDD/`；`<decision_date>__bundle.json` + `<decision_date>__bundle.sha256`；同名已存在 ⇒ **拒绝写入**（append-only，⛔ 不覆盖） |
 | 4 | C-1 自动化 | ⛔ **当前不授权创建任务**；顺序 = 先手工/半自动跑通 **≥3 个交易日** ⇒ 验证 gate 不误杀 ⇒ 再议 automation |
-| 5 | `E28`（字段名勘误）/ `E29`（FNR `STALE CAPABILITY` 勘误候选）登记 | 待 **docs-only 授权**（⛔ 不改任何冻结档案） |
+| 5 | `E28` / `E29` 登记 | ✅ **已完成** —— 见 `GEN1_DOC_ERRATA_20260916.md`（随 PR #48 合入） |
 | 6 | `CD-01` 关闭条件 | = **v2.0 真正冻结**；在此之前保持 **OPEN** |
 | 7 | 同一 `decision_date` 出现多个 capture 的冲突处置 | ✅ **已裁定**：**先到先得**（首个通过 coherence gate 者为准）；后到者 `BUNDLE_INVALID / NON-SCORING`，⛔ 不得覆盖已接受 bundle |
-| 8 | ⚠️ **冻结是否伴随 git commit** | ⛔ **未裁定** —— 本文件当前为工作区**未跟踪文件**；若不 commit，「冻结」**无治理效力**（可被静默改写）。**须 owner 单独授权 git 写操作** |
-| 9 | 本文件 activation-ready 状态 | ❌ **NOT YET** —— 第 8 项未闭合 |
+| 8 | ⚠️ **冻结是否伴随 git commit** | ✅ **已裁定：是** —— owner 授权走 git commit + PR；载体分支自 `origin/master` 开出 |
+| 9 | 本文件 activation-ready 状态 | ✅ **YES** —— 第 8 项已闭合 |
 
 ---
 
 ## 13. 边界声明与不授权声明
 
-**本轮（生成 v2.0 草案）未做**：
+**冻结轮（2026-09-21）仅做**：状态头置 FROZEN、§12 收口、变更日志追加。
+⛔ 未改任何字段/阈值/纳入规则；⛔ 未启动样本累计；⛔ 未改 Seal / Authority。
+
+**生成轮（2026-09-21）未做**：
 
 - ⛔ 未修改 `GEN1_EVIDENCE_CONTRACT.md`（v1.0）任何字节
 - ⛔ 未冻结 v2.0、未启动任何样本累计
 - ⛔ 未改 Seal（Freeze / Evidence 均仍 `PENDING`）
 - ⛔ 未回补历史样本、未部署、未改 Authority、未建 automation
 - ⛔ 未人工调用云函数、未碰 Gen-2、未进 GE-04
-- ⛔ **未 commit** —— 本文件为工作区未跟踪文件 ⇒ **冻结前必须闭合 §12 第 8 项**
+- ✅ **已 commit** —— 冻结轮经 git commit + PR 落盘（§12 第 8 项已闭合）
 
 **⛔ 本文件不授权任何生产变更**；`gen1_authority` 保持 `CANARY`。
 **⛔ 本文件不解除** `Gen-1 → final_target` 的禁令。
@@ -561,4 +567,4 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 ---
 
 *本契约由 `WP-G1-EVIDENCE` 工作包 v2.0 草案生成。任何修改须遵循 §11 元规则。*
-*生成路径：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V2.md`（**DRAFT — NOT FROZEN**）*
+*落盘：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V2.md`（**🔒 FROZEN 2026-09-21**）*
