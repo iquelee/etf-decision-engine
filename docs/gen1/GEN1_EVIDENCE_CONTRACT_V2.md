@@ -1,8 +1,9 @@
 # Gen-1 Evidence Contract v2.0（证据契约 · 正式草案）
 
-**文档编号**：`WP-G1-EVIDENCE-CH-2.0`
-**版本**：v2.0（**FROZEN**）
+**文档编号**：`WP-G1-EVIDENCE-CH-3.0`
+**版本**：v3.0（**FROZEN 2026-09-21**）
 **状态**：🔒 **FROZEN 2026-09-21（北京时间）** — 冻结在先，采样在后
+**取代关系**：**v3.0 取代 v2.0**；v2.0 既有样本**显式作废**（实测 = **0 行** ⇒ 成本为零）。
 **as-of**：2026-09-21（北京时间）
 **授权依据**：owner 2026-09-21 裁定 —— 先授权**生成**，后**单独授权冻结**；「生成」与「冻结」为两个分开的授权步骤（**均已执行**）。
 **生成自**：`outputs/evidence-watch-20260921/V2_PREREGISTRATION_PROPOSAL_20260921.md`（v0.3，`ede8bdfd…042d`）+ `V2_FREEZE_READINESS_ADDENDUM_v0.4_20260921.md`（v0.4 FINAL，`e6570e6f…a294`）
@@ -119,8 +120,8 @@ gen1_canary_suggested_position  →  candidate_only_aux
 | 13 | `MFE` | number | 窗口 T+1..T+20 最大有利变动（%），**用收盘价** | 正数；方向按 delta 方向取有利侧 |
 | 14 | `MAE` | number | 同窗口最大不利变动（%） | 负数；方向同上 |
 | 15 | `false_fast_path` | boolean | `ml_fast = true` 但事后 T+5 收益为负 | 依据 `forward_5d < 0` |
-| 16 | `event_cluster_id` | string | 同一宏观/事件簇共享 ID | 无事件记 `NONE` |
-| 17 | `independent_event` | boolean | 同簇内首个为 `true` | 独立性由 `event_cluster_id` 决定 |
+| 16 | `event_cluster_id` | string | 同一事件簇共享 ID（**计算规则见 §3.4**） | 无事件记 `NONE` |
+| 17 | `independent_event` | boolean | **同簇内首个 Candidate 行**为 `true`（**计算规则见 §3.4**） | 对照行**恒 false** |
 
 ### 3.1 ★ `regime` 精确绑定 + **双日期双组**（v2.0 新增）
 
@@ -180,6 +181,47 @@ Evidence.regime
 - 基准价 = T 日收盘价。
 - `MFE = max(路径内最高收盘 / T 收盘 − 1)`；`MAE = min(路径内最低收盘 / T 收盘 − 1)`。
 - 未满 20 个交易日记 `null`，⛔ **不得**用现有天数凑近似值。
+
+### 3.4 ★ `event_cluster_id` 与 `independent_event` 的计算规则（v3.0 新增，**冻结**）
+
+**规则 = C-B（时间维去相关）+ 混合标记**：
+
+```text
+CLUSTER_GAP_DAYS = 10
+
+① event_cluster_id —— 对**全表**（Candidate 行 + 对照行）计算：
+   同一 code 按 date 升序；与同 code 上一条样本的间隔 ≤ CLUSTER_GAP_DAYS 天
+   ⇒ 归入同一簇；否则开新簇。
+   ⛔ 不对「同一交易日的不同 code」做合并（见下方「已知局限」）。
+
+② independent_event —— 只有 **Candidate 行**可能为 true：
+   每一簇内，**首个 `delta_position != 0` 的行**标记 `independent_event = true`；
+   该簇内其余行一律 false。
+   若某簇内**无** Candidate 行 ⇒ 全簇 `independent_event = false`。
+
+③ 对照行取值：
+   event_cluster_id  —— 正常参与聚类（用于界定簇边界）
+   independent_event —— **恒 false**
+```
+
+**为何这样定（决策依据）**：
+
+1. §7.1 规定 `independent_event` 是 Q1 p 值的**计数单位** ⇒ 计数单位必须是**有信息量的观测**；
+   只有 `delta_position != 0` 的行才可能「对 / 错」。
+2. §4.1 的对照组是为**比较**（Q2 / Q3）而存在，**不是**为「证明 Gen-1 有价值」提供独立证据。
+3. ⛔ 若允许对照行为 `true` ⇒ `independent_events >= 30` 可在**零真实 Candidate**时达成
+   ⇒ 该成熟度门槛将**不度量任何东西**（是「每行独立」失效模式的变体）。
+4. ⛔ 若只用 Candidate 行聚类 ⇒ 当前 Candidate = 0 时**无法界定任何簇边界**。
+
+**已知局限（必须随每次报告显式声明）**：本规则**未建模同一交易日跨 code 的相关性**。
+同一交易日 5 只 code 受**同一市场环境**驱动，可能被计为多个独立事件 ⇒ 报告的独立性**偏乐观**。
+⛔ 不得把结论表述为「已充分独立」。
+
+**⚠️ 由此得出的重要性质（必须与结论同读）**：
+本规则下 `independent_events` 的增长**完全取决于真实 Candidate 的出现频率** ——
+对照行不贡献、无 Candidate 的簇不贡献。
+⇒ 在真实 Candidate 出现之前，`independent_events` **恒为 0**，⛔ 不得据此推断「接近门槛」。
+
 
 ---
 
@@ -411,6 +453,7 @@ CANONICAL_CAPTURE_CHECKPOINT
 ### 7.1 样本独立性与最小样本量
 
 - Q1 的 p 值用 **独立事件**计数（`independent_event = true`），⛔ 不用原始行数。
+  （独立性判定规则见 **§3.4**，v3.0 冻结。）
 - 在 `independent_event = true` 的行数达到 **≥ 30** 之前，**不下任何结论**。
 - 分域报告：`domain_status` 分层（`IN_DOMAIN` / `PARTIAL_COVERAGE` / `OUT_OF_DOMAIN`）**不得混算**。
 
@@ -528,6 +571,8 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 | **v2.0** | 2026-09-21 | ① 主列改绑 `gen1_counterfactual_suggested_position`（修 `CD-01`）；② 引入 E1 daily full-sample；③ 引入 C-1 provenance + 五源 bundle + coherence gate；④ `regime` 精确绑定 + 双日期双组；⑤ 引入 `NATURAL_RUN_PROVENANCE`（CHAIN PROOF）；⑥ 新增 `≥30 ≠ Q1 可判定` 防误读条款 | **是** —— 显式作废 v1.0 全部样本（实测 = **0 行**） |
 | v2.0-draft rev.1 | 2026-09-21 | 闭合冻结前置：① `CANONICAL_CAPTURE_CHECKPOINT` 定为**工作日 09:00（北京）**（依 cron 实测）；② C-1 归档落点/命名与 append-only 规则定稿；③ 多 capture 冲突定为「**先到先得 + 后到 NON-SCORING**」；④ 补记 coherence gate 只读 dry-run 验证（**9/9 PASS**） | **否**（草案修订；未冻结、未采样） |
 | **v2.0 FROZEN** | 2026-09-21 | 冻结（**仅**状态头 / §12 / 变更日志；⛔ 未改字段名、字段定义、纳入排除规则、判定阈值） | **否**（仍未采样） |
+| **v3.0** | 2026-09-21 | **补 §3.4**：钉死 `event_cluster_id` / `independent_event` 的计算规则（C-B 时间维去相关 + 混合标记）。
+动机：v2.0 §3 字段 16/17 未规定计算方法 ⇒ §7.1 的「≥30」门槛**不可机械判定**。 | **是** —— 显式作废 v2.0 全部样本（实测 = **0 行**） |
 
 ---
 
@@ -567,4 +612,4 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 ---
 
 *本契约由 `WP-G1-EVIDENCE` 工作包 v2.0 草案生成。任何修改须遵循 §11 元规则。*
-*落盘：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V2.md`（**🔒 FROZEN 2026-09-21**）*
+*落盘：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V2.md`（**🔒 v3.0 FROZEN 2026-09-21**）*
