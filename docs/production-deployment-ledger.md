@@ -65,6 +65,34 @@
 | 当前仓库基线 | `origin/master = 650db58639f32232ac72a99920060dd92e743621` |
 | evidence | 同 D-002 |
 
+### D-004 · 2026-09-22 · V3.6.4 runDecisionEngine Production Promotion
+
+> 授权范围：**仅** `runDecisionEngine`，一次。**不含** `materializeIndicators`、不含任何其他云函数。
+> `PRODUCTION PROMOTION AUTHORIZATION = GRANTED — RUNDECISIONENGINE ONLY`
+
+| 项 | 值 |
+|---|---|
+| `deploy/mod_time`（NEW） | **2026-09-22 16:29:48**（2026-09-22 只读实测 `ModTime`） |
+| `deploy/mod_time`（PREVIOUS） | `2026-09-17 14:24:41`（= D-002 / D-003 基线） |
+| 函数 | `runDecisionEngine`（`FunctionId = lam-eiye285p`） |
+| Runtime / Handler | `Nodejs16.13` / `index.main`（**部署前后未变**） |
+| `CodeSize` PREV → NEW | `3984731` → `4013498`（+28 767；= 8 个新增 + 6 个修改的 common 源文件） |
+| `previous_package_sha256` | `a694b7d3d6bad410ca5f0c25304ba13fcdf9801c79f86d7f99b1bb0bc3003608` |
+| `new_package_sha256` | `aa576c20599528a66737f154b31b8cca87f25c1cf50068093bc243ed7084caea`（API `CodeSha256` 与本地下载 zip 重算**逐位一致**） |
+| `previous_index_sha256_raw` | `da4910cae28476e6c1605b4043b29ee6afda558f43685c8d0f73da353fc26024` |
+| `new_index_sha256`（LF） | `072b40089c7bc260a888bda913e68b1afb546b49a3d19ef88d4eec7fe9ae477b` |
+| `frozen_source_commit` | **`aa634e264270f26207c59c19ef3e1c31dde01e64`**（tag `v3.6.4-frozen^{}`；用 `git archive` 取干净归档后构建，**非审计分支、非工作区**） |
+| `master_containing_commit` | `519c3559c9840fa954e3357d665635fd1f97648c` |
+| `source_parity` | **MATCH 77 / 77**（ONLY_LIVE 0 / ONLY_CAND 0 / CONTENT_DIFF 0；线上源码 == frozen V3.6.4 预期部署源码） |
+| 部署前预检 | `UNEXPECTED_PACKAGE_DIFF = 0`（新增 8 = 期望集、修改 6 = 期望集、删除 0、`node_modules` 1703 文件逐位一致） |
+| `param_config` changed | **NO** |
+| `materializeIndicators` changed | **NO**（`ModTime` 仍 `2026-09-08 11:35:24`、`CodeSize` 仍 `4073486`、`CodeSha256` 仍 `9642cae255536f5ed1ac040d2891c6152ffba7c7f02fc3a859703ab2d7d44302`、COS 对象 UUID 未变） |
+| 其余 9 个云函数 | **未触碰**（本轮零调用） |
+| `rollback artifact` | `_v364-deploy/rollback/runDecisionEngine.PREVIOUS.a694b7d3.zip`（3 984 731 bytes，本地重算 SHA == PREVIOUS_PACKAGE_SHA） |
+| evidence | `_v364-deploy/preflight_diff.json`、`_v364-deploy/postcheck_parity.json`、`_v364-deploy/postcheck/runDecisionEngine.NEW.aa576c20.zip`、`_v364-deploy/rollback/` |
+| 部署后状态 | ⚠️ **首笔自然生产运行尚未发生** ⇒ 当时只能记为 `FROZEN / MERGED / DEPLOYED`，**不得**记为 `/ PRODUCTION`（见 D-004 备注） |
+| 备注 | 未为验证幂等性人为触发任何生产运行。后续另起一行（D-005 或勘误）登记首笔自然运行验收结果，**不得改写本行**。 |
+
 ---
 
 ## 2. 勘误指针（不改历史行）
