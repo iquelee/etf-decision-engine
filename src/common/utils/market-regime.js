@@ -10,6 +10,8 @@
 'use strict';
 
 const { marketRegimeFromScore, getMarketFactor, V3_CRISIS_SCORE_RELEASE } = require('./v3-constants.js');
+// V3.6.1 R1：W5 多数闸可达性只读诊断（不改阈值、不改触发语义）
+const { W5_MAJORITY_MIN_INDICES, diagnoseIndexStateGate } = require('./market-env-diagnostics.js');
 const {
   neutralVolumeScore,
   neutralGrowthScore,
@@ -156,24 +158,46 @@ function checkCrisisHardTrigger(input) {
     ? input.techBreadthProxy
     : resolveTechBreadthPct(input);
 
+  const indexStates = input.indexWStates || [];
+  // V3.6.1 R1：把「W5 多数闸是否可达」显式带出。
+  // 线上 market_env 只有 3 行（000300 / 000688 / 399006），而闸门要求 >=5 ⇒ 恒不可达。
+  // 本诊断只暴露事实，**不修改**阈值与触发语义。
+  const gate = diagnoseIndexStateGate(indexStates, W5_MAJORITY_MIN_INDICES);
+  const gateReason = gate.w5_majority_gate_reason;
+
   if (breadthPct < 20) {
-    return { triggered: true, reason: 'tech_breadth_proxy', detail: `${breadthPct}%` };
+    return {
+      triggered: true, reason: 'tech_breadth_proxy', detail: `${breadthPct}%`,
+      index_state_count: gate.index_state_count, w5_majority_gate_reachable: gate.w5_majority_gate_reachable,
+      w5_majority_gate_reason: null
+    };
   }
 
-  const indexStates = input.indexWStates || [];
-  if (indexStates.length >= 5) {
+  if (indexStates.length >= W5_MAJORITY_MIN_INDICES) {
     const w5 = indexStates.filter((w) => w === 'W5').length;
     if (w5 >= 3) {
-      return { triggered: true, reason: 'index_w5_majority', detail: `${w5}/${indexStates.length}` };
+      return {
+        triggered: true, reason: 'index_w5_majority', detail: `${w5}/${indexStates.length}`,
+        index_state_count: gate.index_state_count, w5_majority_gate_reachable: true,
+        w5_majority_gate_reason: null
+      };
     }
   }
 
   const risk = input.risk || {};
   if (risk.risk_flag === 'RED' && input.riskEventsActive === true) {
-    return { triggered: true, reason: 'red_active_risk_events', detail: 'RED+events' };
+    return {
+      triggered: true, reason: 'red_active_risk_events', detail: 'RED+events',
+      index_state_count: gate.index_state_count, w5_majority_gate_reachable: gate.w5_majority_gate_reachable,
+      w5_majority_gate_reason: gateReason
+    };
   }
 
-  return { triggered: false, reason: null, detail: null };
+  return {
+    triggered: false, reason: null, detail: null,
+    index_state_count: gate.index_state_count, w5_majority_gate_reachable: gate.w5_majority_gate_reachable,
+    w5_majority_gate_reason: gateReason
+  };
 }
 
 /**
@@ -217,7 +241,11 @@ function resolveMarketEnvironment(input) {
     crisis_hard_trigger: { ...crisis, released_by_score: crisisReleasedByScore },
     crisis_override: crisisOverride,
     crisis_released_by_score: crisisReleasedByScore,
-    components: scored.components
+    components: scored.components,
+    // V3.6.1 R1 只读诊断（缺陷 #7）：宽基指数 W 序列与 W5 闸可达性（不改打分、不改阈值）
+    index_w_states: (input && input.indexWStates) || [],
+    index_state_count: ((input && input.indexWStates) || []).filter(Boolean).length,
+    index_state_diagnostics: diagnoseIndexStateGate((input && input.indexWStates) || [])
   };
 }
 

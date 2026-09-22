@@ -14,11 +14,27 @@ const decision = require('./common/utils/decision');
 const decisionV3 = require('./common/utils/decision-v3.js')();
 const { deriveMarketEnvironmentForPortfolio } = require('./common/utils/market-env-v3.js');
 const {
+  diagnoseRegimeDivergence,
+  diagnoseIndexStateGate
+} = require('./common/utils/market-env-diagnostics.js');
+const {
   mergeShadowOutputs, buildV3Portfolio, appendSlowBreakHistory,
   applyV361ParamBundle, resolveShadowEngineVersion
 } = require('./common/utils/v3-shadow.js');
 const { effectiveTechCap } = require('./common/utils/correlation.js');
-const { swingHighLow } = require('./common/utils/trend-stage.js');
+// V3.6.1 R1：只读诊断模块（纯函数，不参与任何决策分支）
+const { computeCashDiagnostics } = require('./common/utils/portfolio-cash.js');
+const { diagnoseV3PortfolioMode } = require('./common/utils/portfolio-mode.js');
+// V3.6.1 R1（缺陷 #2）：SlowBreak 链必须用**唯一** Swing 实现（返回 4 字段，含 lowerLow）。
+// ⛔ `trend-stage.js` 里那份只返回 2 字段的副本是冻结工件（Gen-1 pipeline lock，role=trend_stage_implementation），
+//    不得改动；`decision-v3.js` 中同名变量是死代码（未上锁但受 V361 lock，同样不动）。
+//    因此生产 SlowBreak 链改从 swing-structure 取数。
+const { swingHighLow } = require('./common/utils/swing-structure.js');
+// V3.6.1 R1（缺陷 #1）：同一 trade_date 幂等（受锁文件不改，改走调用侧重放）
+const {
+  planRunInput: planTrendStageRunInput,
+  finalizeState: finalizeTrendStageState
+} = require('./common/utils/trade-date-idempotence.js');
 const { buildShadowDailyEntry, summarizeEntry } = require('./common/utils/shadow-v3-log.js');
 const indicators = require('./common/utils/indicators');
 const { replayAverageCost } = require('./common/utils/pnl');
@@ -269,8 +285,16 @@ async function loadBarsCache(etfList) {
  * 组合汇总：科技/半导体/黄金/创新药仓位 + 现金拆分 + 组合环境 + 海外信号。
  * @param {string} marketRegime 市场环境（由 deriveMarketRegime 推导）
  * @param {Array<object>} globalSignals 海外信号（computeGlobalSignals 结果）
+ * @param {object} [params] 运行参数（**仅**用于组合轨只读诊断；不改变任何计算）
+ *
+ * V3.6.1 R1（缺陷 #3 / #8）：
+ *   - 新增 `cash_ratio_raw` / `leverage_excess` / `overbooked`：真实现金与隐性杠杆硬诊断。
+ *     `cash_ratio` 仍为 clamp 后的值，既有消费点（UI / sizing 现金底）行为不变。
+ *   - 新增 `portfolio_mode_*` 只读诊断：把「本应为组合轨」与「实际生效轨」并列摆出。
+ *   - ⚠️ 本函数**刻意不返回** `multi_etf` / `etf_count`：在 Replay 报告（CURRENT_PATH vs
+ *     FORCED_PORTFOLIO_PATH）通过并单独 PR 晋升之前，不允许新 flag 驱动生产结果。
  */
-async function getPortfolioSummary(etfs, positions, marketRegime, globalSignals) {
+async function getPortfolioSummary(etfs, positions, marketRegime, globalSignals, params) {
   let techPosition = 0;
   let semiPosition = 0;
   let goldPosition = 0;
@@ -285,12 +309,13 @@ async function getPortfolioSummary(etfs, positions, marketRegime, globalSignals)
     if (sector === 'biotech') drugPosition += p.current_position || 0;
   });
   const totalPosition = positions.reduce((s, p) => s + (p.current_position || 0), 0);
-  const cashRatio = Math.max(0, 100 - totalPosition);
+  const cash = computeCashDiagnostics(totalPosition);
+  const cashRatio = cash.cash_ratio;
   const regime = marketRegime || 'range';
   const cashRange = CASH_REGIME[regime] || [20, 35];
   const strategicCash = Math.min(cashRange[0], cashRatio);
   const deployableCash = Math.max(0, cashRatio - strategicCash);
-  return {
+  const summary = {
     tech_position: techPosition,
     semi_position: semiPosition,
     gold_position: goldPosition,
@@ -300,8 +325,18 @@ async function getPortfolioSummary(etfs, positions, marketRegime, globalSignals)
     deployable_cash: deployableCash,
     market_regime: regime,
     total_position: totalPosition,
-    global_signals: globalSignals || []
+    global_signals: globalSignals || [],
+    // —— V3.6.1 R1 真实现金 / 隐性杠杆诊断（只读，不接任何决策分支）——
+    cash_ratio_raw: cash.cash_ratio_raw,
+    leverage_excess: cash.leverage_excess,
+    overbooked: cash.overbooked
   };
+  // 注意：summary 上**没有** multi_etf / etf_count —— 这正是缺陷 #3 的事实本身。
+  // 诊断把它显式暴露，而不是偷偷补字段让生产行为发生变化。
+  const modeDiag = diagnoseV3PortfolioMode(
+    summary, params, Array.isArray(etfs) ? etfs.length : null
+  );
+  return { ...summary, ...modeDiag };
 }
 
 /**
@@ -464,7 +499,7 @@ exports.main = async (event = {}, context = {}) => {
     const positions = await db.query(COLLECTIONS.PORTFOLIO_POSITION, {});
     const globalSignals = await computeGlobalSignals();
     const marketRegime = await deriveMarketRegime(globalSignals);
-    const portfolio = await getPortfolioSummary(etfs, positions, marketRegime, globalSignals);
+    const portfolio = await getPortfolioSummary(etfs, positions, marketRegime, globalSignals, merged);
     const trendStageEnabled = merged.trend_stage_enabled === true;
     // V3.6.1 Shadow：总闸开启且 shadow 标记时强制并行；否则沿用 v3_shadow_enabled
     const shadowEnabled = merged.v3_6_1_enabled === true && merged.v3_6_1_shadow === true
@@ -677,9 +712,18 @@ exports.main = async (event = {}, context = {}) => {
         if (runV3Path) {
           const etfBars = barsCache ? barsCache[etf.code] : null;
           const v3Portfolio = buildV3Portfolio(portfolio, v3MarketEnv);
-          const v3TrendStageState = p.position.trend_stage_state || {};
+          const v3TrendStagePersisted = p.position.trend_stage_state || {};
           const v3ShockState = p.position.shock_state || null;
+          // V3.6.1 R1（缺陷 #1）：同一 trade_date 无论运行多少次，只能贡献一个交易日。
+          // 受冻结锁限制，trend-stage.js（Gen-1 pipeline lock）与 decision-v3.js（V361 lock）
+          // 都不得改动 ⇒ 在**未上锁的调用侧**做「按交易日幂等重放」：
+          //   今日已评估过 ⇒ 把「当日起点计数器」交给引擎，重放出与当日首次运行逐字段一致的结果。
+          // 变量名保持 v3TrendStageState：它必须**恰好等于**交给引擎/传给 canary 的那份状态
+          // （Gen-1 census 守卫要求 canary 与生产输入同源）。
+          const stagePlan = planTrendStageRunInput(v3TrendStagePersisted, p.snapshot.calc_date);
+          const v3TrendStageState = stagePlan.engine_state;
           // WP-G1：缓存 canary 重算上下文（避免重复 build）
+          // 注意：canary 必须与生产**输入完全相同**，故两者都使用同一个 v3TrendStageState。
           canaryCtx = {
             portfolio: v3Portfolio,
             bars: etfBars,
@@ -703,7 +747,11 @@ exports.main = async (event = {}, context = {}) => {
           result = mergeShadowOutputs(v38Result, v3Result, merged, trendStageEnabled);
           const swing = etfBars ? swingHighLow(etfBars) : null;
           v3SlowBreakHistory = appendSlowBreakHistory(v3SlowBreakHistory, v3Result.slow_break_score, swing);
-          p.position.trend_stage_state = v3Result.trend_stage_state;
+          // 落库时带上交易日锚点（last_evaluated_trade_date / day_start_state），
+          // 使同一天反复运行幂等（见 trade-date-idempotence.js）。
+          p.position.trend_stage_state = finalizeTrendStageState(
+            v3Result.trend_stage_state, p.snapshot.calc_date, stagePlan
+          );
           p.position.shock_state = v3Result.shock_state;
           p.position.slow_break_history = v3SlowBreakHistory;
         }
@@ -1044,7 +1092,34 @@ exports.main = async (event = {}, context = {}) => {
     // 引擎先在各 ETF 循环内更新 portfolio_position，再写快照；而 portfolio 是运行开始时按旧 positions 计算的，
     // 直接写会与用户最新登记的当前仓位不一致（如科技仓位只算到部分 ETF）。重新读取后汇总，保证快照=实时仓位。
     const freshPositions = await db.query(COLLECTIONS.PORTFOLIO_POSITION, {});
-    const freshPortfolio = await getPortfolioSummary(etfs, freshPositions, marketRegime, globalSignals);
+    const freshPortfolio = await getPortfolioSummary(etfs, freshPositions, marketRegime, globalSignals, merged);
+
+    // ---- V3.6.1 R1 只读诊断（缺陷 #7）：Market Regime 单一真相 ----
+    // 事实：决策路径用 v3MarketEnv.market_regime（V3 环境引擎，runV3Path 时写回 portfolio），
+    //       而本快照写入的是 freshPortfolio.market_regime = deriveMarketRegime()（V2.1 指数周线打分）。
+    // 两条路径来源不同 ⇒ 同一天会有两个「市场环境」。本轮只并列诊断，不改变写入值。
+    const regimeDiagnostics = (() => {
+      const snapshotRegime = freshPortfolio.market_regime;
+      const decisionRegime = (trendStageEnabled && v3MarketEnv && v3MarketEnv.market_regime)
+        ? v3MarketEnv.market_regime
+        : (portfolio ? portfolio.market_regime : null);
+      const diff = diagnoseRegimeDivergence({
+        decision_regime: decisionRegime,
+        snapshot_regime: snapshotRegime,
+        decision_source: trendStageEnabled ? 'deriveMarketEnvironmentForPortfolio' : 'deriveMarketRegime',
+        snapshot_source: 'deriveMarketRegime'
+      });
+      const gate = diagnoseIndexStateGate(
+        v3MarketEnv && v3MarketEnv.index_w_states ? v3MarketEnv.index_w_states : []
+      );
+      return {
+        decision_market_regime: diff.decision_regime,
+        market_regime_divergent: diff.divergent,
+        market_regime_sources: `${diff.decision_source}|${diff.snapshot_source}`,
+        w5_majority_gate_reachable: gate.w5_majority_gate_reachable,
+        index_state_count: gate.index_state_count
+      };
+    })();
 
     await db.upsert(COLLECTIONS.PORTFOLIO_SNAPSHOT, {
       snapshot_date: snapshotDate,
@@ -1062,6 +1137,15 @@ exports.main = async (event = {}, context = {}) => {
       strategic_cash: freshPortfolio.strategic_cash,
       deployable_cash: freshPortfolio.deployable_cash,
       market_regime: freshPortfolio.market_regime,
+      // V3.6.1 R1 只读诊断（缺陷 #7）：decision vs snapshot regime 并列。
+      // 本轮不改变 market_regime 的写入值（避免静默改变生产展示状态）。
+      ...regimeDiagnostics,
+      // V3.6.1 R1 只读诊断（缺陷 #3）：组合轨「本应/实际」并列。
+      // ⚠️ 这些字段**不参与**决策：isV3PortfolioMode 只读 multi_etf / etf_count。
+      portfolio_detected_etf_count: freshPortfolio.portfolio_detected_etf_count,
+      portfolio_mode_expected: freshPortfolio.portfolio_mode_expected,
+      portfolio_mode_effective: freshPortfolio.portfolio_mode_effective,
+      portfolio_mode_suspected_mismatch: freshPortfolio.portfolio_mode_suspected_mismatch,
       market_score: v3MarketEnv ? v3MarketEnv.market_score : (freshPortfolio.market_score || null),
       portfolio_breadth_proxy: v3MarketEnv ? v3MarketEnv.portfolio_breadth_proxy : null,
       v3_breadth_source: v3MarketEnv ? v3MarketEnv.breadth_source : null,
