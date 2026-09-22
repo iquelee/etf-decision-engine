@@ -12,7 +12,8 @@
 'use strict';
 
 const { getDefensePenalty } = require('./v3-constants.js');
-const { swingHighLow } = require('./trend-stage.js');
+// V3.6.1 R1：Swing Structure 唯一实现（不再经由 trend-stage 转发，避免隐式耦合）
+const { swingHighLow } = require('./swing-structure.js');
 
 const DEFENSE_WEIGHTS = Object.freeze({
   trendBreak: 0.35,

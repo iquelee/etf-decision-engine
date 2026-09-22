@@ -36,6 +36,21 @@ function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+/**
+ * spawnSync 结果 → 文本（V3.6.1 R1 健壮性修复）。
+ *
+ * 背景：`spawnSync` 自身失败时（Windows 偶发 EBUSY / ENOBUFS / 找不到解释器）
+ * `r.status === null` 且 `r.stdout` / `r.stderr` 均为 `null`。
+ * 旧写法 `(r.stderr + r.stdout)` 在 JS 里等于 `null + null === 0`（数字），
+ * 随后 `.split` 直接抛 TypeError —— 把「某个测试跑不起来」升级成「整个门禁崩掉」，
+ * 结果一行测试结论都看不到。此处统一降级为可读文本。
+ */
+function outText(r) {
+  const body = `${r && r.stdout != null ? r.stdout : ''}${r && r.stderr != null ? r.stderr : ''}`;
+  const err = r && r.error ? ` [spawn_error=${r.error.code || r.error.message}]` : '';
+  return `${body}${err}`;
+}
+
 /* ---------- Stage A: Node 单元测试 ---------- */
 function stageA() {
   console.log('\n== Stage A: Node 单元测试 ==');
@@ -47,9 +62,27 @@ function stageA() {
     const ok = r.status === 0;
     if (!ok) {
       failed++;
-      // 打印失败摘要
-      const lines = (r.stderr + r.stdout).split('\n').filter((l) => /AssertionError|Error|FAIL|actual|expected/.test(l)).slice(0, 3);
-      report('A', t, false, lines.join(' | ').slice(0, 160));
+      // 打印失败摘要。
+      // 2026-09-22 修：旧实现按 /AssertionError|Error|FAIL|actual|expected/ 取前 3 行，
+      //   会把测试里**通过的**用例名（如「…（tie）→ 两项皆 false」）当成失败原因，
+      //   在 CI 上导致误诊（PR #52 run #143 实际失败项是 C.2，标签却指向 C.7）。
+      //   现改为：① spawn 本身失败 → 显式说明；② 优先取测试自己打印的 ✗ 行 + 其下一行；
+      //   ③ 退化为 AssertionError/Error/FAIL 行；④ 再退化为输出尾部。
+      const raw = outText(r).split('\n').map((l) => l.replace(/\s+$/, ''));
+      let picked = [];
+      if (r.error) {
+        picked = [`spawn_failed:${r.error.code || r.error.message}`];
+      } else {
+        const idx = raw.findIndex((l) => l.indexOf('\u2717') >= 0);
+        if (idx >= 0) {
+          picked = [raw[idx].trim()];
+          if (raw[idx + 1] && raw[idx + 1].trim()) picked.push(raw[idx + 1].trim());
+        } else {
+          picked = raw.filter((l) => /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
+        }
+        if (!picked.length) picked = raw.filter(Boolean).slice(-2).map((l) => l.trim());
+      }
+      report('A', t, false, (picked.join(' | ') || '(no output)').slice(0, 280));
     } else {
       report('A', t, true);
     }
@@ -65,7 +98,7 @@ function stageB() {
     cwd: REPO, env, encoding: 'utf8',
   });
   const ok = r.status === 0;
-  const tail = (r.stdout + r.stderr).split('\n').filter(Boolean).slice(-4).join(' | ').slice(0, 200);
+  const tail = outText(r).split('\n').filter(Boolean).slice(-4).join(' | ').slice(0, 200);
   report('B', 'unittest discover ml/gen2/tests', ok, ok ? undefined : tail);
 }
 
@@ -76,7 +109,7 @@ function stageC() {
   // 改为实际文件 SHA256 vs lock 文件 expected（GEN1/V361/GEN2_RULE_V2 lock）。
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-immutable.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
-  const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
+  const lines = outText(r).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
   report('C', 'Immutable SHA lock（23 项：Gen-1 frozen×3 + model_id + V3.6.1×2 + GEN2 bundle/version/role_thresholds/legacy + '
     + 'immutable_set 条目数 + id 必需集合 + 8 项实现（bundle·JS·Python 规则/候选/防守·阈值契约 role_thresholds.py'
@@ -85,7 +118,7 @@ function stageC() {
   // G1-11 Gate G1-B：Gen-1 Feature Pipeline Lock（指标/阶段/PARAMS/特征构建/RS20/schema/sector/健康/域策略）
   const p = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-gen1-pipeline.js')], { cwd: REPO, encoding: 'utf8' });
   const pOk = p.status === 0;
-  const pLines = (p.stdout + p.stderr).split('\n').filter(Boolean);
+  const pLines = outText(p).split('\n').filter(Boolean);
   pLines.forEach((l) => console.log('  ' + l));
   report('C', 'Gen-1 Feature Pipeline Lock（Gate G1-B，10 项；改一行指标实现或阈值不一致即 FAIL）', pOk);
 }
@@ -104,8 +137,7 @@ function stageD() {
     '--node', NODE, '--python', PYTHON, '--fixture', fixture,
   ], { cwd: REPO, env, encoding: 'utf8' });
   const ok = r.status === 0;
-  console.log(r.stdout.trim());
-  if (!ok && r.stderr) console.log(r.stderr.trim());
+  console.log(outText(r).trim());
   report('D', 'parity（360 行 role/rank 精确 + score/weight 容差）', ok);
 }
 
@@ -114,7 +146,7 @@ function stageE() {
   console.log('\n== Stage E: Secret scan ==');
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'scan-secrets.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
-  report('E', 'scan-secrets', ok, ok ? undefined : (r.stdout + r.stderr).slice(-160));
+  report('E', 'scan-secrets', ok, ok ? undefined : outText(r).slice(-160));
 }
 
 /* ---------- Stage F: Build Common Parity（P0-B，进 CI 的正式 Gate） ---------- */
@@ -122,7 +154,7 @@ function stageF() {
   console.log('\n== Stage F: Build Common Parity（src/common → dist-functions 构建 + SHA 校验）==');
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'build-cloudfunctions.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
-  const tail = (r.stdout + r.stderr).split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 200);
+  const tail = outText(r).split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 200);
   report('F', 'build-cloudfunctions（11 函数 common SHA parity）', ok, ok ? undefined : tail);
 
   // WP-G2-04：构建产物（云函数实际加载的 GEN2 bundle / index.js）必须与冻结锁**逐位一致**。
@@ -130,7 +162,7 @@ function stageF() {
   const a = spawnSync(NODE, [path.join(REPO, 'scripts', 'verify-gen2-build-artifacts.js')],
     { cwd: REPO, encoding: 'utf8' });
   const aOk = a.status === 0;
-  const aLines = (a.stdout + a.stderr).split('\n').filter(Boolean);
+  const aLines = outText(a).split('\n').filter(Boolean);
   aLines.forEach((l) => console.log('  ' + l));
   report('F', 'WP-G2-04 构建产物 vs 冻结锁逐位一致（云函数 bundle + index.js）', aOk);
 }
@@ -140,7 +172,7 @@ function stageG() {
   console.log('\n== Stage G: Gen-1 Production Gates（G1-A ~ G1-AF）==');
   const r = spawnSync(NODE, [path.join(REPO, 'scripts', 'gen1-production-gates.js')], { cwd: REPO, encoding: 'utf8' });
   const ok = r.status === 0;
-  const lines = (r.stdout + r.stderr).split('\n').filter(Boolean);
+  const lines = outText(r).split('\n').filter(Boolean);
   lines.forEach((l) => console.log('  ' + l));
   report('G', 'Gen-1 Production Gates G1-A~AF（含 Model Candidate/Sector Contract/Persistent Latch/Economic Health/Canary Portfolio/Health Single Truth/Fail-Closed/Context Parity/Event Contract/Benchmark Pipeline/Daily Finality/Guarded Effective Authority+Gates+Selector No-op+Frozen Param + GE-03 Shadow Eligibility/Rerun/Counters/Replay/Selector Security/Regression Guard/S4 Invocation Census）', ok);
 }
@@ -149,6 +181,20 @@ function stageG() {
 const only = process.argv.find((a) => a.startsWith('--stage='));
 const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE, F: stageF, G: stageG };
 const order = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+
+// 环境披露（2026-09-22 加）：部分门禁依赖 `deliverables/`（已 gitignore）里的真实历史 CSV，
+// 该目录在 CI 上**结构性不存在**。若不显式说明，CI 全绿会被误读为「全量历史已覆盖」。
+// 这里只**如实披露环境**，不放宽任何断言、不伪造数据。
+// （背景：PR #52 run #143 曾因「按本机语料标定的阈值」在 CI 变红，见 docs/V364_CANDIDATE_QUALIFICATION.md §2.4）
+if (!only || only === '--stage=A') {
+  const mlPool = path.join(REPO, 'deliverables', 'etf_daily_ml_pool');
+  const hasReal = fs.existsSync(mlPool);
+  console.log(`\n[ENV] deliverables/etf_daily_ml_pool = ${hasReal ? '存在' : '不存在'}`);
+  console.log(hasReal
+    ? '      真实历史语料门禁（如 Gate C 的 4566 真实窗口）在本环境已覆盖。'
+    : '      ⚠️ 真实历史语料在本环境**未覆盖**（CI 常态）⇒ 依赖它的门禁只跑合成/确定性语料；'
+      + '相关「真实历史全覆盖」结论以本机报告为准，不得由本环境的绿反推。');
+}
 
 for (const s of order) {
   if (only && only !== `--stage=${s}`) continue;

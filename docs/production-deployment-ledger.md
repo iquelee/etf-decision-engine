@@ -1,0 +1,85 @@
+# 生产部署台账（append-only）
+
+> **本文件是 append-only。** 线上基线一律以「追加一行」的方式记录，
+> **不改动历史行**；如需更正，另起一行并标注 `supersedes` / `errata` 关系。
+>
+> 与 `docs/主链冻结契约.md` 的关系：契约里的 2026-09-05 记录是**当时的事实**，
+> 本台账**不覆盖、不重写**它；只在其后追加，并用 `errata` 指针说明哪些字段已经过期。
+>
+> 建立日期：2026-09-22（V3.6.4 Safety Hardening 资格化）
+> 环境：`tradingview-etf-d0fa42yy57cbc11b`（腾讯云开发 CloudBase，上海，个人版，NoSQL 后端）
+
+---
+
+## 0. 字段口径（重要，避免误比）
+
+| 字段 | 含义 | 取法 |
+|---|---|---|
+| `deploy/mod_time` | 线上函数最后修改时间 | CloudBase `queryFunctions.getFunctionDetail` 的 `ModTime` |
+| `source_repo_sha` | 该次部署对应的仓库提交（**推定**，非线上自证） | 该时间点之前最后一个 commit |
+| `package_sha256` | 线上函数代码包 SHA256 | `getFunctionDownloadUrl` 的 `CodeSha256`；与本地下载 zip 重算逐位比对 |
+| `index_sha256_raw` | `runDecisionEngine/index.js` 原始字节 SHA256（含 CRLF） | 下载包解压后 `sha256sum` |
+| `index_sha256_lf` | 同上，但 **LF-normalized**（本仓锁文件的 `hash_basis`） | `content.replace(/\r\n/g,'\n')` 后 sha256 |
+| `source_parity` | 线上包 vs 仓库源码的逐文件对账结论 | 解压线上包（排除 `node_modules` / `config.json` / 2 个 Gen-1 封印 JSON）后逐文件 SHA256 比对 |
+
+⚠️ **`package_sha256` 与 `index_sha256` 是两种不同的东西**，不可互相比较：
+前者含 `node_modules` / `config.json` 等，同一份源码重新打包也会得到不同的 zip 字节。
+
+---
+
+## 1. 部署 / 核验记录
+
+### D-001 · 2026-09-05 · 首次记录部署（V3.6.1 切流后）
+
+| 项 | 值 |
+|---|---|
+| `deploy/mod_time` | 2026-09-05 14:01（**来源：契约文档记载**，非本次实测） |
+| `source_repo_sha` | N/A —— **早于本仓提交历史**（本仓首个 commit 为 2026-09-08 10:59:17 `8fc3ba66da6cb99b9da22b8933d59d582ddb8982`） |
+| `package_sha256` | `7876610f…82e6315d`（**仅存于 `docs/主链冻结契约.md` §1，本次无法复算**：该包已被后续部署覆盖） |
+| `index_sha256_raw` | 未留存 |
+| `source_parity` | 未核验 |
+| evidence | `docs/主链冻结契约.md` §1 表格 |
+| 状态 | **既成历史记录，不作为当前基线** |
+
+### D-002 · 2026-09-17 · GE-03 重部署
+
+| 项 | 值 |
+|---|---|
+| `deploy/mod_time` | **2026-09-17 14:24:41**（2026-09-22 只读实测 `ModTime`） |
+| `source_repo_sha`（推定） | `eefbedf28f547667c8557f055e6c4fc0891f8132`（2026-09-17 13:48:22，`Merge pull request #47 from iquelee/ge03-shadow-guarded-rerun`） |
+| `package_sha256` | 未在当日留存；**2026-09-22 实测 = `a694b7d3d6bad410ca5f0c25304ba13fcdf9801c79f86d7f99b1bb0bc3003608`** |
+| `index_sha256_raw` | `da4910cae28476e6…`（2026-09-22 实测，与线上下载包内字节一致） |
+| `index_sha256_lf` | `36be942f97d94fde…`（仓库侧同口径复算，`git show eefbedf:cloudfunctions/runDecisionEngine/index.js`） |
+| `source_parity` | **MATCH 66 / 66**（2026-09-22 复核） |
+| evidence | `_v361-r1-baseline-20260922/BASELINE_EVIDENCE.md`、`_v361-r1-baseline-20260922/parity.json`、`_v361-r1-baseline-20260922/runDecisionEngine.online.zip` |
+
+### D-003 · 2026-09-22 · 只读核验（V3.6.4 资格化前置）
+
+| 项 | 值 |
+|---|---|
+| `deploy/mod_time` | **2026-09-17 14:24:41（未变）** ⇒ 自 D-002 之后**未再部署** |
+| 函数元数据（实测） | `Runtime=Nodejs16.13` · `FunctionVersion=$LATEST` · `CodeSize=3984731` · `Status=Active/Available` · `Timeout=120` |
+| `package_sha256` | `a694b7d3d6bad410ca5f0c25304ba13fcdf9801c79f86d7f99b1bb0bc3003608`（API `CodeSha256` 与本地下载 zip 重算**逐位一致**） |
+| `index_sha256_raw` | `da4910cae28476e6…` |
+| `source_parity` | **MATCH 66 / 66**（ONLY_ONLINE 0 / ONLY_REPO 0 / CONTENT_DIFF 0） |
+| 当前仓库基线 | `origin/master = 650db58639f32232ac72a99920060dd92e743621` |
+| evidence | 同 D-002 |
+
+---
+
+## 2. 勘误指针（不改历史行）
+
+| # | 对象 | 已过期的字段 | 现状 | 处理 |
+|---|---|---|---|---|
+| E-001 | `docs/主链冻结契约.md` §1 `runDecisionEngine` 行 | `SHA256 = 7876610f…82e6315d`、`部署时间 = 2026-09-05 14:01` | 线上实为 `a694b7d3…` / `2026-09-17 14:24:41`（见 D-002/D-003） | **不修改契约文档**（历史事实）；以本台账 D-002/D-003 为当前基线 |
+| E-002 | 同上 · 其余 9 个函数的 SHA 列 | 均为 2026-09-05 时点值 | **本次仅核验了 `runDecisionEngine`**；其余 9 个函数的线上包 SHA **未重新对账** | 待单独立项（逐函数下载重算） |
+
+---
+
+## 3. 后续追加规范
+
+1. 任何一次**线上部署**（无论谁执行）都必须在 `## 1.` 末尾**追加**一行 `D-xxx`，字段照抄上表。
+2. 任何一次**只读核验**（未部署）也追加一行，`deploy/mod_time` 填「未变」。
+3. 只允许追加；更正用新行 + `supersedes: D-xxx`。
+4. `source_repo_sha` 若无法确证，必须显式写「推定」，不得默认属实。
+5. 不得在此文件写入密钥、envId 之外的真实凭据、或任何个人资金数据。

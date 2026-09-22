@@ -1,0 +1,102 @@
+{
+  "version": "V3.6.4",
+  "status": "CANDIDATE_NOT_FROZEN",
+  "title": "V3.6.4 Safety Hardening",
+  "generated_at": "2026-09-22T06:10:38.079Z",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256)，与 V361/GEN1/GEN2 三把锁同口径",
+  "parent_version": "V3.6.1",
+  "parent_repo_sha": "650db58639f32232ac72a99920060dd92e743621",
+  "candidate_repo_sha": "00a8b14",
+  "candidate_branch": "feat/v361-safety-hardening-r1",
+  "files": {
+    "decision_js": "src/common/utils/decision.js",
+    "decision_v3_js": "src/common/utils/decision-v3.js",
+    "trend_stage_js": "src/common/utils/trend-stage.js",
+    "correlation_js": "src/common/utils/correlation.js",
+    "v3_6_stage_persistence_js": "src/common/utils/v3-6-stage-persistence.js",
+    "defense_js": "src/common/utils/defense.js",
+    "swing_structure_js": "src/common/utils/swing-structure.js",
+    "trade_date_idempotence_js": "src/common/utils/trade-date-idempotence.js",
+    "portfolio_mode_js": "src/common/utils/portfolio-mode.js",
+    "portfolio_cash_js": "src/common/utils/portfolio-cash.js",
+    "market_env_diagnostics_js": "src/common/utils/market-env-diagnostics.js",
+    "v361_run_context_js": "src/common/utils/v361-run-context.js",
+    "v361_run_finality_js": "src/common/utils/v361-run-finality.js",
+    "run_decision_engine_index_js": "cloudfunctions/runDecisionEngine/index.js",
+    "schema_js": "src/common/schema.js",
+    "market_regime_js": "src/common/utils/market-regime.js",
+    "test_all_js": "scripts/test-all.js"
+  },
+  "sha256": {
+    "decision_js": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+    "decision_v3_js": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+    "trend_stage_js": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+    "correlation_js": "44aae61ed6730256959721d3f3d599c5274fd4c863d1b7322a4748c207181b0b",
+    "v3_6_stage_persistence_js": "455c32487ed6b916d1331d1166e136a316736f708e105cd52f044dad42aa10f3",
+    "defense_js": "acda04f9b18cdac01cbb7cd43f225f1a482521424ce5eb830817e0bd74cb0083",
+    "swing_structure_js": "e5796579c3a84ae80b45cdffab827ec1f865639e47303e032080267fbe0958ae",
+    "trade_date_idempotence_js": "fd4f5aa2ec9e897c5ea33a72e4ad66f886a280259f9a8438b778fe6067245707",
+    "portfolio_mode_js": "fe0dbd0446e1de975f921d5bd55a74886a46b20fcfcffcfaf089f2eaa3f3e979",
+    "portfolio_cash_js": "e8fefc5ac9345b9f4e99ca5c9097f2c44060ca52e8636f3bd643045a5a9fc23f",
+    "market_env_diagnostics_js": "3be061ba3e48965a335dda355e026c551cb07ce72415ce84d27ec69f9d7d65db",
+    "v361_run_context_js": "45b799c3c01544e21da1749a2a18ad5de72006dd4a49801dc8a6d2404b6808f2",
+    "v361_run_finality_js": "f9228792793e1059acdbaabe22ba51abdd477be87d626f93d191ae4d6e0dd1e6",
+    "run_decision_engine_index_js": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
+    "schema_js": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
+    "market_regime_js": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
+    "test_all_js": "7d267da912efe8b7e12c3ddd15f193eb242b0c7fec12776359505306771f4754"
+  },
+  "qualification_reports": {
+    "docs/V364_SLOWBREAK_REPLAY.md": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
+    "docs/V364_IDEMPOTENCE_REPLAY.md": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
+    "docs/V364_SWING_PARITY_REPORT.md": "17e43474ba98a995e5c78651c382761bff8fcc94e8158dc21783bcbf8e7974f3",
+    "docs/V364_CANDIDATE_QUALIFICATION.md": "27bf353daec4aebb28307a1d1ce3aef033df9c0fa6dc959cd5cde8f33e42dfba",
+    "docs/V361_SAFETY_HARDENING_R1_REPORT.md": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
+    "docs/production-deployment-ledger.md": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867"
+  },
+  "parent_unchanged_invariants": [
+    {
+      "name": "V3.6.1 decision-v3.js 未被修改",
+      "expected": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "actual": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "pass": true
+    },
+    {
+      "name": "V3.6.1 decision.js 未被修改",
+      "expected": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "actual": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "pass": true
+    },
+    {
+      "name": "GEN-1 pipeline trend-stage.js 未被修改",
+      "expected": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "actual": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "pass": true
+    }
+  ],
+  "parent_unchanged_all_pass": true,
+  "explicitly_not_included": [
+    "Portfolio Mode 启用（v3_force_portfolio_track / v3_5_portfolio_enabled）",
+    "Market Regime authority 变更 / W5 majority 规则变更",
+    "Run Finality 生产阻断接通",
+    "V361RunContext 生产阻断接通",
+    "Tech Cap / correlation discount 阈值变更",
+    "SlowBreak / DefenseScore 阈值变更",
+    "StageFactor / MarketFactor / 仓位步长变更",
+    "V3.6.2 post-S5 Grace / V3.6.3 adaptive post-S5 Grace（继续保持 OFF）",
+    "任何线上部署 / param_config 变更"
+  ],
+  "freeze_condition": {
+    "requirement": "Gate A / B / C / D 全部 PASS，且取得人工 Review 授权",
+    "gate_a": "PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）",
+    "gate_b": "PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）",
+    "gate_c": "PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）",
+    "gate_d": "PASS（2026-09-22，GitHub Actions run #144，head 52ee424：Node16/22 × Python3.11/3.12 四 job 全绿；npm test 59/59 项通过、Stage A 51/51、Gen-1 Production Gates 32/32、Build parity 7/7、parity 360 行）。首轮 run #143 为 FAIL，根因是 tests/v364-swing-parity.test.js 的 C.2 阈值按本机语料标定（CI 无 deliverables/ ⇒ 只剩合成语料 917 窗口），非产品缺陷 —— 反证：C.1 mismatch_count = 0 在 CI 同样 PASS；已修为环境感知（合成语料底线环境无关恒强制 / 真实历史可用时才强制 >3000 / 不可用时显式披露）。",
+    "gate_d_status": "PASS",
+    "gate_d_run": "https://github.com/iquelee/etf-decision-engine/actions/runs/35693440911",
+    "satisfied": true,
+    "freeze_decision": "AWAITING_USER_AUTHORIZATION",
+    "note": "四道 Gate 已全部 PASS ⇒ 已满足置 FROZEN 的**前置条件**；但 `status` 仍保持 CANDIDATE_NOT_FROZEN：置 FROZEN 属治理写操作，须待人工 Review 授权后另起一个可回溯 commit 执行。未授权前，本 manifest 不是生产基线，也不得被引用为「已冻结」。"
+  },
+  "rule": "V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。任何对 V3.6.4 候选范围的扩展都必须重新走 Gate A~D 并重新生成本 manifest。"
+}

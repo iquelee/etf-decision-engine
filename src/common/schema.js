@@ -233,6 +233,19 @@ const SCHEMAS = [
       semi_position: { type: 'number', required: false, desc: '半导体仓位%（storage+semi_equip）' },
       drug_position: { type: 'number', required: false, desc: '创新药仓位%（biotech）' },
       market_regime: { type: 'string', required: false, desc: '组合环境 aggressive/structural/range/defensive/crisis' },
+      // ---- V3.6.1 Safety Hardening R1：只读诊断（真实现金/隐性杠杆 + regime 单一真相）----
+      cash_ratio_raw: { type: 'number', required: false, desc: 'R1 未夹钳现金比例%（可 <0，暴露 book>100%）' },
+      leverage_excess: { type: 'number', required: false, desc: 'R1 隐性杠杆超出量%（= max(0, total_position-100)）' },
+      overbooked: { type: 'boolean', required: false, desc: 'R1 是否超配（book>100%）' },
+      decision_market_regime: { type: 'string', required: false, desc: 'R1 决策路径实际使用的 regime（与 market_regime 并列对照）' },
+      market_regime_divergent: { type: 'boolean', required: false, desc: 'R1 决策 regime ≠ 快照 regime' },
+      market_regime_sources: { type: 'string', required: false, desc: 'R1 两条 regime 来源标识（decision_source|snapshot_source）' },
+      w5_majority_gate_reachable: { type: 'boolean', required: false, desc: 'R1 W5 多数闸是否可达（宽基指数个数 ≥ 闸门下限）' },
+      index_state_count: { type: 'number', required: false, desc: 'R1 参与打分的宽基指数个数' },
+      portfolio_detected_etf_count: { type: 'number', required: false, desc: 'R1 诊断：探测到的标的数量（universe 声明值，非决策输入）' },
+      portfolio_mode_expected: { type: 'boolean', required: false, desc: 'R1 诊断：按标的数量本应处于组合轨' },
+      portfolio_mode_effective: { type: 'boolean', required: false, desc: 'R1 诊断：实际生效轨（isV3PortfolioMode 结果）' },
+      portfolio_mode_suspected_mismatch: { type: 'boolean', required: false, desc: 'R1 诊断：本应组合轨但实际跑单票轨' },
       production_advisory_engine: { type: 'string', required: false, desc: '人工主建议引擎 gen1/v3.6.1' },
       risk_core_engine: { type: 'string', required: false, desc: '风险骨架引擎，固定 v3.6.1' },
       ml_advisory_enabled: { type: 'boolean', required: false, desc: 'Gen-1 Advisory 总闸' },
@@ -350,6 +363,8 @@ const SCHEMAS = [
       gen1_guarded_reason_code: { type: 'string', required: false, desc: '守住门未通过时的首个原因码' },
       gen1_guarded_freeze_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/APPROVED/REVOKED（与 runtime_status 同名登记）' },
       gen1_guarded_evidence_seal_status: { type: 'string', required: false, desc: 'MISSING/PENDING/PASS/FAIL（与 runtime_status 同名登记）' },
+      // ---- V3.6.1 Safety Hardening R1：只读诊断字段登记（纯登记，不参与 production 计算）----
+      trend_stage_state: { type: 'object', required: false, desc: 'V3.6 trend stage 持久化状态；R1 起含交易日锚点 last_evaluated_trade_date / day_start_state（同一 calc_date 幂等）以及 pending/persistence/soft_down/s5_risk 四个 last_counted_date' },
       version: { type: 'number', required: true, desc: '参数版本' }
     },
     indexes: [

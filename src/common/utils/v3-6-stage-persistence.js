@@ -10,18 +10,11 @@
  */
 'use strict';
 
-function swingHighLow(bars) {
-  if (!bars || bars.length < 12) return { higherLow: false, lowerHigh: false };
-  const lows = bars.slice(-10, -5).map((b) => b.low);
-  const lows2 = bars.slice(-5).map((b) => b.low);
-  const highs = bars.slice(-10, -5).map((b) => b.high);
-  const highs2 = bars.slice(-5).map((b) => b.high);
-  const min1 = Math.min(...lows);
-  const min2 = Math.min(...lows2);
-  const max1 = Math.max(...highs);
-  const max2 = Math.max(...highs2);
-  return { higherLow: min2 > min1, lowerHigh: max2 < max1 };
-}
+// V3.6.1 R1：#2 Swing Structure 收敛为唯一实现 —— 本文件**不得**再复制第二份算法。
+// （修复前本文件自带一份只返回 higherLow/lowerHigh 的副本，与 trend-stage 各说一套。）
+const { swingHighLow } = require('./swing-structure.js');
+// V3.6.1 R1：#1 交易日锚点 —— 防「运行次数冒充交易日」
+const { resolveTradeDate, advanceDailyCounter, resetAnchor } = require('./trade-date-progress.js');
 
 function resolveClose(snapshot) {
   if (!snapshot) return null;
@@ -340,6 +333,9 @@ function resolveS4Downgrade(ctx) {
     snapshot = {}, bars = null, state = {}, params = {}, daysInStage = 0
   } = ctx;
 
+  // V3.6.1 R1：本函数内所有「按日推进」的计数以 snapshot.calc_date 为唯一交易日锚
+  const tradeDate = resolveTradeDate(snapshot);
+
   const graceDays = params.v3_6_s4_grace_days != null ? params.v3_6_s4_grace_days : 2;
   const softNeed = params.v3_6_soft_confirm_days != null ? params.v3_6_soft_confirm_days : 2;
   const softThreshold = params.v3_6_downgrade_soft_score != null ? params.v3_6_downgrade_soft_score : 50;
@@ -410,16 +406,28 @@ function resolveS4Downgrade(ctx) {
     && (snapshot.ma20_slope != null ? snapshot.ma20_slope < 0 : false);
 
   if (softSignal || ds.score >= softThreshold) {
-    const softDays = (state.soft_down_days || 0) + 1;
+    // V3.6.1 R1：soft_down_days 按**唯一交易日**推进。
+    // 修复前这里是 `(state.soft_down_days || 0) + 1` ⇒ 同一天跑两次就凑满 soft_confirm_days
+    // 并直接降级（运行次数冒充交易日）。
+    const adv = advanceDailyCounter(
+      state.soft_down_days || 0, state.soft_down_last_counted_date, tradeDate, 1
+    );
+    const softDays = adv.count;
     if (softDays >= softNeed) {
       return {
         action: 'downgrade', target_stage: 'S3', reason: 'soft_confirm', score: ds.score,
-        soft_down_days: softDays, integrity, hits: ds.hits, engine: 's4'
+        soft_down_days: softDays,
+        soft_down_last_counted_date: adv.anchor,
+        soft_down_counted_today: adv.counted,
+        integrity, hits: ds.hits, engine: 's4'
       };
     }
     return {
       action: 'soft_pending', overlay: 'pullback', reason: 'soft_pending', score: ds.score,
-      soft_down_days: softDays, target_stage: 'S4', integrity, hits: ds.hits, engine: 's4'
+      soft_down_days: softDays,
+      soft_down_last_counted_date: adv.anchor,
+      soft_down_counted_today: adv.counted,
+      target_stage: 'S4', integrity, hits: ds.hits, engine: 's4'
     };
   }
 
@@ -445,6 +453,9 @@ function resolveS5Downside(ctx) {
     snapshot = {}, bars = null, state = {}, params = {}, daysInStage = 0,
     candidateStage = null
   } = ctx;
+
+  // V3.6.1 R1：s5_risk_days 以 snapshot.calc_date 为唯一交易日锚
+  const tradeDate = resolveTradeDate(snapshot);
 
   const graceDays = params.v3_6_1_s5_grace_days != null ? params.v3_6_1_s5_grace_days : 1;
   let riskNeed = params.v3_6_1_s5_risk_confirm_days != null ? params.v3_6_1_s5_risk_confirm_days : 2;
@@ -505,7 +516,12 @@ function resolveS5Downside(ctx) {
     };
   }
 
-  const riskDays = (state.s5_risk_days || 0) + 1;
+  // V3.6.1 R1：risk_confirm_days 必须由**不同交易日**累积。
+  // 修复前同一天跑两次就会把 riskDays 从 1 直接顶到 2 ⇒ S5 当天降级。
+  const riskAdv = advanceDailyCounter(
+    state.s5_risk_days || 0, state.s5_risk_last_counted_date, tradeDate, 1
+  );
+  const riskDays = riskAdv.count;
   if (riskDays >= riskNeed) {
     return {
       action: 'downgrade',
@@ -514,7 +530,10 @@ function resolveS5Downside(ctx) {
       reason: 's5_risk_to_s4',
       score: integEff.score,
       s5_risk_days: riskDays,
+      s5_risk_last_counted_date: riskAdv.anchor,
+      s5_risk_counted_today: riskAdv.counted,
       soft_down_days: riskDays,
+      soft_down_last_counted_date: riskAdv.anchor,
       s5_integrity: integEff,
       block_aggressive_add: true,
       engine: 's5'
@@ -527,7 +546,11 @@ function resolveS5Downside(ctx) {
     reason: 's5_risk_pending',
     score: integEff.score,
     soft_down_days: riskDays,
+    soft_down_last_counted_date: riskAdv.anchor,
+    soft_down_counted_today: riskAdv.counted,
     s5_risk_days: riskDays,
+    s5_risk_last_counted_date: riskAdv.anchor,
+    s5_risk_counted_today: riskAdv.counted,
     target_stage: 'S5',
     s5_integrity: integEff,
     block_aggressive_add: true,
@@ -591,8 +614,23 @@ function updatePersistenceState(prevState, nextStage, snapshot, bars, persistenc
   const prev = prevState || {};
   const same = prev.stage === nextStage;
   const close = resolveClose(snapshot);
+  // V3.6.1 R1：days_in_stage 按**唯一交易日**推进。
+  // 修复前 `same ? prev.days_in_stage + 1 : 0` ⇒ 同一 calc_date 跑 N 次 = 驻留 N 天，
+  // 会把 S4 grace（2 日）等窗口在同一天内耗尽。
+  const tradeDate = resolveTradeDate(snapshot);
   let breakoutLevel = prev.breakout_level;
-  let daysInStage = same ? ((prev.days_in_stage || 0) + 1) : 0;
+  let daysInStage;
+  let persistenceAnchor;
+  if (same) {
+    const adv = advanceDailyCounter(
+      prev.days_in_stage || 0, prev.persistence_last_counted_date, tradeDate, 1
+    );
+    daysInStage = adv.count;
+    persistenceAnchor = adv.anchor;
+  } else {
+    daysInStage = 0;
+    persistenceAnchor = resetAnchor(tradeDate);
+  }
   let s4Origin = prev.s4_origin || null;
   const graceOn = postS5GraceEnabled(params);
 
@@ -632,15 +670,26 @@ function updatePersistenceState(prevState, nextStage, snapshot, bars, persistenc
 
   let softDown = 0;
   let s5Risk = 0;
+  let softDownAnchor = prev.soft_down_last_counted_date || null;
+  let s5RiskAnchor = prev.s5_risk_last_counted_date || null;
   if (persistenceResult && persistenceResult.action === 'soft_pending') {
     softDown = persistenceResult.soft_down_days || persistenceResult.s5_risk_days || 1;
     s5Risk = persistenceResult.s5_risk_days || softDown;
+    // V3.6.1 R1：锚点必须回写，否则下一次运行又退化成「按调用次数」
+    softDownAnchor = persistenceResult.soft_down_last_counted_date
+      || persistenceResult.s5_risk_last_counted_date || softDownAnchor;
+    s5RiskAnchor = persistenceResult.s5_risk_last_counted_date
+      || persistenceResult.soft_down_last_counted_date || s5RiskAnchor;
   } else if (persistenceResult && persistenceResult.action === 'hold') {
     softDown = 0;
     s5Risk = 0;
+    softDownAnchor = null;
+    s5RiskAnchor = null;
   } else if (!same) {
     softDown = 0;
     s5Risk = 0;
+    softDownAnchor = null;
+    s5RiskAnchor = null;
   }
 
   return {
@@ -649,6 +698,10 @@ function updatePersistenceState(prevState, nextStage, snapshot, bars, persistenc
     soft_down_days: softDown,
     s5_risk_days: s5Risk,
     s4_origin: s4Origin,
+    // V3.6.1 R1：交易日锚点（旧 state 缺失 ⇒ null，向后兼容）
+    persistence_last_counted_date: persistenceAnchor != null ? persistenceAnchor : null,
+    soft_down_last_counted_date: softDownAnchor,
+    s5_risk_last_counted_date: s5RiskAnchor,
     persistence_overlay: persistenceResult && persistenceResult.overlay
       ? persistenceResult.overlay : null,
     persistence_reason: persistenceResult && persistenceResult.reason
@@ -663,6 +716,8 @@ function updatePersistenceState(prevState, nextStage, snapshot, bars, persistenc
 }
 
 module.exports = {
+  // V3.6.1 R1：转发唯一实现的引用（供「单一真相」不变量测试断言同一函数对象）
+  swingHighLow,
   resolveClose,
   isBreakoutFailure,
   isS5BreakoutFailure,
