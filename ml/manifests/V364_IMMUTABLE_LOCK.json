@@ -1,0 +1,317 @@
+{
+  "version": "V3.6.4",
+  "status": "FROZEN",
+  "freeze_decision": "USER_REVIEW_AUTHORIZED",
+  "title": "V3.6.4 Safety Hardening",
+  "frozen_from": "ml/manifests/V364_IMMUTABLE_LOCK.candidate.json",
+  "generated_at": "2026-09-22T06:27:33.920Z",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256)，与 V361/GEN1/GEN2 三把锁同口径",
+  "parent_version": "V3.6.1",
+  "parent_repo_sha": "650db58639f32232ac72a99920060dd92e743621",
+  "qualification_content_sha": "00a8b14a0f9df83311992f176c8b73a0eda902fa",
+  "qualification_ci_head_sha": "c37ec91bdbe16dca3e6bbf59a53fea96085f6954",
+  "qualification_ci_run_number": 145,
+  "qualification_ci_run_id": 35693711637,
+  "qualification_ci_conclusion": "success",
+  "sha_semantics_note": "qualification_content_sha = 被锁定的候选内容 commit（manifest 生成前的那一个）；qualification_ci_head_sha = 通过最终完整 CI 的 PR HEAD。二者语义不同，禁止互相替代；也不得把任一者替换为 freeze commit 自身。",
+  "candidate_repo_sha_alias_note": "candidate manifest 里的旧字段名 `candidate_repo_sha` 在本冻结文件中由 `qualification_content_sha` 取代（同义：被锁定的候选内容 commit）。它**既不是** CI head，**也不是** freeze commit。",
+  "self_reference_policy": "本 manifest **不记录其自身所在的 freeze commit SHA**（避免自指）。freeze commit 由 git tag `v3.6.4-frozen` 与 `docs/production-deployment-ledger.md` 记录。",
+  "files": {
+    "decision_js": "src/common/utils/decision.js",
+    "decision_v3_js": "src/common/utils/decision-v3.js",
+    "trend_stage_js": "src/common/utils/trend-stage.js",
+    "correlation_js": "src/common/utils/correlation.js",
+    "v3_6_stage_persistence_js": "src/common/utils/v3-6-stage-persistence.js",
+    "defense_js": "src/common/utils/defense.js",
+    "swing_structure_js": "src/common/utils/swing-structure.js",
+    "trade_date_idempotence_js": "src/common/utils/trade-date-idempotence.js",
+    "portfolio_mode_js": "src/common/utils/portfolio-mode.js",
+    "portfolio_cash_js": "src/common/utils/portfolio-cash.js",
+    "market_env_diagnostics_js": "src/common/utils/market-env-diagnostics.js",
+    "v361_run_context_js": "src/common/utils/v361-run-context.js",
+    "v361_run_finality_js": "src/common/utils/v361-run-finality.js",
+    "run_decision_engine_index_js": "cloudfunctions/runDecisionEngine/index.js",
+    "schema_js": "src/common/schema.js",
+    "market_regime_js": "src/common/utils/market-regime.js",
+    "test_all_js": "scripts/test-all.js"
+  },
+  "sha256": {
+    "decision_js": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+    "decision_v3_js": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+    "trend_stage_js": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+    "correlation_js": "44aae61ed6730256959721d3f3d599c5274fd4c863d1b7322a4748c207181b0b",
+    "v3_6_stage_persistence_js": "455c32487ed6b916d1331d1166e136a316736f708e105cd52f044dad42aa10f3",
+    "defense_js": "acda04f9b18cdac01cbb7cd43f225f1a482521424ce5eb830817e0bd74cb0083",
+    "swing_structure_js": "e5796579c3a84ae80b45cdffab827ec1f865639e47303e032080267fbe0958ae",
+    "trade_date_idempotence_js": "fd4f5aa2ec9e897c5ea33a72e4ad66f886a280259f9a8438b778fe6067245707",
+    "portfolio_mode_js": "fe0dbd0446e1de975f921d5bd55a74886a46b20fcfcffcfaf089f2eaa3f3e979",
+    "portfolio_cash_js": "e8fefc5ac9345b9f4e99ca5c9097f2c44060ca52e8636f3bd643045a5a9fc23f",
+    "market_env_diagnostics_js": "3be061ba3e48965a335dda355e026c551cb07ce72415ce84d27ec69f9d7d65db",
+    "v361_run_context_js": "45b799c3c01544e21da1749a2a18ad5de72006dd4a49801dc8a6d2404b6808f2",
+    "v361_run_finality_js": "f9228792793e1059acdbaabe22ba51abdd477be87d626f93d191ae4d6e0dd1e6",
+    "run_decision_engine_index_js": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
+    "schema_js": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
+    "market_regime_js": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
+    "test_all_js": "7d267da912efe8b7e12c3ddd15f193eb242b0c7fec12776359505306771f4754"
+  },
+  "implementation_files_recalc": {
+    "decision_js": {
+      "path": "src/common/utils/decision.js",
+      "expected": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "actual": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "pass": true
+    },
+    "decision_v3_js": {
+      "path": "src/common/utils/decision-v3.js",
+      "expected": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "actual": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "pass": true
+    },
+    "trend_stage_js": {
+      "path": "src/common/utils/trend-stage.js",
+      "expected": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "actual": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "pass": true
+    },
+    "correlation_js": {
+      "path": "src/common/utils/correlation.js",
+      "expected": "44aae61ed6730256959721d3f3d599c5274fd4c863d1b7322a4748c207181b0b",
+      "actual": "44aae61ed6730256959721d3f3d599c5274fd4c863d1b7322a4748c207181b0b",
+      "pass": true
+    },
+    "v3_6_stage_persistence_js": {
+      "path": "src/common/utils/v3-6-stage-persistence.js",
+      "expected": "455c32487ed6b916d1331d1166e136a316736f708e105cd52f044dad42aa10f3",
+      "actual": "455c32487ed6b916d1331d1166e136a316736f708e105cd52f044dad42aa10f3",
+      "pass": true
+    },
+    "defense_js": {
+      "path": "src/common/utils/defense.js",
+      "expected": "acda04f9b18cdac01cbb7cd43f225f1a482521424ce5eb830817e0bd74cb0083",
+      "actual": "acda04f9b18cdac01cbb7cd43f225f1a482521424ce5eb830817e0bd74cb0083",
+      "pass": true
+    },
+    "swing_structure_js": {
+      "path": "src/common/utils/swing-structure.js",
+      "expected": "e5796579c3a84ae80b45cdffab827ec1f865639e47303e032080267fbe0958ae",
+      "actual": "e5796579c3a84ae80b45cdffab827ec1f865639e47303e032080267fbe0958ae",
+      "pass": true
+    },
+    "trade_date_idempotence_js": {
+      "path": "src/common/utils/trade-date-idempotence.js",
+      "expected": "fd4f5aa2ec9e897c5ea33a72e4ad66f886a280259f9a8438b778fe6067245707",
+      "actual": "fd4f5aa2ec9e897c5ea33a72e4ad66f886a280259f9a8438b778fe6067245707",
+      "pass": true
+    },
+    "portfolio_mode_js": {
+      "path": "src/common/utils/portfolio-mode.js",
+      "expected": "fe0dbd0446e1de975f921d5bd55a74886a46b20fcfcffcfaf089f2eaa3f3e979",
+      "actual": "fe0dbd0446e1de975f921d5bd55a74886a46b20fcfcffcfaf089f2eaa3f3e979",
+      "pass": true
+    },
+    "portfolio_cash_js": {
+      "path": "src/common/utils/portfolio-cash.js",
+      "expected": "e8fefc5ac9345b9f4e99ca5c9097f2c44060ca52e8636f3bd643045a5a9fc23f",
+      "actual": "e8fefc5ac9345b9f4e99ca5c9097f2c44060ca52e8636f3bd643045a5a9fc23f",
+      "pass": true
+    },
+    "market_env_diagnostics_js": {
+      "path": "src/common/utils/market-env-diagnostics.js",
+      "expected": "3be061ba3e48965a335dda355e026c551cb07ce72415ce84d27ec69f9d7d65db",
+      "actual": "3be061ba3e48965a335dda355e026c551cb07ce72415ce84d27ec69f9d7d65db",
+      "pass": true
+    },
+    "v361_run_context_js": {
+      "path": "src/common/utils/v361-run-context.js",
+      "expected": "45b799c3c01544e21da1749a2a18ad5de72006dd4a49801dc8a6d2404b6808f2",
+      "actual": "45b799c3c01544e21da1749a2a18ad5de72006dd4a49801dc8a6d2404b6808f2",
+      "pass": true
+    },
+    "v361_run_finality_js": {
+      "path": "src/common/utils/v361-run-finality.js",
+      "expected": "f9228792793e1059acdbaabe22ba51abdd477be87d626f93d191ae4d6e0dd1e6",
+      "actual": "f9228792793e1059acdbaabe22ba51abdd477be87d626f93d191ae4d6e0dd1e6",
+      "pass": true
+    },
+    "run_decision_engine_index_js": {
+      "path": "cloudfunctions/runDecisionEngine/index.js",
+      "expected": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
+      "actual": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
+      "pass": true
+    },
+    "schema_js": {
+      "path": "src/common/schema.js",
+      "expected": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
+      "actual": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
+      "pass": true
+    },
+    "market_regime_js": {
+      "path": "src/common/utils/market-regime.js",
+      "expected": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
+      "actual": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
+      "pass": true
+    },
+    "test_all_js": {
+      "path": "scripts/test-all.js",
+      "expected": "7d267da912efe8b7e12c3ddd15f193eb242b0c7fec12776359505306771f4754",
+      "actual": "7d267da912efe8b7e12c3ddd15f193eb242b0c7fec12776359505306771f4754",
+      "pass": true
+    }
+  },
+  "qualification_reports": {
+    "docs/V364_SLOWBREAK_REPLAY.md": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
+    "docs/V364_IDEMPOTENCE_REPLAY.md": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
+    "docs/V364_SWING_PARITY_REPORT.md": "17e43474ba98a995e5c78651c382761bff8fcc94e8158dc21783bcbf8e7974f3",
+    "docs/V364_CANDIDATE_QUALIFICATION.md": "27bf353daec4aebb28307a1d1ce3aef033df9c0fa6dc959cd5cde8f33e42dfba",
+    "docs/V361_SAFETY_HARDENING_R1_REPORT.md": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
+    "docs/production-deployment-ledger.md": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867"
+  },
+  "qualification_reports_recalc": {
+    "docs/V364_SLOWBREAK_REPLAY.md": {
+      "expected": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
+      "actual": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
+      "pass": true
+    },
+    "docs/V364_IDEMPOTENCE_REPLAY.md": {
+      "expected": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
+      "actual": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
+      "pass": true
+    },
+    "docs/V364_SWING_PARITY_REPORT.md": {
+      "expected": "17e43474ba98a995e5c78651c382761bff8fcc94e8158dc21783bcbf8e7974f3",
+      "actual": "17e43474ba98a995e5c78651c382761bff8fcc94e8158dc21783bcbf8e7974f3",
+      "pass": true
+    },
+    "docs/V364_CANDIDATE_QUALIFICATION.md": {
+      "expected": "27bf353daec4aebb28307a1d1ce3aef033df9c0fa6dc959cd5cde8f33e42dfba",
+      "actual": "27bf353daec4aebb28307a1d1ce3aef033df9c0fa6dc959cd5cde8f33e42dfba",
+      "pass": true
+    },
+    "docs/V361_SAFETY_HARDENING_R1_REPORT.md": {
+      "expected": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
+      "actual": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
+      "pass": true
+    },
+    "docs/production-deployment-ledger.md": {
+      "expected": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867",
+      "actual": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867",
+      "pass": true
+    }
+  },
+  "qualification_reports_basis": "哈希对应 `qualification_content_sha` 的内容。后续**独立**的文档措辞更新不属本候选内容集，不改变本冻结集。",
+  "explicitly_not_included": [
+    "Portfolio Mode 启用（v3_force_portfolio_track / v3_5_portfolio_enabled）",
+    "Market Regime authority 变更 / W5 majority 规则变更",
+    "Run Finality 生产阻断接通",
+    "V361RunContext 生产阻断接通",
+    "Tech Cap / correlation discount 阈值变更",
+    "SlowBreak / DefenseScore 阈值变更",
+    "StageFactor / MarketFactor / 仓位步长变更",
+    "V3.6.2 post-S5 Grace / V3.6.3 adaptive post-S5 Grace（继续保持 OFF）",
+    "任何线上部署 / param_config 变更"
+  ],
+  "freeze_scope": "本冻结**仅**完成 `CANDIDATE_NOT_FROZEN → FROZEN`。**不包含**：PR #52 merge 授权、CloudBase 部署授权、线上 param_config 修改授权、fine-grained PAT 权限变更、仓库 ruleset 变更。",
+  "parent_unchanged_invariants": [
+    {
+      "name": "V3.6.1 decision-v3.js 未被修改",
+      "expected": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "actual": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "pass": true
+    },
+    {
+      "name": "V3.6.1 decision.js 未被修改",
+      "expected": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "actual": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "pass": true
+    },
+    {
+      "name": "GEN-1 pipeline trend-stage.js 未被修改",
+      "expected": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "actual": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "pass": true
+    }
+  ],
+  "parent_unchanged_all_pass": true,
+  "frozen_invariants": [
+    {
+      "name": "V361_IMMUTABLE_LOCK.json 逐位未改（相对 parent_repo_sha）",
+      "expected": "1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd",
+      "actual": "1c724381e533dd51e4fd0268bdc14aca0b4f444a458eab6c75c97be78a78f1bd",
+      "pass": true,
+      "baseline_source": "git show 650db58639f32232ac72a99920060dd92e743621:ml/manifests/V361_IMMUTABLE_LOCK.json | CRLF->LF | sha256"
+    },
+    {
+      "name": "GEN1_FEATURE_PIPELINE_LOCK.json 逐位未改（相对 parent_repo_sha）",
+      "expected": "8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad",
+      "actual": "8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad",
+      "pass": true,
+      "baseline_source": "git show 650db58639f32232ac72a99920060dd92e743621:ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json | CRLF->LF | sha256"
+    },
+    {
+      "name": "decision-v3.js 逐位未改（期望值取自 V361_IMMUTABLE_LOCK.json）",
+      "expected": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "actual": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "pass": true,
+      "baseline_source": "ml/manifests/V361_IMMUTABLE_LOCK.json :: decision_v3_sha256"
+    },
+    {
+      "name": "decision.js 逐位未改（期望值取自 V361_IMMUTABLE_LOCK.json）",
+      "expected": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "actual": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "pass": true,
+      "baseline_source": "ml/manifests/V361_IMMUTABLE_LOCK.json :: decision_sha256"
+    },
+    {
+      "name": "trend-stage.js 逐位未改（期望值取自 GEN1_FEATURE_PIPELINE_LOCK.json）",
+      "expected": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "actual": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "pass": true,
+      "baseline_source": "ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json :: files[role=trend_stage_implementation].sha256"
+    }
+  ],
+  "frozen_invariants_all_pass": true,
+  "gate_a_status": "PASS_SAFETY_ONLY",
+  "gate_a_statement": "R1 lowerLow plumbing 修复在当前生产 indicator contract 下为零副作用；由于 ma60_slope / high_point_falling(or lower_high) 缺失，SB>=75 当前生产不可达；因此 Gate A 不构成 SlowBreak 触发时机正确性的验证。",
+  "gate_a_must_not_be_read_as": "SlowBreak 功能已经验证有效",
+  "finding_1": {
+    "id": "FINDING-1",
+    "status": "OPEN",
+    "summary": "calcSlowBreakScore 的 4 项输入中，ma60_slope 全仓无产生处、high_point_falling/lower_high 不在线上 indicator_snapshot 字段集内 ⇒ 分数上限 50 ⇒ SB>=75 不可达。",
+    "not_fixed_in_this_freeze": true,
+    "do_not": [
+      "补快照字段",
+      "修改 SlowBreak 阈值"
+    ]
+  },
+  "gates": {
+    "A": {
+      "status": "PASS_SAFETY_ONLY",
+      "evidence": "PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）",
+      "statement": "R1 lowerLow plumbing 修复在当前生产 indicator contract 下为零副作用；由于 ma60_slope / high_point_falling(or lower_high) 缺失，SB>=75 当前生产不可达；因此 Gate A 不构成 SlowBreak 触发时机正确性的验证。"
+    },
+    "B": {
+      "status": "PASS",
+      "evidence": "PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）"
+    },
+    "C": {
+      "status": "PASS",
+      "evidence": "PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）"
+    },
+    "D": {
+      "status": "PASS",
+      "evidence": "PASS（2026-09-22，GitHub Actions run #144，head 52ee424：Node16/22 × Python3.11/3.12 四 job 全绿；npm test 59/59 项通过、Stage A 51/51、Gen-1 Production Gates 32/32、Build parity 7/7、parity 360 行）。首轮 run #143 为 FAIL，根因是 tests/v364-swing-parity.test.js 的 C.2 阈值按本机语料标定（CI 无 deliverables/ ⇒ 只剩合成语料 917 窗口），非产品缺陷 —— 反证：C.1 mismatch_count = 0 在 CI 同样 PASS；已修为环境感知（合成语料底线环境无关恒强制 / 真实历史可用时才强制 >3000 / 不可用时显式披露）。",
+      "run_url": "https://github.com/iquelee/etf-decision-engine/actions/runs/35693440911",
+      "run_number": 145,
+      "run_id": 35693711637,
+      "head_sha": "c37ec91bdbe16dca3e6bbf59a53fea96085f6954",
+      "conclusion": "success"
+    }
+  },
+  "post_freeze_state": "FROZEN / NOT_MERGED / NOT_DEPLOYED",
+  "next_authorizations_required": [
+    "MERGE AUTHORIZATION（与部署授权分开）",
+    "PRODUCTION PROMOTION AUTHORIZATION"
+  ],
+  "rule": "V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。任何对 V3.6.4 候选范围的扩展都必须重新走 Gate A~D 并重新生成本 manifest。",
+  "freeze_rule": "本文件一经冻结即不得静默修改。任何对 V3.6.4 冻结集的扩展或挑战，必须升版（V3.6.5+）并重新走完整资格化（Gate A~D）。`V361_IMMUTABLE_LOCK.json` 永久保留 V3.6.1 历史基线，不因本冻结而变更。"
+}
