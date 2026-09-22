@@ -2,6 +2,7 @@
 
 - 报告日期：2026-09-22
 - 分支：`feat/v361-safety-hardening-r1`（基于 `origin/master` = `650db58639f32232ac72a99920060dd92e743621`）
+- 本地提交：见本分支 HEAD（**仅本地提交，未 push、未建 PR、未部署**）
 - 范围：**第一阶段 Correctness Hardening**（不做策略优化，不升版）
 - 铁律遵守：未部署 · 未改线上 param_config · 未改 chase/StageFactor/MarketFactor/Opportunity/仓位上限 · 未开启 V3.6.2 / V3.6.3 · 未让 Gen-1/Gen-2 获得 `final_target` / `final_action` 写权限
 
