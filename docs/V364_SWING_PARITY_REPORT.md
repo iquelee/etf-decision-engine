@@ -56,6 +56,25 @@ node tests/v364-swing-parity.test.js     # CI Stage A 自动执行（tests/*.tes
 该测试在默认的 `node scripts/test-all.js` Stage A 里被自动发现并执行，
 因此**任何对 `swing-structure.js` 的改动只要让 `higherLow` / `lowerHigh` 漂移，CI 立即失败**。
 
+### 门禁自身的首轮 CI 表现（2026-09-22，PR #52 run #143）
+
+首轮 CI **红**，且红在本门禁上 —— 但**不是 parity 破裂**：
+
+```
+✗ C.2 扫描规模足够（真实历史 + 确定性合成语料都覆盖）: total_windows 过少：917
+```
+
+- `C.1（mismatch_count = 0）` 在 CI 上**照样 PASS** ⇒ 共享语义未漂移。
+- 失败原因是 **C.2 的阈值 `total_windows > 3000` 按本机环境标定**：
+  本机 5483（真实 4566 + 合成 917），CI 无 `deliverables/` ⇒ 只剩 917。
+  **这是本门禁的测试缺陷，不是产品缺陷。**
+- 已修为**环境感知**：合成语料底线环境无关恒强制；真实历史仅在**可用时**才强制 `> 3000`；
+  不可用时打印 `[NOTICE]` 显式披露「本环境未覆盖真实历史」。**不静默放宽、不伪造数据。**
+- 复现验证：`scanParity({ includeReal: false })` → `total_windows = 917`，与 CI 逐位吻合。
+
+> 结论：本门禁**确实咬得住**（CI 一跑就暴露了「按本机标定」的隐患）。修复后仍保持
+> `mismatch_count = 0` 的硬约束，只是把「语料规模」这一维度按环境正确分层。
+
 ## 退化输入
 
 | case | 两份实现均不抛异常 |

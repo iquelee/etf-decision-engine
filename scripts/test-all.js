@@ -62,9 +62,27 @@ function stageA() {
     const ok = r.status === 0;
     if (!ok) {
       failed++;
-      // 打印失败摘要
-      const lines = outText(r).split('\n').filter((l) => /AssertionError|Error|FAIL|actual|expected/.test(l)).slice(0, 3);
-      report('A', t, false, (lines.join(' | ') || outText(r).slice(-160)).slice(0, 200));
+      // 打印失败摘要。
+      // 2026-09-22 修：旧实现按 /AssertionError|Error|FAIL|actual|expected/ 取前 3 行，
+      //   会把测试里**通过的**用例名（如「…（tie）→ 两项皆 false」）当成失败原因，
+      //   在 CI 上导致误诊（PR #52 run #143 实际失败项是 C.2，标签却指向 C.7）。
+      //   现改为：① spawn 本身失败 → 显式说明；② 优先取测试自己打印的 ✗ 行 + 其下一行；
+      //   ③ 退化为 AssertionError/Error/FAIL 行；④ 再退化为输出尾部。
+      const raw = outText(r).split('\n').map((l) => l.replace(/\s+$/, ''));
+      let picked = [];
+      if (r.error) {
+        picked = [`spawn_failed:${r.error.code || r.error.message}`];
+      } else {
+        const idx = raw.findIndex((l) => l.indexOf('\u2717') >= 0);
+        if (idx >= 0) {
+          picked = [raw[idx].trim()];
+          if (raw[idx + 1] && raw[idx + 1].trim()) picked.push(raw[idx + 1].trim());
+        } else {
+          picked = raw.filter((l) => /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
+        }
+        if (!picked.length) picked = raw.filter(Boolean).slice(-2).map((l) => l.trim());
+      }
+      report('A', t, false, (picked.join(' | ') || '(no output)').slice(0, 280));
     } else {
       report('A', t, true);
     }

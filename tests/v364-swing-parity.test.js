@@ -61,12 +61,30 @@ test('C.1 共享字段 higherLow / lowerHigh 在全语料上 mismatch_count = 0'
     `共享字段漂移 ${scan.mismatch_count} 例：${JSON.stringify(scan.mismatch_examples.slice(0, 3))}`);
 });
 
-test('C.2 扫描规模足够（真实历史 + 确定性合成语料都覆盖）', () => {
-  assert.ok(scan.total_windows > 3000, `total_windows 过少：${scan.total_windows}`);
-  assert.ok(scan.sources.synthetic_corpus.windows > 500,
-    'CI 上必须始终有合成语料窗口（deliverables/ 不入库）');
-  assert.ok(scan.sources.synthetic_corpus.series_count >= 20,
-    '合成语料序列数不足，边界覆盖太弱');
+test('C.2 扫描规模足够（真实历史可用时必须覆盖；不可用时合成语料兜底并显式披露）', () => {
+  const real = scan.sources.real_history;
+  const synth = scan.sources.synthetic_corpus;
+
+  // 环境无关的硬底线：合成语料必须始终覆盖到位（这是 CI 上唯一的语料来源）
+  assert.ok(synth.windows > 500,
+    `合成语料窗口过少：${synth.windows}（期望 > 500）`);
+  assert.ok(synth.series_count >= 20,
+    `合成语料序列数不足：${synth.series_count}（期望 >= 20）`);
+
+  if (real.available) {
+    // 本机：deliverables/ 存在 ⇒ 必须真正吃到真实历史
+    assert.ok(real.windows > 3000,
+      `真实历史窗口过少：${real.windows}（期望 > 3000）`);
+    assert.ok(scan.total_windows > 3000,
+      `total_windows 过少：${scan.total_windows}（期望 > 3000）`);
+  } else {
+    // CI：deliverables/ 已 gitignore ⇒ 真实历史**结构性不可用**（非缺陷）。
+    // ⛔ 不得静默放宽：必须显式披露，避免 CI 绿被误读为「全量历史已覆盖」。
+    console.log('      [NOTICE] 真实历史不可用（deliverables/ 不入库，'
+      + `unavailable=${real.unavailable_codes.join('/')}）`
+      + ` ⇒ 本环境仅覆盖确定性合成语料 ${synth.windows} 窗口；`
+      + '真实历史（5 只生产 ETF 全量 K 线）的覆盖由本机 Gate C 报告承担。');
+  }
 });
 
 test('C.3 两份实现确实是不同函数（冻结副本仍在，允许并存）', () => {
