@@ -197,13 +197,18 @@ function main() {
       gate_a: 'PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）',
       gate_b: 'PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）',
       gate_c: 'PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）',
-      gate_d: 'BLOCKED_ON_PR_CREATION —— 分支与 tag 已 push（origin/feat/v361-safety-hardening-r1=3568720，tag v361-r1-freeze=a896aeb），'
-        + 'master 未动；但 PR 创建被 GitHub API 403（Resource not accessible by integration，令牌只读）。'
-        + '.github/workflows/test.yml 仅在 push(master/main) 或 pull_request 时触发 ⇒ PR 建立前 CI 不运行。'
-        + '需人工在 Web 建 PR 后取得真实 CI 结果。',
-      gate_d_status: 'BLOCKED_ON_PR_CREATION',
-      satisfied: false,
-      note: 'D 未全绿前**不得**改写为 FROZEN'
+      gate_d: 'PASS（2026-09-22，GitHub Actions run #144，head 52ee424：Node16/22 × Python3.11/3.12 四 job 全绿；'
+        + 'npm test 59/59 项通过、Stage A 51/51、Gen-1 Production Gates 32/32、Build parity 7/7、parity 360 行）。'
+        + '首轮 run #143 为 FAIL，根因是 tests/v364-swing-parity.test.js 的 C.2 阈值按本机语料标定'
+        + '（CI 无 deliverables/ ⇒ 只剩合成语料 917 窗口），非产品缺陷 —— 反证：C.1 mismatch_count = 0 在 CI 同样 PASS；'
+        + '已修为环境感知（合成语料底线环境无关恒强制 / 真实历史可用时才强制 >3000 / 不可用时显式披露）。',
+      gate_d_status: 'PASS',
+      gate_d_run: 'https://github.com/iquelee/etf-decision-engine/actions/runs/35693440911',
+      satisfied: true,
+      freeze_decision: 'AWAITING_USER_AUTHORIZATION',
+      note: '四道 Gate 已全部 PASS ⇒ 已满足置 FROZEN 的**前置条件**；但 `status` 仍保持 CANDIDATE_NOT_FROZEN：'
+        + '置 FROZEN 属治理写操作，须待人工 Review 授权后另起一个可回溯 commit 执行。'
+        + '未授权前，本 manifest 不是生产基线，也不得被引用为「已冻结」。'
     },
 
     rule: 'V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。'

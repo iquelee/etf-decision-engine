@@ -182,6 +182,20 @@ const only = process.argv.find((a) => a.startsWith('--stage='));
 const stages = { A: stageA, B: stageB, C: stageC, D: stageD, E: stageE, F: stageF, G: stageG };
 const order = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
+// 环境披露（2026-09-22 加）：部分门禁依赖 `deliverables/`（已 gitignore）里的真实历史 CSV，
+// 该目录在 CI 上**结构性不存在**。若不显式说明，CI 全绿会被误读为「全量历史已覆盖」。
+// 这里只**如实披露环境**，不放宽任何断言、不伪造数据。
+// （背景：PR #52 run #143 曾因「按本机语料标定的阈值」在 CI 变红，见 docs/V364_CANDIDATE_QUALIFICATION.md §2.4）
+if (!only || only === '--stage=A') {
+  const mlPool = path.join(REPO, 'deliverables', 'etf_daily_ml_pool');
+  const hasReal = fs.existsSync(mlPool);
+  console.log(`\n[ENV] deliverables/etf_daily_ml_pool = ${hasReal ? '存在' : '不存在'}`);
+  console.log(hasReal
+    ? '      真实历史语料门禁（如 Gate C 的 4566 真实窗口）在本环境已覆盖。'
+    : '      ⚠️ 真实历史语料在本环境**未覆盖**（CI 常态）⇒ 依赖它的门禁只跑合成/确定性语料；'
+      + '相关「真实历史全覆盖」结论以本机报告为准，不得由本环境的绿反推。');
+}
+
 for (const s of order) {
   if (only && only !== `--stage=${s}`) continue;
   stages[s]();

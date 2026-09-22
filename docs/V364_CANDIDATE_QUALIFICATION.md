@@ -50,7 +50,7 @@
 | **A** | SlowBreak Historical Replay（OLD vs NEW） | 582 个五票共同交易日 × 5 票 | **PASS** |
 | **B** | Same-Day Idempotence Full-chain Replay（RUN_ONCE vs RUN_3X） | 120 天 × 5 票 × (1+3) 次 = 6000 次字段比对 | **PASS** |
 | **C** | Swing Parity（旧/新实现共享语义） | 5483 个 rolling window | **PASS** |
-| **D** | 正式 CI（GitHub Actions） | Node16/22 × Python3.11/3.12 + 全门禁 | 见 §2.4 |
+| **D** | 正式 CI（GitHub Actions） | Node16/22 × Python3.11/3.12 + 全门禁 | **PASS**（run #144：59/59，4/4 job 绿） |
 
 ### 2.1 Gate A —— SlowBreak Historical Replay
 
@@ -148,7 +148,7 @@
 
 ### 2.4 Gate D —— 正式 CI
 
-**状态：`FAIL（run #143）→ 已定位根因并修复 → 待重跑确认`**
+**状态：✅ `PASS`（run #144，head `52ee424`）** —— 首轮 run #143 为 FAIL，根因已修（见 2.4.2 / 2.4.3）
 
 #### 2.4.1 打通 CI：★ 本报告上一版的结论已被推翻，现撤回
 
@@ -207,8 +207,46 @@ F（Build parity 7-7）/ G（Gen-1 **32/32**）**全部 PASS**。失败项是：
 （如 `…（tie）→ 两项皆 false`）当成失败原因 —— 本次 CI 日志就因此把 C.2 误标为 C.7，导致诊断跑偏。
 现改为：spawn 失败 → `spawn_failed:<code>`；否则优先取 `✗` 行及其下一行；再退化为错误行/输出尾部。
 
-**Gate D 判定：`FAIL（run #143）→ 已修复 → 待重跑确认`**。
+**Gate D 判定（首轮）：`FAIL（run #143）`**。
 `V364_IMMUTABLE_LOCK.candidate.json` 的 `freeze_condition` **仍为未满足**；D 全绿前不得置 `FROZEN`。
+
+#### 2.4.3 重跑结果（run #144，head `52ee424`）：**SUCCESS** ✅
+
+修复提交 `52ee424` 推送后，CI 自动重跑（`pull_request` synchronize）：
+
+| Job | 结果 |
+|---|---|
+| `test (16, 3.11)` / `(16, 3.12)` / `(22, 3.11)` / `(22, 3.12)` | ✅ **全 4 个 success** |
+| 步骤 `Run full test gates (npm test)` / `Gate 6 — Immutable SHA` / `Gate G1-A~H` | ✅ 全部 success（无 skipped） |
+| `CodeQL` / `Analyze (actions)` | ✅ success |
+
+run：https://github.com/iquelee/etf-decision-engine/actions/runs/35693440911
+
+日志取证的最终口径（job `test (16, 3.12)` 全量日志，40 277 bytes）：
+
+```
+=== 汇总：59/59 项通过，0 项失败 ===
+  Stage A: 51/51 文件通过            ← 首轮为 50/51
+  Gen-1 Production Gates：32/32 通过
+  WP-G2-04 构建产物逐位一致：7/7 项
+  Python ↔ Node 决策链逐字段一致（360 行，role/rank 精确、score/weight 容差内）
+[FAIL] 出现次数：0
+```
+
+⇒ **四道 Qualification Gate（A/B/C/D）现已全部 PASS。**
+`freeze_condition.satisfied` 由 `false` 改为 `true`；但 `status` **仍保持 `CANDIDATE_NOT_FROZEN`**
+—— 置 `FROZEN` 属治理动作，**待人工 Review 授权后另起一个可回溯 commit 执行**（见 §3）。
+
+#### 2.4.4 环境披露（新增，兑现「不隐藏样本不足」）
+
+`scripts/test-all.js` 新增 `[ENV]` 行，在每次运行开头如实披露
+`deliverables/etf_daily_ml_pool` 是否存在，并明示：
+
+> 不存在时 —— ⚠️ 真实历史语料在本环境**未覆盖**（CI 常态）⇒ 依赖它的门禁只跑合成/确定性语料；
+> 相关「真实历史全覆盖」结论以本机报告为准，**不得由本环境的绿反推**。
+
+原因：C.2 的 `[NOTICE]` 由子测试打印，而 `test-all.js` 在子测试**通过时不转发其输出**
+⇒ 该披露在 CI 日志里实际上**看不见**。承诺必须兑现，故在入口层补一次显式披露（只披露环境，不放宽断言）。
 
 ---
 
@@ -300,17 +338,21 @@ Gate C 的 **5483 窗口**结论来自**本机**运行（真实 4566 + 合成 91
 ## 6. 结论与建议
 
 1. **Gate A / B / C 全部 PASS**，且均以真实历史数据 + 真实生产链状态跑出，可复核（脚本 + 原始 JSON + 报告齐备）。
-2. **Gate D 首轮为 `FAIL`（run #143）；根因已定位并修复**：失败项是我方测试
+2. ✅ **Gate D 已 PASS（run #144）** —— 首轮 run #143 为 FAIL，根因是我方测试
    `v364-swing-parity.test.js` 的 **C.2 阈值按本机环境标定**（CI 无 `deliverables/` ⇒ 只剩合成语料 917 窗口），
    **不是产品缺陷**（Stage C/D/E/F/G 全 PASS，`C.1 mismatch_count = 0` 在 CI 上照样 PASS）。
-   已修为环境感知并复现验证（`includeReal:false` → 917，与 CI 逐位吻合）。
-   **CI 未重跑确认为绿之前：不得 merge、不得置 `FROZEN`。**
+   修复后重跑：**4/4 job 绿、59/59 项通过、Stage A 51/51、Gen-1 32/32**。
+   ⇒ **四道 Gate 全部 PASS**；`manifest.freeze_condition.satisfied = true`，
+   但 `status` 仍为 `CANDIDATE_NOT_FROZEN`（置 FROZEN 待你 Review 授权）。
+   **仍不得 merge**（本轮明令禁止）。
 3. **V3.6.4 是 correctness hardening 候选，不是业绩改进版本**：
    - 在真实数据上，SlowBreak 修复的决策影响为 **0**（因为 `SB>=75` 不可达，见 FINDING-1）；
    - 相关性口径与 Market Regime / 现金诊断均为**只读新增或零差异**；
    - 交易日幂等修复只改变「同一天重复运行」的行为（Gate B 已证明严格幂等）。
 4. **建议的下一步（按优先级）**：
-   - P0：**等待重跑 CI 转绿**（PR #52 已建；修复 commit 会触发新 run）→ 回填 §2.4 与 manifest；
+   - P0：**裁定是否把 `V364_IMMUTABLE_LOCK.candidate.json` 置 `FROZEN`**
+     —— 四道 Gate 已全 PASS，`freeze_condition.satisfied = true`；
+     冻结动作本身属治理写操作，**需你授权后由我另起一个可回溯 commit 执行**（未授权前保持 `CANDIDATE_NOT_FROZEN`）；
    - P0：**裁定 R1**（两份 Swing 实现是否收敛）；
    - P1：立项 FINDING-1（补齐 SlowBreak 快照字段）与 FINDING-2（`breakout_nd` 缺失）；
    - P1：立项「其余 9 个云函数线上包对账」（勘误 E-002）；
