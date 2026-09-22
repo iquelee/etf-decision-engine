@@ -148,11 +148,35 @@
 
 ### 2.4 Gate D —— 正式 CI
 
-- 分支已 push 到 `origin/feat/v361-safety-hardening-r1`。
-- PR：见 §4（**已创建，未 merge**）。
-- CI 触发项：`test.yml` 矩阵 **Node 16 / Node 22 × Python 3.11 / 3.12**，步骤含
-  `npm test`（Stage A~G 全门禁）、`verify-immutable.js`、`gen1-production-gates.js`。
-- **CI 结果**：见 §4 表格（本节由 CI 完成后回填）。
+**状态：`BLOCKED_ON_PR_CREATION`（未取得 CI 结果）**
+
+已完成的部分：
+
+| 步骤 | 结果 |
+|---|---|
+| 分支 push 到远端 | ✅ `origin/feat/v361-safety-hardening-r1 = 35687205e6777aec8cbaa6e59069c3f7f92f1933` |
+| 冻结 tag push | ✅ `origin` tag `v361-r1-freeze = a896aeb7f6c1e6d3fb4965b1a1962bc7f26fb2ce` |
+| `master` 是否被改动 | ❌ 未改动（`refs/heads/master = 650db586…`，与基线一致） |
+| **创建 PR** | ❌ **失败：`403 Resource not accessible by integration`** |
+
+阻塞原因（实测证据）：
+
+- 通过 GitHub 连接器创建 PR 返回
+  `POST https://api.github.com/repos/iquelee/etf-decision-engine/pulls: 403 Resource not accessible by integration`。
+- 连接器身份为 `iquelee`（GitHub App / integration token），**该 installation 没有 `pull_requests: write` 权限**。
+- 这与既有约定一致：**API 令牌永久纯只读，PR 一律由本人在 Web 手工创建/合并**。
+- 当前该分支**尚无任何 PR**（`list_pull_requests(head=iquelee:feat/v361-safety-hardening-r1)` 返回 `[]`）。
+
+**为什么 CI 现在没跑**：`.github/workflows/test.yml` 的触发条件是
+`push: branches: [master, main]` 与 `pull_request:`。特性分支的 push 不触发；
+`pull_request` 需要 PR 存在。因此**在 PR 建立之前，Actions 不会运行**。
+
+**⇒ 需要你手动执行一步**（见 §7 附录：PR 创建链接 + 可直接粘贴的标题/正文）。
+PR 建立后 CI 会按矩阵运行 **Node 16 / Node 22 × Python 3.11 / 3.12**，步骤含
+`node scripts/test-all.js`（Stage A~G 全门禁）、`scripts/verify-immutable.js`、`scripts/gen1-production-gates.js`。
+
+**Gate D 判定：PHENOMENON_PENDING（未判定）** —— 不是 FAIL，也**不能算 PASS**。
+`V364_IMMUTABLE_LOCK.candidate.json` 的 `freeze_condition` 保持未满足。
 
 ---
 
@@ -235,18 +259,118 @@
 ## 6. 结论与建议
 
 1. **Gate A / B / C 全部 PASS**，且均以真实历史数据 + 真实生产链状态跑出，可复核（脚本 + 原始 JSON + 报告齐备）。
-2. **Gate D**（正式 CI）结果见 §4；**CI 未全绿前不得 merge**。
+2. **Gate D 目前为 `BLOCKED_ON_PR_CREATION`**（PR 创建被 403 拒绝，令牌只读）：
+   **未取得 CI 结果 ⇒ 不得 merge、不得置 FROZEN。** 需你手动建 PR（见 §7 附录）。
 3. **V3.6.4 是 correctness hardening 候选，不是业绩改进版本**：
    - 在真实数据上，SlowBreak 修复的决策影响为 **0**（因为 `SB>=75` 不可达，见 FINDING-1）；
    - 相关性口径与 Market Regime / 现金诊断均为**只读新增或零差异**；
    - 交易日幂等修复只改变「同一天重复运行」的行为（Gate B 已证明严格幂等）。
 4. **建议的下一步（按优先级）**：
-   - P0：完成 Gate D，取得 Node16 / Node22 / Python / Immutable / Gen-1 / Build parity / Secret scan / parity 全绿；
+   - P0：**你手动创建 PR** → CI 跑完 → 回来告我，我读取真实 CI 结果并回填 §2.4 与 manifest；
    - P0：**裁定 R1**（两份 Swing 实现是否收敛）；
    - P1：立项 FINDING-1（补齐 SlowBreak 快照字段）与 FINDING-2（`breakout_nd` 缺失）；
    - P1：立项「其余 9 个云函数线上包对账」（勘误 E-002）；
    - P2：Market Regime authority 裁定 / Portfolio Mode 晋升（上一轮已给 3 选项）。
 5. **V3.6.1 三把锁保持原样、永久保留历史基线**；V3.6.4 只在 Gate D 全绿 + Review 授权后才允许置 `FROZEN`。
+
+---
+
+## 7. 附录：PR 创建（待你手动执行）
+
+由于连接器令牌为只读，**这一步需要你在浏览器里点一下**。
+
+**创建链接（一键）**：
+
+```
+https://github.com/iquelee/etf-decision-engine/pull/new/feat/v361-safety-hardening-r1
+```
+
+**标题**：
+
+```
+V3.6.4 Safety Hardening Candidate — correctness fixes and diagnostics
+```
+
+**正文**（直接粘贴）：
+
+```markdown
+## 这是什么
+
+把已完成的 R1 correctness 修复**资格化**为新的生产候选版本 **V3.6.4 Safety Hardening**（父版本 V3.6.1）。
+
+- 候选 manifest：`ml/manifests/V364_IMMUTABLE_LOCK.candidate.json`（`status = CANDIDATE_NOT_FROZEN`）
+- 资格化报告：`docs/V364_CANDIDATE_QUALIFICATION.md`
+- R1 冻结点：tag `v361-r1-freeze` → `a896aeb`
+
+## ⚠️ 边界声明（请先读这一段）
+
+- **当前生产仍为 V3.6.1。**
+- 本 PR 是 **V3.6.4 candidate**，不是已晋升的生产版本。
+- **没有部署**（线上 `runDecisionEngine` `ModTime` 仍为 2026-09-17 14:24:41）。
+- **没有修改线上参数**（`param_config` 未变更）。
+- **没有开启 6.2 / 6.3**（`v3_6_2_post_s5_s4_grace` / `v3_6_3_adaptive_post_s5_grace` 保持 false）。
+- **Portfolio Mode 未启用**（未设 `v3_force_portfolio_track` / `v3_5_portfolio_enabled`）。
+- **Market Regime authority 未改变**（只加只读诊断；W5 majority 阈值仍为 5）。
+- **Run Finality 尚未晋升为生产 Gate**（只交付纯函数与两阶段发布方案，未接通写库阻断）。
+- 未修改 `V361_IMMUTABLE_LOCK.json`；未修改 Gen-1 frozen pipeline lock；
+  未修改 `trend-stage.js` / `decision-v3.js` / `decision.js`（manifest 含逐位不变量断言）。
+
+## 四道 Qualification Gate
+
+| Gate | 内容 | 规模 | 判定 |
+|---|---|---|---|
+| A | SlowBreak Historical Replay（OLD vs NEW） | 582 个五票共同交易日 × 5 票 | PASS |
+| B | Same-Day Idempotence Full-chain Replay（RUN_ONCE vs RUN_3X） | 120 天 × 5 票 = 6000 次字段比对 | PASS |
+| C | Swing Parity（旧/新实现共享语义） | 5483 个 rolling window | PASS |
+| D | 正式 CI（本 PR 的 GitHub Actions） | Node16/22 × Python3.11/3.12 + 全门禁 | 见 check runs |
+
+### Gate A 要点
+
+- Δtarget 最大 **0 pp**、action 变化 **0** 次、新增 EXIT / STRATEGIC_REDUCE / TACTICAL_REDUCE 全 **0**。
+- ★ **FINDING-1**：`SB>=75` 在生产上**不可达** —— `calcSlowBreakScore` 的 4 项输入里
+  `ma60_slope` / `high_point_falling`(或 `lower_high`) 在线上 `indicator_snapshot` 上**不存在**
+  （只读投影实测；全仓 `ma60_slope` 无任何产生处）⇒ 分数上限 50。
+  故 **R1 的 `lowerLow` 修复是必要条件但不是充分条件**；补齐快照字段属新立项，**本 PR 不修**。
+- 结论：Gate A 证明「SlowBreak 改动在生产数据上零副作用」，**不能**证明「触发时机正确」。
+
+### Gate B 要点
+
+- 逐日 / 日内（第 1 次 vs 第 3 次）/ 日末状态 / 日末账面漂移全部为 **0**。
+- 审计字段差异 5 条（每票 1 条，`new_trade_date` vs `same_trade_date_replay`）= 重放路径被走到的正面证据。
+- 过程留痕：首跑 FAIL（13 天日内漂移），根因是重放 harness 的赛道额度累加位置错误
+  （**harness 缺陷，非生产代码**），修正后 PASS。
+
+### Gate C 要点
+
+- `total_windows = 5483`（真实 4566 + 确定性合成 917），**`mismatch_count = 0`**；共享字段 `higherLow` / `lowerHigh`。
+- 新增**永久门禁** `tests/v364-swing-parity.test.js`（`tests/*.test.js`，`npm test` 自动执行）。
+- `trend-stage.js` 是 Gen-1 冻结件，**未修改**；两份实现并存是有意接受，语义由本 Gate 逐窗口锁定。
+- CI 上真实历史源不可用（`deliverables/` gitignore）⇒ CI 的 parity 保障来自确定性合成语料，**不伪造**。
+
+## 版本治理
+
+- `V364_IMMUTABLE_LOCK.candidate.json`：`parent_version=V3.6.1`、`parent_repo_sha`、`candidate_repo_sha`、
+  17 个实现文件 SHA256、6 份报告哈希、3 项「父版本逐位未变」不变量、9 项 `explicitly_not_included`、`freeze_condition`。
+- **D 未全绿前不得置 `FROZEN`**；冻结需另起可回溯 commit。
+
+## 部署台账
+
+- 新增 append-only `docs/production-deployment-ledger.md`（**不改** `docs/主链冻结契约.md` 历史记录，只追加 + 勘误指针）。
+- D-001（2026-09-05 原部署）/ D-002（2026-09-17 GE-03 重部署）/ D-003（2026-09-22 只读核验）。
+- 实测：线上包 `CodeSha256 = a694b7d3…c3003608`（本地重算逐位一致）；**source parity MATCH 66/66**。
+- 勘误 E-001：契约的 `7876610f…82e6315d` / `2026-09-05 14:01` 已过期。
+- 勘误 E-002：其余 9 个云函数线上包 SHA **本次未对账**。
+
+## 未解决风险（完整见报告 §5）
+
+1. 两份 Swing 实现并存（共享语义已锁，源码未收敛）—— 需裁定收敛路径。
+2. FINDING-1：`SB>=75` 不可达（快照字段缺失）—— 单独立项。
+3. FINDING-2：线上快照缺 `breakout_nd` ⇒ S4「breakout_nd」分支不可达 —— 需核实线上 `materializeIndicators` 是否与仓库分叉。
+4. 仅核验了 `runDecisionEngine` 一个函数的线上包。
+5. 本轮**不构成任何收益/风险改善证据**；若用于生产仍需另走「回测验证」流程。
+
+**请勿 merge。** 等待 CI 全绿 + Review 授权。
+```
 
 ---
 

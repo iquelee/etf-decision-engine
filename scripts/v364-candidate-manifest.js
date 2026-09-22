@@ -197,7 +197,12 @@ function main() {
       gate_a: 'PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）',
       gate_b: 'PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）',
       gate_c: 'PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）',
-      gate_d: 'PENDING_UNTIL_CI_GREEN（见 PR CI 结果）',
+      gate_d: 'BLOCKED_ON_PR_CREATION —— 分支与 tag 已 push（origin/feat/v361-safety-hardening-r1=3568720，tag v361-r1-freeze=a896aeb），'
+        + 'master 未动；但 PR 创建被 GitHub API 403（Resource not accessible by integration，令牌只读）。'
+        + '.github/workflows/test.yml 仅在 push(master/main) 或 pull_request 时触发 ⇒ PR 建立前 CI 不运行。'
+        + '需人工在 Web 建 PR 后取得真实 CI 结果。',
+      gate_d_status: 'BLOCKED_ON_PR_CREATION',
+      satisfied: false,
       note: 'D 未全绿前**不得**改写为 FROZEN'
     },
 

@@ -2,11 +2,11 @@
   "version": "V3.6.4",
   "status": "CANDIDATE_NOT_FROZEN",
   "title": "V3.6.4 Safety Hardening",
-  "generated_at": "2026-09-22T05:23:58.140Z",
+  "generated_at": "2026-09-22T05:25:54.330Z",
   "hash_basis": "LF-normalized content (CRLF->LF before sha256)，与 V361/GEN1/GEN2 三把锁同口径",
   "parent_version": "V3.6.1",
   "parent_repo_sha": "650db58639f32232ac72a99920060dd92e743621",
-  "candidate_repo_sha": "c79364e303089b23019845d4c619b24e39ef38d5",
+  "candidate_repo_sha": "c79364e",
   "candidate_branch": "feat/v361-safety-hardening-r1",
   "files": {
     "decision_js": "src/common/utils/decision.js",
@@ -50,7 +50,7 @@
     "docs/V364_SLOWBREAK_REPLAY.md": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
     "docs/V364_IDEMPOTENCE_REPLAY.md": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
     "docs/V364_SWING_PARITY_REPORT.md": "227d750d84873a5f33d5d560d94fe74d071de21631c2d3e0d4cee67b0b2eaab8",
-    "docs/V364_CANDIDATE_QUALIFICATION.md": "77eb2fc0e708476399e677289a60664fc868e511a62f2cafeb9cf1cc249461a0",
+    "docs/V364_CANDIDATE_QUALIFICATION.md": "a358ddd32c2796275d42092b4303b6e7e20ecef6fcd7eeffdc8ae548a19839c5",
     "docs/V361_SAFETY_HARDENING_R1_REPORT.md": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
     "docs/production-deployment-ledger.md": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867"
   },
@@ -91,7 +91,9 @@
     "gate_a": "PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）",
     "gate_b": "PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）",
     "gate_c": "PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）",
-    "gate_d": "PENDING_UNTIL_CI_GREEN（见 PR CI 结果）",
+    "gate_d": "BLOCKED_ON_PR_CREATION —— 分支与 tag 已 push（origin/feat/v361-safety-hardening-r1=3568720，tag v361-r1-freeze=a896aeb），master 未动；但 PR 创建被 GitHub API 403（Resource not accessible by integration，令牌只读）。.github/workflows/test.yml 仅在 push(master/main) 或 pull_request 时触发 ⇒ PR 建立前 CI 不运行。需人工在 Web 建 PR 后取得真实 CI 结果。",
+    "gate_d_status": "BLOCKED_ON_PR_CREATION",
+    "satisfied": false,
     "note": "D 未全绿前**不得**改写为 FROZEN"
   },
   "rule": "V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。任何对 V3.6.4 候选范围的扩展都必须重新走 Gate A~D 并重新生成本 manifest。"
