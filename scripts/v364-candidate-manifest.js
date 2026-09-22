@@ -35,8 +35,57 @@ function lfSha256(rel) {
   return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
+/**
+ * 读取 git ref —— **不依赖子进程**。
+ * 原因：部分受限环境（以及本仓历史的本地沙箱）禁止 Node 拉起子进程，
+ * `execSync('git ...')` 会直接失败，导致 manifest 的 git 字段静默变 null。
+ * 这里直接读 `.git/` 下的引用文件，并可回退到 `git` 命令。
+ */
+function gitDir() {
+  const g = path.join(REPO, '.git');
+  if (fs.existsSync(g) && fs.statSync(g).isDirectory()) return g;
+  if (fs.existsSync(g)) {
+    const m = fs.readFileSync(g, 'utf8').match(/gitdir:\s*(.+)/);
+    if (m) return path.resolve(REPO, m[1].trim());
+  }
+  return null;
+}
+
+function readRefFile(refName) {
+  const gd = gitDir();
+  if (!gd) return null;
+  const direct = path.join(gd, refName);
+  if (fs.existsSync(direct)) return fs.readFileSync(direct, 'utf8').trim();
+  const packed = path.join(gd, 'packed-refs');
+  if (fs.existsSync(packed)) {
+    const line = fs.readFileSync(packed, 'utf8').split(/\r?\n/)
+      .find((l) => l.endsWith(` ${refName}`));
+    if (line) return line.split(' ')[0].trim();
+  }
+  return null;
+}
+
+function readHead() {
+  const gd = gitDir();
+  if (!gd) return { sha: null, branch: null };
+  const head = fs.readFileSync(path.join(gd, 'HEAD'), 'utf8').trim();
+  if (head.startsWith('ref:')) {
+    const refName = head.slice(4).trim();
+    return { sha: readRefFile(refName), branch: refName.replace(/^refs\/heads\//, '') };
+  }
+  return { sha: head, branch: null };
+}
+
 function git(cmd) {
-  try { return execSync(`git ${cmd}`, { cwd: REPO, encoding: 'utf8' }).trim(); } catch (e) { return null; }
+  // 优先用文件直读；仅当确实需要时才尝试子进程
+  if (cmd === 'rev-parse HEAD') return readHead().sha;
+  if (cmd === 'rev-parse origin/master') return readRefFile('refs/remotes/origin/master');
+  if (cmd === 'branch --show-current') return readHead().branch;
+  try {
+    return execSync(`git ${cmd}`, { cwd: REPO, encoding: 'utf8' }).trim();
+  } catch (e) {
+    return null;
+  }
 }
 
 function main() {

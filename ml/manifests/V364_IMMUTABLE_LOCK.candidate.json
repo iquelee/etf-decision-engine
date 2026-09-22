@@ -1,0 +1,98 @@
+{
+  "version": "V3.6.4",
+  "status": "CANDIDATE_NOT_FROZEN",
+  "title": "V3.6.4 Safety Hardening",
+  "generated_at": "2026-09-22T05:23:58.140Z",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256)，与 V361/GEN1/GEN2 三把锁同口径",
+  "parent_version": "V3.6.1",
+  "parent_repo_sha": "650db58639f32232ac72a99920060dd92e743621",
+  "candidate_repo_sha": "c79364e303089b23019845d4c619b24e39ef38d5",
+  "candidate_branch": "feat/v361-safety-hardening-r1",
+  "files": {
+    "decision_js": "src/common/utils/decision.js",
+    "decision_v3_js": "src/common/utils/decision-v3.js",
+    "trend_stage_js": "src/common/utils/trend-stage.js",
+    "correlation_js": "src/common/utils/correlation.js",
+    "v3_6_stage_persistence_js": "src/common/utils/v3-6-stage-persistence.js",
+    "defense_js": "src/common/utils/defense.js",
+    "swing_structure_js": "src/common/utils/swing-structure.js",
+    "trade_date_idempotence_js": "src/common/utils/trade-date-idempotence.js",
+    "portfolio_mode_js": "src/common/utils/portfolio-mode.js",
+    "portfolio_cash_js": "src/common/utils/portfolio-cash.js",
+    "market_env_diagnostics_js": "src/common/utils/market-env-diagnostics.js",
+    "v361_run_context_js": "src/common/utils/v361-run-context.js",
+    "v361_run_finality_js": "src/common/utils/v361-run-finality.js",
+    "run_decision_engine_index_js": "cloudfunctions/runDecisionEngine/index.js",
+    "schema_js": "src/common/schema.js",
+    "market_regime_js": "src/common/utils/market-regime.js",
+    "test_all_js": "scripts/test-all.js"
+  },
+  "sha256": {
+    "decision_js": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+    "decision_v3_js": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+    "trend_stage_js": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+    "correlation_js": "44aae61ed6730256959721d3f3d599c5274fd4c863d1b7322a4748c207181b0b",
+    "v3_6_stage_persistence_js": "455c32487ed6b916d1331d1166e136a316736f708e105cd52f044dad42aa10f3",
+    "defense_js": "acda04f9b18cdac01cbb7cd43f225f1a482521424ce5eb830817e0bd74cb0083",
+    "swing_structure_js": "e5796579c3a84ae80b45cdffab827ec1f865639e47303e032080267fbe0958ae",
+    "trade_date_idempotence_js": "fd4f5aa2ec9e897c5ea33a72e4ad66f886a280259f9a8438b778fe6067245707",
+    "portfolio_mode_js": "fe0dbd0446e1de975f921d5bd55a74886a46b20fcfcffcfaf089f2eaa3f3e979",
+    "portfolio_cash_js": "e8fefc5ac9345b9f4e99ca5c9097f2c44060ca52e8636f3bd643045a5a9fc23f",
+    "market_env_diagnostics_js": "3be061ba3e48965a335dda355e026c551cb07ce72415ce84d27ec69f9d7d65db",
+    "v361_run_context_js": "45b799c3c01544e21da1749a2a18ad5de72006dd4a49801dc8a6d2404b6808f2",
+    "v361_run_finality_js": "f9228792793e1059acdbaabe22ba51abdd477be87d626f93d191ae4d6e0dd1e6",
+    "run_decision_engine_index_js": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
+    "schema_js": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
+    "market_regime_js": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
+    "test_all_js": "4a53c06b47ae32d360447215d4a5ea1ec24059dcf5950665ccb61dc7f551a6e3"
+  },
+  "qualification_reports": {
+    "docs/V364_SLOWBREAK_REPLAY.md": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
+    "docs/V364_IDEMPOTENCE_REPLAY.md": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
+    "docs/V364_SWING_PARITY_REPORT.md": "227d750d84873a5f33d5d560d94fe74d071de21631c2d3e0d4cee67b0b2eaab8",
+    "docs/V364_CANDIDATE_QUALIFICATION.md": "77eb2fc0e708476399e677289a60664fc868e511a62f2cafeb9cf1cc249461a0",
+    "docs/V361_SAFETY_HARDENING_R1_REPORT.md": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
+    "docs/production-deployment-ledger.md": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867"
+  },
+  "parent_unchanged_invariants": [
+    {
+      "name": "V3.6.1 decision-v3.js 未被修改",
+      "expected": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "actual": "677fd675cc48f079e551ea28200ecda5f9398c7566e2b1dcad60b8a6f4200393",
+      "pass": true
+    },
+    {
+      "name": "V3.6.1 decision.js 未被修改",
+      "expected": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "actual": "0a05fe7f0d6cc169ffe35ba51a9e35524e2bd5d8b1c95ac270ccf53f86b4681a",
+      "pass": true
+    },
+    {
+      "name": "GEN-1 pipeline trend-stage.js 未被修改",
+      "expected": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "actual": "3eba412a950cc278be504ab68d7039ecfc5daf2c147d2eb2b500997560fae412",
+      "pass": true
+    }
+  ],
+  "parent_unchanged_all_pass": true,
+  "explicitly_not_included": [
+    "Portfolio Mode 启用（v3_force_portfolio_track / v3_5_portfolio_enabled）",
+    "Market Regime authority 变更 / W5 majority 规则变更",
+    "Run Finality 生产阻断接通",
+    "V361RunContext 生产阻断接通",
+    "Tech Cap / correlation discount 阈值变更",
+    "SlowBreak / DefenseScore 阈值变更",
+    "StageFactor / MarketFactor / 仓位步长变更",
+    "V3.6.2 post-S5 Grace / V3.6.3 adaptive post-S5 Grace（继续保持 OFF）",
+    "任何线上部署 / param_config 变更"
+  ],
+  "freeze_condition": {
+    "requirement": "Gate A / B / C / D 全部 PASS，且取得人工 Review 授权",
+    "gate_a": "PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）",
+    "gate_b": "PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）",
+    "gate_c": "PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）",
+    "gate_d": "PENDING_UNTIL_CI_GREEN（见 PR CI 结果）",
+    "note": "D 未全绿前**不得**改写为 FROZEN"
+  },
+  "rule": "V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。任何对 V3.6.4 候选范围的扩展都必须重新走 Gate A~D 并重新生成本 manifest。"
+}
