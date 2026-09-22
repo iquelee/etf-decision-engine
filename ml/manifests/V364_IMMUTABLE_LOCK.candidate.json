@@ -2,11 +2,11 @@
   "version": "V3.6.4",
   "status": "CANDIDATE_NOT_FROZEN",
   "title": "V3.6.4 Safety Hardening",
-  "generated_at": "2026-09-22T05:25:54.330Z",
+  "generated_at": "2026-09-22T06:10:38.079Z",
   "hash_basis": "LF-normalized content (CRLF->LF before sha256)，与 V361/GEN1/GEN2 三把锁同口径",
   "parent_version": "V3.6.1",
   "parent_repo_sha": "650db58639f32232ac72a99920060dd92e743621",
-  "candidate_repo_sha": "c79364e",
+  "candidate_repo_sha": "00a8b14",
   "candidate_branch": "feat/v361-safety-hardening-r1",
   "files": {
     "decision_js": "src/common/utils/decision.js",
@@ -44,13 +44,13 @@
     "run_decision_engine_index_js": "77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529",
     "schema_js": "169ac4f307d9ceac726e658a30d96a973d05487bec97d7ce01cb3514ff985c3e",
     "market_regime_js": "127e10779ceabe885aa904c406e6dc251d74fff4f22c38d7d60f261a686b3c43",
-    "test_all_js": "4a53c06b47ae32d360447215d4a5ea1ec24059dcf5950665ccb61dc7f551a6e3"
+    "test_all_js": "7d267da912efe8b7e12c3ddd15f193eb242b0c7fec12776359505306771f4754"
   },
   "qualification_reports": {
     "docs/V364_SLOWBREAK_REPLAY.md": "5e98356ad341ef9db22948437272eb382a2152ad8143e77116c44bc408be4283",
     "docs/V364_IDEMPOTENCE_REPLAY.md": "bba03077bb1a5be337d3fcff5e7fcceb7151f42ac076f6d876a0e6c178ea906d",
-    "docs/V364_SWING_PARITY_REPORT.md": "227d750d84873a5f33d5d560d94fe74d071de21631c2d3e0d4cee67b0b2eaab8",
-    "docs/V364_CANDIDATE_QUALIFICATION.md": "a358ddd32c2796275d42092b4303b6e7e20ecef6fcd7eeffdc8ae548a19839c5",
+    "docs/V364_SWING_PARITY_REPORT.md": "17e43474ba98a995e5c78651c382761bff8fcc94e8158dc21783bcbf8e7974f3",
+    "docs/V364_CANDIDATE_QUALIFICATION.md": "27bf353daec4aebb28307a1d1ce3aef033df9c0fa6dc959cd5cde8f33e42dfba",
     "docs/V361_SAFETY_HARDENING_R1_REPORT.md": "6341a480d3a1e4765cbee6aa07b160ef226614613e13953000db3053821a661d",
     "docs/production-deployment-ledger.md": "106c4dbe622d99c611d995f96dc521645be681266ec2c207c63fc23d96fb8867"
   },
@@ -91,10 +91,12 @@
     "gate_a": "PASS（2026-09-22，582 个共同交易日，5 票，0 触发 / 0 数值差异；SB>=75 因快照字段缺失而不可达，已登记）",
     "gate_b": "PASS（2026-09-22，120 天 × 5 票，6000 次字段比对 0 漂移）",
     "gate_c": "PASS（2026-09-22，5483 个 rolling window，共享字段 mismatch_count = 0）",
-    "gate_d": "BLOCKED_ON_PR_CREATION —— 分支与 tag 已 push（origin/feat/v361-safety-hardening-r1=3568720，tag v361-r1-freeze=a896aeb），master 未动；但 PR 创建被 GitHub API 403（Resource not accessible by integration，令牌只读）。.github/workflows/test.yml 仅在 push(master/main) 或 pull_request 时触发 ⇒ PR 建立前 CI 不运行。需人工在 Web 建 PR 后取得真实 CI 结果。",
-    "gate_d_status": "BLOCKED_ON_PR_CREATION",
-    "satisfied": false,
-    "note": "D 未全绿前**不得**改写为 FROZEN"
+    "gate_d": "PASS（2026-09-22，GitHub Actions run #144，head 52ee424：Node16/22 × Python3.11/3.12 四 job 全绿；npm test 59/59 项通过、Stage A 51/51、Gen-1 Production Gates 32/32、Build parity 7/7、parity 360 行）。首轮 run #143 为 FAIL，根因是 tests/v364-swing-parity.test.js 的 C.2 阈值按本机语料标定（CI 无 deliverables/ ⇒ 只剩合成语料 917 窗口），非产品缺陷 —— 反证：C.1 mismatch_count = 0 在 CI 同样 PASS；已修为环境感知（合成语料底线环境无关恒强制 / 真实历史可用时才强制 >3000 / 不可用时显式披露）。",
+    "gate_d_status": "PASS",
+    "gate_d_run": "https://github.com/iquelee/etf-decision-engine/actions/runs/35693440911",
+    "satisfied": true,
+    "freeze_decision": "AWAITING_USER_AUTHORIZATION",
+    "note": "四道 Gate 已全部 PASS ⇒ 已满足置 FROZEN 的**前置条件**；但 `status` 仍保持 CANDIDATE_NOT_FROZEN：置 FROZEN 属治理写操作，须待人工 Review 授权后另起一个可回溯 commit 执行。未授权前，本 manifest 不是生产基线，也不得被引用为「已冻结」。"
   },
   "rule": "V3.6.4 为 V3.6.1 的 correctness hardening 候选；父版本 V3.6.1 的三把锁保持原样、永久保留历史基线。任何对 V3.6.4 候选范围的扩展都必须重新走 Gate A~D 并重新生成本 manifest。"
 }
