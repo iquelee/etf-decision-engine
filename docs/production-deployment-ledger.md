@@ -227,6 +227,7 @@
 | E-002 | 同上 · 其余 9 个函数的 SHA 列 | 均为 2026-09-05 时点值 | **本次仅核验了 `runDecisionEngine`**；其余 9 个函数的线上包 SHA **未重新对账** | 待单独立项（逐函数下载重算） |
 | E-003 | 本台账 `D-004` 行 `new_index_sha256（LF）` | 该值 `072b4008…` 实为 **raw（含 CRLF）**，标注的「（LF）」**有误** | 正确值：`raw = 072b40089c7bc260a888bda913e68b1afb546b49a3d19ef88d4eec7fe9ae477b`；**`lf = 77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529`**（见 D-005） | **不修改 D-004 行**；以 D-005 的 `index_sha256_raw` / `index_sha256_lf` 为准 |
 | E-004 | 本台账 `D-004` 行 `post_freeze_state` 括注 | 「下一笔自然生产运行**预计**为 2026-09-23 08:00」**预测不完整**：漏了 `fetchDailyData` 22:00 → `materializeIndicators` → `runDecisionEngine` 这条链 | 实测部署后首笔自然运行为 **2026-09-22 22:01:32**（见 D-005 `run_1`） | **不修改 D-004 行**；以 D-005 为准 |
+| E-005 | `ml/manifests/V364_IMMUTABLE_LOCK.json` 的 `gates.D` 区块 | 该区块**内部混用了两次 CI run**：`evidence` 文案 + `run_url`（`…/runs/35693440911`）指向 run **#144 / head `52ee424e`**；而 `run_number`(145) / `run_id`(`35693711637`) / `head_sha`(`c37ec91b`) 指向 run **#145 / head `c37ec91`**（与 top-level `qualification_ci_*` 一致） | 两次 run 在 GitHub 上**均为 success**（同分支 `feat/v361-safety-hardening-r1`，06:07 与 06:11 各推一次）⇒ 资格化**结论正确性不受影响**，属**字段级不自洽**（`gates.D.status = PASS` 本身成立） | **不修改冻结件、不移动 tag**；判定**以机器字段为准**（`run_number` / `run_id` / `head_sha` = #145 / `c37ec91b`，与 top-level 一致），`evidence` 文案与 `run_url` 属陈旧残留。彻底消除须**重出 freeze commit + 重跑 CI**（且会移动 tag）⇒ **另行立项，不随本行处理** |
 
 ---
 
