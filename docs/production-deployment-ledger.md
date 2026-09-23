@@ -161,6 +161,64 @@
 1. **历史计数器可能含「同日重复计数」残留**：修复前（V3.6.1），同一 `calc_date` 会在「当日 22:00 链」与「次日 08:00 定时链」被**各计一次**（两链输入快照相同）。V3.6.4 起**不再重复计数**，但**不追溯修正历史 `days_in_stage`**（5 票现值已承继该残留）。
 2. **`production_engine` 回报字串仍为 `v3.6.1`**：该字串来自冻结源码内变量（`resolveShadowEngineVersion` 路径），**V3.6.4 未修改任何版本字串** ⇒ 属预期、非漂移；若要在载荷中体现 V3.6.4，须走版本字串变更（未授权）。
 
+---
+
+### D-006 · 2026-09-23 · V3.6.4 状态定稿为 `/ PRODUCTION`（`supersedes: D-005` 的 `state_after` 字段）
+
+> **本行为 docs-only**：**未部署、未改任何云函数、未改 `param_config`、未动冻结件**。
+> 依 `## 3. 追加规范` 第 2 条（只读核验亦追加一行）登记。
+> **`supersedes` 的范围严格限定为 D-005 的 `state_after` 一个字段**；
+> D-001~D-005 的其余字段、以及 E-001~E-004 **逐字未动**。
+
+#### 1. 状态升级
+
+| 字段 | 值 |
+|---|---|
+| `record_date` | 2026-09-23 |
+| `record_type` | 只读核验 + 状态定稿（**无部署**） |
+| `deploy/mod_time` | **未变** —— `runDecisionEngine` 仍 `2026-09-22 16:29:48`；`materializeIndicators` 仍 `2026-09-08 11:35:24` |
+| `supersedes` | **D-005 的 `state_after` 字段**（原值：`V3.6.4 = FROZEN / MERGED / DEPLOYED`，`/ PRODUCTION` 后缀暂缓） |
+| `supersedes_scope` | **仅该字段**。D-005 的 15 项验收结论（ALL PASS）、`run_1`/`run_2` 事实、OBS-001 记录、两条「附」说明 **全部继续有效**，未被覆盖 |
+| `state_after` | **`V3.6.4 = FROZEN / MERGED / DEPLOYED / PRODUCTION`** |
+| `upgrade_basis` | ① D-005 的 15 项生产验收 **ALL PASS**；② 用户在 D-005 给出的三种裁定中选 **①**（认定 OBS-001 属上游可观测性问题、对本次晋升无实质影响）⇒ 补一行 `supersedes: D-005` 加注 `/ PRODUCTION`，即本行；③ `ROLLBACK_REQUIRED = NO` |
+
+#### 2. D-005 入主链事实
+
+| 字段 | 值 |
+|---|---|
+| D-005 分支 / 原 commit | `docs/v364-d005-natural-run-acceptance` · `a6e220f` |
+| 同步 base 后 HEAD | `43ee063294f52f99fe21c659ffe34736ddf67649`（`update-branch` 产生的**双亲 merge commit**：`a6e220f` + `bb720ff3`，**是 merge 不是 rebase**，D-005 内容未被改写） |
+| 合并 | **PR #55**，sha-pinned merge（body 带 `sha` 防 TOCTOU）· `merged_at 2026-09-23T09:53:09Z` |
+| merge commit | `3d668211206bb253b90498b6c5104e042d0cdb29` |
+| merge 净变更 | 仅 `docs/production-deployment-ledger.md` **`+68/-0`**（append-only 未被破坏） |
+| master CI（该 merge 触发） | run **#154** `test` = **SUCCESS** · run **#133** = **SUCCESS**（新增 HEAD `3d668211`） |
+| 落笔时点 `origin/master` | `3d668211206bb253b90498b6c5104e042d0cdb29`（**时点值**，非不变量） |
+| `v3.6.4-frozen^{}` | 仍 `aa634e2`（**未移动**） |
+
+#### 3. OBS-001 的最终定性
+
+| 项 | 内容 |
+|---|---|
+| 定性 | **`NON_BLOCKING / OPEN`** —— 分类 `CHAINED_CALL_TIMEOUT / OBSERVABILITY`，`ROOT_CAUSE_NOT_PROVEN`，`NO_CURRENT_DECISION_IMPACT` |
+| ⚠️ 措辞纪律 | ⛔ **不得描述为「已解决」**；⛔ **不得改 `materializeIndicators`**；⛔ 不得调 timeout / retry / `callFunction` 参数 |
+| 处置 | 根因定位**另行立项**（属 `materializeIndicators` 观测性整改，与本次状态定稿**解耦**） |
+| 复查要求 | 后续自然运行继续观察；**若再次出现**，在独立立项中处理，本行不因此变动 |
+| `ROLLBACK_REQUIRED` | **NO** |
+
+#### 4. 仍为 OPEN 的既有项（本行不处置）
+
+| 项 | 状态 |
+|---|---|
+| `FINDING-1` | **OPEN** —— 未补 `ma60_slope` / `high_point_falling` / `lower_high`；未改 SlowBreak 阈值 |
+| `FINDING-2` | **OPEN** —— 未补 `breakout_nd`；未覆盖线上 `materializeIndicators` 漂移件 |
+| `materializeIndicators deployment drift` | **OPEN** —— 生产 `indicator_snapshot` 字段契约仍为 **31** |
+| 冻结 manifest `gates.D.run_url` 与 `run_id` 不自洽 | **OPEN**（见 D-004 区块与本台账 §2；修改须重出 freeze commit + 重跑 CI） |
+
+#### 5. 本次记录未做的事（边界声明）
+
+未部署 · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
+· 未补 FINDING-1/2 字段 · 未处置 OBS-001 · 未回滚 · 未追溯修正历史 `days_in_stage`。
+
 ## 2. 勘误指针（不改历史行）
 
 | # | 对象 | 已过期的字段 | 现状 | 处理 |
