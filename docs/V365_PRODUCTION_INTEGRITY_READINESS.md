@@ -1019,4 +1019,228 @@ RunContext → run_id → candidate documents → expected 5 ETF complete
 **失败集合完全相同**（3 项既有失败为环境相关）⇒ 零新增失败；
 `verify-immutable` 23/23、`verify-gen1-pipeline` 10/10、`verify-gen2-build-artifacts` 7/7 全 PASS。
 
+---
+
+# 19. WP-V365-P4 — Pipeline Correlation & Observability（OBS-001 闭合）
+
+> 本节为追加，不改动上文 §0–§18 的任何历史结论。
+> **本轮裁定**：`P4_DESIGN = CORRELATION_AND_OBSERVABILITY_ONLY`
+> ⛔ `RETRY = NO` · ⛔ `TIMEOUT_CHANGE = NO` · ⛔ `MATERIALIZE_CONTROL_FLOW_CHANGE = NO`
+> ⛔ caller timeout **不自动重试** `runDecisionEngine`
+
+## 19.1 `CURRENT_P4_OBSERVABILITY_GAP`
+
+### 19.1.1 当前真实路径（只读实测）
+
+```
+[定时 22:00 dailyFetch-2200 / 15:30 示例] 或 [链式]
+  fetchDailyData
+    └─ app.callFunction({ name:'materializeIndicators', data:{ from:'fetchDailyData' } })
+         materializeIndicators
+           ├─ 逐票 computeSnapshot → upsert etf_weekly / indicator_snapshot
+           └─ app.callFunction({ name:'runDecisionEngine', data:{ from:'materializeIndicators' } })
+                runDecisionEngine
+                  └─ 逐票 upsert decision_result / fundamental_state / portfolio_position → portfolio_snapshot
+```
+
+**全仓共 6 处 `callFunction`，其中 4 个不同入口进入 `runDecisionEngine`**：
+
+| 入口 | `data.from` | 类型 |
+|---|---|---|
+| `materializeIndicators` | `materializeIndicators` | 链式 |
+| `adminGateway`（风险解除） | `riskResolve` | 人工 |
+| `adminGateway`（风险触发） | `riskTrigger` | 人工 |
+| `adminGateway`（参数变更） | `paramChange` | 人工 |
+
+### 19.1.2 逐条回答任务书 §3 的 8 问
+
+| # | 问题 | 结论 | 证据 |
+|---|---|---|---|
+| 1 | 当前有哪些 request id | **平台侧有**（CLS 里可见）：上游 `1fcaa62f-…`、下游 `804f7202-…`／`fdda3368-…`；`request_source` 亦有（`TRIGGER_TIMER` / `TCB_API`） | OBS-001 调查报告 §2；平台文档 `select request_id, … group by request_id` |
+| 2 | caller request id 是否传入下游 | **否**。payload 只有 `{ from: '<caller>' }` | `materializeIndicators:127`、`fetchDailyData:424` |
+| 3 | `runDecisionEngine` 是否知道上游是谁 | **否**。`event.from` **被传入但从未读取**；`context` **零使用** | `grep -n 'context\.'` 与 `'event\.from'` 均 0 命中 |
+| 4 | 是否已有 `run_id` | **生产链无**。`run_id` 仅存在于 Shadow / Gen-1 / Gen-2 侧集合 | 全仓 grep |
+| 5 | 是否已有 pipeline-level correlation id | **完全没有**。全仓 `pipeline_run_id` 0 命中 | `grep -rn pipeline_run_id src cloudfunctions` 仅命中本轮的 P-4 契约模块 |
+| 6 | timeout 后 caller 是否还能知道 downstream 最终状态 | **不能**。`catch` 只保留错误字符串，且**无 id 可回查** | `chained = { error: String(e.message \|\| e) }` |
+| 7 | 日志/DB 中哪些字段可跨函数关联 | **只有「函数名 + 时间戳」**（人工比对）。CLS 有 `request_id`/`request_source`，但**不落 DB、不入返回体** | OBS-001 报告 §2/§3 |
+| 8 | OBS-001 为何只能人工推断 | 因为 (2)(3)(5)(6) 同时成立：**无共同身份 + 传输结果与业务结果同形** ⇒ 只能靠 08:00:29.973↔08:00:30.488 这类时间窗口拼接 | 同上 |
+
+### 19.1.3 三条结构性缺口
+
+| 缺口 | 说明 |
+|---|---|
+| **GAP-1 无共享身份** | 跨函数没有任何稳定 id；4 个入口也无法区分来源 |
+| **GAP-2 传输与业务同形** | `{error:"ESOCKETTIMEDOUT"}` 与 `{result:{ok:true,…}}` 都在 `chained` 这一层，**没有两个正交维度** |
+| **GAP-3 caller 放弃后无处回查** | 下游的成功事实只存在于 CLS，**不作为结构化数据留存** |
+
+## 19.2 Pipeline Correlation Contract（任务书 §4）
+
+`pipeline_run_id` 由**上游生成、向下游透传**，身份成分**不含 wall-clock**：
+
+```
+pipeline_key    = pl|<expected_trade_date>|<origin>|<entry_function>|<source_detail>
+pipeline_run_id = <pipeline_key>#a<attempt>
+```
+
+| 设计点 | 做法 |
+|---|---|
+| 一次完整 pipeline 唯一 | `key` 内含 trade date + 来源 + 入口 |
+| 上游生成 / 下游透传 | `buildForwardPayload()` 产出透传字段；callee 用 `readInboundCorrelation(event)` **只读**读取 |
+| ⛔ 不依赖 wall-clock 作为身份 | 身份**只用** date/origin/entry/detail/attempt；`started_at`/`completed_at` 仅作诊断 |
+| retry 同一 pipeline 可识别 | 同 `pipeline_key`、`attempt` 递增（`store.nextAttempt` 单调，**不用时钟**） |
+| 手动调用有明确来源 | `origin='manual'` + `entry_function='adminGateway'` + `source_detail∈{riskResolve,riskTrigger,paramChange}` |
+
+**记录字段**（语义保留，名称可调）：`pipeline_run_id` / `pipeline_key` / `attempt` / `origin` /
+`entry_function` / `caller_function` / `caller_request_id` / `callee_function` / `callee_request_id` /
+`expected_trade_date` / `input_hash` / `engine_run_id` / `transport_status` / `business_status` /
+`started_at` / `completed_at` / `error_code`。
+
+## 19.3 状态模型（任务书 §5）—— 两个正交维度
+
+| Transport | 含义 |
+|---|---|
+| `CALL_STARTED` | 已发起，未结算 |
+| `CALL_RETURNED` | 拿到了调用返回 |
+| `CALL_TIMEOUT` | 传输层超时（如 `ESOCKETTIMEDOUT`） |
+| `CALL_ERROR` | 传输层其它错误 |
+
+| Business | 含义 |
+|---|---|
+| `NOT_OBSERVED` | **没有下游自证**（⛔ 不等于 FAILED） |
+| `RUNNING` | 下游已开始、未结束 |
+| `COMPLETE` / `PARTIAL` / `FAILED` | 下游自证的最终业务结论 |
+
+**两条禁令被写成可执行守卫**（不是注释）：
+
+- `deriveBusinessFromTransport()` ⇒ **恒抛** `FORBIDDEN_INFERENCE`
+- `deriveTransportFromBusiness()` ⇒ **恒抛** `FORBIDDEN_INFERENCE`
+- `settleTransport(record, { …, business_status })` ⇒ **抛错**：传输结算不得携带业务状态
+
+## 19.4 OBS-001 如何被结构化表达（任务书 §6）
+
+目标形态：
+
+```
+transport_status = CALL_TIMEOUT
+business_status  = COMPLETE
+```
+
+**机制 = 下游自证（callee-side observation）**：下游把「自己跑完了、结果如何」写成一条带
+**同一个 `pipeline_run_id`** 的记录；caller 即使已放弃等待，事后仍可按 id 回查。
+
+`reconcile()` 的关联依据**只有 `pipeline_run_id` 相等**：
+
+| 字段 | 值 |
+|---|---|
+| `correlated` | `true`（= 两侧 id 相等） |
+| `correlation_basis` | `pipeline_run_id_equality` |
+| `is_obs_001_shape` | `true` |
+| `manual_reconstruction_required` | **0**（⛔ 不再依赖时间窗口 / 函数名+时间拼接） |
+
+## 19.5 `MATERIALIZE_CHANGE_REQUIRED = YES`
+
+**结论：YES。** 理由：不能让 `pipeline_run_id` 端到端透传，就只能在「上游生成但下游看不到」之间断裂 ——
+λ 上游必须做三件事：**生成**、**放进 `callFunction` payload**、**把 transport 结果结构化**。
+
+**最小 additive patch（只新增，不改业务控制流）**——完整描述见
+`scripts/lib/v365-p4-candidate-patches.js`（**只描述、未落盘**）：
+
+| 补丁 | 文件 | 内容 |
+|---|---|---|
+| `P4-PATCH-MI` | `cloudfunctions/materializeIndicators/index.js`（drift 件，本轮⛔不改） | ① 顶部 `require` 契约模块；② 链式调用**前**生成身份 + 落 caller 记录；③ `callFunction` 的 `data` 改用 `buildForwardPayload(...)`（**`from` 语义不变**）；④ `catch` 改为 `chained = { error: <原样保留>, transport: classifyTransportError(e) }`；⑤ 正常返回前结算 `CALL_RETURNED` |
+| `P4-PATCH-RDE` | `cloudfunctions/runDecisionEngine/index.js`（**V364 冻结件**） | ① `require` 契约模块；② `main()` 开头 `readInboundCorrelation(event)`（**只读**）；③ 在**已有** `runtime_status` upsert 上新增 `pipeline_*` / `callee_request_id` 字段（**零新增业务写入**）；④ `return` 体新增只读 `pipeline` 字段 |
+
+**边界**：`retry_added=false` / `timeout_changed=false` / `business_control_flow_changed=false`；
+`PATCH_APPLICATION_REQUIRES_AUTHORIZATION = true`（含冻结件）。本轮 **两处云函数均未改动**（实测零污染）。
+
+## 19.6 P4-T1 ~ T8 测试结果
+
+| 用例 | 期望 | 实测 |
+|---|---|---|
+| **T1** Normal success | `CALL_RETURNED` + `COMPLETE` | ✅ 关联依据 = `pipeline_run_id_equality`；caller/callee request id 都记到 |
+| **T2** Caller timeout / downstream success | `CALL_TIMEOUT` + `COMPLETE` **可结构化** | ✅ `is_obs_001_shape=true`，`manual_reconstruction_required=0` |
+| **T3** Caller timeout / still running | `CALL_TIMEOUT` + `RUNNING` | ✅ |
+| **T4** Caller timeout / failed | `CALL_TIMEOUT` + `FAILED` | ✅ |
+| **T5** Call error before start | `CALL_ERROR` + `NOT_OBSERVED` | ✅ 明确「未观测」，不是 FAILED |
+| **T6** Same pipeline retry | 同 key、attempt 递增、非两次独立决策 | ✅ `attempt 1→2`、run_id 不同、`listAttempts` 2 条 |
+| **T7** Different runs, same trade date | 可区分 | ✅ 同日不同源 ⇒ 不同 key；同日同源不同 attempt 亦可区分 |
+| **T8** Manual run | `manual` + 明确来源 | ✅ `origin=manual`、`source_detail=riskChange` 可反解 |
+
+测试文件 `tests/v365-p4-pipeline-correlation.test.js` —— **29/29 PASS**（含 §C 守卫 5 项、§E 三 ID 3 项、§F 补丁边界 4 项）。
+
+## 19.7 Parity（任务书 §11）
+
+| 证据 | 结果 |
+|---|---|
+| 改动文件 ∩ 回放依赖集（harness 传递闭包） | **`[]`** |
+| 决策核心 12 文件改动 | **`[]`** |
+| `cloudfunctions/` 改动 | **0 个文件** |
+| `replay()` 两次决策序列 sha256 | **一致** |
+| **anchor** | `25ccbfc7e1b73a9a173ec36c17512c6228a2fe42685dcd291bc055ea4ed11723`（**与 §15/§17 完全相同 ⇒ 决策行为未变**） |
+
+⇒ **`UNEXPECTED_DECISION_DELTA = 0`**
+
+## 19.8 P-4 Gate（任务书 §12）
+
+| 判定 | 结果 |
+|---|---|
+| `PIPELINE_CORRELATION_ID` | **PASS** |
+| `TRANSPORT_BUSINESS_STATUS_SEPARATED` | **PASS** |
+| `TIMEOUT_SUCCESS_CASE_EXPRESSIBLE` | **PASS** |
+| `RETRY_NOT_ENABLED` | **PASS**（cloudfunctions 零改动 + 补丁 `retry_added=false` + 契约模块无重试逻辑） |
+| `TIMEOUT_NOT_CHANGED` | **PASS**（cloudfunctions 零改动 ⇒ 任何 timeout 参数都不可能被改） |
+| `CONTROL_FLOW_UNCHANGED` | **PASS**（同上 ⇒ 链式控制流逐字未变） |
+| `SAME_PIPELINE_RETRY_DISTINGUISHABLE` | **PASS** |
+| `NORMAL_PATH_DECISION_DELTA` | **0** |
+
+⇒ **`P4_PIPELINE_OBSERVABILITY = PASS`**（脚本 `scripts/v365-p4-correlation-gate.js`，8/8）
+
+## 19.9 与 P-3 的关系（任务书 §10）
+
+三组 ID **语义独立**，且有可执行守卫 `assertDistinctIdentities()`：
+
+| ID | 语义 |
+|---|---|
+| `pipeline_run_id` | 整条任务链身份 |
+| `engine_run_id` | 一次 decision-engine candidate 身份（P-3 的 `run_id`） |
+| `active_run_id` | 当前 authoritative dataset（P-3 的 pointer） |
+
+⚠️ **重要修正**：`engine_run_id == active_run_id` **是合法的** —— active pointer 本来就「指向某个 run_id」。
+守卫只拒绝 `pipeline_run_id` 被复用为 engine/active 身份，并把前者标为 `pointer_targets_run = true`。
+
+## 19.10 本轮边界履行
+
+⛔ **两处云函数逐字未改**（实测 `cloudfunctions/` 改动 0 个文件）⇒ 无 retry、无 timeout 变更、无控制流变更；
+⛔ 未接线 RunContext / RunFinality / active pointer 到生产；未部署、未建 PR、未 merge、未改 `param_config`；
+⛔ 未进入 B0/B1；未改 V3 策略 / `breakout_nd` / SlowBreak / Portfolio Mode / Market Regime；
+⛔ 未提升 Gen-1 / Gen-2 Authority；未动 `v3.6.4-frozen` tag 与任何 immutable lock。
+
+---
+
+# 20. Readiness 终态（任务书 §12）
+
+| 项 | 状态 |
+|---|---|
+| **P-1** | **`CLOSED`** |
+| **P-1A** | **`CLOSED`**（`P1_PRODUCTION_AUTHORITY_ARTIFACT = CLOSED`） |
+| **P-2** | **`CLOSED`** |
+| **P-3** | **`CLOSED`**（`P3_ATOMIC_PUBLISH_POC = PASS`） |
+| **P-4** | **`CLOSED`**（`P4_PIPELINE_OBSERVABILITY = PASS`） |
+
+# `V365_READINESS = READY_TO_IMPLEMENT`
+
+⚠️ **该判定的语义边界（必须与「可上线」区分）**：
+`READY_TO_IMPLEMENT` 表示 **V3.6.5 的五个工作包（P-1/P-1A/P-2/P-3/P-4）均已达实现就绪**，
+**不等于**「已授权实施 / 已授权部署」。以下均需**单独授权**：
+
+1. **B0/B1 批次开工**（本轮明确禁止进入）；
+2. 把 RunContext / RunFinality / active pointer 接入生产；
+3. 执行 `P4-PATCH-MI` / `P4-PATCH-RDE`（后者含 **V364 冻结件**）；
+4. V3.6.5 的封版、部署与生产晋升。
+
+**回归收尾**：本分支 Node 单测 **53 passed / 3 failed**，`origin/master` worktree 对照 **48 passed / 3 failed**，
+**失败集合完全相同**（3 项既有失败为环境相关）⇒ 零新增失败；
+`verify-immutable` 23/23、`verify-gen1-pipeline` 10/10、`verify-gen2-build-artifacts` 7/7 全 PASS。
+
+
 
