@@ -16,6 +16,8 @@ const axios = require('axios');
 const { parseHoldingRow } = require('./holdings-parse');
 const overseas = require('./overseas-filings');
 const biotech = require('./biotech-intel');
+// V3.6.5 P-2：海外行情日期 provenance（additive，不改 legacy trade_date 语义）
+const { buildGlobalQuoteProvenance } = require('./global-signal-provenance');
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -340,7 +342,16 @@ async function fetchGlobalDaily(ticker, limit = 320) {
   const m = text.match(/="([^"]*)"/);
   if (!m) throw new Error(`腾讯实时解析失败 symbol=${symbol}`);
   const f = m[1].split('~');
+  // ⚠️ legacy：`trade_date` 是**抓取时刻的北京自然日**（artifact 日），**不是**市场交易日。
+  //    V3.6.5 P-2 明确**暂不改写**该字段（不改写、不迁移、不批量改历史数据），
+  //    只**追加** provider 原始时间戳 provenance。
+  //    RunContext 的 freshness 判定应改用 `source_market_date`（经调用侧 adapter）。
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const provenance = buildGlobalQuoteProvenance({
+    fields: f,
+    legacy_trade_date: today,
+    provider: 'tencent_qt'
+  });
   return [{
     trade_date: today,
     open: num(f[5]),
@@ -348,7 +359,15 @@ async function fetchGlobalDaily(ticker, limit = 320) {
     high: num(f[33]),
     low: num(f[34]),
     volume: null,
-    pct_change: num(f[32])
+    pct_change: num(f[32]),
+    // ---- V3.6.5 P-2: additive provenance（不改变上面任何既有字段的取值）----
+    // date_origin = 'provider_timestamp' 时 source_market_date 才是真实市场日；
+    // 解析不到时一律 null / UNKNOWN —— 绝不 fallback 为北京今天。
+    source_timestamp: provenance.source_timestamp,
+    source_market_date: provenance.source_market_date,
+    date_origin: provenance.date_origin,
+    source_timezone: provenance.source_timezone,
+    provenance_status: provenance.provenance_status
   }];
 }
 

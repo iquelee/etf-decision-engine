@@ -1,0 +1,37 @@
+{
+  "artifact_type": "cn_trading_calendar",
+  "schema_version": "1.0",
+  "calendar_version": "TEST-FIXTURE-synthetic-2026.10",
+  "synthetic": true,
+  "exchange": ["SSE", "SZSE"],
+  "session_rule": {
+    "weekend": "sat_sun_non_trading",
+    "session_close_local": "15:00",
+    "timezone": "Asia/Shanghai"
+  },
+  "coverage": {
+    "start": "2026-09-01",
+    "end": "2026-12-31",
+    "seeded": true
+  },
+  "holidays": [
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07"
+  ],
+  "special_trading_days": [],
+  "provenance": {
+    "source": "SYNTHETIC_TEST_FIXTURE",
+    "method": "handwritten_for_unit_test",
+    "source_file": null,
+    "source_file_sha256": null,
+    "generated_at": "2026-09-23T00:00:00Z"
+  },
+  "notes": [
+    "SYNTHETIC TEST FIXTURE —— 仅用于验证 calendar 解析 / cutoff / coverage 逻辑。",
+    "其中的 holidays 日期不代表真实节假日安排，不得用于生产。",
+    "生产 artifact 是 src/common/data/cn-trading-calendar.json，二者严格分离。"
+  ]
+}
