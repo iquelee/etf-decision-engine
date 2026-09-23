@@ -815,3 +815,208 @@ P2_MARKET_ENV     = CLOSED   （日期确实存在且可取；纯调用侧 adapt
 ⛔ 未接入 Two-stage Publish、未实施 P-3、未改动 `cloudfunctions/runDecisionEngine/index.js`；
 ⛔ 未用 `new Date()` 兜底市场日期、未把 `updated_at` 当数据日期、未把自然日差当交易日差。
 
+---
+
+# 16. WP-V365-P1A — Trading Calendar Authority Seal
+
+> 本节为追加，不改动上文 §0–§15 的任何历史结论。
+> 承接 §15.7 的 `P1_PRODUCTION_CALENDAR_SEEDING = BLOCKED_ON_DATA`：本节即该 data 前置的**闭合**。
+
+## 16.1 Authority（任务书 §1）
+
+| 项 | 值 |
+|---|---|
+| 权威来源 | 上证所《关于上海证券交易所2026年部分节假日休市安排的通知》**上证公告〔2025〕45号**（2025-12-22）<br>深交所《关于2026年部分节假日休市安排的通知》**深证会〔2025〕481号**（2025-12-22） |
+| 来源 URL | `https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml`<br>`https://www.szse.cn/www/disclosure/notice/general/t20251222_618087.html` |
+| 复核公告 | 上证公告〔2026〕22号（2026-09-17，中秋/国庆复述确认）、深交所同名通知（2026-09-17） |
+| 判定规则 | `CN trading day = Monday–Friday AND NOT official exchange closure` |
+| 冲突策略 | SSE / SZSE 不一致 ⇒ `CALENDAR_CONFLICT` ⇒ **BLOCKED**（生成器拒绝产出，不选边） |
+
+⛔ 未使用：普通日历网站 / 第三方财经网站 / 政府调休工作日推导 / `HOLIDAYS` 环境变量 / runtime 网络 API / max(snapshot date)。
+
+## 16.2 Production artifact（任务书 §2）
+
+| 文件 | 说明 |
+|---|---|
+| `src/common/data/sources/cn-trading-calendar.source.v1.json` | 官方来源文件（逐条记录两个 authority 的休市区间 + 公告标识/日期/URL + `authority_policy`） |
+| `src/common/data/cn-trading-calendar.v1.json` | **封版 artifact**，`seeded=true` / `synthetic=false` / `market=CN_A_SHARE` |
+| `src/common/data/cn-trading-calendar.v1.manifest.json` | manifest（含任务书 §2 要求的全部字段） |
+
+- `calendar_version = cn-a-share-2026.1`，`coverage = 2026-01-01 … 2026-12-31`
+- **artifact SHA256** = `5edb6d4a0a9d7361d2794399a64f5882a7970a14ce4581aae05addb3c6eef786`
+- **deterministic**：artifact 与 manifest **均不含生成时间戳**；`--check` 实测两者 **BYTE-IDENTICAL**
+- `holidays`（**工作日**休市）= 19 天；`weekend_closures`（公告点明的周末休市）= 20 天；`special_trading_days` = 0
+
+## 16.3 P-1A Test Matrix（`tests/v365-p1a-calendar-authority.test.js`，25/25 PASS）
+
+| 组 | 覆盖 |
+|---|---|
+| §A（7） | seeded/synthetic / 来源可追溯（公告号+日期+机构域名）/ coverage 固化 / **manifest SHA == 实测文件 SHA** / 无非确定性字段 / **SSE_SZSE_CONSISTENCY（独立展开两所区间后逐一比对）** / 每个休市区间复市日必开市 |
+| §B（6） | 任务书 §3 的 2026 特别用例：**09-23 OPEN / 09-24 OPEN**、**09-25~09-27 CLOSED / 09-28 OPEN**、**10-01~10-07 逐日 CLOSED**、**10-08 OPEN / 10-10 CLOSED**，加 holidays 与 weekend_closures 不混放、全年逐日自检（工作日 261 / 休市 19） |
+| §C（5） | **保留既有回归**：周六/周日、节后第一日 08:00 → 09-30、节后第一日收盘后 → 10-08、coverage missing、coverage exhausted |
+| §D（5） | **到期与越界 fail-closed**：OK / WARNING（≤30 天，边界 30 与 31 都测）/ EXPIRED ⇒ `CALENDAR_OUT_OF_RANGE` / 早于 start 同样 BLOCKED / `FAIL_CLOSED_CODE` 覆盖全部原因 |
+| §E（2） | 官方日历接入 RunContext：09-23 22:00 → `CASE_A_ALL_EXPECTED`；09-25 全天 `NON_TRADING_DAY` |
+
+## 16.4 Calendar expiry（任务书 §4）
+
+- `calendar_expiry_warning_days = 30`；`calendarExpiryStatus()` 返回 `OK / WARNING / EXPIRED / UNKNOWN`
+- `auto_update` **恒为 `false`** —— ⛔ 只告警，**不自动联网更新**
+- 超出 coverage ⇒ `resolveExpectedTradeDate` 返回 `fail_closed_code = CALENDAR_OUT_OF_RANGE` 且 `expected_trade_date = null`
+  ⇒ **⛔ 不回退为 weekday-only**（正向越界与早于 start 都实测 BLOCKED）
+
+## 16.5 P-1A Gate（任务书 §5）
+
+| 判定 | 结果 |
+|---|---|
+| `CALENDAR_SEEDED = true` | **PASS** |
+| `CALENDAR_SYNTHETIC = false` | **PASS** |
+| `OFFICIAL_SOURCE_TRACEABLE = PASS` | **PASS** |
+| `SSE_SZSE_CONSISTENCY = PASS` | **PASS** |
+| `DETERMINISTIC_REGEN = PASS` | **PASS** |
+| `ARTIFACT_SHA_STABLE = PASS` | **PASS** |
+| `HOLIDAY_CASES = PASS` | **PASS** |
+| `OUT_OF_RANGE_FAIL_CLOSED = PASS` | **PASS** |
+
+⇒ **`P1_PRODUCTION_AUTHORITY_ARTIFACT = CLOSED`**（脚本 `scripts/v365-p1a-calendar-gate.js`，8/8）
+
+---
+
+# 17. WP-V365-P3 — Atomic Publish PoC
+
+> **PoC only**：⛔ 未接入生产 `runDecisionEngine`、⛔ 未创建任何生产 collection、⛔ 未部署。
+
+## 17.1 当前失败模式（任务书 §6，只读证据）
+
+当前生产写入时序（`cloudfunctions/runDecisionEngine/index.js`）：
+
+```
+read inputs
+ → ETF1 calculate → upsert decision_result / fundamental_state / portfolio_position
+ → ETF2 … → ETF3 … → ETF4 … → ETF5 …        （逐票循环，单票 catch 后 continue）
+ → write portfolio_snapshot                   （循环之后单次写）
+ → upsert runtime_status
+ → return { ok: true }
+```
+
+**可能产生 partial state 的位置**：
+1. **第 N 票抛错** ⇒ 前 N-1 票已落库、后 5-N+1 票保持旧值 ⇒ 前台读到「N-1 新 + 其余旧」的混合组合；
+2. **循环后 `portfolio_snapshot` 写失败** ⇒ 5 票已更新但组合快照仍是旧值；
+3. 循环内单票失败被 `continue` 吞掉，**返回体仍 `{ok:true}`** ⇒ 无任何字段标记 PARTIAL（§15.8 已登记）。
+
+静态断言（A.1）同时确认：当前实现**不含** `active_run_pointer` / `runTransaction` / `run_manifest`。
+
+## 17.2 Target architecture（任务书 §7）
+
+```
+RunContext → run_id → candidate documents → expected 5 ETF complete
+           → Run Finality → Validation → COMPLETED → atomic active pointer switch
+```
+
+- 消费者**只允许**读 `active_run_id` 指向的 **completed** dataset；
+- ⛔ 不得把「最新写入时间最大的文档」视为 active。
+
+## 17.3 逻辑模型（任务书 §8，语义而非 collection 名）
+
+| 逻辑集合 | 字段 |
+|---|---|
+| `run_manifest` | `run_id` / `expected_trade_date` / `input_hash` / `expected_codes` / `status` / `revision` |
+| `run_candidate_decision` | `run_id` / `code` / `payload`（+ `calc_date` 供同日性校验） |
+| `run_candidate_portfolio` | `run_id` / `payload` |
+| `active_run_pointer` | `scope='production'` / `run_id` / `revision` / `expected_trade_date` / `promoted_from_run_id` |
+
+实现：`src/common/utils/v365-atomic-publish.js`（纯逻辑）+ `scripts/lib/v365-p3-memory-adapter.js`（**PoC 专用内存 adapter**）。
+
+## 17.4 Atomic 的严格定义（任务书 §11）
+
+> **Atomicity =** 消费者可见的 authoritative dataset，只能通过**单一 active pointer**
+> 从旧完整 run 切换到新完整 run。
+
+⇒ candidate **可以逐条写**（D.1 实测：写到第 1/2/3 条时读取仍是旧 run）；
+但 **partial candidate 永远不能成为 authoritative**。
+
+## 17.5 提升规则（任务书 §7/§13，显式定义，⛔ 不靠 wall-clock）
+
+| 规则 | 内容 |
+|---|---|
+| R1 | `finality.status === COMPLETE` |
+| R2 | `validation.passed === true` |
+| R3 | **monotonic revision**：`candidate.revision > current_pointer.revision` |
+| R4 | 同 `expected_trade_date` 允许 supersede，但**必须记录** `supersedes_run_id`（可追溯） |
+| R5 | **CAS**：提升时 `expected_pointer` 必须与当前 pointer 一致，否则 HOLD |
+
+## 17.6 NoSQL capability verification（任务书 §12）
+
+| 能力 | 结论 | 依据 |
+|---|---|---|
+| multi-document **transaction** | **存在** —— 平台提供 `db.runTransaction(async transaction => { … })` | CloudBase 参考文档 `cloudbase-document-database-*/crud-operations.md` 的 "Transaction Support" 段 |
+| **conditional delete** | **存在**（"Delete only if conditions are met"） | 同上 |
+| 单文档原子更新 | 平台既有语义；**本仓文档未给出完整契约**（隔离级别 / 冲突重试 / 失败语义均未记载） | 文档原文注释为 "Check CloudBase documentation for transaction API" |
+| 平台安全规则对照 | `security-rules.md` 明确「update … does not guarantee atomicity of this operation」——**这是规则校验层面的表述，不可误读为"单文档更新非原子"** | 同上 |
+
+**推荐方案**：**single-pointer promotion（单指针 CAS）**，而非 multi-document transaction。
+理由：最小复杂度、最可验证、且**不依赖尚未确证的事务隔离语义**；candidate 逐条写 + 单点 CAS 即可满足 §11 的 Atomic 定义。
+
+## 17.7 Failure Injection 结果（任务书 §10，F1–F8）
+
+| 用例 | 期望 | 实测 |
+|---|---|---|
+| **P3-F1** 5/5 成功 | 切换成功 | ✅ `COMPLETE` ⇒ pointer 切到新 run |
+| **P3-F2** 4/5 成功 | `PARTIAL` + pointer 不变 | ✅ |
+| **P3-F3** 5/5 成功但 mixed-date | validation fail + pointer 不变 | ✅ `mixed_date_detected` |
+| **P3-F4** portfolio write failure | pointer 不变 | ✅ `missing_portfolio_candidate` |
+| **P3-F5** promotion 前 crash | 旧 active 保留 | ✅ 注入 `compareAndSetPointer` 失败，pointer 未变 |
+| **P3-F6** promotion 后 retry 同 run_id | 幂等 | ✅ `ALREADY_ACTIVE`，**不产生新 revision** |
+| **P3-F7** 同 trade_date、不同 run_id | 有明确规则 | ✅ revision 更大者 supersede 且写 `supersedes_run_id`；revision 更小者被 `STALE_RUN` 拒绝 |
+| **P3-F8** 旧 active + 新 FAILED | 消费者读旧 active | ✅ dataset 完整（5/5） |
+
+## 17.8 并发 / TOCTOU 结果（任务书 §13）
+
+| 用例 | 结果 |
+|---|---|
+| **C.1** Run A/B 交错，B 先提升、较旧的 A 后到 | ✅ A 被 `STALE_RUN` 拒绝，B 保留 |
+| **C.2** 持**过期 pointer 快照**提升（revision 更大） | ✅ 被 **CAS** 拒绝（`compare_and_set_rejected`），并发者结果保留 |
+| **C.3** `created_at` 更晚但 `revision` 更小 | ✅ 被拒 ⇒ **⛔ 不以 wall-clock 决定胜负** |
+
+## 17.9 P-3 Gate（任务书 §14）
+
+| 判定 | 结果 |
+|---|---|
+| `COMPLETE_CAN_PROMOTE` | **PASS** |
+| `PARTIAL_CANNOT_PROMOTE` | **PASS** |
+| `FAILED_CANNOT_PROMOTE` | **PASS** |
+| `MIXED_DATE_CANNOT_PROMOTE` | **PASS** |
+| `CRASH_BEFORE_PROMOTION_SAFE` | **PASS** |
+| `RETRY_IDEMPOTENT` | **PASS** |
+| `STALE_RUN_CANNOT_OVERWRITE_NEWER` | **PASS** |
+| `OLD_ACTIVE_SURVIVES_FAILED_CANDIDATE` | **PASS** |
+
+⇒ **`P3_ATOMIC_PUBLISH_POC = PASS`**（脚本 `scripts/v365-p3-atomic-publish-gate.js`，8/8；
+测试 `tests/v365-p3-atomic-publish-poc.test.js`，17/17）
+
+## 17.10 本轮边界履行
+
+⛔ **生产代码零改动**（相对 `origin/master` 的已跟踪改动集与 §15 完全相同 —— 本轮只新增文件、并修改 §15 自建的 3 个文件）；
+⛔ 未接线 `runDecisionEngine`、未创建生产 collection、未改 schema、未部署、未建 PR、未 merge、未改 `param_config`；
+⛔ 未改 V3 策略 / `breakout_nd` / SlowBreak / Portfolio Mode / Market Regime / Gen-1 Authority / Gen-2 Authority。
+
+---
+
+# 18. Readiness 更新（任务书 §16）
+
+| 项 | 状态 |
+|---|---|
+| **P-1**（implementation） | **`CLOSED`** |
+| **P-1A**（production calendar authority） | **`CLOSED`**（`P1_PRODUCTION_AUTHORITY_ARTIFACT = CLOSED`） |
+| **P-2** | **`CLOSED`** |
+| **P-3** | **`CLOSED`**（`P3_ATOMIC_PUBLISH_POC = PASS`） |
+| **P-4** | **`OPEN`** —— OBS-001 可观测性 vs「不改 `materializeIndicators`」冲突，**仍需单独裁定** |
+
+# `V365_READINESS = BLOCKED_ON_P4`
+
+> ⛔ 不写 `READY_TO_IMPLEMENT` —— P-4 未关闭，且「实现」不等于「可上线」。
+
+**回归**：本分支 Node 单测 **52 passed / 3 failed**，`origin/master` worktree 对照 **48 passed / 3 failed**，
+**失败集合完全相同**（3 项既有失败为环境相关）⇒ 零新增失败；
+`verify-immutable` 23/23、`verify-gen1-pipeline` 10/10、`verify-gen2-build-artifacts` 7/7 全 PASS。
+
+

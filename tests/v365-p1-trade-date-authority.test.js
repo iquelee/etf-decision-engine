@@ -295,9 +295,17 @@ test('C.7【节后第一交易日收盘后】→ expected = 当日', () => {
 });
 
 test('C.8【calendar coverage 缺失】→ BLOCKED（fail-closed，绝不猜）', () => {
-  // (a) 仓库生产 artifact 当前是未播种状态 ⇒ 必须 BLOCKED
-  const repo = loadRepoCalendar();
-  const r = resolveExpectedTradeDate(bj('2026-10-08', '16:30'), repo);
+  // (a) 未播种 calendar ⇒ 必须 BLOCKED。
+  //     ⚠️ 这里用**内联对象**而不是仓库 artifact —— 因为 P-1A 之后仓库 artifact 已播种，
+  //     本测试不应依赖「仓库当前处于未播种状态」这一会变化的外部条件。
+  const unseeded = loadCalendar({
+    artifact_type: 'cn_trading_calendar',
+    calendar_version: 'UNSEEDED_TEST_FIXTURE',
+    coverage: { start: null, end: null, seeded: false },
+    holidays: [],
+    special_trading_days: []
+  });
+  const r = resolveExpectedTradeDate(bj('2026-10-08', '16:30'), unseeded);
   assert.strictEqual(r.status, STATUS.BLOCKED);
   assert.strictEqual(r.resolution_reason, REASON.CALENDAR_COVERAGE_MISSING);
   assert.strictEqual(r.expected_trade_date, null, '覆盖不足时绝不回退为自然日或工作日猜测');

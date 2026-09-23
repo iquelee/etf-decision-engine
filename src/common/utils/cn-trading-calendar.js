@@ -48,8 +48,16 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const REPO = path.join(__dirname, '..', '..', '..');
-const CALENDAR_PATH = path.join(REPO, 'src', 'common', 'data', 'cn-trading-calendar.json');
-const MANIFEST_PATH = path.join(REPO, 'src', 'common', 'data', 'cn-trading-calendar.manifest.json');
+const DATA_DIR = path.join(REPO, 'src', 'common', 'data');
+const CALENDAR_PATH = path.join(DATA_DIR, 'cn-trading-calendar.json');
+const MANIFEST_PATH = path.join(DATA_DIR, 'cn-trading-calendar.manifest.json');
+/**
+ * P-1A：官方来源封版 artifact（SSE + SZSE 双所正式公告）。
+ * loader **优先**使用 v1；v1 不存在时才回退到旧的未播种骨架。
+ */
+const V1_CALENDAR_PATH = path.join(DATA_DIR, 'cn-trading-calendar.v1.json');
+const V1_MANIFEST_PATH = path.join(DATA_DIR, 'cn-trading-calendar.v1.manifest.json');
+const DEFAULT_EXPIRY_WARNING_DAYS = 30;
 
 /* ------------------------------------------------------------------ *
  * 基础日期工具（全部 UTC-safe，不依赖宿主时区）
@@ -133,12 +141,15 @@ function loadCalendar(raw) {
     if (isDate(cov.start) && isDate(cov.end) && cov.start > cov.end) errors.push('coverage.start > coverage.end');
   }
 
+  const weekendClosures = Array.isArray(o.weekend_closures) ? o.weekend_closures : [];
+  const warnDays = Number(o.calendar_expiry_warning_days);
   const calendar = {
     valid: errors.length === 0,
     errors,
     [LOADED]: true,
     calendar_version: o.calendar_version != null ? String(o.calendar_version) : null,
     schema_version: o.schema_version != null ? String(o.schema_version) : null,
+    market: o.market != null ? String(o.market) : null,
     synthetic: o.synthetic === true,
     exchange: Array.isArray(o.exchange) ? o.exchange.slice() : [],
     session_rule: o.session_rule && typeof o.session_rule === 'object' ? { ...o.session_rule } : {},
@@ -149,6 +160,9 @@ function loadCalendar(raw) {
     },
     holidays: holidays.filter(isDate).slice().sort(),
     special_trading_days: specials.filter(isDate).slice().sort(),
+    weekend_closures: weekendClosures.filter(isDate).slice().sort(),
+    calendar_expiry_warning_days: Number.isFinite(warnDays) && warnDays >= 0
+      ? Math.floor(warnDays) : DEFAULT_EXPIRY_WARNING_DAYS,
     holidaySet: new Set(holidays.filter(isDate)),
     specialSet: new Set(specials.filter(isDate)),
     provenance: o.provenance && typeof o.provenance === 'object' ? { ...o.provenance } : {}
@@ -156,17 +170,23 @@ function loadCalendar(raw) {
   return calendar;
 }
 
-/** 读取仓库内的生产 artifact（只读；失败返回 valid:false 的 calendar） */
+/**
+ * 读取仓库内的生产 artifact（只读；全部失败则返回 valid:false 的 calendar）。
+ * P-1A 之后**优先**读取官方封版 artifact `cn-trading-calendar.v1.json`；
+ * 它不存在时才回退到旧骨架（未播种）。
+ * @param {string} [filePath] 显式路径（给定时只用该路径，不做 v1 回退）
+ */
 function loadRepoCalendar(filePath) {
-  const p = filePath || CALENDAR_PATH;
-  try {
-    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
-    const cal = loadCalendar(raw);
-    cal.source_path = p;
-    return cal;
-  } catch (e) {
-    return loadCalendar(null);
+  const candidates = filePath ? [filePath] : [V1_CALENDAR_PATH, CALENDAR_PATH];
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const cal = loadCalendar(raw);
+      cal.source_path = p;
+      return cal;
+    } catch (e) { /* 试下一个候选 */ }
   }
+  return loadCalendar(null);
 }
 
 function inCoverage(dateStr, calendar) {
@@ -245,11 +265,25 @@ function countTradeDays(fromDate, toDate, calendar) {
  * P-1 权威解析：resolveExpectedTradeDate
  * ------------------------------------------------------------------ */
 
+/**
+ * P-1A：对外**稳定**的 fail-closed 判定码（任务书 §4 的命名）。
+ * 与内部 `resolution_reason` 分离：下游只应依赖这里的码，避免绑死内部枚举。
+ */
+const FAIL_CLOSED_CODE = Object.freeze({
+  [REASON.CALENDAR_COVERAGE_MISSING]: 'CALENDAR_COVERAGE_MISSING',
+  [REASON.CALENDAR_COVERAGE_OUT_OF_RANGE]: 'CALENDAR_OUT_OF_RANGE',
+  [REASON.CALENDAR_COVERAGE_EXHAUSTED]: 'CALENDAR_COVERAGE_EXHAUSTED',
+  [REASON.INVALID_CALENDAR]: 'CALENDAR_INVALID',
+  [REASON.INVALID_NOW]: 'CALENDAR_INVALID_NOW'
+});
+
 function blocked(reason, extra) {
   return Object.assign({
     status: STATUS.BLOCKED,
     expected_trade_date: null,
-    resolution_reason: reason
+    resolution_reason: reason,
+    fail_closed_code: FAIL_CLOSED_CODE[reason] || 'CALENDAR_BLOCKED',
+    blocked: true
   }, extra || {});
 }
 
@@ -311,6 +345,8 @@ function resolveExpectedTradeDate(now, calendar, cutoff) {
   if (tradingToday && bj.minutes >= cutMin) {
     return Object.assign({
       status: STATUS.OK,
+      blocked: false,
+      fail_closed_code: null,
       expected_trade_date: bj.date,
       observed_reference_date: bj.date,
       resolution_reason: REASON.TRADING_DAY_AFTER_CUTOFF
@@ -323,10 +359,64 @@ function resolveExpectedTradeDate(now, calendar, cutoff) {
   }
   return Object.assign({
     status: STATUS.OK,
+    blocked: false,
+    fail_closed_code: null,
     expected_trade_date: prev,
     observed_reference_date: bj.date,
     resolution_reason: tradingToday ? REASON.TRADING_DAY_BEFORE_CUTOFF : REASON.NON_TRADING_DAY
   }, base);
+}
+
+/** 自然日差（b - a） */
+function dateDiffDays(a, b) {
+  if (!isDate(a) || !isDate(b)) return null;
+  const ta = Date.parse(`${a}T00:00:00Z`);
+  const tb = Date.parse(`${b}T00:00:00Z`);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return null;
+  return Math.round((tb - ta) / 86400000);
+}
+
+/**
+ * P-1A：日历到期预警。
+ *
+ * ⛔ **只告警，不自动联网更新**（`auto_update` 恒为 false）。
+ * 到期（remaining < 0）时 `resolveExpectedTradeDate` 会返回
+ * `CALENDAR_OUT_OF_RANGE` ⇒ BLOCKED，**不回退为 weekday-only**。
+ *
+ * @param {Date|string|number} now 运行时刻
+ * @param {object} calendar calendar artifact
+ * @returns {{status:string, coverage_end:string|null, warning_days:number,
+ *            days_remaining:number|null, reason:string, auto_update:boolean}}
+ */
+function calendarExpiryStatus(now, calendar) {
+  const cal = calendar && calendar[LOADED] ? calendar : loadCalendar(calendar);
+  const warnDays = cal && cal.calendar_expiry_warning_days != null
+    ? cal.calendar_expiry_warning_days : DEFAULT_EXPIRY_WARNING_DAYS;
+  const covEnd = cal && cal.coverage && cal.coverage.seeded ? cal.coverage.end : null;
+  const bj = beijingParts(now instanceof Date ? now : new Date(now));
+  if (!covEnd || !bj) {
+    return {
+      status: 'UNKNOWN',
+      coverage_end: covEnd,
+      warning_days: warnDays,
+      days_remaining: null,
+      reason: covEnd ? 'INVALID_NOW' : 'CALENDAR_COVERAGE_MISSING',
+      auto_update: false
+    };
+  }
+  const remaining = dateDiffDays(bj.date, covEnd);   // coverage_end - today
+  let status = 'OK';
+  if (remaining < 0) status = 'EXPIRED';
+  else if (remaining <= warnDays) status = 'WARNING';
+  return {
+    status,
+    coverage_end: covEnd,
+    warning_days: warnDays,
+    days_remaining: remaining,
+    reason: status === 'EXPIRED' ? 'CALENDAR_OUT_OF_RANGE'
+      : (status === 'WARNING' ? 'COVERAGE_EXPIRING_SOON' : 'COVERAGE_OK'),
+    auto_update: false
+  };
 }
 
 /** 计算 artifact 的规范 sha256（用于 manifest 记录；⛔ 不写回 artifact 本身，避免自指） */
@@ -339,16 +429,21 @@ function calendarArtifactSha256(filePath) {
 module.exports = {
   BEIJING_OFFSET_MINUTES,
   DEFAULT_CUTOFF,
+  DEFAULT_EXPIRY_WARNING_DAYS,
   REASON,
   STATUS,
+  FAIL_CLOSED_CODE,
   CALENDAR_PATH,
   MANIFEST_PATH,
+  V1_CALENDAR_PATH,
+  V1_MANIFEST_PATH,
   isDate,
   shiftDate,
   weekdayOf,
   isWeekend,
   beijingParts,
   parseCutoff,
+  dateDiffDays,
   loadCalendar,
   loadRepoCalendar,
   isTradingDay,
@@ -356,5 +451,6 @@ module.exports = {
   nextTradingDay,
   countTradeDays,
   resolveExpectedTradeDate,
+  calendarExpiryStatus,
   calendarArtifactSha256
 };
