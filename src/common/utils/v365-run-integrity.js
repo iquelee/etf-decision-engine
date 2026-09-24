@@ -26,7 +26,9 @@ const {
 } = require('./pipeline-correlation.js');
 const CONTRACTS = require('./v365-contracts.js');
 const calendar = require('./cn-trading-calendar.js');
-const { promotionAllowed, CAS_CODE } = require('./v365-publish-store.js');
+const {
+  promotionAllowed, CAS_CODE, CAS_REASON, classifyPointerPromotion, pointerDocId
+} = require('./v365-publish-store.js');
 
 /** run gate 结果（语义固定；名称可调） */
 const RUN_GATE = Object.freeze({
@@ -188,13 +190,27 @@ async function publishCandidateFirst(input) {
     candidate_class: candidateClass && candidateClass.status ? candidateClass.status : null
   }));
 
-  // 5) 提升 —— **双重门**：协议判定 + 平台 CAS 证据
+  // 5) 提升 —— **双重门**：协议判定 + 平台 CAS 证据（平台实证 AND 实现对齐）
   const allowed = i.allowPromotion != null ? i.allowPromotion === true : promotionAllowed();
-  if (plan.action !== POINTER_ACTION.PROMOTE || plan.action === POINTER_ACTION.ALREADY_ACTIVE) {
+  if (plan.action === POINTER_ACTION.ALREADY_ACTIVE) {
     return {
       finality, candidate_class: candidateClass, validation, plan,
       promotion_attempted: false,
-      promoted: plan.action === POINTER_ACTION.ALREADY_ACTIVE,
+      promoted: true,                    // 目标态已是当前态 ⇒ 该 run **就是** active
+      idempotent: true,
+      cas_reason: CAS_REASON.ALREADY_ACTIVE,
+      promotion_skipped_reason: plan.reason || 'already_active_same_run_id',
+      pointer_unchanged: true,
+      current_pointer: currentPointer
+    };
+  }
+  if (plan.action !== POINTER_ACTION.PROMOTE) {
+    return {
+      finality, candidate_class: candidateClass, validation, plan,
+      promotion_attempted: false,
+      promoted: false,
+      idempotent: false,
+      cas_reason: null,
       promotion_skipped_reason: plan.reason || plan.action,
       pointer_unchanged: true,
       current_pointer: currentPointer
@@ -205,6 +221,8 @@ async function publishCandidateFirst(input) {
       finality, candidate_class: candidateClass, validation, plan,
       promotion_attempted: false,
       promoted: false,
+      idempotent: false,
+      cas_reason: null,
       promotion_skipped_reason: 'ATOMIC_PROMOTION_BLOCKED:platform_cas_unverified',
       pointer_unchanged: true,
       current_pointer: currentPointer
@@ -216,7 +234,15 @@ async function publishCandidateFirst(input) {
     finality, candidate_class: candidateClass, validation, plan,
     promotion_attempted: true,
     promoted: exec.promoted === true,
+    idempotent: exec.idempotent === true,
+    // 拒因**结构化透传**（STALE_EXPECTED_POINTER / NON_MONOTONIC_REVISION / …），
+    // ⛔ 不再把一切拒因压成 CAS_REJECTED 而丢失原因。
+    cas_reason: exec.cas_reason || null,
     promotion_skipped_reason: exec.promoted ? null : (exec.reason || CAS_CODE.CAS_REJECTED),
+    previous_run_id: exec.previous_run_id != null ? exec.previous_run_id : null,
+    previous_revision: exec.previous_revision != null ? exec.previous_revision : null,
+    requested_run_id: exec.requested_run_id != null ? exec.requested_run_id : null,
+    requested_revision: exec.requested_revision != null ? exec.requested_revision : null,
     pointer_unchanged: exec.promoted !== true,
     current_pointer: exec.pointer || currentPointer,
     cas: exec.cas || null,
@@ -331,6 +357,9 @@ module.exports = {
   INPUT_CONTRACT_VERSION: CONTRACTS.INPUT_CONTRACT_VERSION,
   V365_COLLECTIONS: CONTRACTS.V365_COLLECTIONS,
   CAS_EVIDENCE: CONTRACTS.CAS_EVIDENCE,
+  // CAS 语义（拒因枚举 + 机制无关判定）—— 供资格门与测试直接断言
+  CAS_REASON,
+  classifyPointerPromotion,
   // P-1A 日历权威源再导出（RunContext gate 的 expected_trade_date 来源）
   resolveExpectedTradeDate: calendar.resolveExpectedTradeDate,
   loadRepoCalendar: calendar.loadRepoCalendar,
@@ -356,5 +385,6 @@ module.exports = {
   reconcile,
   isObs001Shape,
   buildRunTelemetry,
-  promotionAllowed
+  promotionAllowed,
+  pointerDocId
 };

@@ -1,5 +1,5 @@
 /**
- * V3.6.5 P-3 —— 内存 adapter（**PoC 专用**）
+ * V3.6.5 P-3 —— 内存 adapter（**PoC / 测试专用**）
  *
  * ⛔ 不创建任何生产 collection、不连接 CloudBase、不被 cloudfunctions/ 引用。
  * 用途：在没有真实数据库的前提下，验证「单指针 CAS 提升」的语义与失败模式。
@@ -13,10 +13,15 @@
  * 设计要点：
  *   - 所有写入**深拷贝**，防止调用方持有引用造成「假通过」。
  *   - compareAndSetPointer 在**一个同步临界区**内完成「读→比→写」，
- *     模拟真实平台的单文档原子更新语义。
+ *     模拟真实平台的**单文档原子更新**语义（2026-09-24 平台实证：
+ *     `findAndModify + expected-current filter + revision guard` 即为该语义）。
+ *   - ⚠️ 判定逻辑**复用** `src/common/utils/v365-publish-store.js::classifyPointerPromotion`
+ *     ⇒ 内存适配器与 CloudBase 适配器**共享同一套 reason 语义**，测试结论可迁移。
  *   - 不做任何基于 wall-clock 的排序或覆盖。
  */
 'use strict';
+
+const { classifyPointerPromotion } = require('../../src/common/utils/v365-publish-store.js');
 
 function deepCopy(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
@@ -73,21 +78,32 @@ function createMemoryAdapter(opts) {
 
     /**
      * CAS：仅当 `expected` 与当前 pointer 完全一致时才写入 `next`。
-     * @returns {{ok:boolean, current:object|null}}
+     *
+     * ⚠️ 与 CloudBase 适配器**同构**：判定走共享的 `classifyPointerPromotion`，
+     *    并在同一同步临界区内完成「读→判→写」⇒ 读与写之间不存在可插入的窗口。
+     *
+     * @returns {{ok:boolean, promoted:boolean, reason:string, idempotent:boolean,
+     *            previous_run_id:string|null, previous_revision:number|null,
+     *            requested_run_id:string|null, requested_revision:number|null,
+     *            current:object|null}}
      */
     async compareAndSetPointer(scope, expected, next) {
       record('compareAndSetPointer', `${scope}|expected=${pointerKey(expected)}|next=${pointerKey(next)}`);
       maybeFail('compareAndSetPointer', scope);
-      // ---- 同步临界区：读 → 比 → 写 ----
+      // ---- 同步临界区：读 → 判 → 写 ----
       const current = pointers.get(scope) || null;
-      const same = (current == null && expected == null)
-        || (current != null && expected != null
-          && current.run_id === expected.run_id && current.revision === expected.revision);
-      if (!same) {
-        return { ok: false, current: deepCopy(current), expected: deepCopy(expected) };
+      const verdict = classifyPointerPromotion({ expected, current, next });
+      if (verdict.promoted !== true) {
+        return Object.assign({ ok: false, current: deepCopy(current) }, verdict);
       }
       pointers.set(scope, deepCopy(next));
-      return { ok: true, current: deepCopy(next) };
+      return Object.assign({
+        ok: true,
+        promoted: true,
+        current: deepCopy(next),
+        pointer: deepCopy(next),
+        read_after_write_consistent: true
+      }, verdict);
     },
 
     async putManifest(doc) {

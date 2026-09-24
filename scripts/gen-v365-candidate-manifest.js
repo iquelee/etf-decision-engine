@@ -185,10 +185,21 @@ function build(opts) {
     },
 
     cas_evidence: {
-      api_present: CONTRACTS.CAS_EVIDENCE.api_present,
-      api_reference: '@cloudbase/node-sdk@2.11.0 types/index.d.ts:467-468 (Db.startTransaction / Db.runTransaction)',
-      semantics_documented_in_repo: CONTRACTS.CAS_EVIDENCE.semantics_documented_in_repo,
-      platform_concurrency_tested: CONTRACTS.CAS_EVIDENCE.platform_concurrency_tested
+      // ── Q7 重裁（2026-09-24 平台实证后）──────────────────────────────
+      // 判据从「是否用了多文档事务」改为「authoritative 指针切换是否真的原子」。
+      transaction_required: CONTRACTS.CAS_EVIDENCE.transaction_required,
+      platform_single_document_cas_required: CONTRACTS.CAS_EVIDENCE.platform_single_document_cas_required,
+      mechanics: 'single-document conditional CAS（findAndModify 语义：expected-current filter + revision guard）',
+      channel_evidence: CONTRACTS.CAS_EVIDENCE.channel_evidence,
+      probe_collection: CONTRACTS.CAS_EVIDENCE.probe_collection,
+      probe_date: CONTRACTS.CAS_EVIDENCE.probe_date,
+      platform_single_document_cas_verified: CONTRACTS.CAS_EVIDENCE.platform_single_document_cas_verified,
+      // 平台**负向**事实（如实记录，不得当成"已具备"）
+      transaction_command_available: CONTRACTS.CAS_EVIDENCE.transaction_command_available,
+      multi_command_batch_atomic: CONTRACTS.CAS_EVIDENCE.multi_command_batch_atomic,
+      // 实现对齐（必须与 v365-publish-store.js 实际实现一致）
+      implementation_uses_single_document_cas: CONTRACTS.CAS_EVIDENCE.implementation_uses_single_document_cas,
+      evidence_doc: CONTRACTS.CAS_EVIDENCE.evidence_doc
     },
 
     qualified_files: QUALIFIED_FILES.slice(),

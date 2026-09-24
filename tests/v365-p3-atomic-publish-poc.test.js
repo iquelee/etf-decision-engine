@@ -101,10 +101,28 @@ testAsync('A.1【B1 后更新】runDecisionEngine 已接线：决策写入改经
   const v365 = U('v365-run-integrity.js');
   assert.ok(v365.V365_COLLECTIONS.ACTIVE_POINTER, 'B1：必须存在 active pointer 契约');
   assert.ok(v365.V365_COLLECTIONS.RUN_MANIFEST, 'B1：必须存在 run manifest 契约');
-  // CAS 必须走平台事务；缺能力时 fail-closed（不得降级成先读后写）
+  // CAS 必须走**单文档条件更新**（Q7 重裁，2026-09-24 平台实证）：
+  //   命令通道无事务命令（CommandNotFound）⇒ 不得依赖 runTransaction；
+  //   真正的原子性来自 where({_id, run_id: expected, revision: expected}).update()。
+  // ⚠️ 断言必须针对**代码**而非注释：本文件注释里会解释"为什么不用事务"，故先剥离注释。
   const storeSrc = fs.readFileSync(path.join(REPO, 'src/common/utils', 'v365-publish-store.js'), 'utf8');
-  assert.ok(storeSrc.includes('runTransaction'), 'CAS 必须走平台事务 API');
-  assert.ok(storeSrc.includes('CAS_UNAVAILABLE'), '缺事务能力必须返回 CAS_UNAVAILABLE（fail-closed）');
+  const codeOnly = storeSrc
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  assert.ok(!/runTransaction/.test(codeOnly),
+    '⛔ CAS 代码中不得出现 runTransaction（平台无该命令，且协议不需要多文档事务）');
+  assert.ok(!/startTransaction/.test(codeOnly), '⛔ 同上：不得依赖 startTransaction');
+  assert.ok(/\.where\(/.test(codeOnly) && /\.update\(/.test(codeOnly),
+    '必须使用单文档条件更新（where + update）实现 CAS');
+  assert.ok(codeOnly.includes('classifyPointerPromotion'),
+    '语义判定必须复用共享的机制无关分类函数');
+  assert.ok(codeOnly.includes('conditional_update_matched_0'),
+    '条件更新命中 0 条必须显式拒绝（⛔ 不得 fallback 为无条件 update）');
+  assert.ok(codeOnly.includes('CAS_UNAVAILABLE'),
+    '缺条件更新能力必须返回 CAS_UNAVAILABLE（fail-closed）');
+  // 结构化拒因枚举必须在位（不得用 true/false 丢失原因）
+  ['PROMOTED', 'ALREADY_ACTIVE', 'STALE_EXPECTED_POINTER', 'NON_MONOTONIC_REVISION', 'POINTER_NOT_FOUND']
+    .forEach((r) => assert.ok(codeOnly.includes(r), '缺少 CAS 拒因 ' + r));
 });
 
 /* ================================================================== *

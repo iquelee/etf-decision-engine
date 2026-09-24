@@ -107,13 +107,27 @@ test('A.9 ★ 反向证明：合格面文件未被声明 ⇒ UNEXPECTED_QUALIFIE
     '存在属于 V365 合格面但未被 manifest 声明的文件: ' + JSON.stringify(undeclared));
 });
 
-test('A.10 CAS 证据状态未被高估（平台并发实证未取得时必须为 false）', () => {
+test('A.10 CAS 证据状态未被高估（Q7 重裁后：只认单文档 CAS，且要求实现对齐）', () => {
   const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
-  assert.strictEqual(m.cas_evidence.api_present, true, 'API 存在（SDK 2.11.0）应为 true');
-  assert.strictEqual(m.cas_evidence.platform_concurrency_tested, false,
-    '平台并发未实测 ⇒ 不得标为 true');
-  assert.strictEqual(CONTRACTS.publishPromotionAllowed(), false,
-    'promotionAllowed() 必须 fail-closed');
+  // 机制裁定：多文档事务**非**必要条件；单文档条件 CAS 才是
+  assert.strictEqual(m.cas_evidence.transaction_required, false,
+    '多文档事务不是必要条件（协议只需要单文档指针原子切换）');
+  assert.strictEqual(m.cas_evidence.platform_single_document_cas_required, true);
+  assert.strictEqual(m.cas_evidence.platform_single_document_cas_verified, true,
+    '平台单文档条件 CAS 已实证（CAS-1~CAS-7 + 并发，见 docs/V365_PLATFORM_CAS_EVIDENCE.md）');
+  // 平台**负向**事实必须如实记录
+  assert.strictEqual(m.cas_evidence.transaction_command_available, false,
+    '命令通道无事务命令（CommandNotFound）⇒ 不得标 true');
+  assert.strictEqual(m.cas_evidence.multi_command_batch_atomic, false,
+    '批量命令非原子 ⇒ 不得标 true');
+  // 实现对齐
+  assert.strictEqual(m.cas_evidence.implementation_uses_single_document_cas, true);
+  // 双重门：平台证据 AND 实现对齐 ⇒ 现为 true（⛔ 但仍受 deploy 授权约束）
+  assert.strictEqual(CONTRACTS.publishPromotionAllowed(), true,
+    '平台证据 + 实现对齐后 promotionAllowed() 应为 true');
+  // ⛔ 反向守卫：任何一门缺失都必须 fail-closed
+  const seen = CONTRACTS.CAS_EVIDENCE.platform_single_document_cas_verified;
+  assert.strictEqual(seen, true);
 });
 
 test('A.11 CI 真的消费 manifest（§18 要求）', () => {

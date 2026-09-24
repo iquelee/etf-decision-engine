@@ -33,6 +33,8 @@
 const {
   RUN_STATUS, PUBLISH_PHASE, classifyRunFinality, planTwoStagePublish
 } = require('./v361-run-finality.js');
+// 拒因枚举**单一来源**：与适配器共用同一 CAS 语义层（机制无关）
+const { CAS_REASON } = require('./v365-publish-store.js');
 
 /** 逻辑集合名（PoC 抽象；未创建任何生产 collection） */
 const POC_COLLECTIONS = Object.freeze({
@@ -223,7 +225,16 @@ function planPointerPromotion(input) {
 
 /**
  * 执行 pointer 提升（**唯一**把 candidate 变成 authoritative 的入口）。
- * 用 CAS：expected 必须与当前 pointer 完全一致，否则并发者已抢先 ⇒ HOLD。
+ *
+ * 用**单文档条件 CAS**：expected 必须与当前 pointer 逐位一致，且 revision 严格单调；
+ * 否则拒写（并发者已抢先 / 快照过期 / 较旧 run 后到）。
+ *
+ * ⚠️ 拒因**结构化透传**（⛔ 不得压成统一的 CAS_REJECTED 而丢失原因）：
+ *    PROMOTED / ALREADY_ACTIVE / STALE_EXPECTED_POINTER / NON_MONOTONIC_REVISION /
+ *    POINTER_NOT_FOUND / CAS_UNAVAILABLE / CAS_REJECTED / CAS_ERROR
+ *
+ * ⚠️ 顺序约束（§9）：本函数是**最后一步** —— 所有关键 validation 必须已在此**之前**完成。
+ *    绝不允许「先提升 pointer，再做 validation」。
  */
 async function executePointerPromotion(input) {
   const inp = input || {};
@@ -233,22 +244,51 @@ async function executePointerPromotion(input) {
   const expectedPointer = inp.expected_pointer || null;
 
   if (plan.action === POINTER_ACTION.ALREADY_ACTIVE) {
-    return { promoted: false, action: POINTER_ACTION.ALREADY_ACTIVE, reason: 'already_active_same_run_id' };
+    return {
+      promoted: false,
+      action: POINTER_ACTION.ALREADY_ACTIVE,
+      reason: 'already_active_same_run_id',
+      cas_reason: 'ALREADY_ACTIVE',
+      idempotent: true,
+      previous_run_id: plan.run_id != null ? String(plan.run_id) : null,
+      previous_revision: Number.isFinite(Number(plan.revision)) ? Number(plan.revision) : null,
+      requested_run_id: plan.run_id != null ? String(plan.run_id) : null,
+      requested_revision: Number.isFinite(Number(plan.revision)) ? Number(plan.revision) : null
+    };
   }
   if (plan.action !== POINTER_ACTION.PROMOTE) {
-    return { promoted: false, action: POINTER_ACTION.HOLD, reason: plan.reason };
+    return { promoted: false, action: POINTER_ACTION.HOLD, reason: plan.reason, cas_reason: null, idempotent: false };
   }
 
   const res = await adapter.compareAndSetPointer(scope, expectedPointer, plan.next_pointer);
-  if (!res || res.ok !== true) {
+  if (!res || (res.ok !== true && res.promoted !== true)) {
+    const casReason = (res && res.reason) || CAS_REASON.CAS_REJECTED;
     return {
       promoted: false,
       action: POINTER_ACTION.HOLD,
       reason: HOLD_REASON.CAS_REJECTED,
+      cas_reason: casReason,
+      idempotent: !!(res && res.idempotent),
+      previous_run_id: res ? res.previous_run_id : null,
+      previous_revision: res ? res.previous_revision : null,
+      requested_run_id: res ? res.requested_run_id : null,
+      requested_revision: res ? res.requested_revision : null,
       current: res ? res.current : null
     };
   }
-  return { promoted: true, action: POINTER_ACTION.PROMOTE, pointer: plan.next_pointer, cas: res };
+  return {
+    promoted: true,
+    action: POINTER_ACTION.PROMOTE,
+    reason: CAS_REASON.PROMOTED,
+    cas_reason: CAS_REASON.PROMOTED,
+    idempotent: false,
+    previous_run_id: res.previous_run_id != null ? res.previous_run_id : null,
+    previous_revision: res.previous_revision != null ? res.previous_revision : null,
+    requested_run_id: res.requested_run_id != null ? res.requested_run_id : null,
+    requested_revision: res.requested_revision != null ? res.requested_revision : null,
+    pointer: plan.next_pointer,
+    cas: res
+  };
 }
 
 /**

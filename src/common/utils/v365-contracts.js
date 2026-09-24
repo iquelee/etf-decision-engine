@@ -56,23 +56,55 @@ const V365_COLLECTIONS = Object.freeze({
 const POINTER_SCOPE_PRODUCTION = 'production';
 
 /* ------------------------------------------------------------------ *
- * 事务 / CAS 证据状态（§10）
+ * 平台 CAS 证据状态（Q7 重裁，2026-09-24）
  * ------------------------------------------------------------------ *
- * `PLATFORM_CAS_VERIFIED` 只有在**实测两个并发 promotion** 并证明 stale run 无法覆盖
- * newer run 之后才可为 `true`。⛔ 不得因为"读到了 API 签名"就置 true。
+ * ── 重裁背景 ──────────────────────────────────────────────────────────
+ * 旧版把 `REAL_TRANSACTION_API` 当成 Q7 的**必要实现机制**。真实平台实测推翻了这一点：
+ *   • `tcb.RunCommands` 的 `{"startTransaction":1}` → `CommandNotFound: no such command`
+ *     ⇒ 该通道**没有**多文档事务命令（`transaction_command_available = false`）；
+ *   • `[有效写, 非法命令]` 批量 ⇒ 前半**已生效**、整体报错
+ *     ⇒ `multi_command_batch_atomic = false`（⛔ 不得用批量伪造成事务）；
+ *   • 而本协议的 atomicity 定义（单一 active pointer 切换）**本来就只要求单文档原子性** ——
+ *     单文档 `findAndModify + expected-current filter + revision guard` 在真实平台
+ *     **八项语义全部 PASS**（CAS-1~CAS-7 + 并发，见 `docs/V365_PLATFORM_CAS_EVIDENCE.md`）。
+ * ⇒ 正式裁定：`TRANSACTION_REQUIRED = NO` / `PLATFORM_SINGLE_DOCUMENT_CAS_REQUIRED = YES`。
+ *   这是 **implementation selection correction**（判据从"用了什么机制"改为"是否真的原子"），
+ *   **不是**放宽安全标准：放行同时要求「平台实证」**且**「实现对齐」。
+ *
+ * ⛔ 不得手工把 `implementation_uses_single_document_cas` 置 true —— 它必须与
+ *    `v365-publish-store.js` 的实际实现一致（由测试静态断言守住）。
  */
 const CAS_EVIDENCE = Object.freeze({
-  api_present: true,                  // @cloudbase/node-sdk 2.11.0 Db.runTransaction 存在（types/index.d.ts:467-468）
-  semantics_documented_in_repo: false, // 本仓文档未给隔离级别/冲突重试契约
-  platform_concurrency_tested: false  // 需一次性授权的真实集合写测试
+  // 机制裁定
+  transaction_required: false,
+  platform_single_document_cas_required: true,
+
+  // 平台实证（来自一次性隔离探针；集合已 drop、无残留）
+  channel_evidence: 'tcb.RunCommands',
+  probe_collection: '_v365_cas_probe',
+  probe_date: '2026-09-24',
+  platform_single_document_cas_verified: true,   // CAS-1~CAS-7 + 并发全部 PASS
+  evidence_doc: 'docs/V365_PLATFORM_CAS_EVIDENCE.md',
+
+  // 平台**负向**事实（如实记录，不得当成"已具备"）
+  transaction_command_available: false,
+  multi_command_batch_atomic: false,
+
+  // 实现对齐（本轮把 publish-store 从 runTransaction 改为单文档条件 CAS 后置 true）
+  implementation_uses_single_document_cas: true
 });
 
 /**
  * 发布协议是否被允许执行 promotion。
- * fail-closed：平台 CAS 未取得并发实证 ⇒ 一律不得提升。
+ *
+ * fail-closed **双重门**（⛔ 比旧版更严）：
+ *   ① 平台已实证单文档条件 CAS；
+ *   ② **实现**确已对齐该机制。
+ * 两者缺一即 false。
  */
 function publishPromotionAllowed() {
-  return CAS_EVIDENCE.platform_concurrency_tested === true;
+  return CAS_EVIDENCE.platform_single_document_cas_verified === true
+    && CAS_EVIDENCE.implementation_uses_single_document_cas === true;
 }
 
 module.exports = {
