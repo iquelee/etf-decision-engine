@@ -60,3 +60,13 @@ jobs:
       #            CANDIDATE_CONTENT_SHA_MISMATCH / CALENDAR_SHA_MISMATCH
       - name: Gate V365 — Candidate Manifest Qualified-File Verification
         run: node scripts/verify-v365-candidate-manifest.js
+
+      # WP-V365-RM（§16）：Reader Migration Gate。
+      #   八项判据：AUTHORITATIVE_ENDPOINTS_MIGRATED / NO_LATEST_QUERY_AS_AUTHORITY /
+      #   SINGLE_REQUEST_RUN_PINNING / CROSS_COLLECTION_RUN_COHERENCE /
+      #   CANDIDATE_INVISIBLE_BEFORE_PROMOTION / MISSING_POINTER_FAIL_CLOSED /
+      #   MUTABLE_STATE_AXIS_PRESERVED / LEGACY_RESPONSE_COMPATIBILITY
+      #   ⚠️ 本门禁把一个**语义要求**（reader 不得用 latest 猜权威）变成**可执行约束**，
+      #      以免后续又悄悄退回 latest document fallback。
+      - name: Gate V365-RM — Authoritative Reader Migration
+        run: node scripts/v365-reader-migration-gate.js
