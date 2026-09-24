@@ -1242,5 +1242,177 @@ business_status  = COMPLETE
 **失败集合完全相同**（3 项既有失败为环境相关）⇒ 零新增失败；
 `verify-immutable` 23/23、`verify-gen1-pipeline` 10/10、`verify-gen2-build-artifacts` 7/7 全 PASS。
 
+---
+
+# 21. WP-V365-B0/B1 — Production Integrity Implementation Candidate
+
+> 本轮性质：**实施轮**（新分支 `feat/v365-production-integrity-impl`，由 `94b7728` 分出）。
+> ⛔ 未部署 / 未 push / 未建 PR / 未 merge；V3.6.4 保持 `FROZEN / MERGED / DEPLOYED / PRODUCTION`，
+> tag `v3.6.4-frozen^{}` 未移动，V361/V364 lock **未被回写**。
+
+## 21.1 分支与提交（按工作包拆分）
+
+| # | commit | 工作包 | 内容 |
+|---|---|---|---|
+| 1 | `7e6d1df` | **B0** | `v365-contracts.js` / `V365_CANDIDATE_MANIFEST.json` + 生成器 + 校验器 / `docs/V365_AUTHORITATIVE_CONSUMER_MAP.md` / CI Gate V365 / `tests/v365-b0-manifest.test.js` |
+| 2 | `bd9634d` | **B1-correlation** | `materializeIndicators` 生成+透传 `pipeline_run_id`、transport 结构化 |
+| 3 | `86d4b58` | **B1-run-integrity** | RunContext gate + Run Finality + candidate-first 发布接线（`runDecisionEngine`）+ 3 个新运行时模块 + 2 处真实缺陷修正 |
+| 4 | 见 `git log` | **qualification** | `scripts/v365-qualification-gate.js` / `scripts/v365-cas-platform-probe.js` / 本节 |
+
+## 21.2 B0：V3.6.5 自有身份与合格面
+
+- `engine_version = v3.6.5`，`parent_production_version = v3.6.4`，`release_kind = PRODUCTION_INTEGRITY`
+- 契约：`input_contract_version = live-31-v1`（**31 字段**，⛔ 不恢复 `breakout_nd`）·
+  `calendar_version = cn-a-share-2026.1` · `pipeline_correlation-v1` · `v361-run-context-v2` ·
+  `v361-run-finality-v1` · `v365-two-stage-v1`
+- `qualified_files = 18`，`candidate_content_sha = 601d313d1492623b4f32090bdc6066dcf1f729678b51d3f5551cb1ed9b2a4024`
+- **V364 lock 的历史缺陷（声明了 file hash 却无校验器消费）在 V365 不得复制**：
+  新校验器**逐文件实读 → 实算 LF-sha256 → 逐一比对**，失败码 `DECLARED_FILE_MISSING` /
+  `HASH_MISMATCH` / `UNEXPECTED_QUALIFIED_FILE_CHANGE` / `CANDIDATE_CONTENT_SHA_MISMATCH` /
+  `CALENDAR_SHA_MISMATCH`；**已接入 CI**（`Gate V365 — Candidate Manifest Qualified-File Verification`）
+- **反向证明**（`tests/v365-b0-manifest.test.js` A.8）：篡改任一合格文件内容 ⇒ 校验器**必须 FAIL**
+  （否则就是"声明了却无人消费"）
+
+## 21.3 AUTHORITATIVE_CONSUMER_MAP（§3）
+
+详见 `docs/V365_AUTHORITATIVE_CONSUMER_MAP.md`。要点：
+
+- 4 个集合共 **30 个读取点**；`web/` 不直连集合（全经 HTTP）⇒ reader migration **全在服务端可完成**
+- **跨集合组合点 9 处**（最大 = `apiGateway.getDashboard`：position + snapshot + 逐票 decision + runtime_status **无 run 绑定**）
+- **回到 §3 的那个问题：会破坏 P-3 atomicity？→ `YES`**（reader 不变时切换窗口内可拼出「新 decision + 旧 snapshot」）
+- **是否触发 `STOP_B1_ATOMIC_WIRING`？→ 不触发（有条件）**：不存在技术上无解的消费者。
+  但附**三条硬约束**：① pointer 生效前 5 个 authoritative 端点必须先迁移；② `portfolio_position` /
+  现金基线属**「当前可变状态」另一条轴**，必须显式区隔（⛔ 不得声称"单 run 快照"）；
+  ③ 历史 range / Gen-2 anchor / `cooldown` 需**run 历史索引**，单指针不足 ⇒ 另立工作包。
+- `portfolio_position` 这类**可变状态**轴与 run 产物（不可变）轴**不得混为一谈**。
+
+## 21.4 实际数据 / 写入 / 读取拓扑（实施后）
+
+```
+fetchDailyData(22:00) ──(仍只带 from；**本轮未接线**)──▶ materializeIndicators(08:00/链式)
+        │ 生成 pipeline_run_id（身份成分不含 wall-clock）
+        │ buildForwardPayload（from 语义逐字保留）+ settleTransport
+        ▼
+runDecisionEngine ──▶ readInbound(event)（只读）
+        ├─ RunContext：expected_trade_date ← 官方日历 artifact（⛔ 非 max(calc_date)）
+        ├─ gate: BLOCKED ⇒ **不写任何 authoritative 数据**，返回结构化理由（fail-closed）
+        ├─ 5 票计算（决策核心**零改动**）
+        ├─ v365WriteDecision  → candidate（ENFORCE）／ decision_result（LEGACY）
+        ├─ v365Finality：COMPLETE / PARTIAL / FAILED
+        └─ 快照发布门：仅 COMPLETE ⇒ candidate（ENFORCE）／ portfolio_snapshot（LEGACY）
+                             ▼
+                  单指针 CAS 提升（active_run_pointer）
+                  ⛔ 平台级证据未取得 ⇒ **本分支下不会发生**（ATOMIC_PROMOTION_BLOCKED）
+```
+
+## 21.5 本轮修正的**两处真实缺陷**（不是我造的需求）
+
+1. **日历 artifact 路径**：`cn-trading-calendar.js` 此前按**仓库布局**（`__dirname/../../..`）解析路径；
+   但 `build-cloudfunctions.js` 把 `src/common` 整体复制为 `<fn>/common`，打包后 `__dirname` = `<fn>/common/utils`
+   ⇒ `../../../src/common/data` 指错 ⇒ **部署后读不到 artifact，会静默退化成"未播种"并恒判 BLOCKED**
+   （典型"本地全绿、线上全红"）。已改为**多候选**（先打包布局 `../data`，后仓库布局）。
+2. **发布校验字段名不匹配**：P-3 的 mixed-date 校验读 `calc_date`，而生产
+   `decision_result.decision_date` **本身就等于** snapshot 的 `calc_date`（`src/common/utils/decision.js:936`）
+   ⇒ 原样接线会在生产**恒报 `mixed_date_detected`**、永不发布。已做**同义归一**；
+   ⛔ 日期真不同的场景仍会被拦（`Q4 FI-02（发布层）` 已证）。
+
+## 21.6 B1 接线清单（逐项对应任务书 §4–§9）
+
+| 任务书要求 | 实施情况 | 证据 |
+|---|---|---|
+| §4 pipeline correlation 接线 | ✅ `pipeline_run_id` 生成/透传；`transport_status` 结构化；`chained.error` 保留；⛔ 无 retry / 无 timeout 改动 / 未改调用顺序 | `tests/v365-p4` A.1/A.3/F.4 |
+| §5 RunContext 正式接线 | ✅ 三日期 + `input_hash` + `input_contract_version` + `calendar_version` + missing/stale + `input_health`；5/5 `calc_date == expected_trade_date` | gate Q2/Q3 |
+| §6 BLOCK 的生产语义 | ✅ fail-closed 早退：不写 decision/position/snapshot；`business_status=FAILED`；`publishable=false`；⛔ 不回退 `observed_latest_date` | gate Q2/Q3 + `FI-12` |
+| §7 Run Finality 接线 | ✅ `COMPLETE/PARTIAL/FAILED` + `expected/success/failed/missing/publishable`；PARTIAL/FAILED 不得成为 authoritative | gate Q4/Q5 |
+| §8 candidate-first write | ✅ 计算与 authoritative 发布分离；ENFORCE 下决策写 candidate | gate Q6 + `tests/v365-p3` A.1 |
+| §9 active pointer | ✅ 单指针 + `run_id`/`revision`/`supersedes`/`expected_current_pointer`；⛔ 不靠 wall-clock | gate Q7/Q8/Q9 |
+| §10 CAS / concurrency | ⚠️ **协议层 PASS，平台层未证** ⇒ `ATOMIC_PROMOTION_BLOCKED` | 见 21.7 |
+
+## 21.7 ⛔ `ATOMIC_PROMOTION_BLOCKED`（§10 的诚实结论）
+
+`@cloudbase/node-sdk@2.11.0` 的 `Db.startTransaction()` / `Db.runTransaction()`
+**确实存在**（`types/index.d.ts:467-468`，`Transaction.collection()` 返回 CollectionReference，
+`commit()` / `rollback()` 齐备）⇒ §10 要求①「明确实际 API」**已满足**。
+
+但 §10 要求②③④（明确冲突失败语义 / **实测两个并发 promotion** / 证明 stale run 无法覆盖 newer run）
+都需要**向真实环境写入**；而 §15 规定「任何 production write：需要另行授权」
+⇒ **本轮未做**，故：
+
+- `CAS_EVIDENCE.platform_concurrency_tested = false`
+- `publishPromotionAllowed() === false`（fail-closed：**绝不降级为先读后写**）
+- 适配器在缺事务能力时返回 `CAS_UNAVAILABLE`，调用方一律 HOLD
+
+**由此得到一个必须写明的推论**：ENFORCE 语义下 candidate 会写、但 **authoritative 不会发布**
+⇒ **V3.6.5 在取得该证据前不可部署**（否则线上"只算不发"）。
+
+**关闭它只需要一件事**（一次性、极小面）：授权执行
+`node scripts/v365-cas-platform-probe.js --i-have-authorization --env <envId>`
+（探针**只**写 `_v365_` 前缀的独立集合，与任何生产集合/reader 无交集；默认拒绝运行）。
+
+## 21.8 `MATERIALIZE_CHANGE_REQUIRED` 的闭合（§4 结论）
+
+- 需要：**YES**（已在本轮按最小 additive patch 落盘）。
+- ⛔ 未做：补 `breakout_nd` / 同步 repo 的其他 indicator 差异 / 改 `computeSnapshot` /
+  改 contract 31→32 / 改 retry / 改 timeout。
+- 生产 `materializeIndicators` 仍是**独立 drift 件**，V3.6.5 继续按**真实 31-field contract** 资格化。
+
+## 21.9 Qualification（§19）
+
+`scripts/v365-qualification-gate.js`（全部 FI 跑在**内存适配器**上，⛔ 不写真实集合）：
+
+| 门 | 结果 |
+|---|---|
+| Q1 `NORMAL_PATH_DECISION_DELTA = 0` | **PASS**（决策核心 `src/common/utils` 数学文件零改动；replay 两次决策序列 sha256 一致 = `25ccbfc7…`，与 P-1/P-3/P-4 轮**完全相同**） |
+| Q2 `EXPECTED_DATE_GATE` | **PASS**（FI-01 5/5 PASS；FI-02 4/5+1 stale BLOCK；FI-12 日历越界 BLOCK 且不回退） |
+| Q3 `ALL_STALE_BLOCK` | **PASS**（FI-03 `CASE_C_ALL_STALE`；并显式证明此时 5 票 `calc_date` **互相完全一致** ⇒ 旧 cross-sectional 判据结构性假绿） |
+| Q4 `PARTIAL_NO_PUBLISH` | **PASS**（FI-02 发布层 mixed-date ⇒ validation fail 且不提升） |
+| Q5 `FAILED_NO_PUBLISH` | **PASS**（全失败 ⇒ FAILED；缺一票 ⇒ 不得冒充 COMPLETE） |
+| Q6 `WRITE_FAILURE_NO_PUBLISH` | **PASS**（FI-05 candidate 写失败 / FI-06 portfolio 写失败 ⇒ 指针为 NULL） |
+| Q7 `ACTIVE_POINTER_ATOMICITY` | **⚠️ BLOCK**（协议层 PASS：FI-01 提升、FI-07 提升前 crash 旧 active 存活；**平台层未证**） |
+| Q8 `CONCURRENT_STALE_PROMOTION_REJECTED` | **PASS**（FI-10 较旧 revision 后到被拒；CAS 拒绝持过期 expected 的写入） |
+| Q9 `SAME_DAY_IDEMPOTENCE` | **PASS**（FI-09 同交易日新 revision ⇒ 显式 `supersedes=run-A`） |
+| Q10 `RUN_RETRY_IDEMPOTENCE` | **PASS**（FI-08 同 run 重放 ⇒ 不产生新 revision、不再触发提升） |
+| Q11 `OBS001_STRUCTURED` | **PASS**（`CALL_TIMEOUT + COMPLETE` 且 `pipeline_run_id` 相等 ⇒ `obs_001_shape=true`、`manual_reconstruction_required=0`；⛔ id 不同则判**非**同一笔） |
+| Q12 `INPUT_CONTRACT` | **PASS**（`live-31-v1` / 31 / 排除 `breakout_nd`） |
+| Q13 `CALENDAR_AUTHORITY` | **PASS**（seeded=true / synthetic=false；open 4/4、closed 6/6——含 10-10 周末休市） |
+| Q14 `SOURCE_PROVENANCE` | **PASS**（`["SSE","SZSE"]` + 两份公告号） |
+| Q15 `V365_MANIFEST_VERIFIER` | **PASS**（18 个合格文件逐字节一致） |
+
+**汇总：26 / 27**（唯一 BLOCK 项 = Q7 平台证据缺失，**非实现缺陷**）
+
+## 21.10 最终状态
+
+```
+P-1 = CLOSED · P-1A = CLOSED · P-2 = CLOSED · P-3 = CLOSED · P-4 = CLOSED
+V365_IMPLEMENTATION = BLOCKED_ON_PLATFORM_CAS_EVIDENCE      ← ⛔ 不是 QUALIFIED_CANDIDATE
+ATOMIC_PROMOTION_BLOCKED = 成立（§10）
+```
+
+**为什么不给 `QUALIFIED_CANDIDATE`**：§19 明文要求 Q1–Q15 **全部**满足才可给该状态；
+Q7 的平台级并发证据未取得（§10 亦明文禁止在该证据缺失时"继续部署准备"）。
+⇒ 我可以诚实地说：**除平台 CAS 并发实证外的 26 项全部通过**，但**不**越级宣称合格。
+
+**回归**：CANDIDATE **54 passed / 3 failed**，`origin/master` worktree 对照 **48 passed / 3 failed**，
+**失败集合完全相同**（`gen1-parity` / `gen1-ge03-regression-guard` / `gen2-scenario-parity` 为既有环境相关失败）
+⇒ **零新增失败**。三校验器 `23/23` / `10/10` / `7/7` 全 PASS；V365 manifest 校验器 PASS。
+
+⚠️ **一处必须披露的判据冲突**：P-1/P-4 轮的 `scripts/v365-p12-decision-parity.js` 把
+`cloudfunctions/runDecisionEngine/index.js` 列入"决策核心必须零改动"，本轮**按 B1 要求修改了它**
+⇒ 该脚本的「决策核心零改动」判据**必然 FAIL**（属**预期**，非回归）。
+B1 适用的判据在 qualification gate 的 Q1：**`src/common/utils` 决策数学文件零改动 +
+replay 决策序列 sha256 与前三轮完全相同**。
+⚠️ 另需明确：ENFORCE 下的变化是**发布行为**（不写 legacy authoritative），**不是决策值**变化。
+
+## 21.11 本轮边界履行（§20 / §21）
+
+⛔ 未 deploy · 未 push · 未建 PR · 未 merge · 未 push master · 未改 `param_config` ·
+未移动 `v3.6.4-frozen` tag · 未改 V364 immutable manifest · 未提升 Gen-1 / Gen-2 Authority ·
+未恢复 `breakout_nd` · 未补 SlowBreak · 未启用 Portfolio Mode · 未改 Market Regime ·
+未改 tech cap / single ETF cap / StageFactor / MarketFactor / step size ·
+未接线 Two-stage Publish 到**生产 collection**（只在 candidate 与内存适配器上验证）·
+未修改任何生产 collection schema · 未写真实生产集合。
+✅ 已本地 commit（4 个工作包）；`V365_CANDIDATE_MANIFEST.qualification_status = CANDIDATE`。
+
+
 
 
