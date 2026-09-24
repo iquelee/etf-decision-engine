@@ -52,3 +52,11 @@ jobs:
       # WP-G1 显式命名门禁：G1-A ~ G1-H（Frozen / Pipeline / Golden Parity / Permission / Domain / Circuit / Execution / No-op）
       - name: Gate G1-A~H — Gen-1 Production Gates
         run: node scripts/gen1-production-gates.js
+
+      # WP-V365（B0 §18）：V3.6.5 合格面校验。
+      # ⚠️ V364 lock 的历史缺陷 = **声明了 file hash 却无人消费**；
+      #    V365 不得复制该缺陷 ⇒ 本门禁对 manifest 声明的每个文件**实读 + 实算 hash + 逐一比对**。
+      #    失败码：DECLARED_FILE_MISSING / HASH_MISMATCH / UNEXPECTED_QUALIFIED_FILE_CHANGE /
+      #            CANDIDATE_CONTENT_SHA_MISMATCH / CALENDAR_SHA_MISMATCH
+      - name: Gate V365 — Candidate Manifest Qualified-File Verification
+        run: node scripts/verify-v365-candidate-manifest.js
