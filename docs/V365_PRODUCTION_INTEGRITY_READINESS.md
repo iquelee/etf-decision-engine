@@ -1546,6 +1546,125 @@ READY_FOR_FREEZE_REVIEW ≠ 已具备
 ✅ 本轮只改 **publish / storage protocol** 层 + 契约 + 门禁 + 测试 + 文档；
 ⛔ 未改任何 V3 计算 / Stage / target / action / Market Regime / Gen-1 Canary / Portfolio 数学。
 
+---
+
+# 23. WP-V365-RM — Authoritative Reader Migration（2026-09-24）
+
+> **本节为追加。** 上文 §21（writer 接线，reader 仍 PENDING）与 §22（Q7 重裁）的结论**逐字保留**。
+> 本节记录 reader 侧的落地。
+
+## 23.1 要解决的问题
+
+§21 完成的是 **writer** 侧：candidate-first + 单指针 CAS。但 `?` 问题在于
+**reader 仍直接读 legacy collection 的最新文档** ⇒ 即使 writer 原子性正确，reader 仍可能读到
+candidate / partial run / 不同 run 拼接的数据，**从而破坏 P-3 的全部价值**。
+
+（这正是 `docs/V365_AUTHORITATIVE_CONSUMER_MAP.md` §E.1 当时回答 **YES** 的那个问题。）
+
+## 23.2 精确 5 个 authoritative 端点
+
+| # | 路由 | function | 文件 |
+|---|---|---|---|
+| 1 | `GET /api/dashboard` | `getDashboard` | `cloudfunctions/apiGateway/index.js` |
+| 2 | `GET /api/etf/list` | `getEtfList` | 同上 |
+| 3 | `GET /api/etf/:code` | `getEtfDetail` | 同上 |
+| 4 | `GET /api/portfolio` | `getPortfolio` | 同上 |
+| 5 | `GET /api/constants` | `getConstants` | 同上 |
+
+**额外迁移**：`adminGateway.getGen1Health`（后台 Gen-1 健康表）—— 同属 CLASS A（读 `decision_result` 最新），
+⛔ **仅换来源**，不改任何 Gen-1 权限/健康判据（**Gen-1 Authority 不变**）。
+
+## 23.3 统一 Authoritative Read Resolver
+
+`src/common/utils/v365-active-read.js` 扩展为正式解析器（**唯一入口**）：
+
+```
+endpoint → resolveAuthoritative(codes) → 读一次 pointer(pin) → 三类 run-bound 读取 → coherence → 完整性
+```
+
+- **唯一 selector = `active_run_pointer.run_id`**；⛔ 不再用 `orderBy(...desc).limit(1)` 猜权威。
+- **单请求 run pinning**：一次 request 只读一次 pointer（测试断言 `getPointer` 调用数**恰为 1**）
+  ⇒ 一次 response 要么完整 A、要么完整 B。
+- **fail-closed**：`NO_ACTIVE_POINTER` / `POINTER_TARGET_RUN_NOT_FOUND` / `RUN_DATA_INCOMPLETE` / `READ_ERROR`
+  ⇒ `AUTHORITATIVE_READ_UNAVAILABLE`；`RUN_ID_MISMATCH` ⇒ `READ_COHERENCE_FAILURE`。
+  ⛔ 一律**不**回退 latest；固定带 `latest_fallback_used: false`。
+- **Compatibility Strategy**：legacy 响应字段逐字保留，只**新增** provenance（前端无需发版）。
+  ⚠️ 但**生产当前无 pointer** ⇒ 迁移后 decision 轴返回 `AUTHORITATIVE_READ_UNAVAILABLE`
+  （shape 不变、内容 fail-closed）。这是**有意为之**（§10）；**V3.6.5 部署前前端会看到 decision 轴不可用**。
+
+## 23.4 双轴模型（dashboard）
+
+| 轴 | selector | 内容 | provenance |
+|---|---|---|---|
+| Authoritative（不可变 run 产物） | `active_run_pointer.run_id` | decision / run portfolio / run status | `authority` |
+| Mutable（持续变化的现实状态） | 自身 `updated_at` | `portfolio_position` / 快照的用户维护资产字段 | `mutable_axis` |
+
+⛔ 两轴不得合成一句；⛔ `mutable_axis` **不带 `run_id`**（测试有显式断言）。
+⚠️ `adminGateway.getGen1Health` 的 provenance 命名为 **`authoritative_read`** —— 该 response **已有**
+`authority` 键（= Gen-1 Authority 真相），两者**同名不同义**，不得合并。
+
+**字段级审计依据**：`portfolio_snapshot` 是混合体 —— 6 个资产字段
+（`total_asset`/`cash_balance`/`total_pnl`/`asset_source`/`auto_pnl`/`holdings_mv`）由
+`adminGateway.savePortfolioSnapshot`（**用户维护**）写入，其余由引擎按 run 计算
+⇒ `projectCompatSnapshot` 按轴取用，**不是「大一统 snapshot」**。
+
+## 23.5 本轮发现的真实缺陷（已修）
+
+1. ★ **双适配器语义偏离（假绿风险）**：内存适配器 `putCandidate` **不盖章** `run_id`/`candidate_key`/`written_at`，
+   而 cloudbase 适配器盖章；coherence guard 恰好依赖 `run_id` ⇒ 该偏离会把「candidate 缺 run_id」
+   **隐藏成假绿**。已把内存适配器改为与真实适配器**同构**，并加**保真断言**（RM-05c）。
+2. **跨 run 记录在保真适配器下无法经正常 API 注入**（`where({run_id})` 天然过滤）
+   ⇒ coherence guard 是**纵深防御**；测试改用「损坏的 store」+「守卫单元测试」两条路径覆盖。
+3. ⚠️ **`ROOT_CAUSE` 级别的认知更新**：把「reader 不得用 latest 猜权威」从**语义要求**
+   变成**可执行约束**（门禁逐行要求轴标记）——否则后续很容易悄悄退回 latest fallback。
+
+## 23.6 验证
+
+**RM 矩阵 19/19 PASS**（`tests/v365-reader-migration.test.js`）：RM-01~RM-10 + §15 并发读 + G.1~G.3 源级断言。
+**Reader Gate 8/8 PASS**（`scripts/v365-reader-migration-gate.js`），并已接入 CI。
+
+**Parity**：跨树同度量 anchor baseline == candidate == `cce9ccbf…` ⇒ `UNEXPECTED_DECISION_DELTA = 0`；
+P-12 判据 anchor `25ccbfc7…` 与前三轮逐字相同。**API-level parity**：pointer 路径业务字段与 legacy 逐位一致，
+新增键**只有** provenance（RM-09b）。
+
+**回归**：CANDIDATE **56/3** vs BASELINE **48/3**，失败集合完全相同 ⇒ **零新增失败**；
+三校验器 23/23 · 10/10 · 7/7；V365 manifest **20 个合格文件逐字节一致** + `--check` BYTE-EQUIVALENT。
+
+**合格面 18 → 20**（新增 `cloudfunctions/apiGateway/index.js`、`cloudfunctions/adminGateway/index.js`）：
+reader 迁移改变了「前台看到什么」，若不受完整性覆盖，「writer 原子 + reader 混读」会重新出现而 manifest 不自知。
+
+## 23.7 Historical readers 本轮只标记（§13）
+
+`getDecisions` / `getReview` / `runIntegratedShadowEod.loadInputs` / `cooldown.resolveLastBuyAddMode` /
+`runGen1ShadowEod.latestMarketRegime` ⇒ 全部 `DEFER_TO_RUN_HISTORY_INDEX`，
+并为每个登记了 `consumer / purpose / time range / lookup key / 现用索引 / 所需能力`。
+
+**`RUN_HISTORY_INDEX_REQUIREMENTS`**（最小能力集）：
+`RH-1` run 目录索引（含 `supersedes` 链，支持按区间枚举 run）·
+`RH-2` run → 数据集反向索引（保证历史条目只来自**完整** run）·
+`RH-3` 索引缺失时仍 fail-closed（⛔ 不得回退「当天任意最新文档」）。
+
+⛔ 本轮**未**用 `active_run_pointer` 临时替代历史索引。
+
+## 23.8 状态
+
+```
+V365_WRITER_PATH  = QUALIFIED
+READER_MIGRATION  = COMPLETE
+RUN_HISTORY_INDEX = PENDING          ← 下一步：WP-V365-RH1
+
+V365_FULL_QUALIFICATION = NOT_YET_COMPLETE
+READY_FOR_FREEZE_REVIEW = NO
+```
+
+## 23.9 本轮边界履行
+
+⛔ 未 deploy / 未 push / 未 PR / 未 merge / 未 freeze · 未改 production data / `param_config` ·
+⛔ **未实现 Run History Index** · 未提升 Gen-1 / Gen-2 Authority · 未恢复 `breakout_nd` ·
+未补 SlowBreak · 未启用 Portfolio Mode · 未改 Market Regime ·
+⛔ 未因 reader migration 麻烦而退回 `latest document fallback`。
+✅ 只改 reader 路径 + provenance + 门禁 + 测试 + 文档；⛔ 未改任何决策计算。
+
 
 
 

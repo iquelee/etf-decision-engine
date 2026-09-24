@@ -172,3 +172,27 @@ read active_run_pointer(scope='production')
 - 本文是 **B0 只读审计产物**（`docs/` 下，随 V365 candidate 分支提交）。
 - **未修改任何 consumer**；reader migration 仍是 **PENDING**。
 - 因此 **`ATOMIC_PUBLISH` 尚未在生产成立** —— 与 §10 的 `ATOMIC_PROMOTION_BLOCKED` 一致。
+
+---
+
+## G. 后续状态更新（WP-V365-RM 落地后，2026-09-24 追加）
+
+> ⚠️ **本节为追加，不改动上文 A–F 的任何历史结论**（上文仍是当时的只读审计快照）。
+
+| 上文结论 | 现状 |
+|---|---|
+| §E.1「会不会破坏 P-3 atomicity？→ **YES**（reader 不变的前提下）」 | 前提已消除：5 个 authoritative 端点 + `getGen1Health` 已迁到 pointer 路径 |
+| §E.3 硬约束 #1「pointer 生效前 5 个端点必须先迁移」 | ✅ **已完成**（`getDashboard`/`getEtfList`/`getEtfDetail`/`getPortfolio`/`getConstants`） |
+| §E.3 硬约束 #2「`portfolio_position` 必须与 run 产物显式区隔」 | ✅ 已落为**两条轴 + 各自 provenance**，并加测试断言（`mutable_axis` 不带 `run_id`） |
+| §E.3 硬约束 #3「历史 range / Gen-2 anchor / cooldown 另立工作包」 | ✅ 仍 PENDING —— 已登记为 **`RUN_HISTORY_INDEX_REQUIREMENTS`** |
+| §F「参考实现（**本轮已提供，未接线**）」 | ✅ 已接线；正式 API 见 `docs/V365_READER_MIGRATION.md` §2 |
+
+**详细迁移文档**：`docs/V365_READER_MIGRATION.md`
+（READER_MIGRATION_TARGETS / 30 个读取点分类 / resolver 协议 / 双轴模型 / RM-01~RM-10 结果 /
+deferred 清单 / RUN_HISTORY_INDEX_REQUIREMENTS / Reader Gate 8 项）
+
+```
+READER_MIGRATION   = COMPLETE
+RUN_HISTORY_INDEX  = PENDING
+ATOMIC_PUBLISH 在生产成立？→ 仍未成立（writer 已 QUALIFIED，但 V3.6.5 尚未部署）
+```
