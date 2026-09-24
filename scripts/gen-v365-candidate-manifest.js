@@ -64,7 +64,14 @@ const QUALIFIED_FILES = [
 
   // —— B1：云函数接线 ——
   'cloudfunctions/materializeIndicators/index.js',
-  'cloudfunctions/runDecisionEngine/index.js'
+  'cloudfunctions/runDecisionEngine/index.js',
+
+  // —— Reader Migration（WP-V365-RM）：authoritative reader 端点 ——
+  // ⚠️ 必须纳入合格面：reader 迁移改变了「前台看到什么」，若不受完整性覆盖，
+  //    「writer 原子 + reader 混读」会重新出现而 manifest 不自知。
+  'cloudfunctions/apiGateway/index.js',
+  // 后台侧 CLASS A 消费者（getGen1Health 的 decision 读取已对齐 active run）
+  'cloudfunctions/adminGateway/index.js'
 ];
 
 function lfNormalize(buf) {

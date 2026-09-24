@@ -125,7 +125,17 @@ function createMemoryAdapter(opts) {
       record('putCandidate', `${col}:${key}`);
       maybeFail('putCandidate', `${col}:${key}`);
       if (!candidates.has(k)) candidates.set(k, new Map());
-      candidates.get(k).set(String(key), deepCopy(payload));
+      // ⚠️ 保真：**必须**与 cloudbase 适配器 `createCloudbaseStore.putCandidate` 同构 ——
+      //    真实适配器会盖章 `run_id` / `candidate_key` / `written_at`（见 v365-publish-store.js）。
+      //    早期的内存适配器**不**盖章 ⇒ 两个适配器语义偏离，会把「candidate 缺 run_id」
+      //    这类缺陷隐藏成假绿（reader coherence guard 正是依赖该字段）。
+      //    本改为保真修正：写入形状与真实适配器一致。
+      const doc = Object.assign({}, deepCopy(payload), {
+        run_id: runId,
+        candidate_key: String(key),
+        written_at: new Date().toISOString()
+      });
+      candidates.get(k).set(String(key), doc);
       return { ok: true };
     },
 

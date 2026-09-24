@@ -20,6 +20,29 @@ const {
 const { hashPassword, verifyPassword } = require('./common/utils/admin-auth');
 const { requestId, safeErrorResponse } = require('./common/utils/gateway-errors');
 const { triggerIntelRefresh } = require('./common/utils/intel-refresh');
+// V3.6.5 Reader Migration：后台侧的 CLASS A（run-bound）读取也统一走 Authoritative Read Resolver
+const publishStore = require('./common/utils/v365-publish-store');
+const activeRead = require('./common/utils/v365-active-read');
+
+let _authStore = null;
+function authoritativeStore() {
+  if (!_authStore) {
+    try { _authStore = publishStore.createCloudbaseStore({ db }); } catch (e) { _authStore = null; }
+  }
+  return _authStore;
+}
+
+/**
+ * 后台侧 authoritative 读取（**一次 request 只读一次 pointer** ⇒ run pinning）。
+ * store 不可用 ⇒ fail-closed（⛔ 绝不回退 latest document）。
+ */
+async function resolveAuthoritativeDatasetAdmin(codes) {
+  const store = authoritativeStore() || {
+    getPointer: async () => null, listCandidates: async () => [],
+    getCandidate: async () => null, getManifest: async () => null
+  };
+  return activeRead.readAuthoritativeDataset(store, { expected_codes: codes });
+}
 const { isDateStr, clampInt, isRiskEventTypeKey, normalizeRiskFlag, parseFiniteNumber } = require('./common/utils/request-validate');
 // PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约 + legacy 声明 + runtime 三态真值
 const {
@@ -62,20 +85,23 @@ async function getGen1Health() {
   const healthState = healthRows && healthRows[0] ? healthRows[0] : null;
   const today = beijingDateStr();
 
+  // V3.6.5 Reader Migration：decision 属 **CLASS A**（run-bound）⇒ 一次读取 pin 住 active run，
+  // 之后按 code 取同一 run 的决策。⛔ 不再用 `decision_date desc limit 1` 猜"当前正式决策"（会跨 run 混读）。
+  // ⚠️ 本改动**只换来源**，不触碰任何 Gen-1 权限/健康判据（Gen-1 Authority 不变）。
+  const authDs = await resolveAuthoritativeDatasetAdmin((etfs || []).map((e) => e.code));
+  const decisionByCode = authDs.available ? authDs.decision_map : {};
+
   const rows = await Promise.all((etfs || []).map(async (etf) => {
-    const [signals, dailyRows, decisions] = await Promise.all([
+    const [signals, dailyRows] = await Promise.all([
       db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { code: etf.code }, {
-        orderBy: [{ field: 'date', direction: 'desc' }], limit: 1
+        orderBy: [{ field: 'date', direction: 'desc' }], limit: 1 // v365-reader-allow:input-data
       }).catch(() => []),
       db.query(COLLECTIONS.ETF_DAILY, { code: etf.code }, {
-        orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 10
-      }).catch(() => []),
-      db.query(COLLECTIONS.DECISION_RESULT, { code: etf.code }, {
-        orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 1
+        orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 10 // v365-reader-allow:input-data
       }).catch(() => [])
     ]);
     const signal = signals[0] || null;
-    const decision = decisions[0] || null;
+    const decision = decisionByCode[etf.code] || null;
     const signalDate = String((signal && (signal.date || signal.signal_date)) || '').slice(0, 10) || null;
     // 信号应与最新“正式 EOD”对齐，而不是强制等于自然日；盘中/早晨没有
     // 当日收盘数据时，上一交易日信号仍是有效的最新参考。
@@ -183,6 +209,10 @@ async function getGen1Health() {
     ledger,
     // PR-UI-01 review-fix（P1-2）：legacy 块显式声明 deprecated
     legacy: buildLegacyNotice(),
+    // V3.6.5 Reader Migration：**只读 provenance**（decision 是从哪个 active run 读的）。
+    // ⚠️ 刻意命名为 `authoritative_read`：与上方 `authority`（**Gen-1 Authority 真相**）**同名不同义**，
+    //    ⛔ 两者不得合并、不得互相推断；本键不参与任何权限/健康判定。
+    authoritative_read: activeRead.buildAuthoritativeProvenance(authDs),
     rows
   };
 }
