@@ -1413,6 +1413,140 @@ replay 决策序列 sha256 与前三轮完全相同**。
 未修改任何生产 collection schema · 未写真实生产集合。
 ✅ 已本地 commit（4 个工作包）；`V365_CANDIDATE_MANIFEST.qualification_status = CANDIDATE`。
 
+---
+
+# 22. Q7 RE-ADJUDICATION — Writer 迁移到单文档条件 CAS（2026-09-24）
+
+> **本节为追加。** 上文 §21.7 记录的「`Q7_PLATFORM_CAS = BLOCKED` / `ATOMIC_PROMOTION_BLOCKED`」
+> **作为历史结论完整保留、逐字未改**。本节记录的是**判据本身被重裁**这件事及其理由。
+
+## 22.1 重裁的原因（不是"证据凑不齐所以降标准"）
+
+§21.7 的 BLOCK 依据是：`REAL_TRANSACTION_API = FAIL`（`{"startTransaction":1}` → `CommandNotFound`），
+而 §19 要求 Q1–Q15 全过才可给 `QUALIFIED_CANDIDATE`。
+
+**问题出在判据本身**：旧 Q7 把「是否使用了**多文档事务**」当成了必要条件。
+但本协议的 atomicity 定义（`src/common/utils/v365-atomic-publish.js` §11 头部）写得很清楚：
+
+> «消费者可见的 authoritative dataset，只能通过**单一 active pointer** 从旧完整 run 切换到新完整 run。»
+> candidate **可以逐条写**；partial candidate **永远不能成为 authoritative**。
+
+⇒ 该定义**只要求单文档指针切换的原子性**，**不要求**多文档提交。
+把「用了什么机制」当门槛，是**把实现机制误当成了需求本身**。
+
+## 22.2 正式裁定
+
+```
+TRANSACTION_REQUIRED                   = NO
+PLATFORM_SINGLE_DOCUMENT_CAS_REQUIRED  = YES
+
+Q7 的真实判据（语义层，机制无关）：
+  ATOMIC_POINTER_PROMOTION
+  STALE_EXPECTED_POINTER_REJECTED
+  CONCURRENT_LOST_UPDATE_PREVENTED
+  OLDER_RUN_CANNOT_OVERWRITE_NEWER
+  RETRY_IDEMPOTENT
+  FAILURE_PRESERVES_OLD_ACTIVE
+  READ_AFTER_WRITE_CONSISTENT
+```
+
+**底层实现机制不作为 Gate 本身。**
+
+⚠️ 这是 **implementation selection correction**，**不是放宽安全标准**：
+判据从「用了什么机制」改为「是否真的原子」，且**放行同时要求**
+「平台级实证」**AND**「实现对齐」两者成立（`publishPromotionAllowed()` 的双重门，
+比旧版的单条件**更严**）。
+
+## 22.3 平台证据（已正式入库）
+
+`docs/V365_PLATFORM_CAS_EVIDENCE.md` —— 一次性隔离探针（集合 `_v365_cas_probe`，已 drop、无残留）：
+
+| 项 | 结果 |
+|---|---|
+| CAS-1 正常提升 | PASS |
+| CAS-2 过期 expected 被拒 | PASS |
+| CAS-3 并发同 expected ⇒ 恰一个成功 | PASS（无 lost update） |
+| CAS-4 旧 run 后到不得覆盖 | PASS |
+| CAS-5 retry 幂等 | PASS |
+| CAS-6a 失败不改指针 | PASS |
+| CAS-6b **多命令批量非原子** | ⚠️ 负向发现 ⇒ `MULTI_COMMAND_BATCH_ATOMIC = FALSE` |
+| CAS-7 写后独立读一致 | PASS |
+| 事务命令 | `CommandNotFound` ⇒ `TRANSACTION_COMMAND_AVAILABLE = FALSE` |
+| 清理 / 生产集合不变量 / 零部署 | 全部 PASS（27 集合逐字未变；10 云函数 `ModTime` 未变） |
+
+⚠️ 证据强度限定（原文照录，不得过度解读）：CAS-3 是**两个重叠请求**的实证，
+**不是** N 路高并发压力测试；CAS-6b 为**单次观测**。
+
+## 22.4 实现变更（本轮）
+
+| 文件 | 变更 |
+|---|---|
+| `src/common/utils/v365-publish-store.js` | **移除 `runTransaction` 依赖**；`compareAndSetPointer` 改为**单文档条件 CAS**：指针 `_id` 由 scope 确定性派生（`active_run_pointer::<scope>`），更新走 `where({_id, scope, run_id: expected.run_id, revision: expected.revision}).update(...)`；`updated < 1` ⇒ 拒写。新增**机制无关**纯函数 `classifyPointerPromotion` 与结构化 `CAS_REASON`。bootstrap 用确定性 `_id` `add()`（并发重复靠主键唯一性兜住） |
+| `scripts/lib/v365-p3-memory-adapter.js` | 复用**同一个** `classifyPointerPromotion` ⇒ 内存与 CloudBase 适配器**共享 reason 语义**，测试结论可迁移 |
+| `src/common/utils/v365-atomic-publish.js` | `executePointerPromotion` **结构化透传**拒因（`STALE_EXPECTED_POINTER` / `NON_MONOTONIC_REVISION` / `ALREADY_ACTIVE` / …），⛔ 不再压成统一 `CAS_REJECTED` |
+| `src/common/utils/v365-run-integrity.js` | 发布结果新增 `idempotent` / `cas_reason` / `previous_*` / `requested_*`；`ALREADY_ACTIVE` 分支显式标幂等 |
+| `src/common/utils/v365-contracts.js` | `CAS_EVIDENCE` 重写为机制裁定 + 平台实证 + 平台**负向**事实 + 实现对齐；`publishPromotionAllowed()` 改**双重门** |
+
+### 22.4.1 写入实现的两条硬约束（平台事实派生）
+
+1. ⛔ **绝不** fallback 为无条件 `update`（那会退化成"先读后写"，原子性失效）。
+   测试以**哨兵**守住：桩把无条件 `update` 记为 `update_UNCONDITIONAL`，正确实现**永不**走到。
+2. ⛔ **不得**用多命令批量伪装事务（平台实证：`[有效写, 非法命令]` 前半**会**生效）。
+
+## 22.5 本轮新增/重跑的验证
+
+**CAS 专项测试** `tests/v365-cas-single-doc.test.js`（新增，**38/38 PASS**）：
+
+- §A 语义层六种 reason + 结构化字段 + 顺序不变式（`ALREADY_ACTIVE` 必须先于 expected 校验）
+- §B 实现对齐静态证明（代码中**无** `runTransaction`/`startTransaction`/`commit`/`rollback`；
+  CAS 走 `where(cond).update()`；条件含 `_id`+`run_id`+`revision`）
+- §C **C1**（并发同 expected ⇒ 恰一个成功）· **C2**（旧 run 派生 ⇒ STALE）· **C3**（revision 倒退 ⇒ NON_MONOTONIC）· C4 TOCTOU
+- §D **FI-15** already-active retry 幂等（重放 1× / 2× 均不产生第二 revision）
+- §E **FI-13** stale expected · **FI-14** non-monotonic（CAS 层**独立**兜底，绕过 plan 层亦无效）
+- §F **FI-07 / FI-08 / FI-09 / FI-10** 在发布层重跑
+- §G 顺序约束：源码顺序 + **行为**证明（validation 失败 ⇒ `compareAndSetPointer` 调用数 **0**）
+- §H fail-closed 反向证明（桩驱动真实 cloudbase 代码路径）：能力缺失 ⇒ `CAS_UNAVAILABLE` 零写入；
+  条件命中 0 条 ⇒ `STALE_EXPECTED_POINTER`；**每次 update 都携带完整 expected 条件**
+
+**资格门 Q7 重写为 8 项**（`PLATFORM_SINGLE_DOC_CAS_EVIDENCE` / `IMPLEMENTATION_USES_SINGLE_DOC_CAS` /
+`STALE_EXPECTED_POINTER_REJECTED` / `CONCURRENT_LOST_UPDATE_PREVENTED` / `OLDER_RUN_REJECTED` /
+`RETRY_IDEMPOTENT` / `FAILURE_PRESERVES_PREVIOUS_ACTIVE` / `MULTI_COMMAND_BATCH_NOT_USED_FOR_ATOMICITY`）。
+
+## 22.6 状态迁移
+
+| 项 | 值 |
+|---|---|
+| `PLATFORM_CAS_EVIDENCE` | **PASS**（证据已入库） |
+| `V365_IMPLEMENTATION_ALIGNMENT` | **PASS**（实现已迁移） |
+| `Q7_PLATFORM_CAS` | **PASS** |
+| `ATOMIC_PROMOTION_BLOCKED` | **CLOSED** |
+| `V365_WRITER_PATH` | **QUALIFIED** |
+| 资格门 | **38 / 38 PASS** ⇒ `V365_IMPLEMENTATION = QUALIFIED_CANDIDATE` |
+
+## 22.7 仍不允许写的事（⛔）
+
+```
+READER_MIGRATION   = PENDING        ← 下一步（需单独开工）
+RUN_HISTORY_INDEX  = PENDING
+
+V365_FULL_QUALIFICATION ≠ COMPLETE
+READY_FOR_FREEZE_REVIEW ≠ 已具备
+```
+
+⇒ **不写** `V365_FULL_QUALIFICATION = COMPLETE`、**不写** `READY_FOR_FREEZE_REVIEW`。
+`QUALIFIED_CANDIDATE ≠ PRODUCTION AUTHORIZED`：freeze / PR / merge / deploy 均需**单独授权**。
+
+## 22.8 本轮边界履行
+
+⛔ 未 deploy · 未 push · 未建 PR · 未 merge · 未 freeze · 未改生产 collection ·
+**未再次运行任何真实平台写探针**（证据已取得，本轮只做入库）· 未改 `param_config` ·
+未做 reader migration · 未做 run history index · 未提升 Gen-1 / Gen-2 Authority ·
+未恢复 `breakout_nd` · 未补 SlowBreak · 未启用 Portfolio Mode · 未改 Market Regime ·
+未改 tech cap / single ETF cap / StageFactor / MarketFactor / step size。
+✅ 本轮只改 **publish / storage protocol** 层 + 契约 + 门禁 + 测试 + 文档；
+⛔ 未改任何 V3 计算 / Stage / target / action / Market Regime / Gen-1 Canary / Portfolio 数学。
+
+
 
 
 

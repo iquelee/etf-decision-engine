@@ -2,16 +2,23 @@
 'use strict';
 
 /**
- * V3.6.5 资格门（任务书 §19）+ 失效注入矩阵（§13 FI-01~FI-12）。
+ * V3.6.5 资格门（任务书 §19）+ 失效注入矩阵（§13 FI-01~FI-12 + 重裁轮 FI-13~FI-15）。
  *
  * 运行方式：
  *   node scripts/v365-qualification-gate.js [--changed-file <list>] [--json]
  *
- * 重要边界（诚实声明，不得被解读为"已可用"）：
- *   - 全部 FI 用例跑在 **内存适配器** 上（⛔ 不写任何真实生产集合）。
- *   - 因此 Q7/Q8 证明的是**协议层**的原子性，**不是平台层**：
- *     CloudBase 的真并发 CAS 语义**尚未实测** ⇒ `ATOMIC_PROMOTION_BLOCKED` 保持成立，
- *     `V365_IMPLEMENTATION` **不得**给出 QUALIFIED_CANDIDATE。
+ * ── Q7 重裁（2026-09-24 平台实证后）────────────────────────────────────
+ *   旧 Q7 把 `REAL_TRANSACTION_API` 当成**必要实现机制**。真实平台实测推翻：
+ *     • `{"startTransaction":1}` → `CommandNotFound`（该通道无事务命令）
+ *     • `[有效写, 非法命令]` 批量 → 前半**已生效** ⇒ `MULTI_COMMAND_BATCH_ATOMIC = FALSE`
+ *     • 单文档 `findAndModify + expected-current filter + revision guard` → CAS-1~CAS-7 全 PASS
+ *   本协议的 atomicity 定义本就只要求「单一 active pointer 原子切换」⇒
+ *     TRANSACTION_REQUIRED = NO / PLATFORM_SINGLE_DOCUMENT_CAS_REQUIRED = YES
+ *   这是 **implementation selection correction**，**不是**放宽安全标准
+ *   （判据改为「是否真的原子」+ 要求平台实证**与**实现对齐双门）。
+ *   证据：`docs/V365_PLATFORM_CAS_EVIDENCE.md`。
+ *
+ * ⚠️ 边界：全部 FI 用例跑在**内存适配器 / 桩**上（⛔ 不写任何真实集合、不起网络）。
  */
 
 const fs = require('fs');
@@ -20,6 +27,8 @@ const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..');
 const ri = require(path.join(REPO, 'src/common/utils/v365-run-integrity.js'));
+const ps = require(path.join(REPO, 'src/common/utils/v365-publish-store.js'));
+const ap = require(path.join(REPO, 'src/common/utils/v365-atomic-publish.js'));
 const contracts = require(path.join(REPO, 'src/common/utils/v365-contracts.js'));
 const { createMemoryAdapter } = require(path.join(REPO, 'scripts/lib/v365-p3-memory-adapter.js'));
 const { verify: verifyManifest } = require(path.join(REPO, 'scripts/verify-v365-candidate-manifest.js'));
@@ -27,6 +36,9 @@ const { verify: verifyManifest } = require(path.join(REPO, 'scripts/verify-v365-
 const CODES = ['513310', '515880', '159582', '518880', '159570'];
 const EXPECTED = '2026-09-23';
 const PREV = '2026-09-22';
+const SCOPE = 'production';
+const CAS_R = ps.CAS_REASON;
+const PTR = (run_id, revision) => ({ run_id, revision });
 
 const checks = [];
 function check(name, ok, detail) {
@@ -34,6 +46,12 @@ function check(name, ok, detail) {
 }
 function section(title) {
   checks.push({ section: title });
+}
+/** 剥离注释后的源码（静态断言必须看**代码**，不看注释） */
+function codeOnly(rel) {
+  return fs.readFileSync(path.join(REPO, rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
 /* ---------------- 工具 ---------------- */
@@ -239,8 +257,8 @@ async function main() {
     }
   }
 
-  /* ================= Q7/Q8 指针原子性 + 并发（FI-07/08/09/10）=============== */
-  section('Q7/Q8 ACTIVE_POINTER_ATOMICITY / CONCURRENT_STALE');
+  /* ================= Q7（重裁版：单文档条件 CAS）/ Q8 并发 + FI-07~FI-10 + FI-13~FI-15 == */
+  section('Q7 PLATFORM_SINGLE_DOC_CAS（重裁后）+ Q8 并发 / FI-07~FI-10 / FI-13~FI-15');
   {
     // FI-01 提升：健康 run ⇒ 提升成功
     const ad = createMemoryAdapter();
@@ -328,9 +346,143 @@ async function main() {
         `crashed=${crashed} ptr=${ptr ? ptr.run_id : 'NULL'}`);
     }
 
-    check('Q7 平台 CAS 并发实证（真实集合）', contracts.CAS_EVIDENCE.platform_concurrency_tested === true,
-      `api_present=${contracts.CAS_EVIDENCE.api_present}，platform_concurrency_tested=${contracts.CAS_EVIDENCE.platform_concurrency_tested}`
-      + ' ⇒ 协议层 PASS、**平台层未证实**（ATOMIC_PROMOTION_BLOCKED）');
+    /* ---- Q7 重裁版：8 项判据（机制无关 + 平台证据 + 实现对齐）---- */
+    const E = contracts.CAS_EVIDENCE;
+    const psCode = codeOnly('src/common/utils/v365-publish-store.js');
+    const evDocPath = path.join(REPO, E.evidence_doc);
+
+    check('Q7-1 PLATFORM_SINGLE_DOC_CAS_EVIDENCE = PASS',
+      E.platform_single_document_cas_verified === true && fs.existsSync(evDocPath),
+      `channel=${E.channel_evidence} probe=${E.probe_collection}@${E.probe_date} doc=${E.evidence_doc}`);
+
+    check('Q7-2 IMPLEMENTATION_USES_SINGLE_DOC_CAS = PASS',
+      E.implementation_uses_single_document_cas === true
+      && !/runTransaction/.test(psCode) && !/startTransaction/.test(psCode)
+      && /\.where\(cond\)\.update\(/.test(psCode),
+      '代码不含 runTransaction/startTransaction，且 CAS 走 where(cond).update()');
+
+    // Q7-3 过期 expected 被拒（CAS 层，独立于 plan 层）
+    {
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('B', 4));
+      const r = await ad.compareAndSetPointer(SCOPE, PTR('A', 3), PTR('C', 5));
+      check('Q7-3 STALE_EXPECTED_POINTER_REJECTED = PASS',
+        r.ok === false && r.reason === CAS_R.STALE_EXPECTED_POINTER
+        && (await ad.getPointer(SCOPE)).run_id === 'B',
+        `reason=${r.reason} ptr=${(await ad.getPointer(SCOPE)).run_id}`);
+    }
+
+    // Q7-4 并发同 expected ⇒ 恰好一个成功（无 lost update）
+    {
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('A', 3));
+      const [x, y] = await Promise.all([
+        ad.compareAndSetPointer(SCOPE, PTR('A', 3), PTR('B', 4)),
+        ad.compareAndSetPointer(SCOPE, PTR('A', 3), PTR('C', 4))
+      ]);
+      const wins = [x, y].filter((v) => v.ok === true).length;
+      const ptr = await ad.getPointer(SCOPE);
+      check('Q7-4 CONCURRENT_LOST_UPDATE_PREVENTED = PASS',
+        wins === 1 && ptr.revision === 4,
+        `成功数=${wins}（必须恰为 1） ptr=${ptr.run_id}@${ptr.revision}`);
+    }
+
+    // Q7-5 较旧 run 后到 ⇒ 拒（revision 非单调）
+    {
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('B', 4));
+      const r = await ad.compareAndSetPointer(SCOPE, PTR('B', 4), PTR('C', 3));
+      check('Q7-5 OLDER_RUN_REJECTED = PASS',
+        r.ok === false && r.reason === CAS_R.NON_MONOTONIC_REVISION
+        && (await ad.getPointer(SCOPE)).run_id === 'B',
+        `reason=${r.reason}`);
+    }
+
+    // Q7-6 retry 幂等：目标态已达成 ⇒ ALREADY_ACTIVE，revision 不推进
+    {
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('B', 4));
+      const before = await ad.getPointer(SCOPE);
+      const r = await ad.compareAndSetPointer(SCOPE, PTR('A', 3), PTR('B', 4));
+      const after = await ad.getPointer(SCOPE);
+      check('Q7-6 RETRY_IDEMPOTENT = PASS',
+        r.promoted === false && r.reason === CAS_R.ALREADY_ACTIVE && r.idempotent === true
+        && JSON.stringify(before) === JSON.stringify(after),
+        `reason=${r.reason} idempotent=${r.idempotent} revision=${after.revision}`);
+    }
+
+    // Q7-7 失败/崩溃不得改动旧 active
+    {
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('BASE', 1));
+      ad.injectFailure('compareAndSetPointer', SCOPE, 1);
+      let threw = false;
+      try { await ad.compareAndSetPointer(SCOPE, PTR('BASE', 1), PTR('NEXT', 2)); } catch (e) { threw = true; }
+      const ptr = await ad.getPointer(SCOPE);
+      check('Q7-7 FAILURE_PRESERVES_PREVIOUS_ACTIVE = PASS',
+        threw && ptr.run_id === 'BASE' && ptr.revision === 1,
+        `threw=${threw} ptr=${ptr.run_id}@${ptr.revision}`);
+    }
+
+    // Q7-8 不得用多命令批量伪造原子性
+    {
+      const batchUsed = /RunCommands|MgoCommands|CommandType|multiCommand/i.test(psCode);
+      check('Q7-8 MULTI_COMMAND_BATCH_NOT_USED_FOR_ATOMICITY = PASS',
+        E.multi_command_batch_atomic === false && batchUsed === false,
+        `平台批量非原子=${E.multi_command_batch_atomic}（如实记录） 实现使用批量=${batchUsed}`);
+    }
+
+    /* ---- FI-13 / FI-14 / FI-15（本轮新增注入）---- */
+    {
+      // FI-13 stale expected pointer（发布层：plan 放行后 CAS 仍拦得住）
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('B', 2));
+      const exec = await ap.executePointerPromotion({
+        adapter: ad, scope: SCOPE,
+        plan: { action: 'PROMOTE', run_id: 'C', revision: 3, next_pointer: PTR('C', 3) },
+        expected_pointer: PTR('A', 1)
+      });
+      check('Q7 FI-13 stale expected pointer ⇒ CAS_REJECTED 且拒因结构化',
+        exec.promoted === false && exec.cas_reason === CAS_R.STALE_EXPECTED_POINTER,
+        `cas_reason=${exec.cas_reason}`);
+    }
+    {
+      // FI-14 non-monotonic revision（即使 plan 被伪造为 PROMOTE）
+      const ad = createMemoryAdapter();
+      await ad.compareAndSetPointer(SCOPE, null, PTR('B', 4));
+      const exec = await ap.executePointerPromotion({
+        adapter: ad, scope: SCOPE,
+        plan: { action: 'PROMOTE', run_id: 'C', revision: 3, next_pointer: PTR('C', 3) },
+        expected_pointer: PTR('B', 4)
+      });
+      check('Q7 FI-14 non-monotonic revision ⇒ CAS 层独立拒绝',
+        exec.promoted === false && exec.cas_reason === CAS_R.NON_MONOTONIC_REVISION,
+        `cas_reason=${exec.cas_reason}`);
+    }
+    {
+      // FI-15 already-active retry（经发布层：不得产生第二 authoritative revision）
+      const ad3 = createMemoryAdapter();
+      await ri.publishCandidateFirst({
+        store: ad3, manifest: manifest('run-retry', 1, EXPECTED),
+        decisions: decisionsFor([true, true, true, true, true]),
+        portfolio: { snapshot_date: EXPECTED }, expected_codes: CODES, allowPromotion: true
+      });
+      const again = await ri.publishCandidateFirst({
+        store: ad3, manifest: manifest('run-retry', 1, EXPECTED),
+        decisions: decisionsFor([true, true, true, true, true]),
+        portfolio: { snapshot_date: EXPECTED }, expected_codes: CODES, allowPromotion: true
+      });
+      const ptr = await ad3.getPointer(SCOPE);
+      check('Q7 FI-15 already-active retry ⇒ 幂等、不增 revision',
+        again.promotion_attempted === false && again.idempotent === true
+        && again.cas_reason === CAS_R.ALREADY_ACTIVE && ptr.revision === 1,
+        `reason=${again.cas_reason} revision=${ptr.revision}`);
+    }
+
+    // 双重门 + 证据完整性
+    check('Q7 双重门 publishPromotionAllowed（平台证据 AND 实现对齐）',
+      contracts.publishPromotionAllowed() === true && Object.isFrozen(contracts.CAS_EVIDENCE),
+      `allowed=${contracts.publishPromotionAllowed()} frozen=${Object.isFrozen(contracts.CAS_EVIDENCE)}`);
   }
 
   /* ================= Q11 OBS-001 结构化（FI-11）================= */
@@ -413,29 +565,30 @@ async function main() {
 
   /* ================= 汇总 ================= */
   const items = checks.filter((c) => !c.section);
-  // ⚠️ 「平台级 CAS 并发实证」**不是实现缺陷**，而是"证据尚未取得"的显式声明
-  //    （需一次性的真实集合写测试 —— 属另行授权事项）⇒ 单列，不计入实现失败集。
-  const isPlatformBlocker = (c) => c.name.indexOf('Q7 平台 CAS 并发实证') === 0;
-  const failed = items.filter((c) => !c.ok && !isPlatformBlocker(c));
-  const platformBlocked = items.some((c) => isPlatformBlocker(c) && !c.ok)
-    || !contracts.CAS_EVIDENCE.platform_concurrency_tested;
+  const failed = items.filter((c) => !c.ok);
+  // Q7 重裁后**不再有"平台证据缺失"这一类 BLOCK** ——
+  // 平台单文档条件 CAS 已实证（docs/V365_PLATFORM_CAS_EVIDENCE.md），实现亦已对齐。
+  // ⇒ 任何 FAIL 都属**实现级**失败，不再单列白名单。
+  const platformBlocked = false;
 
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify({ checks, failed: failed.length, platformBlocked }, null, 2));
   } else {
     checks.forEach((c) => {
       if (c.section) { console.log('\n### ' + c.section); return; }
-      console.log((c.ok ? '[PASS] ' : (isPlatformBlocker(c) ? '[BLOCK] ' : '[FAIL] ')) + c.name
+      console.log((c.ok ? '[PASS] ' : '[FAIL] ') + c.name
         + (c.detail ? '\n        ' + c.detail : ''));
     });
     console.log('\n==================== 汇总 ====================');
-    console.log(`PASS ${items.filter((c) => c.ok).length} / ${items.length}（其中 BLOCK 1 = 平台证据缺失）`);
+    console.log(`PASS ${items.filter((c) => c.ok).length} / ${items.length}`);
     if (failed.length) failed.forEach((f) => console.log('  [FAIL] ' + f.name + ' :: ' + f.detail));
-    console.log('Q7/Q8 平台级 CAS 并发实测 = ' + (platformBlocked ? 'UNPROVEN ⇒ ATOMIC_PROMOTION_BLOCKED' : 'PROVEN'));
-    console.log('V365_IMPLEMENTATION = ' + (failed.length
-      ? 'NOT_QUALIFIED（存在实现级 FAIL 项）'
-      : (platformBlocked ? 'BLOCKED_ON_PLATFORM_CAS_EVIDENCE' : 'QUALIFIED_CANDIDATE')));
-    console.log('⚠️ QUALIFIED_CANDIDATE ≠ PRODUCTION AUTHORIZED；FREEZE / PR / MERGE / DEPLOY 均需单独授权。');
+    console.log('Q7 机制裁定 = single-document conditional CAS（TRANSACTION_REQUIRED = NO）');
+    console.log('平台实证   = ' + (contracts.CAS_EVIDENCE.platform_single_document_cas_verified ? 'PASS' : 'MISSING')
+      + ' ／ 实现对齐 = ' + (contracts.CAS_EVIDENCE.implementation_uses_single_document_cas ? 'PASS' : 'MISSING'));
+    console.log('Q7_PLATFORM_CAS = ' + (failed.length ? 'NOT_PASS' : 'PASS'));
+    console.log('V365_IMPLEMENTATION = ' + (failed.length ? 'NOT_QUALIFIED（存在实现级 FAIL 项）' : 'QUALIFIED_CANDIDATE'));
+    console.log('⚠️ QUALIFIED_CANDIDATE ≠ PRODUCTION AUTHORIZED；'
+      + 'READER_MIGRATION / RUN_HISTORY_INDEX 仍 PENDING；FREEZE / PR / MERGE / DEPLOY 均需单独授权。');
   }
   fs.writeFileSync(path.join(REPO, 'outputs', 'v365-qualification.json'),
     JSON.stringify({ at: new Date().toISOString(), checks, failed: failed.length, platformBlocked }, null, 2), 'utf8');

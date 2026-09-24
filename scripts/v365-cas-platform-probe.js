@@ -4,13 +4,18 @@
 /**
  * V3.6.5 —— 平台级 CAS 并发实测探针（**默认拒绝运行**）。
  *
- * 为什么需要它（任务书 §10）：
+ * ⚠️⚠️ **SUPERSEDED（2026-09-24，请勿据本脚本下结论）** ⚠️⚠️
+ *   本脚本按「多文档事务」假设设计（走 SDK `db.runTransaction`）。真实平台实测已推翻该假设：
+ *     • 可及通道（`tcb.RunCommands`）**没有**事务命令（`{"startTransaction":1}` → `CommandNotFound`）；
+ *     • 且本协议的 atomicity 定义**只要求单文档指针原子切换**，不需要多文档提交。
+ *   ⇒ Q7 已重裁：`TRANSACTION_REQUIRED = NO` / `PLATFORM_SINGLE_DOCUMENT_CAS_REQUIRED = YES`；
+ *     证据与实际采用机制见 **`docs/V365_PLATFORM_CAS_EVIDENCE.md`**。
+ *   ⇒ 本脚本**不再是** Q7 的证据来源；保留仅为历史留痕。⛔ 不得用它证明或否定 CAS 行为。
+ *   （另注：本脚本需要 SDK 凭据或部署后执行，二者在本机/本轮均不可用，故从未运行。）
+ *
+ * 为什么曾需要它（任务书 §10）：
  *   P-3/P-4 的原子性只在**内存适配器**上被证明（协议层）。要断言
- *   「两个并发 promotion 中，较旧 run 绝不可能覆盖较新 run」必须在**真实平台**上实测：
- *     ① 明确实际 API        ✅ 已确证：@cloudbase/node-sdk@2.11.0 `Db.startTransaction/runTransaction`
- *     ② 明确冲突失败语义     ⬜ 需实测
- *     ③ 实测两个并发 promotion ⬜ 需实测
- *     ④ 证明 stale run 无法覆盖 newer run ⬜ 需实测
+ *   「两个并发 promotion 中，较旧 run 绝不可能覆盖较新 run」必须在**真实平台**上实测。
  *   ②③④ 都要求**向真实环境写入** —— 按 §15「任何 production write：需要另行授权」，
  *   本脚本**默认直接退出**，不做任何写操作。
  *
