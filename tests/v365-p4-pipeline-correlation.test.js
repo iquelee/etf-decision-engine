@@ -49,34 +49,54 @@ function readCf(name) {
  * ================================================================== */
 section('§A 缺口只读证据');
 
-test('A.1 现有链式调用 payload 只带 {from}，无任何关联 id', () => {
+test('A.1【B1 后更新】链式调用已透传 pipeline 关联 id（旧缺口已闭合）', () => {
   const mi = readCf('materializeIndicators');
   const fdd = readCf('fetchDailyData');
-  assert.ok(mi.includes("data: { from: 'materializeIndicators' }"), '确认现状：仅 from');
-  assert.ok(fdd.includes("{ name: 'materializeIndicators', data: { from: 'fetchDailyData' } }"), '链路起点同理');
-  assert.ok(!mi.includes('pipeline_run_id'), '现状：无 pipeline id');
-  assert.ok(!mi.includes('request_id'), '现状：request_id 未透传');
+  // ⚠️ 原断言「payload 仅 {from}、无 pipeline id」记录的是**修复前缺口**；
+  //    B1 接线后该缺口已闭合 ⇒ 断言改为证明新事实（更强，不是放宽）。
+  assert.ok(mi.includes('buildForwardPayload'), 'B1：必须用契约模块构造透传载荷（保留 from 语义）');
+  assert.ok(mi.includes('pipeline_run_id'), 'B1：必须透传 pipeline_run_id');
+  // 残余（明确记录，不掩盖）：链路**起点** fetchDailyData → materializeIndicators 本轮未接线
+  assert.ok(fdd.includes("{ name: 'materializeIndicators', data: { from: 'fetchDailyData' } }"),
+    '残余：链路起点仍只带 from（本轮未接线 ⇒ 起点无 pipeline_run_id）');
 });
 
-test('A.2 runDecisionEngine 不使用 context / event（不知道自己被谁调用）', () => {
+test('A.2【B1 后更新】runDecisionEngine 已只读读取 event 关联（旧缺口已闭合）', () => {
   const rde = readCf('runDecisionEngine');
-  assert.ok(!rde.includes('context.'), '现状：context 完全未使用（连自己的 request_id 都没取）');
-  assert.ok(!rde.includes('event.from'), '现状：event.from 被传入但从未读取');
-  assert.ok(!rde.includes('pipeline_run_id'));
+  // ⚠️ 原断言「event.from 从未读取 / 无 pipeline_run_id」记录的是修复前缺口。
+  assert.ok(rde.includes('runIntegrity.readInbound(event)'),
+    'B1：必须从 event **只读**读取 inbound correlation');
+  assert.ok(rde.includes('pipeline_run_id'), 'B1：runDecisionEngine 必须记录 pipeline_run_id');
+  // ⛔ 边界仍必须成立：pipeline 字段**不得**进入决策计算路径
+  assert.ok(!/decision\.runDecision\([^)]*pipeline/.test(rde),
+    '⛔ pipeline 字段不得进入 decision.runDecision 的参数');
 });
 
-test('A.3 transport 失败被压成 error 字符串，与业务结果同形', () => {
+test('A.3【B1 后更新】transport 与 business 已分离（旧缺口已闭合，且未越界）', () => {
   const mi = readCf('materializeIndicators');
-  assert.ok(mi.includes("chained = { error: String(e.message || e) };"), '现状：catch 只留字符串');
-  assert.ok(mi.includes('return { ok: true,'), '现状：即使 chained 失败，caller 仍 ok:true');
-  // 全仓 cloudfunctions 内不存在 transport/business 两维状态
+  // ⚠️ 本条原为「记录修复前缺口」的断言（catch 只留字符串、全仓无两维状态）。
+  //    B1 接线后缺口已闭合 ⇒ 断言改为证明**新事实**。
+  // ① 旧语义必须**逐字保留**（这是不许破坏的兼容面）
+  assert.ok(mi.includes("chained = { error: String(e.message || e) };"),
+    'chained.error 的旧语义必须保留（不得被结构化字段取代）');
+  assert.ok(mi.includes('ok: true, version, duration_ms:'),
+    'caller 返回体主形态不变（未改控制流）');
+  // ② B1 新事实：transport / business 分离 + pipeline_run_id 透传
+  assert.ok(mi.includes('transport_status'), 'B1：必须结构化记录 transport_status');
+  assert.ok(mi.includes('business_status'), 'B1：必须结构化记录 business_status');
+  assert.ok(mi.includes('pipeline_run_id'), 'B1：必须透传 pipeline_run_id');
+  assert.ok(mi.includes('buildForwardPayload'), 'B1：必须用契约模块构造透传载荷（保留 from 语义）');
+  // ③ 边界：不得顺手引入 retry / 改动 timeout
+  assert.ok(!/retry\s*:/.test(mi), '⛔ 不得引入 retry 参数');
+  assert.ok(!/timeout\s*:/.test(mi), '⛔ 不得引入 / 修改 timeout 参数');
+  // ④ 至少一个云函数含两维状态（旧断言要求 0 处，正是被关闭的缺口）
   const cf = fs.readdirSync(path.join(REPO, 'cloudfunctions'));
   let hits = 0;
   cf.forEach((fn) => {
     const p = path.join(REPO, 'cloudfunctions', fn, 'index.js');
     if (fs.existsSync(p) && fs.readFileSync(p, 'utf8').includes('transport_status')) hits += 1;
   });
-  assert.strictEqual(hits, 0, `现状：cloudfunctions 内 transport_status 命中 ${hits} 处（应为 0）`);
+  assert.ok(hits >= 1, `B1：cloudfunctions 内应至少 1 处 transport_status（实测 ${hits}）`);
 });
 
 test('A.4 全仓有 4 个不同入口进入 runDecisionEngine（关联必须能区分来源）', () => {
@@ -400,14 +420,17 @@ test('F.3 补丁未引入 retry / timeout / 控制流变更', () => {
   });
 });
 
-test('F.4 补丁只描述、不落盘：云函数文件仍不含 pipeline_run_id', () => {
+test('F.4【B1 后更新】补丁已在授权范围内落盘（旧"只描述不落盘"约束已被 B1 授权取代）', () => {
   const cf = fs.readdirSync(path.join(REPO, 'cloudfunctions'));
-  const polluted = [];
+  const wired = [];
   cf.forEach((fn) => {
     const p = path.join(REPO, 'cloudfunctions', fn, 'index.js');
-    if (fs.existsSync(p) && fs.readFileSync(p, 'utf8').includes('pipeline_run_id')) polluted.push(fn);
+    if (fs.existsSync(p) && fs.readFileSync(p, 'utf8').includes('pipeline_run_id')) wired.push(fn);
   });
-  assert.deepStrictEqual(polluted, [], '本轮不得把补丁写入云函数');
+  // ⚠️ 原断言要求「云函数仍不含 pipeline_run_id」（记录"补丁只描述、未落盘"）。
+  //    B1 轮次已显式授权落盘 ⇒ 断言改为**精确限定落盘范围**（更强，不是放宽）。
+  assert.deepStrictEqual(wired.sort(), ['materializeIndicators', 'runDecisionEngine'],
+    'B1 只允许 materializeIndicators + runDecisionEngine 被接线；实得 ' + JSON.stringify(wired));
 });
 
 /* ------------------------------------------------------------------ *

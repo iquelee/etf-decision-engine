@@ -11,6 +11,8 @@ const cloudbase = require('@cloudbase/node-sdk');
 const db = require('./common/utils/db');
 const indicators = require('./common/utils/indicators');
 const { COLLECTIONS, DEFAULT_PARAMS } = require('./common/constants');
+// V3.6.5 (B1 / P-4)：pipeline correlation 契约（**纯函数**；不改控制流、不加 retry、不改 timeout）
+const pipelineCorrelation = require('./common/utils/pipeline-correlation.js');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -122,14 +124,96 @@ exports.main = async (event = {}, context = {}) => {
     }
 
     // 3. 链式调用 runDecisionEngine
+    // ---- V3.6.5 (B1 / P-4)：pipeline correlation 生成 + 透传（**纯 additive**）----
+    // 边界（任务书 §4/§8/§16）：
+    //   ✅ 只新增 pipeline_run_id 的生成 / 透传 / transport 状态记录
+    //   ✅ `chained.error` 语义逐字保留（caller timeout 时仍保留原错误串）
+    //   ⛔ 未新增 retry；⛔ 未修改 timeout；⛔ 未改变 callFunction 顺序；
+    //   ⛔ 未改动 indicator contract；⛔ 未恢复 breakout_nd。
+    const okCodes = results.filter((r) => r.ok === true).map((r) => String(r.code));
+    const observedDates = results
+      .filter((r) => r.ok === true && r.calc_date)
+      .map((r) => String(r.calc_date)).sort();
+    const identityDate = observedDates.length ? observedDates[observedDates.length - 1] : 'UNKNOWN_DATE';
+    const pipelineIdentity = pipelineCorrelation.buildPipelineIdentity({
+      expected_trade_date: identityDate,
+      origin: pipelineCorrelation.ORIGIN.TIMER,
+      entry_function: 'materializeIndicators',
+      source_detail: 'materialize',
+      attempt: 1
+    });
+    const pendingCall = pipelineCorrelation.buildCallRecord({
+      identity: pipelineIdentity,
+      origin: pipelineCorrelation.ORIGIN.TIMER,
+      entry_function: 'materializeIndicators',
+      caller_function: 'materializeIndicators',
+      callee_function: 'runDecisionEngine',
+      expected_trade_date: identityDate,
+      started_at: new Date(startedAt).toISOString()
+    });
+
     let chained = null;
+    let transportStatus;
     try {
-      chained = await app.callFunction({ name: 'runDecisionEngine', data: { from: 'materializeIndicators' } });
+      chained = await app.callFunction({
+        name: 'runDecisionEngine',
+        // ⚠️ `from` 字段语义**逐字保留**（既有下游/日志依赖）；pipeline_* 为新增透传字段。
+        data: pipelineCorrelation.buildForwardPayload({
+          identity: pipelineIdentity,
+          caller_function: 'materializeIndicators',
+          origin: pipelineCorrelation.ORIGIN.TIMER,
+          entry_function: 'materializeIndicators',
+          expected_trade_date: identityDate
+        })
+      });
+      transportStatus = pipelineCorrelation.TRANSPORT_STATUS.CALL_RETURNED;
     } catch (e) {
+      // ⚠️ 保留原 `error` 字段（既有语义）；transport 状态**另行**结构化记录。
       chained = { error: String(e.message || e) };
+      transportStatus = pipelineCorrelation.classifyTransportFailure
+        ? pipelineCorrelation.classifyTransportFailure(String(e.message || e))
+        : pipelineCorrelation.TRANSPORT_STATUS.CALL_ERROR;
     }
 
-    return { ok: true, version, duration_ms: Date.now() - startedAt, results, chained };
+    // transport 与 business **分开**记录（⛔ 不得由 transport 反推 business）
+    const settled = pipelineCorrelation.settleTransport(pendingCall, {
+      transport_status: transportStatus,
+      completed_at: new Date().toISOString(),
+      error_code: chained && chained.error ? 'CHAINED_CALL_FAILED' : null,
+      error_message: chained && chained.error ? String(chained.error) : null
+    });
+    // 下游自证（best-effort）：只在**已成功返回**且下游确实回传了同一 pipeline_run_id 时建立关联。
+    // timeout 场景下 caller 拿不到它 ⇒ business_status 保持 NOT_OBSERVED，后续按 pipeline_run_id 回查。
+    const calleePipelineRunId = (chained && chained.pipeline && chained.pipeline.pipeline_run_id)
+      ? String(chained.pipeline.pipeline_run_id) : null;
+
+    return {
+      ok: true, version, duration_ms: Date.now() - startedAt, results, chained,
+      pipeline: {
+        pipeline_run_id: pipelineIdentity.pipeline_run_id,
+        pipeline_attempt: pipelineIdentity.attempt,
+        identity_date_basis: 'observed_calc_date（⚠️ 仅作**身份成分**；⛔ 不作 expected_trade_date 权威）',
+        identity_date_observed: identityDate,
+        ok_codes: okCodes,
+        transport_status: settled.transport_status,
+        business_status: calleePipelineRunId
+          ? ((chained && chained.ok === true) ? pipelineCorrelation.BUSINESS_STATUS.COMPLETE
+            : pipelineCorrelation.BUSINESS_STATUS.RUNNING)
+          : pipelineCorrelation.BUSINESS_STATUS.NOT_OBSERVED,
+        callee_pipeline_run_id: calleePipelineRunId,
+        obs_001_shape: calleePipelineRunId
+          ? pipelineCorrelation.isObs001Shape(pipelineCorrelation.reconcile({
+            callRecord: settled,
+            businessObservation: {
+              pipeline_run_id: calleePipelineRunId,
+              business_status: (chained && chained.ok === true)
+                ? pipelineCorrelation.BUSINESS_STATUS.COMPLETE
+                : pipelineCorrelation.BUSINESS_STATUS.RUNNING
+            }
+          })) === true
+          : false
+      }
+    };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
