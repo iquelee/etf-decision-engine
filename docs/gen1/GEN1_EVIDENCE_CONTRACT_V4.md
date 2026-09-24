@@ -28,7 +28,7 @@ GE-04                         ⛔ NOT AUTHORIZED
 
 ## 0. 本文件做什么，以及**不**做什么
 
-**做**：定义「Gen-1 反事实建议是否具有经济价值」这一问句的**可复核、可证伪、不可事后修改**的度量口径 v2.0。
+**做**：定义「Gen-1 反事实建议是否具有经济价值」这一问句的**可复核、可证伪、不可事后修改**的度量口径 v4.0。
 
 **不做**：
 - ❌ 不修改 `GEN1_EVIDENCE_CONTRACT.md`（v1.0）**任何一个字节**。
@@ -48,7 +48,8 @@ GE-04                         ⛔ NOT AUTHORIZED
 |---|---|
 | `GEN1_EVIDENCE_CONTRACT.md`（v1.0） | **暂停作为正式采样执行契约**；⛔ **不删除、不修改、不否定其历史价值** |
 | v1.0 既有样本 | **显式作废**。实测 v1.0 样本数 = **0** ⇒ 作废成本为零，但**声明必须保留** |
-| 本文件 v2.0 | 自**冻结后首个交易日**起取代 v1.0 作为正式执行契约 |
+| **本文件 v4.0（拟）** | 自**冻结后首个交易日**起取代 v1.0 作为正式执行契约。
+（v2.0 / v3.0 为**中间版本**，均**未采样** ⇒ 无样本作废成本；见 §11 变更日志） |
 
 ### 1.2 `CD-01` —— v1.0 的实质性缺陷（本文件的 remedy）
 
@@ -62,9 +63,9 @@ GE-04                         ⛔ NOT AUTHORIZED
 - L255–L256 `intendedTarget = canaryEffective ? canaryTarget : baselineTarget`；`suggested = canaryEffective ? canarySuggested : baselineSuggested`
   ⇒ 非 Candidate 日**回落 baseline**，天然产出 `delta = 0` 对照组。实读 **35 行**。
 
-**登记**：`CD-01`（`CONTRACT SEMANTIC DEFECT`），**remedy = 本文件**。
-✅ **本文件已于 2026-09-21 冻结 ⇒ `CD-01` 随之 CLOSED**（关闭条件 = v2.0 真正冻结）。
-⛔ 冻结**之前**不得在勘误表中写成 `FIXED`（避免「勘误已修复但 v2.0 尚不存在」的治理假象）。
+**登记**：`CD-01`（`CONTRACT SEMANTIC DEFECT`），**remedy = 本文件**（自 v2.0 起，v4.0 沿用）。
+✅ **`CD-01` 已 CLOSED** —— 关闭条件 =「**v2.0 真正冻结**」，该条件已于 **2026-09-21 满足**（见 §11 变更日志）。
+⛔ 该关闭是**历史事实**：⛔ 不得因本文件（v4.0）尚为 DRAFT 而把 `CD-01` 回退为 `OPEN`。
 
 ---
 
@@ -126,7 +127,8 @@ gen1_canary_suggested_position  →  candidate_only_aux
 2. ⛔ 禁止继续把 `gen1_canary_suggested_position` 标为**主列来源**。
 3. ⛔ 禁止把两条列**混入 Q1/Q2/Q3**。
 
-> ⚠️ 本条**改变了 v1.0 §1 的主列数据源** ⇒ 属 v1.0 §6 元规则下的实质性修正 ⇒ 必须以 v2.0 发布（本文件）。
+> ⚠️ 本条**改变了 v1.0 §1 的主列数据源** ⇒ 属 v1.0 §6 元规则下的实质性修正 ⇒ 已由 **v2.0** 发布（历史事实）。
+> 本文件（v4.0）**沿用**该绑定，⛔ 不重新开启该修正。
 
 ---
 
@@ -238,7 +240,7 @@ v3-bull-participation.js:115-128  resolveEffectiveRegime(baseRegime, bullScore, 
 - `MFE = max(路径内最高收盘 / T 收盘 − 1)`；`MAE = min(路径内最低收盘 / T 收盘 − 1)`。
 - 未满 20 个交易日记 `null`，⛔ **不得**用现有天数凑近似值。
 
-### 3.4 ★ `event_cluster_id` 与 `independent_event` 的计算规则（v3.0 新增，**冻结**）
+### 3.4 ★ `event_cluster_id` 与 `independent_event` 的计算规则（v3.0 新增并冻结；**v4.0 沿用，⛔ 未改**）
 
 **规则 = C-B（时间维去相关）+ 混合标记**：
 
@@ -555,7 +557,7 @@ Q1 denominator
 |---|---|---|
 | 建议仓 / stage / probability / domain | `decision_result` | 每日 EOD 后读取 |
 | 反事实建议仓 | `decision_result.gen1_counterfactual_suggested_position` | 同上 |
-| `regime` | `portfolio_snapshot.market_regime`（经 §3.1 关联） | 同上 |
+| `regime` | **`portfolio_snapshot.decision_market_regime`**（经 §3.1 关联；v4.0 改绑） | 同上 |
 | Canary 健康态 / eligibility | `runtime_status`（**当日**快照，见 §5） | 同上 |
 | 调用来源 | `tcb logs search`（调用日志） | 同上 |
 | forward 收益 | `etf_daily`（official bars，`source != 'realtime'` 且 `volume > 0`） | 样本成熟后回填 |
@@ -593,7 +595,7 @@ STATUS:         PRE-EXISTING SEMANTIC DEBT
 ## 10. 生效日（V2-D）
 
 ```text
-v2.0 FREEZE
+v4.0 FREEZE
     ↓
 冻结后的**首个交易日**
     ↓
@@ -615,7 +617,7 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 ## 11. 契约不可变性（元规则）
 
 1. 本文件**冻结后**，字段名、字段定义、纳入/排除规则、判定阈值**不得修改**。
-2. 发现错误 → 发布 **v3.0**，并**显式作废 v2.0 全部样本**，从新版本生效日起重新累计。
+2. 发现错误 → 发布 **v5.0**，并**显式作废 v4.0 全部样本**，从新版本生效日起重新累计。
 3. 每次修改必须在变更日志留痕，写明**修改动机**与**是否作废既有样本**。
 4. 采样进程与契约修改**不得由同一次决策同时触发**。
 
@@ -640,24 +642,24 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | **本文件冻结授权** | ✅ **已授权并完成（2026-09-21）** |
+| 1 | **本文件（v4.0）冻结授权** | ⛔ **NOT YET** —— STEP 4 须单独授权（⛔ 不与「生成」合并） |
 | 2 | `CANONICAL_CAPTURE_CHECKPOINT` 具体时点 | ✅ **已裁定 = 工作日 09:00（北京）** —— 依据见 §5.8 |
 | 3 | C-1 归档的**具体落点与命名** | ✅ **已裁定**：仓库外 `_evidence-capture-YYYYMMDD/`；`<decision_date>__bundle.json` + `<decision_date>__bundle.sha256`；同名已存在 ⇒ **拒绝写入**（append-only，⛔ 不覆盖） |
 | 4 | C-1 自动化 | ⛔ **当前不授权创建任务**；顺序 = 先手工/半自动跑通 **≥3 个交易日** ⇒ 验证 gate 不误杀 ⇒ 再议 automation |
 | 5 | `E28` / `E29` 登记 | ✅ **已完成** —— 见 `GEN1_DOC_ERRATA_20260916.md`（随 PR #48 合入） |
-| 6 | `CD-01` 关闭条件 | = **v2.0 真正冻结**；在此之前保持 **OPEN** |
+| 6 | `CD-01` 关闭条件 | ✅ **已 CLOSED** —— 条件「v2.0 真正冻结」已于 **2026-09-21** 满足 |
 | 7 | 同一 `decision_date` 出现多个 capture 的冲突处置 | ✅ **已裁定**：**先到先得**（首个通过 coherence gate 者为准）；后到者 `BUNDLE_INVALID / NON-SCORING`，⛔ 不得覆盖已接受 bundle |
 | 8 | ⚠️ **冻结是否伴随 git commit** | ✅ **已裁定：是** —— owner 授权走 git commit + PR；载体分支自 `origin/master` 开出 |
-| 9 | 本文件 activation-ready 状态 | ✅ **YES** —— 第 8 项已闭合 |
+| 9 | 本文件 activation-ready 状态 | ❌ **NOT YET** —— 第 1 项（v4.0 冻结）未闭合 |
 
 ---
 
 ## 13. 边界声明与不授权声明
 
-**冻结轮（2026-09-21）仅做**：状态头置 FROZEN、§12 收口、变更日志追加。
-⛔ 未改任何字段/阈值/纳入规则；⛔ 未启动样本累计；⛔ 未改 Seal / Authority。
+**生成轮（2026-09-23，v4.0）仅做**：从 v3.0 派生 → 改绑 `regime` → 登记 `CD-02` → 清理 v2/v3 stale wording。
+⛔ 未改任何**其他**字段/阈值/纳入规则；⛔ 未启动样本累计；⛔ 未改 Seal / Authority；⛔ 未冻结。
 
-**生成轮（2026-09-21）未做**：
+**前序轮（2026-09-21，v2.0/v3.0）未做**：
 
 - ⛔ 未修改 `GEN1_EVIDENCE_CONTRACT.md`（v1.0）任何字节
 - ⛔ 未冻结 v2.0、未启动任何样本累计
