@@ -80,19 +80,31 @@ async function publish(adapter, opts) {
  * ================================================================== */
 section('§A 当前生产写入时序（只读证据）');
 
-testAsync('A.1 当前 runDecisionEngine 为逐票 upsert，无 pointer / 无事务 / 无 active 概念', async () => {
+testAsync('A.1【B1 后更新】runDecisionEngine 已接线：决策写入改经发布路由器 + 存在 active/pointer 契约', async () => {
   const src = fs.readFileSync(path.join(REPO, 'cloudfunctions', 'runDecisionEngine', 'index.js'), 'utf8');
-  // 逐票写入（循环内 upsert）
-  assert.ok(src.includes('await db.upsert(COLLECTIONS.DECISION_RESULT'), '存在逐票 decision_result 写入');
-  assert.ok(src.includes('await db.upsert(COLLECTIONS.PORTFOLIO_POSITION'), '存在逐票 portfolio_position 写入');
-  // ⛔ 不得存在 active pointer / 事务
-  ['active_run_pointer', 'runTransaction', 'run_manifest'].forEach((k) => {
-    assert.ok(!src.includes(k), `当前生产实现不得已存在 ${k}（本 PoC 未接线）`);
-  });
-  // 组合快照在循环**之后**单次写 ⇒ 异常早退会留下「部分新 + 部分旧」
-  const iDec = src.indexOf('await db.upsert(COLLECTIONS.DECISION_RESULT');
-  const iSnap = src.indexOf('await db.upsert(COLLECTIONS.PORTFOLIO_SNAPSHOT');
-  assert.ok(iDec > 0 && iSnap > iDec, '组合快照写在其后');
+  // ⚠️ 本条原为「记录修复前缺口」的断言（逐票直写 authoritative、无 pointer 概念）。
+  //    B1 接线后该缺口已被关闭 ⇒ 断言改为证明**新事实**（更强，不是放宽）。
+  assert.ok(src.includes('async function v365WriteDecision'),
+    'B1：必须存在决策发布写入路由器');
+  assert.ok(src.includes('CANDIDATE_DECISION'),
+    'B1：ENFORCE 路径必须写 candidate 集合（不再无条件直写 authoritative）');
+  assert.ok(src.includes('publishStore.createCloudbaseStore'),
+    'B1：必须构造发布存储适配器（CAS 能力由它 fail-closed 兜底）');
+  assert.ok(src.includes('v365Finality'),
+    'B1：必须有 Run Finality 分类参与发布门');
+  // LEGACY 分支必须保留旧写入语义（对照回放用），且 portfolio_position 仍由生产路径维护
+  assert.ok(src.includes('db.upsert(COLLECTIONS.DECISION_RESULT'),
+    'LEGACY 分支保留旧 decision_result 写入语义');
+  assert.ok(src.includes('await db.upsert(COLLECTIONS.PORTFOLIO_POSITION'),
+    'portfolio_position 属「可变当前状态」轴，仍由生产路径维护');
+  // active / manifest / pointer 契约必须存在
+  const v365 = U('v365-run-integrity.js');
+  assert.ok(v365.V365_COLLECTIONS.ACTIVE_POINTER, 'B1：必须存在 active pointer 契约');
+  assert.ok(v365.V365_COLLECTIONS.RUN_MANIFEST, 'B1：必须存在 run manifest 契约');
+  // CAS 必须走平台事务；缺能力时 fail-closed（不得降级成先读后写）
+  const storeSrc = fs.readFileSync(path.join(REPO, 'src/common/utils', 'v365-publish-store.js'), 'utf8');
+  assert.ok(storeSrc.includes('runTransaction'), 'CAS 必须走平台事务 API');
+  assert.ok(storeSrc.includes('CAS_UNAVAILABLE'), '缺事务能力必须返回 CAS_UNAVAILABLE（fail-closed）');
 });
 
 /* ================================================================== *

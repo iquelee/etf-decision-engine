@@ -48,7 +48,25 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const REPO = path.join(__dirname, '..', '..', '..');
-const DATA_DIR = path.join(REPO, 'src', 'common', 'data');
+/**
+ * artifact 目录解析（**多候选**，B1 修复）。
+ *
+ * ⚠️ 必须同时支持两种布局：
+ *   ① 仓库布局      ：`src/common/utils/` → `../../../src/common/data`
+ *   ② 云函数打包布局：`<fn>/common/utils/` → `../data`
+ *      （`scripts/build-cloudfunctions.js` 把整个 `src/common` 复制为 `<fn>/common`）
+ *
+ * 若只按仓库布局解析，**部署后** `loadRepoCalendar()` 会读不到 artifact
+ * ⇒ 悄悄退化成「未播种」⇒ 生产上恒判 `CALENDAR_COVERAGE_MISSING` BLOCKED。
+ * 这是一种"本地全绿、线上全红"的静默失效，必须在此容错。
+ */
+const DATA_DIR_CANDIDATES = [
+  path.join(__dirname, '..', 'data'),                 // ② 打包布局
+  path.join(REPO, 'src', 'common', 'data')            // ① 仓库布局
+];
+const DATA_DIR = DATA_DIR_CANDIDATES.find((d) => {
+  try { return fs.existsSync(d); } catch (e) { return false; }
+}) || DATA_DIR_CANDIDATES[1];
 const CALENDAR_PATH = path.join(DATA_DIR, 'cn-trading-calendar.json');
 const MANIFEST_PATH = path.join(DATA_DIR, 'cn-trading-calendar.manifest.json');
 /**
