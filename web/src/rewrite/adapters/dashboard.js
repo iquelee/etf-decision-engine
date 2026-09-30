@@ -46,6 +46,8 @@ import {
 } from '../domain/labels.js';
 import { opportunityLevel, CHAIN_COLLAPSE_AFTER } from '../domain/thresholds.js';
 import { formatPercent, formatScore, formatDate, formatDateTime, formatRatio, formatProbability, formatAmount } from '../domain/format.js';
+/** ★ 展示映射统一实现在 domain/display.js（M4 起 M3/M4 共用；⛔ 不得再在 adapter 内私有实现） */
+import { disp, dispTri, pctText, scoreText, dateText, dateTimeText, rawText } from '../domain/display.js';
 
 const SRC = 'api:/api/dashboard';
 const SRC_ALT = 'api:/api/constants';
@@ -53,57 +55,14 @@ const P = (f) => provenance({ source: SRC + (f ? '.' + f : ''), authority: AUTHO
 const P_OPS = (f) => provenance({ source: SRC + (f ? '.' + f : ''), authority: AUTHORITY.OPERATOR });
 
 /* ==================== 展示映射工具（VM 层） ====================
- * 统一把 `Field<T>` → `{ field, text, missing, reason, reasonText }`。
- * ★ 关键：**缺失必须显式**（`数据未提供` + 原因），
- *   ⛔ 不得静默显示 `—` 而让人误以为「值就是空」。
+ * ★ 已上移到 `domain/display.js`（M4 起 M3/M4 共用同一实现）。
+ *   此处仅保留本地别名，调用点零改动（行为与 M3 逐位一致）。
  */
-function disp(field, formatter) {
-  if (!field || (field.state !== FIELD_STATE.PROVIDED && field.state !== FIELD_STATE.STALE)) {
-    const reason = (field && field.missingReason) || MISSING_REASON.NO_BACKEND_CONTRACT;
-    return {
-      field: field || null,
-      text: fieldStateText(field && field.state) || '数据未提供',
-      missing: true,
-      reason,
-      reasonText: missingReasonText(reason)
-    };
-  }
-  let text;
-  try {
-    text = formatter ? formatter(field.value) : String(field.value);
-  } catch (e) {
-    // 语义拒绝（如 formatProbability 收到百分数）⇒ 回退原值，⛔ 不猜单位
-    text = String(field.value);
-  }
-  return { field, text, missing: false, reason: null, reasonText: '' };
-}
-
-/** 三态布尔（true / false / **null**）—— ⛔ 不得把 null 压成 false */
-function dispTri(field) {
-  if (!field || field.state !== FIELD_STATE.PROVIDED) {
-    const reason = (field && field.missingReason) || MISSING_REASON.NO_BACKEND_CONTRACT;
-    return {
-      field: field || null,
-      text: fieldStateText(field && field.state) || '数据未提供',
-      missing: true,
-      reason,
-      reasonText: missingReasonText(reason)
-    };
-  }
-  const v = field.value;
-  if (v === null || v === undefined) {
-    return { field, text: '未提供（null）', missing: true, reason: MISSING_REASON.NULL_IN_CONTRACT, reasonText: missingReasonText(MISSING_REASON.NULL_IN_CONTRACT) };
-  }
-  if (v === true) return { field, text: '是', missing: false, reason: null, reasonText: '' };
-  if (v === false) return { field, text: '否', missing: false, reason: null, reasonText: '' };
-  return { field, text: String(v), missing: false, reason: null, reasonText: '' };
-}
-
-const pct = (field, digits = 1, withSign = false) => disp(field, (v) => formatPercent(v, digits, withSign));
-const score = (field, digits = 0) => disp(field, (v) => formatScore(v, digits));
-const dateTxt = (field) => disp(field, (v) => formatDate(v));
-const dtTxt = (field) => disp(field, (v) => formatDateTime(v));
-const rawTxt = (field) => disp(field, null);
+const pct = pctText;
+const score = scoreText;
+const dateTxt = dateText;
+const dtTxt = dateTimeText;
+const rawTxt = rawText;
 
 /* ==================== 主入口 ==================== */
 

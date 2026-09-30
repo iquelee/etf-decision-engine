@@ -120,3 +120,30 @@ export const FRESHNESS = Object.freeze({
 
 /* ---------------- 前/后台分区 ---------------- */
 export const ZONE = Object.freeze({ FRONT: 'front', ADMIN: 'admin', AUTH: 'auth' });
+
+/* ---------------- Gen-1 数据通道（owner 裁定 M4-D1） ----------------
+ * ★ 三通道**必须**区分，且 ⛔ 不得互相顶替：
+ *   CANONICAL        = V3.6.5 正式契约 `system_runtime.gen1`（当前线上**未部署**）
+ *   DECISION_LEGACY  = `decision.gen1_*`(59 键) + `ml_shadow`(27 键) —— pre-contract 平铺字段
+ *   NONE             = 三级全无 ⇒ 显式「数据未提供」
+ *
+ * ⛔ 硬禁止：把 DECISION_LEGACY 呈现为 canonical（用户裁定原文：「ml_shadow → 冒充 canonical gen1」）。
+ */
+export const GEN1_CHANNEL = Object.freeze({
+  CANONICAL: 'CANONICAL',
+  DECISION_LEGACY: 'DECISION_LEGACY',
+  NONE: 'NONE'
+});
+
+/* ---------------- 决策链展示模式（owner 裁定 M4-D3） ----------------
+ * QUALITATIVE_ONLY：只保留定性条件，遮蔽定量数字。
+ *   依据：实测 `explain_chain` 文案与同文档字段**三处冲突**（M4-P0 §F.7.2）：
+ *     step 10「仓位缺口 -7.8pct」vs `position_gap=0`
+ *     step  9「核心 12.6% · 交易 0%」vs `decision.core_position=0.2 / trade_position=0.3`
+ *     step  8「目标区间 [18~24]% 标准目标 21%」vs `position.target_min/max=20/30`
+ *   ⇒ 后端统一 explain_chain 来源后，此处再切回 QUANTITATIVE。
+ */
+export const CHAIN_MODE = Object.freeze({
+  QUALITATIVE_ONLY: 'QUALITATIVE_ONLY',
+  QUANTITATIVE: 'QUANTITATIVE'
+});

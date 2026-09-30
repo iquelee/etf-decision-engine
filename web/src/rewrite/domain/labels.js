@@ -65,7 +65,14 @@ const RISK_ALIASES = Object.freeze({
 export function normalizeRisk(v) {
   if (v === null || v === undefined || v === '') return null;
   const s = String(v).trim();
-  return RISK_ALIASES[s] || RISK_ALIASES[s.toUpperCase()] || null;
+  /**
+   * ⚠️ 必须**同时**试原样与小写：线上同一族字段既出现 `NORMAL`（大写英文），
+   *   又出现「正常」（中文），而本表键为**小写英文 + 中文**。
+   *   原实现只比 `s` 与 `s.toUpperCase()` ⇒ `NORMAL` 两个都落空、返回 null，
+   *   后果：`risk_flag="NORMAL"` 的 tone 掉成 `muted`（与「未知」不可区分）。
+   *   M4-P1 实测发现，M3 期间被 dashboard 的中文值掩盖。
+   */
+  return RISK_ALIASES[s] || RISK_ALIASES[s.toLowerCase()] || null;
 }
 
 export function riskLabel(v) {
@@ -387,3 +394,146 @@ export function lifecycleValueText(v) {
   if (v === false) return '否';
   return LIFECYCLE_VALUE_TEXT[String(v)] || String(v);
 }
+
+/* ================================================================
+ * 以下为 M4-P1 增补。仍遵守「文案只此一处」原则（SPEC §12.1）。
+ * 裁定来源：owner 2026-09-30 对 M4-D1 / M4-D2 / M4-D3 的决定。
+ * ================================================================ */
+
+/* ---------------- M4-D1：Gen-1 在 ETF Detail 的数据通道身份 ----------------
+ * ★ 裁定：允许展示 `decision.gen1_*`(59 键) + `ml_shadow`(27 键)，
+ *   但**必须降级为 Legacy Advisory**，⛔ 不得伪装成 canonical Gen-1。
+ * ★ 视觉层级：V3 Safety Core（正式决策）> Gen-1 Legacy Advisory。 */
+
+/** 区块标题（三通道统一标题；权威等级由 LABEL 区分） */
+export const GEN1_SECTION_TITLE = 'GEN-1 · TIMING / ADVISORY';
+
+/** 通道角标文案 */
+export const GEN1_CHANNEL_LABEL = Object.freeze({
+  CANONICAL: 'Canonical Channel',
+  DECISION_LEGACY: 'Legacy Channel',
+  NONE: 'No Channel'
+});
+
+/** 通道说明（★ DECISION_LEGACY 的措辞由 owner 逐字给定，⛔ 不得改写） */
+export const GEN1_CHANNEL_CAVEAT = Object.freeze({
+  CANONICAL: '数据来源：V3.6.5 canonical 契约 system_runtime.gen1。',
+  DECISION_LEGACY: '当前页面使用的是现有 legacy 通道数据；它不是 V3.6.5 canonical "system_runtime.gen1" 契约。',
+  NONE: ''
+});
+
+/** 通道 tone（Legacy 用中性偏警示，⛔ 不得用与正式决策同级的强调色） */
+export const GEN1_CHANNEL_TONE = Object.freeze({
+  CANONICAL: 'good',
+  DECISION_LEGACY: 'warn',
+  NONE: 'muted'
+});
+
+/**
+ * 通道来源标注（供 provenance 行渲染）。
+ * ⚠️ 刻意**不写后端字段名**：面向用户的来源说明用大白话；
+ *    ⛔ 不得在组件模板里硬编码这些串（M4-P1 回归测试抓到过）。
+ */
+export const GEN1_PROVENANCE_SOURCE = Object.freeze({
+  CANONICAL: '正式契约 · 系统运行时',
+  DECISION_LEGACY: '历史兼容通道 · 决策记录与影子观察',
+  NONE: ''
+});
+
+/** 通道警示（⛔ 只有 CANONICAL 才可用于权威判断） */
+export const GEN1_CHANNEL_NOTE = Object.freeze({
+  CANONICAL: '',
+  DECISION_LEGACY: '非契约通道：数值不得用于权限或阶段判定',
+  NONE: ''
+});
+
+/** 权威降级声明（Gen-1 区**必须**可见） */
+export const GEN1_ADVISORY_DISCLAIMER =
+  'Gen-1 只提供时机与适用性建议，不构成正式交易决定，也不改变仓位目标；最终动作与目标由 V3 Safety Core 决定。';
+
+/**
+ * ★ 反事实专项声明：反事实目标与正式目标常取同值（实测均 0.5），极易误读为
+ *   「Gen-1 决定了目标」。⚠️ 刻意**不写后端字段名**（用户偏好大白话，⛔ 不暴露原始字段）。
+ */
+export const GEN1_COUNTERFACTUAL_NOTE =
+  '反事实只是影子推演，不改变正式目标；两者数值相同不代表 Gen-1 决定了目标。';
+
+/** legacy 通道字段级标注（UI 挂在数值旁） */
+export const GEN1_LEGACY_FIELD_NOTE = 'Legacy 通道';
+
+/* ---------------- M4-D2：K 线陈旧（★ 与 decision freshness 严格独立） ----------------
+ * ★ 裁定：置顶 Banner + **保留图表**；⛔ 不修改数据、⛔ 不猜最新价、⛔ 不删历史数据伪装正常、
+ *   ⛔ 不得把 stale 当 empty；⛔ 不得把 K 线 stale 扩展成 ETF decision stale。 */
+
+export const KLINE_STALE_TITLE = 'K 线数据已明显滞后';
+
+/**
+ * ★ Banner 正文——**日期必须来自实际数据**（⛔ 不得硬编码）。
+ * @param {string} lastBarDate 实际最后一根 K 线日期（如 `2024-08-27`）
+ * @param {string} decisionDate 实际决策日（如 `2026-09-29`）；无则省略比较句
+ */
+export function klineStaleBannerText(lastBarDate, decisionDate) {
+  const a = lastBarDate || '—';
+  if (!decisionDate) return '当前 K 线截至 ' + a + '。';
+  return '当前 K 线截至 ' + a + '，早于当前决策日 ' + decisionDate + '。';
+}
+
+/** K 线区块内的状态标签（与 decision freshness 分开显示） */
+export const KLINE_STATUS_LABEL = Object.freeze({
+  FRESH: '数据新鲜',
+  STALE: 'STALE · 数据滞后',
+  MISSING: '无时间戳',
+  UNAVAILABLE: '未提供',
+  /** ★ 请求失败 —— ⛔ 必须与「空数据」和「缺失」都不同（把错误说成空是 SPEC §9 明令禁止的） */
+  ERROR: '读取失败'
+});
+
+/** K 线图区固定说明（解释"为何图还在"） */
+export const KLINE_STALE_KEEP_NOTE = '历史数据照常保留（不清空、不插值）；仅标注其实际时点。';
+
+/* ---------------- M4-D3：决策链只保留定性 ----------------
+ * ★ 裁定：`explain_chain` 与同文档字段存在三处数字冲突 ⇒ 本页**不消费**冲突数字。 */
+
+export const CHAIN_SECTION_TITLE = '为什么（定性条件）';
+
+export const CHAIN_MODE_NOTE =
+  '本链仅保留定性条件；其中的数字与正式决策字段口径不一致（已核验冲突），故一律隐藏。'
+  + '后端统一口径后再恢复定量。';
+
+/** 数字遮蔽标记（UI 直接渲染；⛔ 不得替换为具体数字） */
+export const CHAIN_QUANT_MASK = '［数字已隐藏］';
+
+/** 结果含定量时的替代文案 */
+export const CHAIN_RESULT_QUANT_HIDDEN = '（结果含定量，已隐藏）';
+
+/** 统计隐藏条数的文案 */
+export function chainHiddenSummary(hiddenCount, total) {
+  if (!hiddenCount) return '';
+  return '共 ' + total + ' 步，其中 ' + hiddenCount + ' 步含定量数字，已隐藏。';
+}
+
+/* ---------------- M4-P1：建议 / 实际 / 目标 三类仓位的显式命名 ----------------
+ * ★ 依据 M4-P0 §F.3：`decision.core_position`(0.2 建议) ≠ `position.core_position`(12.6 实际)，
+ *   ⛔ 不得放进同一个无标签数字卡。 */
+
+export const POSITION_KIND_LABEL = Object.freeze({
+  suggested: '建议（本次决策）',
+  actual: '实际（当前持仓）',
+  target: '目标（决策带）',
+  config: '配置标准（etf_basic）'
+});
+
+export const POSITION_KIND_NOTE = Object.freeze({
+  suggested: '来自 decision 块：本次决策给出的建议值',
+  actual: '来自 position 块：账户当前真实持仓',
+  target: '来自 decision 块：经组合约束后的最终目标带',
+  config: '来自 position/basic 块：配置层面的标准目标带（⛔ 不是本次决策结果）'
+});
+
+/** ★ 仓位缺口来源标注（⛔ 组件不得硬编码；语义见 SPEC 附录 A.5） */
+export const GAP_SOURCE_NOTE = '服务端值，⛔ 本页不重算';
+
+/** ★ 本页「不重算」的统一声明（多个组件共用） */
+export const NO_RECOMPUTE_NOTE =
+  '⛔ 本页不重算任何上述数值（缺口 / 目标 / 等级均直接采用服务端值）；'
+  + '⛔ 不从 `/api/etf/list` 借用同名字段补齐。';

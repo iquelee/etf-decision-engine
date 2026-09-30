@@ -766,3 +766,96 @@ vite build       PASS（双入口；旧前端产物不变，Structure 仍 1,044.
 
 见审计附录 **C-6 ~ C-9**（运行时模板白屏、中文风险值色域丢失、生命周期版本身份口径、`most_worth` 噪音）。
 
+---
+
+## 附录 E：M4-P1 第一阶段实现记录（2026-09-30 · ETF 工作台）
+
+> 依据 owner 对 **M4-D1 / D2 / D3 / D4** 的裁定实施（裁定原文见
+> `V365_M4_ETF_WORKBENCH_CONTRACT.md` §G）。本轮只做**第一阶段**：
+> ViewModel + Desktop IA + Mobile IA + Primary Decision + Gen-1 Legacy Advisory + K-line stale handling。
+
+### E.1 IA（自上而下，视觉权重递减）
+
+| # | 区块 | 回答的问题 | 组件 |
+|---|---|---|---|
+| ① | Header | 这是哪只 ETF？现在什么价位？数据什么时点？ | `WorkbenchHeader.vue` |
+| ② | K 线滞后提示 | K 线是否可信？（**仅严重滞后时出现**） | `StaleBanner.vue` |
+| ③ | **正式决策** ★最高权威 | 系统怎么建议？目标与缺口多少？ | `PrimaryDecision.vue` |
+| ④ | 仓位与风险（三轴分区） | 实际 vs 建议 vs 目标 vs 配置标准 | `PositionRiskSection.vue` |
+| ⑤ | **Gen-1 Advisory** ★降权 | 时机建议是什么（且它只是建议） | `Gen1AdvisorySection.vue` |
+| ⑥ | K 线 | 走势长什么样（图**始终保留**） | `KlineSection.vue` + `MiniKline.vue` |
+| ⑦ | 结构与量价 | W/D/H/V + 横盘 + 均线 | `StructureSection.vue` |
+| ⑧ | 基本面摘要 | 只给摘要（深层属 M6） | `DetailView.vue` 内联 |
+| ⑨ | 数据质量 | 新鲜度 / 来源 / 缺什么 | `WorkbenchDataQuality.vue` |
+
+**响应式**：`≥1100px` 四列 hero · `≤900px` 二列 · `≤768px` **单列**（决策信息优先保留）· `≤420px` 压缩字号。
+实测断点：1920 / 1440 / 1280 / 1024 / 768 / 390（见 E.5）。
+
+### E.2 ViewModel 结构
+
+```js
+adaptEtfDetail(data, runtimeStatus, { klineRaw, klineError, retrievedAt })
+// → 12 组：
+//   identity · decision · position · risk · gen1Detail · price · kline
+//   · structure · fundamentalsSummary · freshness · provenance · boundaries · missingItems
+```
+
+★ **零回归设计**：`decision` / `position` 用 `...d` / `...p` **平铺 M2 原字段**，
+M4 的展示字段一律用**新名**追加（`*Text` / `*View` / `chain` / `configBand`）——
+⛔ 绝不覆盖 M2 的键（`finalTarget` / `targetBand` / `positionGap` / `overAllocStatus` /
+`addEligibility` / `explainChain` / `scores` / `factors` / `band` 全部保持原形态）。
+（教训：`FE-DEF-003`。）
+
+### E.3 raw → adapter → domain → UI 映射（关键行）
+
+| raw 字段 | adapter 归一 | domain | UI |
+|---|---|---|---|
+| `basic.name/sector` | `identity.nameText/sectorText` | `etfName` / `sectorLabel` | 页头 |
+| `decision.final_target` | `decision.finalTargetText` | `pctText`（`0.5` → **`0.5%`**） | 决策 hero |
+| `decision.position_gap` | `decision.gapText` + `gapNote` | `pctText(±)` | 决策 hero（⛔ 不重算） |
+| `decision.core_position`（**建议**） | `decision.suggestedCoreText` | `pctText` | 仓位卡片② |
+| `position.core_position`（**实际**） | `position.realCoreText` | `pctText` | 仓位卡片① |
+| `position.target_min/std/max`（配置带） | `position.configBand.*` | `pctText` | 仓位卡片③ |
+| `decision.stage_factor/market_factor` | `decision.factorsView.*` | `factorText`（⛔ **不加 %**） | 评分区 |
+| `decision.explain_chain` | `decision.chain.steps[]` | `maskQuant` / `qualitativeStep` | 「为什么（定性条件）」 |
+| `decision.gen1_*` + `ml_shadow.*` | `gen1Detail.*`（display 形态） | `disp` / `pctText` | Gen-1 区（★ Legacy Channel） |
+| `kline[].{date,o,c,l,h}` | `kline.bars` + `lastBarDate` | `assess(lastBarDate,'kline')` | SVG K 线 + banner |
+| `snapshot.{w,d,h,v}_state` | `structure.stateRows[]` | `stateLabel` | 结构区（全称显示） |
+
+### E.4 与旧 `EtfDetail.vue` 的差异
+
+**删除**：`gen1.advisory.*` 契约假设（从未下发）· `ml_shadow` 的 24 行「模型审计/基线对照」（生产上 16 行恒
+`—`）· `privateValue()` 把 `null` 说成**「后台查看」**的错误归因 · 前端重算防守等级 · 跨 endpoint 读 `etf/list`。
+
+**保留**：标的身份 / 动作 / 当前仓位 / 目标带 / 建议缺口 / 风险与超配 / 加仓资格（**10 项**，含
+`cooldown`/`regime`）/ 评分五维 / 下一加仓条件 / 决策链 / 风险事件 / K 线图 / W/D/H/V / 横盘四重确认 /
+量价 / 均线 / 基本面摘要。
+
+**新增**：K 线独立新鲜度 + 滞后 banner · Gen-1 三通道 + Legacy 角标 + 逐字段标注 · 决策链定性化 ·
+仓位三轴显式分区（实际/建议/目标/配置）· 缺失清单（`missingItems`）· 未消费载荷登记 ·
+结构维度全称 + 单位标注 · 移动端单列布局。
+
+### E.5 测试与验证（M4-P1 实测）
+
+```text
+rewrite 套件   17/17 PASS（M3 为 15）    用例 **276** 项（M3 为 207），零新增依赖
+新增 2 套件    etf-detail-adapter（40 项）· etf-detail-render（29 项，真 SSR）
+vite build     PASS（双入口；旧前端不变，Structure 仍 1,044.68 kB；EtfWorkbench 70.44 kB / gzip 20.27 kB）
+浏览器核验     15 场景 × 6 断点 = **38 张截图，problems = 0**（横向溢出 0、JS 异常 0）
+非回归         src/ · cloudfunctions/ · tests/ · scripts/ · 旧 web/src/** 的 git diff 全为空
+```
+
+**验证工具**（工作区根，⛔ 不入库）：`_v365-fe-audit-20260930/tools/m4-preview-server.cjs`（场景化 API 桩）、
+`m4-visual-check.py`；证据：`_v365-fe-audit-20260930/m4-visual/{*.png, report.json}`。
+
+### E.6 M4-P1 新发现
+
+见审计附录 **C-16 ~ C-18** 与风险台账 **`FE-DEF-001 ~ FE-DEF-004`**
+（display/Field 形态错配导致整区空值 · `normalizeRisk` 大写英文落空 · 重写导致 M2 键回归 ·
+缺失分支未返回同形状骨架）。
+
+★ **本轮最重要的方法论结论**：
+`[SRC]` **「build PASS + 单测全过」不能证明页面能渲染** —— 上述 4 个缺陷中有 2 个
+（`FE-DEF-001` / `FE-DEF-004`）**只被真实浏览器渲染核验 / SSR 渲染测试抓到**，
+代码审查与字段级单测均漏检。⇒ **每个页面里程碑必须做一次真实渲染核验**（已固化为技能）。
+

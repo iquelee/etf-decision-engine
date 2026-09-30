@@ -28,7 +28,10 @@ export const FIXTURES = Object.freeze({
   legacyOnly: () => fixture('edge/legacy-only.json'),
   canonicalPlusLegacy: () => fixture('edge/canonical-plus-legacy.json'),
   emptyArrays: () => fixture('edge/empty-arrays.json'),
-  malformed: () => fixture('edge/malformed.json')
+  malformed: () => fixture('edge/malformed.json'),
+  /** M4-P1：ETF 工作台 fixture 族（生成器 = web/tests/tools/gen-m4-fixtures.cjs，✅ 入库） */
+  m4: (name) => fixture('m4/' + name),
+  m4Meta: () => fixture('m4/_meta.json')
 });
 
 /** 简易断言计数（各套件自报 PASS 数） */

@@ -12,7 +12,7 @@
  *
  * 生命周期：M3（本文件为 M3 参考实现；M4+ 的其它页面照此结构落地）
  */
-import PageStateBlock from './PageStateBlock.vue';
+import PageStateBlock from '../common/PageStateBlock.vue';
 import MarketDecisionSection from './MarketDecisionSection.vue';
 import Gen1Section from './Gen1Section.vue';
 import CardsSection from './CardsSection.vue';

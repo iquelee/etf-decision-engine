@@ -23,6 +23,9 @@ const SUITES = [
   /* --- Dashboard（M3） --- */
   './rewrite/dashboard-adapter.test.js',
   './rewrite/dashboard-render.test.js',
+  /* --- ETF 工作台（M4-P1） --- */
+  './rewrite/etf-detail-adapter.test.js',
+  './rewrite/etf-detail-render.test.js',
   /* --- transport（M2 清理） --- */
   './rewrite/api-client.test.js',
   /* --- 工程守卫（M0/M1） --- */

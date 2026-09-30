@@ -12,3 +12,5 @@ export * from './labels.js';
 export * from './thresholds.js';
 export * from './format.js';
 export * from './lifecycle.js';
+export * from './display.js';
+export * from './chain.js';

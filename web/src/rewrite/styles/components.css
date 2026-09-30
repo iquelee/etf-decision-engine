@@ -307,3 +307,235 @@ details.fold > summary::marker { color: var(--c-text-3); }
   .kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lifecycle { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ================================================================
+ * M4 · ETF 工作台（workbench）
+ * 规范依据：SPEC §12（Design System）＋ owner 裁定 M4-D1/D2/D3
+ * ★ 色域纪律（SPEC §12.1）：
+ *     · 涨跌用 --mkt-up / --mkt-down（中国惯例：涨=红、跌=绿）
+ *     · 风险用 --risk-*
+ *     · 动作/状态用 --tone-*
+ *   ⛔ 三域物理隔离，不得互相借用。
+ * ================================================================ */
+
+.wb { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+/* ---------------- 页头 ---------------- */
+
+.wb-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--sp-4);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+}
+.wb-head-left { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.wb-code {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-family: var(--font-mono); font-size: var(--fs-13); color: var(--c-text-3);
+}
+.wb-name { margin: 0; font-size: var(--fs-20); font-weight: var(--fw-bold); line-height: var(--lh-tight); }
+.wb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); font-size: var(--fs-12); color: var(--c-text-2); }
+.wb-dot { color: var(--c-text-3); }
+
+.wb-head-right { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.wb-price { display: flex; flex-direction: column; align-items: flex-end; }
+.wb-price-num { font-size: var(--fs-28); font-weight: var(--fw-bold); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.wb-price-label { font-size: var(--fs-11); color: var(--c-text-3); }
+
+/* ★ 涨跌色域（中国惯例：涨=红、跌=绿）；⛔ 不得用于风险或动作 */
+.dir-up    { color: var(--mkt-up); }
+.dir-down  { color: var(--mkt-down); }
+.dir-flat  { color: var(--mkt-flat); }
+.dir-muted { color: var(--c-text-3); }
+
+.wb-dates { display: flex; flex-direction: column; gap: 3px; }
+.wb-date-row { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-12); }
+.wb-date-k { min-width: 56px; color: var(--c-text-3); }
+.wb-date-v { font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
+
+/* ---------------- K 线滞后提示（owner D2：克制但明确） ---------------- */
+
+.stale-banner {
+  border: 1px solid var(--risk-yellow);
+  background: var(--risk-yellow-bg);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.stale-banner-main { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.stale-banner-icon {
+  flex: 0 0 auto;
+  width: 20px; height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--risk-yellow);
+  color: var(--c-surface);
+  font-weight: var(--fw-bold); font-size: var(--fs-13);
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.stale-banner-title { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+.stale-banner-text { font-size: var(--fs-13); color: var(--c-text-2); margin-top: 2px; }
+.stale-banner-meta { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding-left: 32px; }
+.stale-banner-tag {
+  font-family: var(--font-mono); font-size: var(--fs-11);
+  color: var(--c-text-2); border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-sm); padding: 1px 6px;
+}
+.stale-banner-note { font-size: var(--fs-11); color: var(--c-text-3); }
+
+/* ---------------- 正式决策（全页最高权威） ---------------- */
+
+.primary-decision { border-left: 3px solid var(--c-accent); }
+
+.pd-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) 0;
+}
+.pd-hero-main, .pd-hero-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-hero-label { font-size: var(--fs-11); color: var(--c-text-3); }
+.pd-hero-value { display: flex; align-items: center; gap: var(--sp-2); min-height: 30px; }
+.pd-hero-num {
+  font-size: var(--fs-28);
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.pd-hero-note { font-size: var(--fs-11); color: var(--c-text-3); }
+/* 缺失值：明显弱化但**可辨**（⛔ 不得与真值同权重） */
+.is-missing { font-size: var(--fs-16); font-weight: var(--fw-regular); color: var(--c-text-3); font-style: normal; }
+
+/* ---------------- 仓位三轴分区 ---------------- */
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--sp-3);
+}
+.pos-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  padding: var(--sp-3);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  min-width: 0;
+}
+.pos-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.pos-card-kind { font-size: var(--fs-13); font-weight: var(--fw-semibold); }
+.pos-card-src { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--c-text-3); }
+.pos-card-note { font-size: var(--fs-11); color: var(--c-text-3); }
+.pos-card-main { display: flex; flex-direction: column; gap: 1px; padding: var(--sp-1) 0; }
+.pos-num { font-size: var(--fs-28); font-weight: var(--fw-bold); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pos-num-label { font-size: var(--fs-11); color: var(--c-text-3); }
+
+/* ---------------- Gen-1（★ 视觉上必须弱于正式决策） ---------------- */
+
+.gen1-advisory {
+  border-left: 3px solid var(--c-border-strong);
+  background: var(--c-surface);
+}
+.gen1-advisory .kv-v { font-size: var(--fs-13); font-weight: var(--fw-regular); }
+/* 通道角标：逐字段标注「Legacy 通道」 */
+.gen1-tag {
+  margin-left: 6px;
+  font-size: var(--fs-11);
+  color: var(--c-text-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.gen1-unit { margin-left: 6px; font-size: var(--fs-11); color: var(--c-text-3); }
+.gen1-disclaimer {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-12);
+  color: var(--c-text-2);
+  border-left: 2px solid var(--c-border-strong);
+  padding-left: var(--sp-2);
+}
+
+/* ---------------- 决策链（定性版，M4-D3） ---------------- */
+
+.chain-qual { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
+.chain-qual .chain-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+.chain-qual-cond { font-size: var(--fs-13); overflow-wrap: anywhere; }
+.chain-qual-res { font-size: var(--fs-13); color: var(--c-text-2); }
+.chain-qual-res::before { content: '→ '; color: var(--c-text-3); }
+.chain-qual-hidden { font-size: var(--fs-11); color: var(--c-text-3); }
+
+/* ---------------- 结构识别 ---------------- */
+
+.struct-states { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--sp-2); }
+.struct-state {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  padding: var(--sp-3);
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.struct-state-dim { font-size: var(--fs-11); color: var(--c-text-3); }
+.struct-state-code { font-family: var(--font-mono); font-size: var(--fs-16); font-weight: var(--fw-semibold); }
+.struct-state-text { font-size: var(--fs-12); color: var(--c-text-2); overflow-wrap: anywhere; }
+
+/* ---------------- 轻量 SVG K 线 ---------------- */
+
+.mkline { position: relative; width: 100%; }
+.mkline-svg { display: block; width: 100%; height: 100%; }
+.mkline-axis line { stroke: var(--c-border); }
+.mkline-tick { fill: var(--c-text-3); font-size: 10px; font-family: var(--font-mono); }
+.mkline-wick { stroke-width: 1; }
+.mkline-body { stroke: none; }
+/* ★ 涨红跌绿（中国惯例） */
+.mkline-up .mkline-wick { stroke: var(--mkt-up); }
+.mkline-up .mkline-body { fill: var(--mkt-up); }
+.mkline-down .mkline-wick { stroke: var(--mkt-down); }
+.mkline-down .mkline-body { fill: var(--mkt-down); }
+.mkline-lastline { stroke: var(--c-accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.mkline-empty {
+  height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-13); color: var(--c-text-3);
+  border: 1px dashed var(--c-border); border-radius: var(--r-md);
+}
+.mkline-foot {
+  display: flex; justify-content: space-between; gap: var(--sp-2);
+  font-size: var(--fs-11); color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+.mkline-foot-mid { flex: 1; text-align: center; }
+
+/* ---------------- 响应式（复用既有断点：1100 / 900 / 768 / 420） ---------------- */
+
+@media (max-width: 1100px) {
+  .pd-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .wb-head { flex-direction: column; }
+  .wb-head-right { width: 100%; justify-content: flex-start; gap: var(--sp-5); }
+  .wb-price { align-items: flex-start; }
+  .pd-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .wb-head { padding: var(--sp-3); }
+  .wb-name { font-size: var(--fs-16); }
+  .pd-hero { grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+  .pd-hero-num, .pos-num, .wb-price-num { font-size: var(--fs-20); }
+  .pos-grid { grid-template-columns: minmax(0, 1fr); }
+  .struct-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stale-banner-meta { padding-left: 0; }
+  .mkline-foot { flex-wrap: wrap; }
+}
+@media (max-width: 420px) {
+  .struct-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wb-meta { font-size: var(--fs-11); }
+}

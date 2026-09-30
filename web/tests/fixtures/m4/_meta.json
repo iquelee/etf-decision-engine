@@ -1,7 +1,8 @@
 {
-  "generated_by": "_v365-fe-audit-20260930/tools/gen-m4-fixtures.cjs（工作区根，⛔ 不入库）",
+  "generated_by": "web/tests/tools/gen-m4-fixtures.cjs（✅ 入库，可复现；--check 可校验）",
+  "supersedes": "_v365-fe-audit-20260930/tools/gen-m4-fixtures.cjs（M4-P0 现场副本，⛔ 不入库）",
   "generated_at": "2026-09-30",
-  "base_sha": "2bd8df2",
+  "base_sha": "8c6f78e",
   "note": "fixture 均为**响应 data**（不含 {code,data,message} 信封），与 M2 约定一致",
   "files": {
     "etf-normal.json": {
@@ -43,7 +44,7 @@
         "snapshot.calc_date=2020-01-01",
         "decision.decision_date=2020-01-01"
       ],
-      "expect": "freshness=STALE 且文案与 MISSING（无时间戳）不同"
+      "expect": "★ 决策 freshness=STALE；但 **K 线 freshness 独立判定**（两者⛔ 不得合并为一个「数据日期」）"
     },
     "etf-malformed.json": {
       "scenario": "malformed",
@@ -98,7 +99,7 @@
     "kline-live60.json": {
       "scenario": "kline-live",
       "origin": "live-legacy/kline-513310.json（线上实测尾部 60 根）",
-      "expect": "★ 注意：线上 kline 末端为 2024-08-27（详见 M4-R1），渲染时必须标数据新鲜度"
+      "expect": "★ 线上 K 线末端为 2024-08-27（见 KLINE-DATA-001）⇒ 渲染时必须显著标注 K 线自身时点；⛔ 不得与 decision freshness 合并，⛔ 不得因 stale 而隐藏历史数据"
     }
   }
 }

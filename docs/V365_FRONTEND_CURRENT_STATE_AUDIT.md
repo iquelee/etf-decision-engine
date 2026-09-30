@@ -1008,4 +1008,49 @@ const rows = await db.query(COLLECTIONS.ETF_DAILY, { code },
 `feature_schema_hash` · `rule_permission_reason` · `rule_permission_source`。
 （审计 §3.6 #9 的同一模式：**前端契约假设与后端实际不符**。）
 
+---
+
+### C-16 ★★ 前端缺陷（已修）：adapter 透传裸 `Field`，而组件只认 display 对象 ⇒ **Gen-1 整区值全空**
+
+| 项 | 内容 |
+|---|---|
+| **ID** | `FE-DEF-001`（风险台账） |
+| **现象** | M4-P1 完成后，浏览器实看发现 Gen-1 区**只剩标签与角标，所有值渲染为空** |
+| **根因** | 新写的 `adapters/gen1Detail.js` 输出**裸 `Field`**（`{state,value,provenance}`），而 `components/domain/FieldValue.vue` 只渲染 display 对象（`{text,missing,reasonText}`）⇒ `{{ d.text }}` 取到 `undefined` |
+| **检出方式** | ★ **真实浏览器渲染核验**（SSR 断言当时只检查了标题与 caveat ⇒ **漏检**） |
+| **修复** | `gen1Detail` 输出改为 display 形态（新增 `toDisplay()` 深度转换，并用 `isDisplay()` 短路避免二次包装） |
+| **防复发** | 新增 SSR 守卫：断言 Gen-1 区**必须出现具体值**（`CANARY` / `DEGRADED` / `0.65` / `BLOCK` / `S1` / 运行 ID），并断言 ⛔ 不得出现 `[object Object]` |
+
+**教训**：`[SRC]` 适配器的**输出形态契约**（裸 `Field` vs display 对象）必须在模块头部显式声明；
+断言"字段存在"**抓不到形态错配**，必须在**渲染层**断言"值真的出现"。
+
+### C-17 ★★ 前端缺陷（已修）：`normalizeRisk` 对**大写英文枚举**落空 ⇒ 风险色域丢失
+
+| 项 | 内容 |
+|---|---|
+| **ID** | `FE-DEF-002`（风险台账） |
+| **现象** | `risk_flag="NORMAL"` 的 tone 掉成 `muted`（与「未知」**视觉不可区分**）；`premium_flag` 直接显示英文原文 |
+| **根因** | `RISK_ALIASES` 的键是**小写英文 + 中文**，而实现只比较 `s` 与 `s.toUpperCase()` ⇒ 对 `'NORMAL'` **两个分支都落空**、返回 `null` |
+| **为何 M3 未暴露** | M3 Dashboard 的 `overall_risk` 线上是**中文**「正常」⇒ 命中中文键，掩盖了该 bug |
+| **检出方式** | 既有测试套件（M4 新增断言） |
+| **修复** | 改为 `RISK_ALIASES[s] \|\| RISK_ALIASES[s.toLowerCase()]`；并建了中/英 × 大/小写全矩阵回归断言 |
+| **范围** | 属 **M3 遗留 bug**，修复同时改善了 Dashboard 的风险显示 |
+
+**教训**：`[AS-IS]` 该 API 的枚举字段**中英混用是系统性特征**（`risk_flag` 英 / `premium_flag` 中 /
+`over_alloc_status` 中 / `defense` 中 / `sector` 英）⇒ 归一的**归一化键设计**必须同时覆盖
+「大小写」与「语言」，⛔ 不得只测一条样本路径。
+
+### C-18 ★ 前端缺陷（已修）：重写 `adaptEtfDetail` 时**丢失 M2 的键**（回归）
+
+| 项 | 内容 |
+|---|---|
+| **ID** | `FE-DEF-003` / `FE-DEF-004`（风险台账） |
+| **现象** | ① `vm.position.band.std`、`vm.decision.explainChain` 变成 `undefined` ⇒ 既有测试抛 `TypeError`；② `fundamentalsSummary` 不可用分支缺 `fScoreText` ⇒ SSR 渲染抛 `TypeError` |
+| **根因** | ① 用「**新建平行结构**」替代「在 M2 结构上**追加**」；② 缺失分支未返回**同形状骨架** |
+| **检出方式** | ★ **既有回归套件**（`adapters-pages` / `edge-malformed`）+ **SSR 渲染测试** |
+| **修复** | ① 改为 `...d` / `...p` **平铺 M2 原字段**，M4 展示字段一律用**新名**（`scoresView` / `factorsView` / `configBand`）；② 补全骨架 |
+
+**教训**：`[SRC]` 重写一个已有 adapter 时，**必须先跑既有套件确认基线通过**，
+且**只能用「追加 + 新名」**，⛔ 不得复用旧名承载新语义。
+
 

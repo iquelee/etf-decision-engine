@@ -17,12 +17,22 @@ import { FRESHNESS } from './enums.js';
 export const SLA_HOURS = Object.freeze({
   decision: 72,
   snapshot: 72,
+  /** ★ K 线**独立域**（owner 裁定 M4-D2）：⛔ 不得与 decision/snapshot 合并判定 */
+  kline: 72,
   runtimeStatus: 30,
   intel: 24,
   fundamentals: 24 * 30,
   adminHealth: 72,
   gen2Shadow: 24 * 7
 });
+
+/**
+ * 严重滞后阈值（自然日）。
+ * ★ 用途：区分「刚过期几天」（提示即可）与「滞后以年计」（必须置顶 banner）。
+ *   实测案例：线上 K 线末端 `2024-08-27` vs 决策日 `2026-09-29` ⇒ 滞后 ≈ 764 天。
+ *   ⛔ 该阈值只决定**呈现强度**，不改变 STALE 判定本身，也不得据此隐藏历史数据。
+ */
+export const SEVERE_STALE_DAYS = 30;
 
 const HOUR_MS = 3600 * 1000;
 
@@ -60,4 +70,19 @@ export function describe(result) {
     return days >= 1 ? '数据已过期 ' + days + ' 天' : '数据已过期 ' + Math.round(result.ageHours) + ' 小时';
   }
   return '数据新鲜';
+}
+
+/**
+ * 是否「严重滞后」（滞后以月/年计）。
+ * ★ 触发置顶 banner；⛔ 不改变 `level`（仍为 STALE），⛔ 不构成隐藏历史数据的理由。
+ */
+export function isSeverelyStale(result) {
+  if (!result || result.level !== FRESHNESS.STALE) return false;
+  return result.ageHours >= SEVERE_STALE_DAYS * 24;
+}
+
+/** 滞后天数（整数；用于文案，⛔ 四舍五入到「天」即可，不需要小时精度） */
+export function staleDays(result) {
+  if (!result || result.ageHours === null || result.ageHours === undefined) return null;
+  return Math.floor(result.ageHours / 24);
 }

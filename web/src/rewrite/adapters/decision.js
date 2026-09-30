@@ -13,8 +13,9 @@
  *   `stage_factor` / `market_factor` = **系数 0~1**（⛔ 不是百分比）。
  */
 import { readField, readBlock, provided, missing, unavailable, pickCanonicalThenLegacy, provenance, hasValue } from '../domain/provenance.js';
-import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
-import { normalizeAction, overAllocLabel, riskLabel, stateLabel } from '../domain/labels.js';
+import { FIELD_STATE, MISSING_REASON, AUTHORITY, CHAIN_MODE } from '../domain/enums.js';
+import { normalizeAction, overAllocLabel, riskLabel, stateLabel, CHAIN_MODE_NOTE } from '../domain/labels.js';
+import { qualitativeStep } from '../domain/chain.js';
 import { ELIGIBILITY_ITEMS, opportunityLevel } from '../domain/thresholds.js';
 
 const SRC = 'api:/api/etf/:code#decision';
@@ -95,8 +96,12 @@ export function adaptDecision(decision) {
       level: opportunityLevel(hasValue(gradeF) ? gradeF.value : null, hasValue(scoreF) ? scoreF.value : null)
     }),
 
-    /* ---- 决策链 ---- */
+    /* ---- 决策链 ----
+     * `explainChain` = 原始三元组（保留契约完整性；⛔ 页面不得直接渲染其数字）
+     * `chain`        = ★ M4-D3 定性版（页面**唯一**可消费的形态，定量一律不出）
+     */
     explainChain: adaptChain(decision),
+    chain: adaptChainQualitative(decision),
 
     /* ---- 系数（0~1，⛔ 非百分比）---- */
     factors: Object.freeze({
@@ -171,6 +176,42 @@ function adaptChain(decision) {
       result: readField(x, 'result', prov0)
     }));
   return provided(steps, prov0);
+}
+
+/**
+ * ★ M4-D3：决策链的**定性版**（页面唯一可消费形态）。
+ *
+ * ⛔ 明文禁止（owner 裁定原文）：把未经统一口径的数字链重新包装成"解释"。
+ *     特别是不得出现「目标 21% / 仓位缺口 -7.8% / 实际目标 30%」这种并列结构。
+ * ⇒ 本函数对 `condition` 遮蔽全部数字，对含数字的 `result` 整条不展示。
+ *
+ * @param {object} decision 原始 decision 文档
+ */
+function adaptChainQualitative(decision) {
+  const raw = adaptChain(decision);
+  if (raw.state !== FIELD_STATE.PROVIDED) {
+    return Object.freeze({
+      mode: CHAIN_MODE.QUALITATIVE_ONLY,
+      available: false,
+      state: raw.state,
+      missingReason: raw.missingReason || null,
+      steps: Object.freeze([]),
+      total: 0,
+      hiddenCount: 0,
+      note: CHAIN_MODE_NOTE
+    });
+  }
+  const steps = raw.value.map(qualitativeStep);
+  return Object.freeze({
+    mode: CHAIN_MODE.QUALITATIVE_ONLY,
+    available: true,
+    state: FIELD_STATE.PROVIDED,
+    steps: Object.freeze(steps),
+    total: steps.length,
+    /** 含定量而被处理的步数（供 UI 显示"共 N 步，其中 M 步含定量"） */
+    hiddenCount: steps.filter((s) => s.quantHidden).length,
+    note: CHAIN_MODE_NOTE
+  });
 }
 
 /* ------------------------------------------------------------------ */

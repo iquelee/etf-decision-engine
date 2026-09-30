@@ -441,16 +441,27 @@ EtfDetailVm = {
 
 ---
 
-## §G 待 owner 裁定 / 新登记（M4-P0 新增，⛔ 本轮不处理）
+## §G owner 裁定结果（2026-09-30，已回填；M4-P1 按此实施）
 
-| # | 事项 | 说明 |
-|---|---|---|
-| M4-D1 | **Gen-1 在 ETF Detail 的通道策略** | canonical 未部署期间：(A) 用 `decision.gen1_*`+`ml_shadow` 平铺字段**显式标「legacy 通道」**渲染（信息量大、但属非契约源）；(B) 只显示「数据未提供」等契约部署（与 M3 Dashboard 同口径，最保守）。**我倾向 A + 显著标注**，但需你拍板 |
-| M4-D2 | **K 线陈旧（§0-2）如何呈现** | (A) 照实画出并大字标「行情数据截至 2024-08-27」；(B) 只显示时点提示、不出图；(C) 在置顶 banner 提示「K 线数据源异常」。⛔ 均不改 backend |
-| M4-D3 | **`explain_chain` 矛盾（F.7.2）** | (A) 只展示 condition 定性文案、隐藏数字；(B) 全展示但加「口径待核验」标注；(C) 隐藏整条链。属**数据一致性问题**，需你裁定后再决定 UI |
-| M4-D4 | `_meta.json` 生成的 fixture 是否算「交付物」 | 我已按 M2 惯例把 generator 放在工作区根（不入库）、fixture 入库。若你要求 generator 也入库以便复现，我下轮搬进 `web/tests/` |
+| # | 事项 | ★ 裁定 | M4-P1 落地位置 |
+|---|---|---|---|
+| **M4-D1** | **Gen-1 在 ETF Detail 的通道策略** | **A，但必须降级为 Legacy Advisory**：允许展示 `decision.gen1_*` + `ml_shadow`，统一进入 `Gen-1 · TIMING / ADVISORY` + **`Legacy Channel`**，并明示「当前页面使用的是现有 legacy 通道数据；它不是 V3.6.5 canonical "system_runtime.gen1" 契约」。视觉层级 **Safety Core > Gen-1 Legacy Advisory**；字段无可靠来源 ⇒ 「数据未提供」，⛔ 不得用其它字段偷偷补齐；⛔ **硬禁止 `ml_shadow` 冒充 canonical gen1**。 | `adapters/gen1Detail.js`（三通道）+ `components/workbench/Gen1AdvisorySection.vue` + `domain/labels.js#GEN1_CHANNEL_*` |
+| **M4-D2** | **K 线陈旧如何呈现** | **C（置顶 Banner + 图表保留）**：banner 文案日期**必须来自实际数据**；区块内显示「数据截至 + STALE / 数据滞后」；⛔ 不修改数据、⛔ 不猜最新价、⛔ 不删历史数据伪装正常、⛔ 不把 stale 当 empty；★ **不得把 K 线 stale 扩展成 ETF decision stale —— 两者独立**。 | `adapters/etfDetail.js#adaptKlineView` + `components/workbench/StaleBanner.vue` + `domain/freshness.js`（`kline` 独立域 + 严重滞后阈值） |
+| **M4-D3** | **`explain_chain` 矛盾** | **A（只使用定性 condition 文案）**：保留 condition / rule / qualitative；**隐藏或不消费**与正式 decision 冲突的数字（target / position / gap 等）；⛔ 不得出现「为什么？目标 X% / 缺口 Y% / 实际目标 Z%」这种并列结构；正式数字只从 canonical / authoritative source 展示；后端统一 `explain_chain` 来源后再恢复定量。 | `domain/chain.js`（`maskQuant` / `qualitativeStep`）+ `adapters/decision.js#adaptChainQualitative` |
+| **M4-D4** | **fixture 生成器是否入库** | **入库**，但只入 `web/tests/fixtures/m4/` 与 **可复现 fixture 的生成器**；⛔ **不入库** `_v365-fe-audit-20260930/live/`（含 `recheck_kline_*.json`）—— 那是**本轮现场审计证据**，不属产品测试 fixture。原则：**fixture = 可重复测试资产；live recheck = 本轮审计证据**，两者分开。 | `web/tests/tools/gen-m4-fixtures.cjs`（✅ 入库，带 `--check` 幂等校验） |
 
-**本轮明确未处理**（按你的指令）：D-8 · `most_worth` · `apiGateway` 部署 · E-006。
+### §G.1 新增登记：`KLINE-DATA-001`（数据正确性 Blocker）
+
+M4-D2 的裁定**同时把 K 线问题正式升级为数据正确性 Blocker**，登记于
+**`docs/V365_FRONTEND_RISK_LEDGER.md#kline-data-001`**（⛔ 不在本文件重复登记，避免双源）。
+
+要点（详见台账）：现象 = 线上 K 线末端 `2024-08-27` vs 决策日 `2026-09-29`；
+已证实 = `getKline` 用 `trade_date **asc** + limit 320` ⇒ 取到**最旧** 320 根；
+**未知** = 集合内 2024-08 之后是否真有数据（需 DB 只读权限）；
+**可能根因 A（ordering bug）/ B（upstream sync stopped）—— 本轮 ⛔ 不选边**；
+前端只负责 detect → classify stale → display provenance；**不阻塞 M4-P1**。
+
+**本轮明确未处理**（按 owner 指令）：D-8 · `most_worth` · `apiGateway` 部署 · E-006 · 后端 K 线修复。
 
 ---
 
