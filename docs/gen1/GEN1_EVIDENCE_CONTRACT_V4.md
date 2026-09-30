@@ -280,6 +280,35 @@ CLUSTER_GAP_DAYS = 10
 对照行不贡献、无 Candidate 的簇不贡献。
 ⇒ 在真实 Candidate 出现之前，`independent_events` **恒为 0**，⛔ 不得据此推断「接近门槛」。
 
+### 3.5 ★ V3.6.5 宿主内部量**排除声明**（v4.0 新增，冻结）
+
+生产宿主 V3.6.5 引入两个**宿主内部对齐量**。⛔ **二者均不进入 Evidence eligibility**：
+
+| 宿主内部量 | 来源 | 是否落入 Evidence 消费的集合 | 定位 |
+|---|---|---|---|
+| `expected_trade_date` | **日历权威源**（`cn-trading-calendar v1`；⛔ 不得用 `max(calc_date)` 代替） | ⛔ **否** —— 只进 `run_manifest` | **HOST-LOCAL DIAGNOSTIC** |
+| `observed_latest_date` | 5 票 prepared 快照的 `calc_date` **观测值** | ⚠️ 部分 —— 仅 `run_manifest` + `runtime_status.v365_*` telemetry | **HOST-LOCAL DIAGNOSTIC** |
+
+**理由**：
+
+1. 二者**不落入** Evidence 消费的四个集合
+   （`decision_result` / `portfolio_snapshot` / `ml_shadow_signal` / `runtime_status` **主字段**）；
+2. Evidence 的 eligibility 判据（**§4.2 五条 + §5.4 九条**）**已完整定义**，与二者**无依赖**；
+3. 把宿主内部对齐量写进本契约，会让契约**耦合到宿主实现细节**，违背 §11 的不可变性意图。
+
+**⇒ 本契约的日期口径仍为「双日期双组」（§3.1），⛔ 不扩展为三日期。**
+
+⛔ **不得**因 `expected_trade_date` / `observed_latest_date` 的存在而：
+
+- 新增 Evidence 字段或 eligibility 判据；
+- 修改 §3.1 的组A / 组B 定义；
+- 把「宿主 run 日期对齐失败」当作 Evidence 的**额外**排除条件
+  —— 该失败已由 §5.2 / §5.4 的 **fail-closed** 覆盖（缺快照 ⇒ 组A 关联失败 ⇒ `BUNDLE_INVALID` ⇒ `NON_SCORING`）。
+
+> ⚠️ **复核条件**：本条基于 as-of 2026-09-30 的**线上包实读 + 线上数据实读**（V3.6.5 首次自然运行**尚未发生**）。
+> 若 V3.6.5 首次自然运行后，`expected_trade_date` / `observed_latest_date` **确实落入了** Evidence 消费的集合，
+> 本条须**重审**（按 §11 元规则走新版本）。
+
 
 ---
 
@@ -633,8 +662,10 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 动机：v2.0 §3 字段 16/17 未规定计算方法 ⇒ §7.1 的「≥30」门槛**不可机械判定**。 | **是** —— 显式作废 v2.0 全部样本（实测 = **0 行**） |
 | **v4.0**（DRAFT） | 2026-09-23 | ① §3 字段 3 与 §3.1 的 `regime` **改绑** `portfolio_snapshot.decision_market_regime`（修 **`CD-02`**）；
 ② 定来源层级：`market_regime` 降为 legacy 诊断列、`effective_market_regime` 为 downstream 诊断（⛔ 均不得作来源）；
-③ **明确 ⛔ 不要求 `effective_market_regime` 与主来源相等**（避免误杀）。
-动机：v3.0 的 `regime` 绑到 legacy 字段，非决策实际所见。 | **是**（拟） —— 作废 v3.0 全部样本（实测 = **0 行**） |
+③ **明确 ⛔ 不要求 `effective_market_regime` 与主来源相等**（避免误杀）；
+④ **新增 §3.5**：声明 V3.6.5 宿主内部量（`expected_trade_date` / `observed_latest_date`）为 HOST-LOCAL DIAGNOSTIC，
+⛔ 不进入 Evidence eligibility，日期口径**不扩展为三日期**。
+动机：v3.0 的 `regime` 绑到 legacy 字段，非决策实际所见；V3.6.5 引入第三日期语义须显式划界。 | **是**（拟） —— 作废 v3.0 全部样本（实测 = **0 行**） |
 
 ---
 
@@ -656,7 +687,8 @@ PRE-V2 DIAGNOSTIC / NON-SCORING / NON-GATE
 
 ## 13. 边界声明与不授权声明
 
-**生成轮（2026-09-23，v4.0）仅做**：从 v3.0 派生 → 改绑 `regime` → 登记 `CD-02` → 清理 v2/v3 stale wording。
+**生成轮（2026-09-23 / 修订 2026-09-30，v4.0）仅做**：从 v3.0 派生 → 改绑 `regime`（含 §9.1）→ 登记 `CD-02` →
+清理 v2/v3 stale wording → 新增 §3.5 宿主内部量排除声明。
 ⛔ 未改任何**其他**字段/阈值/纳入规则；⛔ 未启动样本累计；⛔ 未改 Seal / Authority；⛔ 未冻结。
 
 **前序轮（2026-09-21，v2.0/v3.0）未做**：
