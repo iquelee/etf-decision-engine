@@ -22,8 +22,10 @@ const REAL = '2026-09-30T20:00:00.000Z';
 const LIVE = () => FIXTURES.m4('etf-normal.json');
 const K60 = () => FIXTURES.m4('kline-live60.json');
 
-/** 完整 VM（带 K 线） */
-const VM = (data, opts = {}) => adaptEtfDetail(data, null, { klineRaw: K60(), retrievedAt: REAL, ...opts });
+/** 完整 VM（带 K 线 + 历史） */
+const VM = (data, opts = {}) => adaptEtfDetail(data, null, {
+  klineRaw: K60(), decisionsRaw: FIXTURES.m4('decisions-normal.json'), retrievedAt: REAL, ...opts
+});
 /** 无 K 线的 VM */
 const VM_NO_K = (data, opts = {}) => adaptEtfDetail(data, null, { klineRaw: [], retrievedAt: REAL, ...opts });
 
@@ -337,11 +339,133 @@ try {
     const html = await renderVm(VM(LIVE()));
     assert.ok(html.includes('摘要'));
     assert.ok(html.includes('只给摘要'), '必须声明「本页只给摘要」的边界');
-    // ⛔ 不得出现 M6 才有的**数据内容**（声明句里提到这些词是允许的）
-    for (const raw of ['fundamental_config', 'fundamental_series', 'layer_breakdown']) {
+    /**
+     * ⚠️ 第二阶段起 `layer_breakdown` **已在情报区展示**（属 `fundamental.detail` 内嵌，
+     *    M4-P0 曾误记为「属 M6」）⇒ 本条只拦真正不消费的两个**块**。
+     */
+    for (const raw of ['fundamental_config', 'fundamental_series']) {
       assert.ok(!html.includes(raw), '⛔ 不得搬 ' + raw);
     }
-    assert.ok(!/权重\s*[:：]/.test(html), '⛔ 不得出现分层权重明细');
+    assert.ok(!/权重\s*[:：]/.test(html), '⛔ 不得出现分层权重明细以外的权重排版');
+  });
+  /* ==================== H 第二阶段：机会 / 防守 / 情报 / 历史 ==================== */
+
+  await ok('H 机会雷达：分数（点）/ 系数（⛔ 非 %）/ 加仓模式 / 资格 10 项渲染', async () => {
+    const html = await renderVm(VM(LIVE()));
+    assert.ok(html.includes('机会 / 辅助信号'), '区块标题');
+    assert.ok(html.includes('67'), '机会分必须渲染');
+    assert.ok(html.includes('0.70'), '机会系数必须渲染');
+    assert.ok(!html.includes('70%'), '⛔ 机会系数 0.7 不得渲染成 70%');
+    assert.ok(html.includes('加仓资格判据'));
+    const items = (html.match(/elig-item/g) || []).length;
+    assert.equal(items, 10, '必须渲染 10 项判据，实际 ' + items);
+    assert.ok(html.includes('⛔ 本页不会因为'), '必须显式声明不推导加仓');
+  });
+
+  await ok('★ H 防守雷达：等级 / 分数 / 系数**三重量纲**各自渲染且带说明', async () => {
+    const html = await renderVm(VM(LIVE()));
+    assert.ok(html.includes('防守雷达'));
+    assert.ok(html.includes('轻度防守'), '等级中文（由 domain 映射，⛔ 前端不分档）');
+    assert.ok(html.includes('level = 1'), '必须展示后端原始档位数字');
+    assert.ok(html.includes('趋势破坏'), '后端原因');
+    assert.ok(html.includes('分数 0~100'), '分数量纲说明');
+    assert.ok(html.includes('乘性系数 0.50 ~ 1.00'), '系数量纲说明');
+    assert.ok(html.includes('>37<'), '分数值');
+    assert.ok(html.includes('0.95'), '系数值');
+    assert.ok(!html.includes('95%'), '⛔ defense_penalty=0.95 不得渲染成 95%');
+  });
+
+  await ok('★ H 防守雷达：`[]` ⇒ 「当前没有返回风险事件数据」（⛔ 不得说「没有风险」）', async () => {
+    const html = await renderVm(VM(LIVE()));
+    assert.ok(html.includes('当前没有返回风险事件数据。'));
+    assert.ok(html.includes('不等于'), '必须说明 ≠ 没有风险');
+    assert.ok(!/没有风险[。，]/.test(html), '⛔ 不得出现「没有风险」');
+  });
+
+  await ok('H 防守雷达：level=0 且无 score/factor ⇒ 显式缺失（⛔ 不补 0 / 1.00）', async () => {
+    const html = await renderVm(adaptEtfDetail(FIXTURES.m4('etf-defense-inactive.json'), null, { klineRaw: [], retrievedAt: REAL }));
+    assert.ok(html.includes('无防守信号'));
+    assert.ok(html.includes('数据未提供') || html.includes('字段缺失'));
+    /**
+     * ⚠️ 用 `>1.00<`（元素内容）而非裸 `1.00` —— 量纲说明文案本身就含「0.50 ~ 1.00」。
+     */
+    assert.ok(!html.includes('>1.00<'), '⛔ 不得把缺失的系数补成 1.00');
+    /** ⚠️ 切片必须止于**紧邻的下一个区块**（`gen1-advisory`）；否则会把 Gen-1 区的真值 `0` 圈进来 */
+    const seg = sectionOf(html, 'rank-defense', ['gen1-advisory', 'mkline']);
+    assert.ok(seg.length > 0 && seg.length < html.length, '切片必须真的截断');
+    assert.ok(!/>0</.test(seg), '⛔ 缺失分数不得渲染成 0');
+  });
+
+  await ok('H 情报：分层证据渲染；权重不含 %', async () => {
+    const html = await renderVm(VM(LIVE()));
+    assert.ok(html.includes('情报 / 基本面'));
+    assert.ok(html.includes('硬数据') && html.includes('景气 / 财报'));
+    assert.ok(html.includes('后端原始信号值'), '必须标注量纲未解释');
+    assert.ok(html.includes('不消费'), '必须登记未消费载荷块');
+    assert.ok(!html.includes('fundamental_config'), '⛔ 不得出现后端块名');
+  });
+
+  await ok('★ H 历史：真实 6 条 + 变化点（桌面表 + 移动卡同数据）', async () => {
+    const html = await renderVm(VM(LIVE()));
+    assert.ok(html.includes('历史决策变化'));
+    assert.ok(html.includes('2026-09-29') && html.includes('2026-09-22'));
+    assert.ok(html.includes('变化点（相邻记录对比）'));
+    assert.ok(html.includes('hist-tbl') && html.includes('hist-cards'), '双形态必须同时存在');
+    const cards = (html.match(/hist-card-nums/g) || []).length;
+    assert.equal(cards, 6, '移动卡必须 6 张，实际 ' + cards);
+    assert.ok(html.includes('不由当前字段拼装'), '必须声明不伪造');
+  });
+
+  await ok('★★ H 历史四态：文案**两两不同**且都**不伪造**条目', async () => {
+    const cases = [
+      ['unavailable', undefined, '数据未提供'],
+      ['error', null, '读取失败'],
+      ['empty', [], '为空'],
+      ['malformed', FIXTURES.m4('decisions-error.json'), '缺失']
+    ];
+    const texts = [];
+    for (const [name, raw, expectWord] of cases) {
+      const html = await renderVm(adaptEtfDetail(LIVE(), null, { klineRaw: [], decisionsRaw: raw, retrievedAt: REAL }));
+      assert.ok(html.includes(expectWord), name + ' 应包含「' + expectWord + '」');
+      assert.ok(!html.includes('hist-card-nums'), name + ' ⛔ 不得渲染任何历史条目（伪造）');
+      assert.ok(html.includes('rank-history'), name + ' 区块本身必须存在（⛔ 不是隐藏）');
+      texts.push((html.match(/rank-history[\s\S]{0,400}/) || [''])[0]);
+    }
+    assert.equal(new Set(texts).size, 4, '四态渲染片段必须互不相同');
+  });
+
+  await ok('★ H 空数据总检：⛔ 不得出现 0 / 0% / NaN / undefined / [object Object]', async () => {
+    const cases = [
+      FIXTURES.m4('etf-opportunity-missing.json'),
+      FIXTURES.m4('etf-defense-missing.json'),
+      FIXTURES.m4('etf-defense-inactive.json'),
+      FIXTURES.m4('etf-fundamental-minimal.json'),
+      FIXTURES.m4('etf-decision-missing.json')
+    ];
+    for (const data of cases) {
+      for (const raw of [undefined, null, []]) {
+        const html = await renderVm(adaptEtfDetail(data, null, { klineRaw: null, decisionsRaw: raw, retrievedAt: REAL }));
+        for (const bad of ['NaN', 'undefined', '[object Object]']) {
+          assert.ok(!html.includes(bad), '⛔ 出现 ' + bad + '（' + (data.basic && data.basic.code) + '）');
+        }
+      }
+    }
+  });
+
+  await ok('★ H 视觉层级：Formal Decision → Defense → History（DOM 顺序 + 分档类）', async () => {
+    const html = await renderVm(VM(LIVE()));
+    const seq = ['primary-decision', 'rank-defense', 'rank-history'];
+    let prev = -1;
+    for (const cls of seq) {
+      const at = html.indexOf(cls);
+      assert.ok(at > -1, '缺分档类: ' + cls);
+      assert.ok(at > prev, cls + ' 顺序错误');
+      prev = at;
+    }
+    // 分档类必须真的挂在区块上（⛔ 不是只存在于 CSS）
+    assert.ok(/class="[^"]*rank-defense/.test(html));
+    assert.ok(/class="[^"]*rank-advisory/.test(html));
+    assert.ok(/class="[^"]*rank-history/.test(html));
   });
 } finally {
   await server.close();

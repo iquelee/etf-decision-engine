@@ -247,6 +247,109 @@ meta['kline-live60.json'] = {
         + '⛔ 不得与 decision freshness 合并，⛔ 不得因 stale 而隐藏历史数据'
 };
 
+/* ═══════════ 第二阶段：机会 / 防守 / 情报 / 历史 ═══════════ */
+
+/** 已入库的真实历史决策（6 条，M2 从线上只读抓取后原样保存） */
+const DECISIONS6 = read('live-legacy/decisions-513310.json');
+
+/* ============ 17. 机会 / 加仓：整族缺失 ============ */
+const noOpp = clone(LIVE);
+for (const k of ['opportunity_score', 'opportunity_grade', 'opportunity_factor',
+  'add_mode', 'add_eligibility', 'cooldown_days', 'next_add_condition']) {
+  delete noOpp.decision[k];
+}
+emit('etf-opportunity-missing.json', noOpp);
+meta['etf-opportunity-missing.json'] = {
+  scenario: 'opportunity-missing',
+  origin: 'etf-normal.json 删除 decision 的机会/加仓族',
+  expect: '机会雷达全部「数据未提供」，⛔ 不得显示 0 分 / ⛔ 不得据此推导「建议加仓」'
+};
+
+/* ============ 18. 防守：未激活（level=0，且**无** score/factor 键） ============ */
+const defInactive = clone(LIVE);
+defInactive.decision.defense_state = { level: 0, reason: '无防守信号' };
+delete defInactive.decision.defense_score;
+delete defInactive.decision.defense_penalty;
+emit('etf-defense-inactive.json', defInactive);
+meta['etf-defense-inactive.json'] = {
+  scenario: 'defense-inactive',
+  origin: '线上实测形态（2026-08-25 及更早的 decision 记录）',
+  mutated: ['defense_state={level:0,reason:"无防守信号"}', '删除 defense_score', '删除 defense_penalty'],
+  expect: '防守「未激活」；score/factor 必须显式缺失，⛔ 不得补 0、⛔ 不得显示 1.00'
+};
+
+/* ============ 19. 防守：整族缺失 ============ */
+const noDef = clone(LIVE);
+delete noDef.decision.defense_state;
+delete noDef.decision.defense_score;
+delete noDef.decision.defense_penalty;
+emit('etf-defense-missing.json', noDef);
+meta['etf-defense-missing.json'] = {
+  scenario: 'defense-missing',
+  origin: 'etf-normal.json 删除 decision 的防守族',
+  expect: '防守雷达整区「数据未提供」；⛔ 前端**不得**自行按 W 态重算防守等级'
+};
+
+/* ============ 20. 风险事件：有事件 ============ */
+const evtPresent = clone(LIVE);
+evtPresent.risk_events = [{
+  _id: 'evt-1', code: '513310', event_type: 'MANUAL', risk_flag: 'YELLOW',
+  risk_override: false, status: 'ACTIVE', reason: '手工登记：测试用风险事件',
+  note: null, trigger_time: '2026-09-30T09:00:00.000Z'
+}];
+emit('etf-risk-events-present.json', evtPresent);
+meta['etf-risk-events-present.json'] = {
+  scenario: 'risk-events-present',
+  origin: 'etf-normal.json + 1 条 ACTIVE 事件',
+  expect: '渲染事件原因与时间'
+};
+
+/* ============ 21. 情报：fundamental 存在但无 detail ============ */
+const fMinimal = clone(LIVE);
+fMinimal.fundamental = { code: '513310', f_state: 'F2', f_score: 20, updated_at: '2026-09-30T00:00:57.827Z' };
+emit('etf-fundamental-minimal.json', fMinimal);
+meta['etf-fundamental-minimal.json'] = {
+  scenario: 'fundamental-minimal',
+  origin: 'etf-normal.json 删除 fundamental.detail',
+  expect: '分层证据显式「数据未提供」；f_state / f_score 仍可读'
+};
+
+/* ============ 22/23/24. 历史决策 ============ */
+emit('decisions-normal.json', DECISIONS6);
+meta['decisions-normal.json'] = {
+  scenario: 'history-normal',
+  origin: 'live-legacy/decisions-513310.json（6 条真实历史，逐字节复制）',
+  expect: '渲染 6 条真实历史 + 变化标记（target: 0.5→0.5→0.5→0→1.5→7.5）'
+};
+
+/** ⚠️ 定点突变，**仅用于测试「变化标记」逻辑**（⛔ 不得当作真实历史） */
+const dChanges = clone(DECISIONS6);
+dChanges[5].final_action = 'HOLD'; dChanges[5].action_label = '持有';
+dChanges[4].final_action = 'HOLD'; dChanges[4].action_label = '持有';
+dChanges[3].final_action = 'TACTICAL_REDUCE'; dChanges[3].action_label = '战术减仓';
+dChanges[2].risk_flag = 'YELLOW';
+emit('decisions-changes.json', dChanges);
+meta['decisions-changes.json'] = {
+  scenario: 'history-changes',
+  origin: 'decisions-normal.json 的**定点突变**（⛔ 非真实历史，仅测变化标记）',
+  mutated: ['[5]/[4] final_action=HOLD', '[3] final_action=TACTICAL_REDUCE', '[2] risk_flag=YELLOW'],
+  expect: '相邻对比标出 action 变化与 risk 变化'
+};
+
+emit('decisions-empty.json', []);
+meta['decisions-empty.json'] = {
+  scenario: 'history-empty',
+  origin: '空数组',
+  expect: '★ 合法「无历史记录」—— 与「接口未提供」必须文案不同，⛔ 不得用当前字段拼一条假历史'
+};
+
+emit('decisions-error.json', { not: 'an array' });
+meta['decisions-error.json'] = {
+  scenario: 'history-error',
+  origin: '对象而非数组',
+  expect: '显式缺失，不抛异常'
+};
+
 /* ============ _meta.json ============ */
 const metaBody = JSON.stringify({
   generated_by: 'web/tests/tools/gen-m4-fixtures.cjs（✅ 入库，可复现；--check 可校验）',

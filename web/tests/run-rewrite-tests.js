@@ -26,6 +26,8 @@ const SUITES = [
   /* --- ETF 工作台（M4-P1） --- */
   './rewrite/etf-detail-adapter.test.js',
   './rewrite/etf-detail-render.test.js',
+  './rewrite/etf-radar.test.js',
+  './rewrite/etf-history-intel.test.js',
   /* --- transport（M2 清理） --- */
   './rewrite/api-client.test.js',
   /* --- 工程守卫（M0/M1） --- */

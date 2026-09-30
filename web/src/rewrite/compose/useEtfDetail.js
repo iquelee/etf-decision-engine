@@ -31,10 +31,11 @@ const PROVIDED_STATES = ['PROVIDED', 'STALE'];
  */
 export async function loadEtfDetail(code, loader = api, meta = {}) {
   const retrievedAt = meta.retrievedAt || new Date().toISOString();
-  const [detailRes, constRes, klineRes] = await Promise.allSettled([
+  const [detailRes, constRes, klineRes, decRes] = await Promise.allSettled([
     loader.etfDetail(code),
     loader.constants(),
-    loader.kline(code, 'daily')
+    loader.kline(code, 'daily'),
+    loader.decisions(code)
   ]);
 
   // 主数据失败 ⇒ 整页失败（由页面转 error 态）
@@ -47,9 +48,18 @@ export async function loadEtfDetail(code, loader = api, meta = {}) {
   const klineFailed = klineRes.status === 'rejected';
   const klineRaw = klineFailed ? null : klineRes.value;
 
+  /**
+   * ★ 历史决策：失败 ⛔ 不阻断整页，但必须让 adapter 拿到 `null`（= 请求失败）
+   *   而不是 `undefined`（= 未请求）—— 两者在 UI 上的文案**不同**（用户 M4-P1b §七）。
+   */
+  const decFailed = decRes.status === 'rejected';
+  const decisionsRaw = decFailed ? null : decRes.value;
+
   return adaptEtfDetail(detailRes.value, rs || null, {
     klineRaw,
     klineError: klineFailed ? ((klineRes.reason && klineRes.reason.message) || 'kline request failed') : null,
+    decisionsRaw,
+    decisionsError: decFailed ? ((decRes.reason && decRes.reason.message) || 'decisions request failed') : null,
     retrievedAt
   });
 }

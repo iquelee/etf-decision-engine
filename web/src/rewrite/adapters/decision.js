@@ -30,10 +30,67 @@ function prov(field) {
  */
 export function adaptDecision(decision) {
   if (!decision || typeof decision !== 'object') {
+    /**
+     * ★★ 返回**与正常分支同形状的完整骨架**（全 unavailable）。
+     *   教训（M4-P1b 实测）：早前这里只返回 3 个键（available/reason/action），
+     *   下游（如 `adaptDefense`）读 `decisionVm.riskFlag` 直接 `TypeError`
+     *   ⇒ 页面整页崩。⛔ **不要靠下游一个个加防御**，骨架必须在这里补齐。
+     */
+    const u = (f) => unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov(f));
+    const empty = {};
     return Object.freeze({
       available: false,
       reason: MISSING_REASON.CONTRACT_NOT_PROVIDED,
-      action: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, provenance({ source: SRC, authority: AUTHORITY.SAFETY_CORE }))
+
+      code: u('code'),
+      decisionDate: u('decision_date'),
+
+      action: u('final_action'),
+      actionLabel: u('action_label'),
+
+      riskFlag: u('risk_flag'),
+      riskOverride: u('risk_override'),
+      premiumFlag: u('premium_flag'),
+      states: Object.freeze({
+        w: u('w_state'), d: u('d_state'), h: u('h_state'),
+        v: u('v_state'), f: u('f_state'), c: u('c_state')
+      }),
+
+      finalTarget: u('final_target'),
+      targetBand: Object.freeze({ min: u('target_min'), std: u('target_std'), max: u('target_max') }),
+      maxPosition: u('max_position'),
+      suggestedPosition: u('suggested_position'),
+      positionGap: u('position_gap'),
+      corePosition: u('core_position'),
+      tradePosition: u('trade_position'),
+      overAllocStatus: u('over_alloc_status'),
+      targetDelta: u('target_delta'),
+
+      addEligibility: adaptEligibility(empty),
+      cooldownDays: u('cooldown_days'),
+      nextAddCondition: u('next_add_condition'),
+
+      scores: adaptScores(empty),
+      opportunity: Object.freeze({
+        grade: u('opportunity_grade'),
+        score: u('opportunity_score'),
+        level: opportunityLevel(null, null)
+      }),
+      opportunityFactor: u('opportunity_factor'),
+      addMode: u('add_mode'),
+      aggressiveDivergence: u('aggressive_divergence'),
+
+      explainChain: missing(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov('explain_chain')),
+      chain: adaptChainQualitative(empty),
+
+      defense: adaptDefenseRaw(null),
+
+      factors: Object.freeze({ stage: u('stage_factor'), market: u('market_factor') }),
+      audit: Object.freeze({
+        engineVersion: u('engine_version'), configVersion: u('config_version'),
+        decisionTimestamp: u('decision_timestamp'), enginePath: u('engine_path'),
+        effectiveMarketRegime: u('effective_market_regime')
+      })
     });
   }
 
@@ -95,6 +152,12 @@ export function adaptDecision(decision) {
       score: scoreF,
       level: opportunityLevel(hasValue(gradeF) ? gradeF.value : null, hasValue(scoreF) ? scoreF.value : null)
     }),
+    /** ★ 机会系数（schema desc: '机会系数'）—— **系数**，⛔ 不是百分比 */
+    opportunityFactor: readField(decision, 'opportunity_factor', prov('opportunity_factor')),
+    /** ★ 加仓模式（schema desc: '横盘加仓/突破加仓/无'） */
+    addMode: readField(decision, 'add_mode', prov('add_mode')),
+    /** 主动分歧标记（布尔） */
+    aggressiveDivergence: readField(decision, 'aggressive_divergence', prov('aggressive_divergence')),
 
     /* ---- 决策链 ----
      * `explainChain` = 原始三元组（保留契约完整性；⛔ 页面不得直接渲染其数字）
@@ -102,6 +165,9 @@ export function adaptDecision(decision) {
      */
     explainChain: adaptChain(decision),
     chain: adaptChainQualitative(decision),
+
+    /* ---- 防守（★ 全部为后端已算结果；⛔ 前端不得重算 defense_level / defense_penalty）---- */
+    defense: adaptDefenseRaw(decision),
 
     /* ---- 系数（0~1，⛔ 非百分比）---- */
     factors: Object.freeze({
@@ -120,8 +186,52 @@ export function adaptDecision(decision) {
   });
 }
 
-/** 加仓资格：按 canonical 10 项逐一取；`overall` 单独取 */
-function adaptEligibility(decision) {
+/**
+ * 防守族（★ M4-P1b）。
+ *
+ * ⚠️ 实测形状（`/api/etf/:code#decision`，2026-09-29）：
+ *   `defense_state = { level: 1, reason: '趋势破坏', score: 37, factor: 0.95 }`
+ *   `defense_score  = 37`     ← **顶层冗余**（与 state.score 同源，均来自 defenseResult）
+ *   `defense_penalty = 0.95`  ← **顶层冗余**（与 state.factor 同源）
+ *
+ * ★ 量纲（源码可证，⛔ 不得猜）：
+ *   · `score`  = **分数 0~100**（`computeDefenseScore` 加权求和 + `Math.min(100, …)`）
+ *   · `factor` = **乘性系数**（`DEFENSE_PENALTY_BANDS`：0-20→1.00 / 21-40→0.95 / 41-60→0.85
+ *                / 61-80→0.70 / 81-100→0.50）⇒ 实测 0.95 ⇔ score ∈ [21,40]，与 37 自洽
+ *   · `level`  = **数字 0~4**（`defenseLevelFromScore`），⛔ 不是「高/中/低」中文
+ *
+ * ⚠️ `level === 0` 时线上**没有** `score` / `factor` 键（且顶层两个也缺失）
+ *    ⇒ 必须走 MISSING，⛔ 不得补 0、⛔ 不得显示 1.00。
+ *
+ * ⛔ 本函数只做「读」，不做任何重算（用户 M4-P1b §四：禁止前端 defenseLevel heuristic）。
+ */
+function adaptDefenseRaw(decision) {
+  const P0 = prov('defense_state');
+  const ds = decision && decision.defense_state;
+  const topScore = readField(decision, 'defense_score', prov('defense_score'));
+  const topPenalty = readField(decision, 'defense_penalty', prov('defense_penalty'));
+
+  if (!ds || typeof ds !== 'object') {
+    const u = (f) => unavailable(MISSING_REASON.FIELD_ABSENT, prov(f));
+    return Object.freeze({
+      available: false,
+      level: u('defense_state.level'), reason: u('defense_state.reason'),
+      score: u('defense_state.score'), factor: u('defense_state.factor'),
+      topScore, topPenalty
+    });
+  }
+  return Object.freeze({
+    available: true,
+    level: readField(ds, 'level', P0),
+    reason: readField(ds, 'reason', P0),
+    score: readField(ds, 'score', P0),
+    factor: readField(ds, 'factor', P0),
+    /** 顶层冗余字段（⛔ 只用于交叉核对，不替代 state 内的值） */
+    topScore, topPenalty
+  });
+}
+
+/** 加仓资格：按 canonical 10 项逐一取；`overall` 单独取 */function adaptEligibility(decision) {
   const block = decision.add_eligibility;
   const prov0 = provenance({ source: SRC + '.add_eligibility', authority: AUTHORITY.SAFETY_CORE });
   if (!block || typeof block !== 'object') {

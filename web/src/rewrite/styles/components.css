@@ -539,3 +539,93 @@ details.fold > summary::marker { color: var(--c-text-3); }
   .struct-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wb-meta { font-size: var(--fs-11); }
 }
+
+/* ================================================================
+ * M4-P1 第二阶段 · 视觉权重分档（⛔ 不得退化成"一长串等重卡片"）
+ *   档 1 Formal Decision（.primary-decision 已定义）
+ *   档 2 Risk / Defense      → .rank-defense
+ *   档 3 Position            → 沿用 .pos-grid
+ *   档 4 Advisory            → .rank-advisory（Gen-1 / 机会）
+ *   档 5 Evidence            → .rank-evidence（K线 / 结构 / 情报）
+ *   档 6 History             → .rank-history（最弱）
+ * ================================================================ */
+
+/* 档 2：风险 / 防守 —— 有强调边线 + 次级大数字（弱于 hero 的 fs-28） */
+.rank-defense { border-left: 3px solid var(--risk-yellow); }
+.def-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) 0;
+}
+.def-hero-main, .def-hero-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.def-hero-label { font-size: var(--fs-11); color: var(--c-text-3); }
+.def-hero-value { display: flex; align-items: baseline; gap: var(--sp-2); min-height: 28px; flex-wrap: wrap; }
+/* ★ 次级大数字：fs-20（正式决策是 fs-28）—— 层级靠字号 + 边线双重表达 */
+.def-hero-num { font-size: var(--fs-20); font-weight: var(--fw-bold); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.def-hero-note { font-size: var(--fs-11); color: var(--c-text-3); }
+.def-level { font-size: var(--fs-20); font-weight: var(--fw-bold); }
+.def-level-raw { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--c-text-3); }
+
+/* 档 4：Advisory —— 弱边线（Gen-1、机会） */
+.rank-advisory { border-left: 3px solid var(--c-border-strong); }
+.advisory-note {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-12);
+  color: var(--c-text-2);
+  border-left: 2px solid var(--c-border-strong);
+  padding-left: var(--sp-2);
+}
+
+/* 加仓资格判据网格（10 项） */
+.elig-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: var(--sp-2); }
+.elig-item {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  padding: var(--sp-2) var(--sp-3);
+  display: flex; flex-direction: column; gap: 1px;
+  min-width: 0;
+}
+.elig-label { font-size: var(--fs-11); color: var(--c-text-3); }
+.elig-value { font-size: var(--fs-13); font-weight: var(--fw-medium); }
+
+/* 档 5：Evidence —— 无强调边线 */
+.rank-evidence { border-left: 3px solid transparent; }
+
+/* 档 6：History —— 最弱（略降不透明度，⛔ 不是隐藏） */
+.rank-history { border-left: 3px solid transparent; }
+.rank-history .section-title { font-size: var(--fs-14); }
+
+/* ---------------- 历史决策表 ---------------- */
+.hist-tbl-wrap { overflow-x: auto; }
+.hist-tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.hist-tbl th, .hist-tbl td {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--c-border);
+  white-space: nowrap;
+}
+.hist-tbl th { font-size: var(--fs-11); color: var(--c-text-3); font-weight: var(--fw-medium); }
+.hist-tbl td.num { font-variant-numeric: tabular-nums; }
+.hist-tbl .hist-date { font-family: var(--font-mono); }
+/* 最新一条加重（★ 与"历史"区分：这条是当前） */
+.hist-latest { background: var(--c-surface-2); }
+
+.hist-cards { display: none; }
+.hist-card {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.hist-card-head { display: flex; justify-content: space-between; gap: var(--sp-2); align-items: baseline; }
+.hist-card-nums { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-size: var(--fs-12); color: var(--c-text-2); margin-top: 2px; }
+
+@media (max-width: 768px) {
+  .hist-tbl-wrap { display: none; }
+  .hist-cards { display: block; }
+  .def-hero { grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+  .def-hero-num, .def-level { font-size: var(--fs-16); }
+  .elig-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

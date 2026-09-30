@@ -86,9 +86,26 @@
 | `FE-DEF-002` | `risk_flag="NORMAL"` 的 tone 掉成 `muted`（与「未知」不可区分）；`premium_flag` 显示成英文原文 | `normalizeRisk` 只比原样与全大写，而别名表键是**小写英文 + 中文** ⇒ `NORMAL` 两个都落空 | 既有测试（M4 新增断言） | ✅ 已修（M3 遗留，被中文值掩盖） |
 | `FE-DEF-003` | 重写 `adaptEtfDetail` 时丢失 M2 的键（`position.band` / `decision.explainChain`），`scores`/`factors` 被 display 覆盖 | 用「新建平行结构」替代「在原结构上追加」 | **既有回归套件**（`adapters-pages` / `edge-malformed`） | ✅ 已修（改为 `...d` 平铺 + 新名追加） |
 | `FE-DEF-004` | `fundamentalsSummary` 不可用时缺 `fScoreText` ⇒ SSR 渲染抛 `TypeError` | 缺失分支未返回**同形状骨架** | **SSR 渲染测试** | ✅ 已修 |
+| `FE-DEF-005` | `decision` 缺失时 `adaptDefense` 读 `decisionVm.riskFlag` 抛 `TypeError` ⇒ **整页崩** | `adaptDecision` 的不可用分支只返回 3 个键 | 新增的 `etf-radar` 单测 | ✅ 已修（该分支改为返回**同形状完整骨架**） |
 
 **共同教训**：`[SRC]` **「适配器输出形态」（裸 Field vs display 对象）必须在该模块头部显式声明**，
 并在**渲染层**加断言 —— 仅断言"字段存在"抓不到形态错配。
+★ 追加（`FE-DEF-005`）：**「不可用分支」也必须返回与正常分支同形状的完整骨架**；
+靠下游逐个加防御是打地鼠 —— 骨架缺口必须在**产生它的那一层**补上。
+
+---
+
+## 后端数据侧观察（⛔ 只登记，不改）
+
+> 前端做契约侦察时顺带发现的后端疑点。⛔ **未修改任何后端逻辑**。
+
+| ID | 观察 | 证据 | 性质 |
+|---|---|---|---|
+| `DS-001` | **`defenseLevelFromScore` 区间重叠** | `src/common/utils/defense.js`：`if (score>=35) return 1; if (score>=20) return 1;` ⇒ 20~49 **全为 level 1**，level 2 只可能在 50~64 | `[AS-IS]` 可能是有意的粗分档，也可能是笔误 ⇒ **需 owner 判定**；⛔ 前端不介入、⛔ 不补偿 |
+| `DS-002` | **顶层 `defense_score` / `defense_penalty` 与 `defense_state` 内字段冗余同源** | 实测恒相等（`37` / `0.95`） | 前端已做**交叉核对**（不一致时出警示），⛔ 不静默选边 |
+| `DS-003` | **`level === 0` 时后端不返回 `score` / `factor` 键** | 线上 2026-08-25 及更早记录 | 前端按 `MISSING` 处理（⛔ 不补 0 / 1.00）✅ 已适配 |
+| `DS-004` | **`fundamental.detail.final_signal` / `layer.signal` 量纲未由 schema 证实** | `schema.js` 无该内嵌对象的 desc | 前端只展示**原始值**并显式标注「不解释量纲」；口径确认后再决定是否换算 |
+| `DS-005` | **`getDecisions` 走 `v365-reader-allow:history-deferred`** | `apiGateway/index.js` 注释：`RUN_HISTORY_INDEX=PENDING` | `[AS-IS]`；历史读取属「延后」段，与本轮前端无关 |
 
 ---
 

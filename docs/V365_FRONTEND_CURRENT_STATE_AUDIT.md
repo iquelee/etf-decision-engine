@@ -1053,4 +1053,36 @@ const rows = await db.query(COLLECTIONS.ETF_DAILY, { code },
 **教训**：`[SRC]` 重写一个已有 adapter 时，**必须先跑既有套件确认基线通过**，
 且**只能用「追加 + 新名」**，⛔ 不得复用旧名承载新语义。
 
+---
+
+### C-19 ★★ 前端缺陷（已修）：`adaptDecision` 不可用分支**骨架不全** ⇒ 下游整页崩
+
+| 项 | 内容 |
+|---|---|
+| **ID** | `FE-DEF-005`（风险台账） |
+| **现象** | `decision` 块缺失时，页面在防守雷达处抛 `TypeError: Cannot read properties of undefined (reading 'state')`，**整页白屏** |
+| **根因** | `adaptDecision` 的「不可用分支」只返回 `{available, reason, action}` 三个键，而下游 `adaptDecisionView` / `adaptDefense` 会读 `riskFlag` / `targetBand` / `defense` 等 |
+| **检出方式** | ★ 新增的 `etf-radar` 单测（`decision-missing` 场景） |
+| **修复** | 该分支改为返回**与正常分支同形状的完整骨架**（全 `unavailable`），⛔ 不再靠下游逐个加防御 |
+| **防复发** | `emptyDecisionView`（展示层）与 `adaptDecision`（原始层）**两层骨架齐全**；`decision-missing` 场景在单测 + 渲染测试 + 浏览器核验三处覆盖 |
+
+**教训**：`[SRC]` **「不可用分支」必须与正常分支同形状**。下游看到的对象形状应恒稳定；
+缺一个键就会在距离事发点很远的地方崩，且**只有真正跑到那条分支才暴露**。
+
+### C-20 ★ `defense_state` 家族的实测形状与量纲（★ M4-P0 记录不完整，本轮补齐）
+
+| 项 | 实测 / 源码证据 |
+|---|---|
+| **形状** | `defense_state = { level, reason, score, factor }`（**实测**：`{level:1, reason:'趋势破坏', score:37, factor:0.95}`） |
+| **`level` 取值** | **数字 0~4**（`defenseLevelFromScore`：≥80→4 / ≥65→3 / ≥50→2 / ≥35→1 / ≥20→1 / else 0） |
+| ★ **区间重叠** | `>=35 → 1` 与 `>=20 → 1` **同时返回 1** ⇒ 20~49 全为 level 1，**level 2 只能在 50~64** ⇒ 已登记 `DS-001`，⛔ 前端不补偿 |
+| **`score` 量纲** | **0~100 分**（`computeDefenseScore` 加权求和 `DEFENSE_WEIGHTS{trendBreak:.35, downVolume:.25, stagnation:.15, fundamental:.15, eventRisk:.10}` + `Math.min(100, …)`） |
+| **`factor` 量纲** | **乘性系数**（`DEFENSE_PENALTY_BANDS`：0-20→1.00 / 21-40→0.95 / 41-60→0.85 / 61-80→0.70 / 81-100→0.50）⇒ 实测 `0.95` ⇔ `score∈[21,40]`，与 37 **自洽** |
+| ★ **`level=0` 时** | 后端**不返回** `score` / `factor` 键（且顶层 `defense_score` / `defense_penalty` 亦缺）⇒ 必须走 `MISSING`，⛔ 不得补 0 / 1.00 |
+| ★ **顶层冗余** | `decision.defense_score` / `.defense_penalty` 与 `defense_state.score` / `.factor` **同源恒相等** ⇒ 前端只展示 state 内的值 + **交叉核对**（登记 `DS-002`） |
+
+**勘误**：`fundamental.detail`（含 `layer_breakdown`）**就在 `fundamental` 块内**（409 B）——
+M4-P0 §D 曾误记为「属 M6 范围」⇒ 第二阶段已纳入情报区展示；
+⛔ `fundamental_config` / `fundamental_series` 仍**不消费**（那才是 M6 范围）。
+
 

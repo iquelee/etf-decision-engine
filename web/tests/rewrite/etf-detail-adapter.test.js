@@ -68,10 +68,17 @@ t.ok('★ 禁止 1：position_gap 逐位等于服务端值，⛔ 不重算', () 
 t.ok('★ 禁止 2：⛔ 不跨 endpoint 偷补（不使用 /api/etf/list）', () => {
   const vm = full(LIVE());
   assert.ok(vm.provenance.listEndpointNote.includes('/api/etf/list'), '必须显式声明不用 list 端点');
-  assert.equal(vm.provenance.blocks.includes('list'), false);
-  // 本页 VM 中不得出现任何 list 专属字段名
-  const json = JSON.stringify(vm);
-  assert.ok(!json.includes('"defense"'), '⛔ 不得引入 etf/list 的 defense 字段');
+  assert.equal(vm.provenance.blockKeys.includes('list'), false, 'blocks 不得含 list 端点');
+  /**
+   * ⚠️ 第二阶段起本页**有** `vm.defense` 组 —— 但它必须来自 `decision.defense_state`，
+   *    ⛔ **不是** `etf/list[].defense`（那个是中文「高/中/低」字符串）。
+   *    ⇒ 用**来源 + 形态**双重断言，比"整串不含 defense"更精确。
+   */
+  assert.ok(vm.defense.level.provenance.source.includes('decision'),
+    '防守等级必须来自 decision 块，实际来源：' + vm.defense.level.provenance.source);
+  assert.ok(!['高', '中', '低'].includes(vm.defense.levelLabel),
+    '⛔ 不得使用 etf/list 的「高/中/低」防守等级，实际：' + vm.defense.levelLabel);
+  assert.equal(typeof vm.defense.levelNumber, 'number', '必须是数值档位（defense_state.level）');
   assert.equal(vm.identity.configTargetText.text, '25.0%', '配置目标来自 basic 块（本端点自带），非 list');
 });
 

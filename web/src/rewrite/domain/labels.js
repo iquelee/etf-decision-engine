@@ -537,3 +537,143 @@ export const GAP_SOURCE_NOTE = '服务端值，⛔ 本页不重算';
 export const NO_RECOMPUTE_NOTE =
   '⛔ 本页不重算任何上述数值（缺口 / 目标 / 等级均直接采用服务端值）；'
   + '⛔ 不从 `/api/etf/list` 借用同名字段补齐。';
+
+/* ================================================================
+ * 以下为 M4-P1 第二阶段增补（防守 / 机会 / 情报 / 历史）。
+ * 仍遵守「文案只此一处」原则（SPEC §12.1）。
+ * ================================================================ */
+
+/* ---------------- 防守等级 ----------------
+ * ★ 唯一来源 = 后端 `defenseLevelFromScore(score)`（返回**数字 0~4**）；
+ *   ⛔ 前端**不得**自行按 W 态或 high_volume_* 重算（用户 M4-P1b §四明文禁止）。
+ */
+export const DEFENSE_LEVEL_LABELS = Object.freeze({
+  0: '无防守信号',
+  1: '轻度防守',
+  2: '中度防守',
+  3: '高度防守',
+  4: '极高防守'
+});
+
+export function defenseLevelLabel(n) {
+  if (n === null || n === undefined || n === '') return '—';
+  const k = String(n);
+  return DEFENSE_LEVEL_LABELS[k] !== undefined ? DEFENSE_LEVEL_LABELS[k] : String(n);
+}
+
+/** 防守等级 tone（⛔ 与行情色分域） */
+export function toneForDefenseLevel(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 'muted';
+  if (v >= 3) return 'risk';
+  if (v >= 1) return 'warn';
+  return 'good';
+}
+
+/** 量纲标注（★ 用户反复强调：分数 / 系数 / 百分比不得混用） */
+export const DEFENSE_SCORE_NOTE = '分数 0~100（后端计算，⛔ 本页不重算、⛔ 不加 %）';
+export const DEFENSE_PENALTY_NOTE = '乘性系数 0.50 ~ 1.00（⛔ 不是百分比）';
+export const OPPORTUNITY_FACTOR_NOTE = '系数（⛔ 不是百分比）';
+export const OPPORTUNITY_SCORE_NOTE = '分数（⛔ 不加 %）';
+
+/** 防守族的统一「只读」声明 */
+export const DEFENSE_READONLY_NOTE =
+  '防守等级 / 分数 / 系数全部为后端已算结果，本页只展示；'
+  + '⛔ 具备前端 self-compute 的旧实现（按 W 态与放量字段重算）已移除。';
+
+/* ---------------- 加仓模式（schema desc：'横盘加仓/突破加仓/无'） ---------------- */
+export const ADD_MODE_LABELS = Object.freeze({
+  无: '无',
+  横盘加仓: '横盘加仓',
+  突破加仓: '突破加仓'
+});
+
+export function addModeLabel(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return ADD_MODE_LABELS[v] !== undefined ? ADD_MODE_LABELS[v] : String(v);
+}
+
+/** 加仓资格单项状态（与 `eligibilityTone` 配套；⛔ 语义由后端给定） */
+export const ELIGIBILITY_STATUS_LABELS = Object.freeze({ ok: '通过', pause: '暂停' });
+
+export function eligibilityStatusLabel(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return ELIGIBILITY_STATUS_LABELS[v] !== undefined ? ELIGIBILITY_STATUS_LABELS[v] : String(v);
+}
+
+/**
+ * ★★ 机会区的**命名纪律**（用户 M4-P1b §三）：
+ *   后端已有正式 action / final_target / position_gap ⇒ 那属 **V3 Safety Core 正式决策**；
+ *   本区额外信息只能叫「机会 / 辅助信号」，⛔ **不得**叫「建议加仓」。
+ */
+export const OPPORTUNITY_SECTION_TITLE = '机会 / 辅助信号';
+export const OPPORTUNITY_SECTION_NOTE =
+  '本区为**辅助信号**，不是加仓建议；正式动作与目标见上方「正式决策」（V3 Safety Core）。';
+export const OPPORTUNITY_NO_DERIVE_NOTE =
+  '⛔ 本页不会因为「仓位缺口 > 0」就推导「应该加仓」—— 缺口是后端计算结果。';
+
+/* ---------------- 情报 / 基本面 ---------------- */
+export const INTELLIGENCE_SECTION_TITLE = '情报 / 基本面摘要';
+export const INTELLIGENCE_SECTION_NOTE = '只展示有助于理解当前决策的证据；完整基本面属「基本面」页。';
+
+/** 基本面分层（`fundamental.detail.layer_breakdown` 的键 → 中文） */
+export const FUND_LAYER_LABELS = Object.freeze({
+  hard_data: '硬数据',
+  earnings: '景气 / 财报',
+  events: '事件',
+  ai_evidence: 'AI 研究证据'
+});
+
+export function fundLayerLabel(k) {
+  return FUND_LAYER_LABELS[k] !== undefined ? FUND_LAYER_LABELS[k] : String(k);
+}
+
+/**
+ * 基本面 detail 内的两个量纲标注。
+ * ⚠️ `layer.signal` / `detail.final_signal` 的**量纲未由 schema 证实**
+ *    ⇒ 页面只展示**后端原始值**，⛔ 不加 %、⛔ 不解释、⛔ 不换算。
+ * `layer.weight` 实测 50 / 30、合计 = `total_layer_weight`(80) ⇒ **原始权重和**，⛔ 不是百分比。
+ */
+export const FUND_SIGNAL_NOTE = '后端原始信号值（本页不解释其量纲）';
+export const FUND_WEIGHT_NOTE = '后端原始权重（⛔ 不是百分比）';
+
+/**
+ * ★★ 空数组语义（用户 M4-P1b §六 / §九.4）：
+ *   `[]` 只能说明「当前没有返回事件数据」，⛔ **不得**说成「没有风险」。
+ */
+export const RISK_EVENTS_EMPTY_TEXT = '当前没有返回风险事件数据。';
+export const RISK_EVENTS_EMPTY_NOTE = '⛔ 这不等于「没有风险」—— 只表示接口未返回事件记录。';
+
+export const RISK_EVENT_STATUS_LABELS = Object.freeze({
+  ACTIVE: '生效中', RESOLVED: '已解除', CLOSED: '已关闭'
+});
+
+export function riskEventStatusLabel(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  const k = String(v).toUpperCase();
+  return RISK_EVENT_STATUS_LABELS[k] !== undefined ? RISK_EVENT_STATUS_LABELS[k] : String(v);
+}
+
+/* ---------------- 历史决策变化 ----------------
+ * ★★ 硬规则（用户 M4-P1b §七 / §九.5）：
+ *   有真实历史 API ⇒ 展示真实历史；没有 ⇒ 明说「数据未提供」；
+ *   ⛔ **绝对不得**用「当前 target + 当前 action + 当前日期」拼一条假历史，
+ *     也 ⛔ 不得据当前字段猜测「持有 → 加仓 → 防守」。
+ */
+export const HISTORY_SECTION_TITLE = '历史决策变化';
+export const HISTORY_SOURCE_NOTE = '来源：后端历史决策记录（逐条实测，⛔ 不由当前字段拼装）';
+export const HISTORY_EMPTY_TEXT = '后端返回的历史决策记录为空。';
+export const HISTORY_EMPTY_NOTE = '⛔ 「记录为空」与「接口未提供」是两种不同状态，故文案不同。';
+export const HISTORY_UNAVAILABLE_TEXT = '历史决策变化：数据未提供。';
+export const HISTORY_UNAVAILABLE_NOTE =
+  '⛔ 本页不会用当前决策字段拼装历史，也不会据当前字段推测历史动作变化。';
+
+/** 变化维度（相邻两条实测值的差异，⛔ 不推断原因） */
+export const HISTORY_CHANGE_KINDS = Object.freeze([
+  { key: 'action', label: '动作' },
+  { key: 'target', label: '目标' },
+  { key: 'risk', label: '风险' },
+  { key: 'defense', label: '防守' }
+]);
+
+export const HISTORY_CHANGE_NOTE = '变化 = 相邻两条后端记录的实测值差异（⛔ 不推断原因）。';

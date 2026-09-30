@@ -36,6 +36,10 @@ import { adaptDecision } from './decision.js';
 import { adaptGen1, legacyFallback } from './gen1.js';
 import { adaptGen1ForDetail } from './gen1Detail.js';
 import { adaptKline } from './kline.js';
+import { adaptDefense } from './defense.js';
+import { adaptOpportunity } from './opportunity.js';
+import { adaptIntelligence } from './intelligence.js';
+import { adaptDecisionHistory } from './decisionHistory.js';
 import { assess, describe, isSeverelyStale, staleDays } from '../domain/freshness.js';
 import {
   pctText, ratioText, scoreText, priceText, countText, dateText, dateTimeText, rawText, factorText
@@ -79,6 +83,17 @@ export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
   const gen1Detail = adaptGen1ForDetail(data, runtimeStatus);
   const risk = adaptRisk(decision, empty ? null : data.risk_events, snapshot);
 
+  /* ---- M4-P1 第二阶段：机会 / 防守 / 情报 / 历史 ---- */
+  /**
+   * 风险事件只适配**一次**，供「防守雷达」与「情报」**共用同一对象**
+   * （⛔ 不重复计算，避免两处展示出现分歧）。
+   */
+  const riskEventsField = adaptRiskEvents(empty ? null : data.risk_events);
+  const defense = adaptDefense(decision, riskEventsField, snapshot);
+  const opportunity = adaptOpportunity(decision);
+  const intelligence = adaptIntelligence(empty ? null : data.fundamental, defense.events);
+  const decisionHistory = adaptDecisionHistory(options.decisionsRaw, { retrievedAt: retrievedAt(options) });
+
   const snapshotFreshness = assess(snapshot && snapshot.calc_date, 'snapshot');
   const decisionFreshness = assess(
     hasValue(decision.decisionDate) ? decision.decisionDate.value : null, 'decision');
@@ -104,6 +119,18 @@ export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
 
     /* ---- ④ Gen-1（Timing / Advisory；★ M4-D1 三通道，Legacy 显式降级） ---- */
     gen1Detail,
+
+    /* ---- ④b 机会 / 辅助信号（★ 不是「建议加仓」，⛔ 不由 gap 推导） ---- */
+    opportunity,
+
+    /* ---- ④c 防守雷达（★ 只用后端已算 level/score/factor，⛔ 不重算） ---- */
+    defense,
+
+    /* ---- ④d 情报 / 基本面摘要（⛔ 不展开 fundamental_config / series） ---- */
+    intelligence,
+
+    /* ---- ④e 历史决策变化（★ 真实 API；无则 NOT_PROVIDED，⛔ 不伪造） ---- */
+    decisionHistory,
 
     /* ---- ⑤ 价格 / 量价（快照口径） ---- */
     price: adaptPrice(snapshot),
@@ -208,6 +235,14 @@ const MISSING_SCAN = Object.freeze([
   ['结构 · 量能状态', (b) => b.structure.states.v],
   ['结构 · 量比', (b) => b.structure.volume.ratio],
   ['基本面 · 状态', (b) => b.fundamentalsSummary.fState],
+  /* ---- M4-P1 第二阶段 ---- */
+  ['机会 · 机会分', (b) => b.opportunity.score],
+  ['机会 · 机会系数', (b) => b.opportunity.factor],
+  ['机会 · 加仓模式', (b) => b.opportunity.addMode],
+  ['防守 · 等级', (b) => b.defense.level],
+  ['防守 · 分数', (b) => b.defense.score],
+  ['防守 · 系数', (b) => b.defense.factor],
+  ['情报 · 基本面状态', (b) => b.intelligence.fundamental.fState],
   /* ⚠️ gen1Detail 输出的已是 display 对象 ⇒ 取 `.field` 才能拿到原 Field 的状态 */
   ['Gen-1 · 权限档位', (b) => b.gen1Detail.authority.field],
   ['Gen-1 · 健康状态', (b) => b.gen1Detail.healthStatus.field],

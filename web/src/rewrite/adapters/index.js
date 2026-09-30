@@ -10,6 +10,11 @@
 export { adaptDecision, displayRisk, displayOverAlloc, displayState } from './decision.js';
 export { adaptEtfDetail } from './etfDetail.js';
 export { adaptGen1ForDetail } from './gen1Detail.js';
+/* ---- M4-P1 第二阶段 ---- */
+export { adaptDefense } from './defense.js';
+export { adaptOpportunity } from './opportunity.js';
+export { adaptIntelligence } from './intelligence.js';
+export { adaptDecisionHistory, HISTORY_DEFAULT_LIMIT } from './decisionHistory.js';
 export { adaptDashboard } from './dashboard.js';
 export { adaptKline, movingAverage } from './kline.js';
 export { adaptConstants, adaptRuntimeStatus } from './constants.js';

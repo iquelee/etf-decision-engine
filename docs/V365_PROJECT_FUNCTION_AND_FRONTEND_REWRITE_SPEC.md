@@ -859,3 +859,132 @@ vite build     PASS（双入口；旧前端不变，Structure 仍 1,044.68 kB；
 （`FE-DEF-001` / `FE-DEF-004`）**只被真实浏览器渲染核验 / SSR 渲染测试抓到**，
 代码审查与字段级单测均漏检。⇒ **每个页面里程碑必须做一次真实渲染核验**（已固化为技能）。
 
+---
+
+## 附录 F：M4-P1 第二阶段实现记录（2026-09-30 · ETF 工作台「可审阅」）
+
+> 目标升级：从「看懂一只 ETF」→「**能够审阅这只 ETF 当前决策及其变化、风险和辅助证据**」。
+> 本轮 **只读侦察 → 确认契约 → 实现**，⛔ 未改 backend；`NO PUSH / NO MERGE / NO DEPLOY`。
+
+### F.1 IA（12 段 · 六档视觉权重）
+
+| # | 区块 | 档 | 组件 |
+|---|---|---|---|
+| ① | Header | — | `WorkbenchHeader` |
+| ② | K 线滞后提示 | — | `StaleBanner` |
+| ③ | **正式决策** | **档 1** | `PrimaryDecision` |
+| ④ | 仓位（实际/建议/目标/配置） | 档 3 | `PositionRiskSection` |
+| ⑤ | **机会 / 辅助信号** | 档 4 | `OpportunityRadar` |
+| ⑥ | **防守雷达** | **档 2** | `DefenseRadar` |
+| ⑦ | Gen-1 Legacy Advisory | 档 4 | `Gen1AdvisorySection` |
+| ⑧ | K 线 | 档 5 | `KlineSection` |
+| ⑨ | 结构 | 档 5 | `StructureSection` |
+| ⑩ | 情报 / 基本面摘要 | 档 5 | `IntelligenceSection` |
+| ⑪ | **历史决策变化** | **档 6** | `DecisionHistorySection` |
+| ⑫ | 数据质量 / 来源 | 档 5 | `WorkbenchDataQuality` |
+
+**权重靠三件事共同表达**（⛔ 不靠单一颜色）：
+① 左侧强调边线（`.primary-decision` 强调色 / `.rank-defense` 风险色 / `.rank-advisory` 弱边线 / 无 / 无）
+② 数字字号（hero `28px` > 次级 `20px` > 常规 `14px`）
+③ 区块自身声明（副标题里写明"这是辅助信号，不是加仓建议"）。
+
+### F.2 新增 ViewModel 四组
+
+```js
+opportunity  = { available, score/scoreText/scoreNote, grade/gradeText, level/levelText/levelTone,
+                 factor/factorText/factorNote, addMode/addModeText, cooldownDays/cooldownText,
+                 nextAddCondition/nextAddConditionText, eligibility{items[10],overall,blockedCount},
+                 gap/gapText/gapNote, sectionNote, noDeriveNote }
+defense      = { available, active, level/levelNumber/levelLabel/levelTone, reason/reasonText,
+                 score/scoreText/scoreNote, factor/factorText/factorNote,
+                 crossCheck{topScore,topPenalty,scoreConsistent,factorConsistent,inconsistent,note},
+                 riskFlag/riskLabel/riskTone, riskOverrideText, overAlloc/overAllocText,
+                 premiumFlag/premiumText, premiumRate/premiumRateText,
+                 events{state,items[],count,isEmpty,emptyText,emptyNote}, readonlyNote }
+intelligence = { available, fundamental{...}, layers{available,items[],totalLayerWeight,note},
+                 detail{available,finalSignal/finalSignalText,signalNote,counts},
+                 riskEvents（★ 与 defense.events 同一对象引用）, notConsumed[] }
+decisionHistory = { state, available, reason, source/sourceNote/changeNote/changeKinds,
+                    count, items[{date,action/actionText/actionTone,finalTarget/finalTargetText,
+                                  gap/gapText,riskFlag/riskText/riskTone,
+                                  defenseLevel/defenseLevelText/defenseLevelTone,defenseScore/…}],
+                    changes[{kind,label,date,fromDate,toDate,from,to}], changedCount,
+                    freshness, oldestDate, newestDate, text, note }
+```
+
+### F.3 raw → adapter → domain → UI（新增行）
+
+| raw | adapter | domain | UI |
+|---|---|---|---|
+| `decision.defense_state.level`（**数字 0~4**） | `defense.levelNumber` | `defenseLevelLabel` / `toneForDefenseLevel` | 防守雷达（`level = N` 与中文并列） |
+| `decision.defense_state.score`（**0~100 分**） | `defense.scoreText` | `formatScore` | 防守雷达（带「分数 0~100」说明） |
+| `decision.defense_state.factor`（**系数 0.50~1.00**） | `defense.factorText` | `formatRatio` | 防守雷达（带「乘性系数」说明） |
+| `decision.defense_score` / `.defense_penalty`（顶层**冗余**） | `defense.crossCheck` | — | 仅在不一致时出警示 |
+| `decision.opportunity_factor`（**系数**） | `opportunity.factorText` | `formatRatio` | 机会雷达 |
+| `decision.add_mode`（字符串枚举） | `opportunity.addModeText` | `addModeLabel` | 机会雷达 |
+| `decision.add_eligibility`（10 判据 + overall） | `eligibility.items[]` | `ELIGIBILITY_ITEMS` / `eligibilityTone` | 资格网格 |
+| `fundamental.detail.layer_breakdown` | `intelligence.layers.items[]` | `fundLayerLabel` | 情报区（信号/权重**原值**，⛔ 不加 %） |
+| `risk_events`（`[]` / 有值 / 缺失） | `defense.events`（情报区**共用同一对象**） | `RISK_EVENTS_EMPTY_TEXT` | 防守雷达 + 情报区 |
+| `GET /api/etf/:code/decisions` → `data[]` | `decisionHistory.items[]` | `pctText` / `riskLabel` / `defenseLevelLabel` | 历史表（桌面）/ 卡片（移动） |
+
+### F.4 与第一阶段的差异
+
+**新增**：机会/辅助信号区（含 10 项加仓资格 + 显式「不推导加仓」声明）·
+防守雷达（等级/分数/系数**三重量纲**各自带说明 + 顶层冗余字段交叉核对）·
+情报/基本面摘要（分层证据 + 事件 + 未消费块登记）·
+历史决策变化（真实 API + 变化点 + 桌面表/移动卡双形态）。
+
+**修正（勘误）**：`fundamental.detail.layer_breakdown` 就在 `fundamental` 块内（409 B），
+M4-P0 曾误记为「属 M6」⇒ 本轮纳入情报区；⛔ `fundamental_config` / `fundamental_series` 仍不消费。
+
+**未变**：Gen-1 策略（仍 `TIMING / ADVISORY` + `Legacy Channel` + 降权）；
+K 线处理（banner + 保留图表）；决策链定性化；仓位四轴分区。
+
+### F.5 测试与验证（M4-P1b 实测）
+
+```text
+rewrite 套件   19/19 PASS（M4-P1a 为 17）    用例 **319** 项（M4-P1a 为 276），零新增依赖
+新增 2 套件    etf-radar（17 项）· etf-history-intel（17 项）
+渲染套件扩充   38 项（原 29）：新增第二阶段 9 条，含「空数据总检」与「视觉层级」
+vite build     PASS（双入口；旧前端不变，Structure 仍 1,044.68 kB；EtfWorkbench 99.44 kB/gzip 27.46 kB）
+浏览器核验     24 场景 × 5 断点（1920/1440/1024/768/390）= **54 张截图，problems 0**
+非回归         src/ · cloudfunctions/ · scripts/ · tests/ · 旧 web/src/** 的 git status 全为空
+```
+
+### F.6 M4-P1b 新发现
+
+| # | 内容 | 处置 |
+|---|---|---|
+| 1 | ★ **`adaptDecision` 不可用分支只返 3 键** ⇒ 下游 `adaptDefense` 读 `riskFlag` 直接 `TypeError`（整页崩） | ✅ 已修：该分支改为返回**同形状完整骨架**（教训见 `FE-DEF-005`） |
+| 2 | ★ **`defenseLevelFromScore` 区间重叠**：`score>=35 → 1` 与 `score>=20 → 1` **都返回 1** ⇒ 20~49 全为 level 1，level 2 只可能在 50~64 | `[AS-IS]` **只登记**（后端逻辑可疑点，⛔ 不属前端范围、⛔ 不修改） |
+| 3 | ★ **顶层 `defense_score` / `defense_penalty` 与 `defense_state` 内字段冗余同源** | 前端只展示 state 内的值 + **交叉核对**（不一致时警示，⛔ 不静默选边） |
+| 4 | ★ **`level === 0` 时后端不返回 `score` / `factor` 键** | 走 `MISSING/FIELD_ABSENT`（「字段缺失」），⛔ 不得补 0 / 1.00 |
+| 5 | **`getDecisions` 走 `v365-reader-allow:history-deferred`**（`RUN_HISTORY_INDEX = PENDING`） | `[AS-IS]` 登记；历史读取属「延后」段，与本轮前端无关 |
+| 6 | **`fundamental.detail` 量纲未由 schema 证实**（`final_signal=0.73`、`layer.signal`） | 只展示**后端原始值** + 显式标注「本页不解释量纲」，⛔ 不加 %、⛔ 不换算 |
+| 7 | **`getDecisions` 默认 limit 60、支持 `?from=&to=`** | 前端当前不带参数（取默认 60 条）；区间筛选属后续能力（⛔ 本轮不加 UI） |
+
+登记位置：审计附录 **C-19 ~ C-20**、风险台账 **`FE-DEF-005`**。
+
+### F.7 M4 最终验收对照（owner 的 12 问）
+
+| # | 问题 | 本页回答方式 | 有后端数据？ |
+|---|---|---|---|
+| ① | 这是什么 ETF？ | 页头：代码/名称/赛道/配置上限/配置标准 | ✅ |
+| ② | 当前正式决策是什么？ | `PrimaryDecision`（动作 + 目标 + 缺口） | ✅ |
+| ③ | 当前目标/仓位/风险是什么？ | `PositionRiskSection` 四轴 + 防守雷达 | ✅ |
+| ④ | 为什么当前有这个正式决策？ | 决策链**定性条件**（M4-D3 裁定） | ✅ |
+| ⑤ | 防守风险是什么？ | `DefenseRadar`（等级/分数/系数 + 事件） | ✅ |
+| ⑥ | 有没有辅助 Timing / Advisory？ | `Gen1AdvisorySection`（Legacy 通道显式降级） | ✅（legacy 通道） |
+| ⑦ | 有没有机会/加仓相关辅助信号？ | `OpportunityRadar`（★ 明确「辅助信号，不是加仓建议」） | ✅ |
+| ⑧ | 有没有风险事件/基本面证据？ | `DefenseRadar.events` + `IntelligenceSection` | ✅（事件当前为 `[]`） |
+| ⑨ | K 线数据截至什么时候？ | 页头 + banner + K 线区（**实际日期**） | ✅（末端 2024-08-27，见 `KLINE-DATA-001`） |
+| ⑩ | 历史决策变化是否有真实数据？ | `DecisionHistorySection`（真实 6 条 + 变化点） | ✅ |
+| ⑪ | 哪些信息是 backend 真正提供的？ | 每个区块的 provenance / 来源说明 / 逐字段量纲标注 | — |
+| ⑫ | 哪些信息目前没有提供？ | `missingItems` 清单 + 各区块显式「数据未提供」+ `notConsumed` 登记 | — |
+
+★ **最后三条原则的执行证据**：
+「有数据就展示」⇒ 12 区全部由真实字段驱动；
+「没有数据就明确说没有」⇒ `[]` / 缺失 / 未请求 / 读取失败**四态文案两两不同**（测试断言强制）；
+「永远不要为了视觉完整而推导或虚构」⇒ 三类禁止项均有**测试断言**守卫
+（⛔ 不重算 `position_gap`/`defense_*`/`final_target`、⛔ 不跨 endpoint 偷补、⛔ 不伪造历史、⛔ 不由 gap 推导加仓）。
+

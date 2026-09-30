@@ -461,6 +461,33 @@ M4-D2 的裁定**同时把 K 线问题正式升级为数据正确性 Blocker**�
 **可能根因 A（ordering bug）/ B（upstream sync stopped）—— 本轮 ⛔ 不选边**；
 前端只负责 detect → classify stale → display provenance；**不阻塞 M4-P1**。
 
+### §G.2 第二阶段只读侦察结论（2026-09-30 · 四类数据契约）
+
+> 结论先行：**四类数据全部真实存在**，其中**历史决策 API 真实可用**（不是 NOT_PROVIDED）。
+
+| 区域 | 后端字段 / 端点 | 真实存在？ | 量纲（源码可证） |
+|---|---|---|---|
+| **机会 / 加仓** | `decision.{opportunity_score, opportunity_grade, opportunity_factor, add_mode, add_eligibility(10判据+overall), cooldown_days, next_add_condition}` | ✅ | score=**点数**；factor=**系数**；add_mode=**字符串枚举**（'横盘加仓'/'突破加仓'/'无'） |
+| **防守雷达** | `decision.defense_state{level,reason,score,factor}` + 顶层 `defense_score` / `defense_penalty` | ✅ | level=**数字 0~4**；score=**0~100 分**；factor=**乘性系数 0.50~1.00**；顶层两字段与 state 内**冗余同源** |
+| **情报 / 基本面** | `fundamental{f_state,f_score,**detail{layer_breakdown,total_layer_weight,final_signal,…}**,updated_at}` · `risk_events` | ✅ | f_score=**点数**；`layer.weight`=**原始权重和**；`layer.signal`/`final_signal`=**量纲未证实** ⇒ 只展示原值 |
+| **历史决策** | `GET /api/etf/:code/decisions` → `data[]`（同一 `decision_result` 集合、`orderBy decision_date **desc**`、默认 `limit 60`、支持 `?from=&to=`） | ✅ **真实可用** | 每行含 `decision_date/final_action/action_label/final_target/position_gap/risk_flag/defense_state/defense_score/…`（146 键） |
+
+**关键判定（逐条）**
+
+1. **正式决策 vs 辅助信号**：`action` / `final_target` / `position_gap` 属 **V3 Safety Core 正式决策**；
+   `opportunity_*` / `add_mode` / `add_eligibility` 属**辅助信号** ⇒ UI 必须分区且**命名不得混淆**（⛔ 不叫「建议加仓」）。
+2. **防守族不由前端计算**：`level` / `score` / `factor` 全部由后端 `computeDefenseScore` + `defenseLevelFromScore` +
+   `getDefensePenalty` 产出 ⇒ ⛔ 前端只展示，且**保留**顶层冗余字段的一致性核对。
+3. **情报必需 vs 非必需**：`required` = `fundamental`（含 `detail`）· `risk_events`；
+   `unused/moved` = `fundamental_config` · `fundamental_series` · `holdings`（M6 / 后台范围）；
+   `legacy` = `decision.gen1_*` · `ml_shadow`（Gen-1 区，显式标 Legacy Channel）。
+4. **历史决策**：**不是** `NOT_PROVIDED` —— 端点在 `/api/etf/:code/decisions` 提供**真实记录**；
+   前端 ⛔ 仍**不得**用当前字段拼历史（硬规则不变），但有真数据就展示真数据。
+
+**登记**：`DS-001`（level 区间重叠）· `DS-002`（顶层冗余）· `DS-003`（level=0 无 score/factor）·
+`DS-004`（`detail` 量纲未证实）· `DS-005`（`getDecisions` 走 `history-deferred`）⇒ 见
+`docs/V365_FRONTEND_RISK_LEDGER.md#后端数据侧观察`。
+
 **本轮明确未处理**（按 owner 指令）：D-8 · `most_worth` · `apiGateway` 部署 · E-006 · 后端 K 线修复。
 
 ---
