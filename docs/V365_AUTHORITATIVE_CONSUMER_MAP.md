@@ -184,7 +184,7 @@ read active_run_pointer(scope='production')
 | §E.1「会不会破坏 P-3 atomicity？→ **YES**（reader 不变的前提下）」 | 前提已消除：5 个 authoritative 端点 + `getGen1Health` 已迁到 pointer 路径 |
 | §E.3 硬约束 #1「pointer 生效前 5 个端点必须先迁移」 | ✅ **已完成**（`getDashboard`/`getEtfList`/`getEtfDetail`/`getPortfolio`/`getConstants`） |
 | §E.3 硬约束 #2「`portfolio_position` 必须与 run 产物显式区隔」 | ✅ 已落为**两条轴 + 各自 provenance**，并加测试断言（`mutable_axis` 不带 `run_id`） |
-| §E.3 硬约束 #3「历史 range / Gen-2 anchor / cooldown 另立工作包」 | ✅ 仍 PENDING —— 已登记为 **`RUN_HISTORY_INDEX_REQUIREMENTS`** |
+| §E.3 硬约束 #3「历史 range / Gen-2 anchor / cooldown 另立工作包」 | ✅ 已登记为 **`RUN_HISTORY_INDEX_REQUIREMENTS`**；**WP-RH1~RH4 代码侧已完成**（契约 / 写侧 / 读者）+ **HD-10 结构侧已完成**（5 集合 + 7 索引），⚠️ **数据侧仍 PENDING**（5 集合 `n=0` + 无生产提升） |
 | §F「参考实现（**本轮已提供，未接线**）」 | ✅ 已接线；正式 API 见 `docs/V365_READER_MIGRATION.md` §2 |
 
 **详细迁移文档**：`docs/V365_READER_MIGRATION.md`
@@ -192,7 +192,10 @@ read active_run_pointer(scope='production')
 deferred 清单 / RUN_HISTORY_INDEX_REQUIREMENTS / Reader Gate 8 项）
 
 ```
-READER_MIGRATION   = COMPLETE
-RUN_HISTORY_INDEX  = PENDING
+V365_IMPLEMENTATION = QUALIFIED_CANDIDATE   （资格门 PASS 38 / 38；⛔ ≠ PRODUCTION AUTHORIZED）
+READER_MIGRATION    = COMPLETE
+RUN_HISTORY_INDEX   = PENDING
+  · 契约（RH1）✅ · 写侧（RH2/RH3）✅ · 读者（RH4）✅ · 结构（HD-10 建表）✅ · 数据侧 ⛔（无生产提升 ⇒ run_axis_available=false）
+  · HD-10 ✅ COMPLETE（5/5 集合 + 7/7 索引；CREATE EMPTY STRUCTURE ONLY；documents_written=0）
 ATOMIC_PUBLISH 在生产成立？→ 仍未成立（writer 已 QUALIFIED，但 V3.6.5 尚未部署）
 ```

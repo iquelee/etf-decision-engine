@@ -267,11 +267,28 @@ Authoritative axis（不可变 run 产物）        Mutable axis（持续变化�
 
 ### 7.5 回归
 
+> ★ **2026-09-24 勘误（append-only：原记录保留在下方删除线中，⛔ 不删除历史）**
+>
+> 原表写于**前任通道**（沙箱禁止 Node 子进程，`spawnSync` 恒 `EBUSY`）。复核发现两点：
+> 1. 原记的 3 项「既有环境相关失败」**不是基线属性，而是通道差异** ——
+>    `gen1-parity` / `gen1-ge03-regression-guard` / `gen2-scenario-parity` 是**全库仅有的 3 个
+>    自身调用 `child_process` 的测试**（`grep -l "spawnSync\|execSync\|child_process" tests/*.test.js`
+>    恰好且仅有这 3 个）。前任通道跑不了子进程 ⇒ 这 3 个必然全红，与树无关；本机通道可跑 ⇒ 全部转绿。
+> 2. `gen1-ge03-regression-guard` 在**候选树**上另有**真实新增失败**（D12 前向 fail-closed：
+>    `runtime_status` 出现 4 个未登记写入字段 `v365_mode` / `v365_run_integrity` /
+>    `v365_finality_status` / `v365_authoritative_published`），该失败在前任通道被 spawn 失败**掩盖**。
+>    已在 `src/common/schema.js` 的 `runtime_status` 段补齐登记 ⇒ 转绿。
+>
+> ⇒ 复核后的判据：**CANDIDATE 59 passed / 0 failed · BASELINE 51 passed / 0 failed · `NEW_FAILURES = 0`**。
+
 | 项 | 结果 |
 |---|---|
-| CANDIDATE 全量单测 | **56 passed / 3 failed** |
-| BASELINE（`origin/master` worktree） | **48 passed / 3 failed** |
-| 失败集合 | **完全相同** ⇒ **零新增失败**（`gen1-parity` / `gen1-ge03-regression-guard` / `gen2-scenario-parity`，既有环境相关） |
+| ~~CANDIDATE 全量单测（原记录）~~ | ~~**56 passed / 3 failed**~~ |
+| ~~BASELINE（`origin/master` worktree，原记录）~~ | ~~**48 passed / 3 failed**~~ |
+| ~~失败集合（原记录）~~ | ~~**完全相同** ⇒ **零新增失败**（`gen1-parity` / `gen1-ge03-regression-guard` / `gen2-scenario-parity`，既有环境相关）~~ |
+| **CANDIDATE 全量单测（2026-09-24 复核）** | **59 passed / 0 failed** |
+| **BASELINE（`origin/master` worktree，2026-09-24 复核）** | **51 passed / 0 failed** |
+| **失败集合（2026-09-24 复核）** | **空集** ⇒ **`NEW_FAILURES = 0`** |
 | `verify-immutable` / `verify-gen1-pipeline` / `verify-gen2-build-artifacts` | 23/23 · 10/10 · 7/7 PASS |
 | V365 manifest verifier | PASS（**20 个合格文件逐字节一致**）+ `--check` BYTE-EQUIVALENT |
 
@@ -292,10 +309,27 @@ Authoritative axis（不可变 run 产物）        Mutable axis（持续变化�
 ## 9. 状态
 
 ```
-V365_WRITER_PATH   = QUALIFIED
-READER_MIGRATION   = COMPLETE
-RUN_HISTORY_INDEX  = PENDING          ← 下一步（WP-V365-RH1）
+V365_WRITER_PATH      = QUALIFIED
+V365_IMPLEMENTATION   = QUALIFIED_CANDIDATE
+READER_MIGRATION      = COMPLETE
+
+RUN_HISTORY_INDEX     = PENDING
+  · 契约侧（WP-RH1）：✅ 完成 —— 5 集合登记于 v365-contracts.js + schema.js（tests/v365-rh1-contract-registry.test.js E-01~12）
+  · 写侧（WP-RH2/RH3）：✅ 完成 —— RDE 接线 publishCandidateFirst() + run_history 单次写入（F-01~12 / G-01~11）
+  · 读者侧（WP-RH4）：✅ 完成 —— CLASS C 5 读点登记 + buildClassCProvenance（H-01~12）· Reader Gate 8/8
+  · 结构侧（HD-10）：✅ 完成 —— 5 集合 + 7 索引已在生产创建（CREATE EMPTY STRUCTURE ONLY；documents_written=0）
+  · 数据侧：⛔ PENDING —— 生产尚无 active_run_pointer 提升 ⇒ run_axis_available=false · coverage='legacy_only'
+  · 切换日：⛔ 未登记 —— V365_ENFORCE_SWITCH_DATE = null（部署时登记）
 
 V365_FULL_QUALIFICATION  = NOT_YET_COMPLETE
 READY_FOR_FREEZE_REVIEW  = NO
 ```
+
+> ⚠️ **代码就绪 / 结构就绪 ≠ 数据就绪**：RH1~RH4 测试全绿 + HD-10 建表完成**只**证明
+> 「契约 + 写侧 + 读者 + 结构」就绪；`RUN_HISTORY_INDEX = PENDING` 仍为真，
+> 因为**生产侧无 `run_history` 数据**（5 集合全部 `n=0` + 无提升发生）
+> ⇒ CLASS C 仍如实报 `run_axis_available = false`。
+> ⛔ 不得因「测试全绿」或「集合已建」就改写此状态。
+
+> ⚠️ `V365_IMPLEMENTATION = QUALIFIED_CANDIDATE` 是**资格门输出**（`PASS 38 / 38`），
+> ⛔ **不等于** `PRODUCTION AUTHORIZED`；FREEZE / PR / MERGE / DEPLOY 均需单独授权。

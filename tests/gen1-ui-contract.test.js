@@ -371,7 +371,15 @@ const POSITION = { code: '513310', current_position: 9.1 };
   assert.ok(/require\('\.\/common\/utils\/gen1-ui-view-model'\)/.test(admin), 'adminGateway 必须引入契约模块');
   assert.ok(/COLLECTIONS\.RUNTIME_STATUS/.test(admin), 'admin health 必须读 runtime_status');
   assert.ok(/COLLECTIONS\.GEN1_HEALTH_STATE/.test(admin), 'admin health 必须读 gen1_health_state');
-  assert.ok(/COLLECTIONS\.DECISION_RESULT/.test(admin), 'admin health 必须读 decision_result');
+  // V3.6.5 Reader Migration：decision 属 **CLASS A（run-bound）** ⇒ admin health ⛔ 不得直读
+  // decision_result 猜「最新决策」（会跨 run 混读）；必须经 run-pinned 权威解析器
+  // （active_run_pointer → run_candidate_decision）读取。
+  // 守卫随之改为**判读取形态**，而非判旧集合名 —— 后者在迁移后已不可能满足，
+  // 且若强行满足（直读 decision_result）反而违反 reader migration 契约。
+  assert.ok(/readAuthoritativeDataset\(/.test(admin),
+    'admin health 必须经权威解析器（run-pinned）读取 decision');
+  assert.ok(!/COLLECTIONS\.DECISION_RESULT(?![^\n]*v365-reader-allow:)/.test(admin),
+    'admin health ⛔ 不得直读 decision_result 按日期取最新（历史读取须带 v365-reader-allow: 标记）');
   assert.ok(/buildCanaryLedger\(runtime\)/.test(admin), 'admin health 必须经 buildCanaryLedger 输出账本');
   // final-fix：admin canary 同样必须走三态（runtimeBool），不得用 `=== true : false` 压扁 UNKNOWN
   assert.ok(/runtimeBool\(runtime/.test(admin), 'admin canary 必须用 runtimeBool 三态读真值');

@@ -8,6 +8,11 @@
 'use strict';
 
 const { COLLECTIONS } = require('./constants');
+// WP-RH1：v365 集合名的**唯一来源**（OD-5 冻结）。
+// ⛔ 不把 v365 集合名复制进 `constants.js` —— 该文件属 `DECISION_CALCULATION_CORE`（HD12-D8），
+//    受**绝对**保护（无授权路径）；且 OD-5 已裁定集合名收敛到 `v365-contracts.js`
+//    ⇒ 复制会造成双源漂移（正是 HD12-0 实测过的那类问题）。
+const { V365_COLLECTIONS } = require('./utils/v365-contracts');
 
 /**
  * 每个集合定义：
@@ -639,6 +644,23 @@ const SCHEMAS = [
       gen1_counterfactual_ledger_ok: { type: 'boolean', required: false, desc: '反事实账本是否未越 cap' },
       gen1_production_write: { type: 'boolean', required: false, desc: '恒 false' },
       gen1_auto_execution: { type: 'boolean', required: false, desc: '恒 false' },
+      /* ---- V3.6.5 (B1)：run 完整性 telemetry（只读字段，不参与任何决策计算）----
+       * 写入方 = cloudfunctions/runDecisionEngine/index.js（runtimeStatus 对象 → upsert RUNTIME_STATUS）。
+       * 此前只写未登记 ⇒ gen1-ge03-regression-guard 的 D12 前向守卫打红；此处补齐登记。 */
+      v365_mode: { type: 'string', required: false, desc: "V3.6.5 运行模式：'ENFORCE' 或 'LEGACY'" },
+      v365_run_integrity: { type: 'object', required: false, desc: 'V3.6.5 run 完整性 telemetry（buildRunTelemetry 输出，只读）' },
+      v365_finality_status: { type: 'string', required: false, desc: 'run 终局状态 COMPLETE/PARTIAL/FAILED' },
+      v365_authoritative_published: { type: 'boolean', required: false, desc: '⚠️ DEPRECATED（OD-6 批2）：按 mode !== ENFORCE 推断"已发布" —— 推理链错误；值未改，请改用 v365_authoritative_publish_status' },
+      /** OD-6 批2 派生字段：反映真相（null=LEGACY / PROMOTED / NOT_PROMOTED / PROMOTION_FAILED） */
+      v365_authoritative_publish_status: { type: 'string', required: false, desc: 'authoritative 发布状态（派生；⛔ 不由 mode 推断）' },
+      /** R2-c：CAS 提升是否被尝试（null=非 ENFORCE；false=计划未达 PROMOTE 或未授权；true=已执行 CAS 尝试） */
+      v365_promotion_attempted: { type: 'boolean', required: false, desc: 'R2-c：本轮是否真正执行了 CAS 指针提升尝试' },
+      /** R2-c：结构化 CAS 拒因（STALE_EXPECTED_POINTER / NON_MONOTONIC_REVISION / ALREADY_ACTIVE …） */
+      v365_cas_reason: { type: 'string', required: false, desc: 'R2-c：CAS 结构化拒因（无拒因 ⇒ null）' },
+      /** R2-d：唯一 history row 写入结果（null=非 ENFORCE / not_written / ok / failed） */
+      v365_history_status: { type: 'string', required: false, desc: 'R2-d：run_history 写入结果' },
+      /** R2-d：history 写失败原因（⛔ 失败不得静默；成功 ⇒ null） */
+      v365_history_write_error: { type: 'string', required: false, desc: 'R2-d：run_history 写失败原因' },
       updated_at: { type: 'string', required: false, desc: '更新时间 ISO' }
     },
     indexes: [{ name: 'uk_key', keys: [{ field: 'key', direction: 'asc' }], unique: true }]
@@ -712,6 +734,120 @@ const SCHEMAS = [
       updated_at: { type: 'date', required: false, desc: '更新时间' }
     },
     indexes: [{ name: 'uk_run_code', keys: [{ field: 'run_id', direction: 'asc' }, { field: 'code', direction: 'asc' }], unique: true }]
+  },
+
+  /* ================================================================== *
+   * V3.6.5 Run Lifecycle（WP-RH1）
+   *
+   * ⚠️ 集合名取自 `v365-contracts.js::V365_COLLECTIONS`（**唯一来源**，OD-5 冻结），
+   *    ⛔ 不复制进 `constants.js`（该文件属 DECISION_CALCULATION_CORE / HD12-D8，绝对保护）。
+   * ⚠️ `init-collections.js` 由 `SCHEMAS` 驱动 ⇒ 登记即会被创建。
+   * ⛔ 生产建表需**单独授权**（本登记只保证"清单完整"，不代表已创建）。
+   * ================================================================== */
+
+  /* ---- ① run_manifest：run 内部完整性 ---- */
+  {
+    name: V365_COLLECTIONS.RUN_MANIFEST,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'engine_run_id（candidate 身份；与 pipeline_run_id 语义不同）' },
+      expected_trade_date: { type: 'string', required: false, desc: 'YYYY-MM-DD（该 run 声明的交易日）' },
+      revision: { type: 'number', required: false, desc: '单调修订号（NON_MONOTONIC_REVISION 拒因依据）' },
+      input_hash: { type: 'string', required: false, desc: '输入契约哈希' },
+      expected_codes: { type: 'array', required: false, desc: '声明的标的清单（⛔ 不是"实际写成功条数"）' },
+      status: { type: 'string', required: false, desc: 'run 终局 COMPLETE/PARTIAL/FAILED' },
+      finality_health: { type: 'string', required: false, desc: '终局健康语义' },
+      validation_passed: { type: 'boolean', required: false, desc: 'candidate 校验是否通过' },
+      validation_reason: { type: 'string', required: false, desc: '校验拒因' },
+      candidate_class: { type: 'string', required: false, desc: 'candidate 集合分类' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'uk_run_id', keys: [{ field: 'run_id', direction: 'asc' }], unique: true }]
+  },
+
+  /* ---- ② run_candidate_decision：逐票候选（run 隔离）---- */
+  {
+    name: V365_COLLECTIONS.CANDIDATE_DECISION,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'engine_run_id' },
+      candidate_key: { type: 'string', required: true, desc: '候选键（逐票 = code）' },
+      written_at: { type: 'date', required: false, desc: '写入时刻' },
+      code: { type: 'string', required: false, desc: 'ETF 代码（payload 冗余，便于查询）' },
+      decision_date: { type: 'string', required: false, desc: '决策日（payload 冗余）' },
+      final_target: { type: 'number', required: false, desc: '建议目标仓位%（payload 冗余，便于核对）' },
+      final_action: { type: 'string', required: false, desc: '建议动作（payload 冗余，便于核对）' }
+    },
+    indexes: [{
+      name: 'uk_run_candidate',
+      keys: [{ field: 'run_id', direction: 'asc' }, { field: 'candidate_key', direction: 'asc' }],
+      unique: true
+    }]
+  },
+
+  /* ---- ③ run_candidate_portfolio：组合候选（run 隔离）---- */
+  {
+    name: V365_COLLECTIONS.CANDIDATE_PORTFOLIO,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'engine_run_id' },
+      candidate_key: { type: 'string', required: true, desc: '候选键（组合固定 = "portfolio"）' },
+      written_at: { type: 'date', required: false, desc: '写入时刻' },
+      snapshot_date: { type: 'string', required: false, desc: '快照日（payload 冗余）' },
+      market_regime: { type: 'string', required: false, desc: '组合环境（payload 冗余）' },
+      cash_ratio: { type: 'number', required: false, desc: '现金比例%（payload 冗余）' }
+    },
+    indexes: [{
+      name: 'uk_run_candidate',
+      keys: [{ field: 'run_id', direction: 'asc' }, { field: 'candidate_key', direction: 'asc' }],
+      unique: true
+    }]
+  },
+
+  /* ---- ④ active_run_pointer：★ current state（1 行 / scope）---- */
+  {
+    name: V365_COLLECTIONS.ACTIVE_POINTER,
+    fields: {
+      scope: { type: 'string', required: true, desc: '作用域（生产 = production）；确定性 _id = active_run_pointer::<scope>' },
+      run_id: { type: 'string', required: true, desc: '当前 authoritative run 的 engine_run_id' },
+      revision: { type: 'number', required: true, desc: '单调修订号（CAS 比较依据）' },
+      expected_trade_date: { type: 'string', required: false, desc: 'YYYY-MM-DD' },
+      promoted_from_run_id: { type: 'string', required: false, desc: '本次提升的来源 run（⚠️ 只保留**上一次**；⛔ 不是时间线）' },
+      updated_at: { type: 'date', required: false, desc: '更新时间' }
+    },
+    indexes: [{ name: 'uk_scope', keys: [{ field: 'scope', direction: 'asc' }], unique: true }]
+  },
+
+  /* ---- ⑤ run_history：★ timeline（append-only；OD-1 方案 A′）---- */
+  {
+    name: V365_COLLECTIONS.RUN_HISTORY,
+    fields: {
+      run_id: { type: 'string', required: true, desc: 'engine_run_id（一行一 run）' },
+      scope: { type: 'string', required: false, desc: '作用域（与 pointer 同语义）' },
+      expected_trade_date: { type: 'string', required: false, desc: '★ 时间轴检索键 YYYY-MM-DD' },
+      revision: { type: 'number', required: false, desc: '单调修订号' },
+      status: { type: 'string', required: false, desc: 'COMPLETE / PARTIAL / FAILED' },
+      engine_version: { type: 'string', required: false, desc: '引擎版本' },
+      input_hash: { type: 'string', required: false, desc: '输入契约哈希' },
+      expected_codes: { type: 'array', required: false, desc: '声明的标的清单' },
+      decision_count: { type: 'number', required: false, desc: 'RH-2：该 run 实际写入的候选数' },
+      portfolio_present: { type: 'boolean', required: false, desc: 'RH-2：该 run 是否有组合候选' },
+      // ⚠️ 只存**前向**指针（⛔ 无 `superseded_by_run_id`）—— 反向字段需更新既有行 ⇒ 破坏严格 append-only
+      supersedes_run_id: { type: 'string', required: false, desc: '同日被本 run 替代的 run（前向；查询靠 idx_supersedes）' },
+      /** RH3：同一交易日 supersede 显式标记（R4「必须显式可追溯」）；与 supersedes_run_id **同源** */
+      same_trade_date_supersede: { type: 'boolean', required: false, desc: 'RH3：是否同日 supersede（取自 promotion 前的 plan）' },
+      promoted: { type: 'boolean', required: false, desc: '本 run 是否被提升为 authoritative（含"尝试但被拒"时的 false）' },
+      promoted_at: { type: 'date', required: false, desc: '★ 提升**事件**时刻（⛔ 不是 is_active 布尔）' },
+      promoted_from_run_id: { type: 'string', required: false, desc: '提升时的前一个 run（CAS 回执 previous_run_id）' },
+      /** RH3：与 `promoted_from_run_id` 同源（pointer plan.next_pointer.promoted_from_run_id） */
+      promoted_from_pointer_run_id: { type: 'string', required: false, desc: 'RH3：promotion 前 pointer 记录的 active run（plan 同源）' },
+      /** RH3：CAS-7 写后独立回读一致性；⛔ 仅提升成功时有意义，其余 ⇒ null */
+      read_after_write_consistent: { type: 'boolean', required: false, desc: 'RH3：CAS 写后回读一致性（失败/未提升 ⇒ null）' },
+      cas_reason: { type: 'string', required: false, desc: 'CAS 判定（PROMOTED/ALREADY_ACTIVE/…；被拒时留痕）' },
+      created_at: { type: 'date', required: false, desc: '写入时刻（本行一次写入，永不更新）' }
+    },
+    indexes: [
+      { name: 'uk_run_id', keys: [{ field: 'run_id', direction: 'asc' }], unique: true },
+      { name: 'idx_trade_date', keys: [{ field: 'expected_trade_date', direction: 'desc' }], unique: false },
+      { name: 'idx_supersedes', keys: [{ field: 'supersedes_run_id', direction: 'asc' }], unique: false }
+    ]
   }
 ];
 

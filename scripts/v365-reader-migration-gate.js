@@ -365,7 +365,7 @@ async function main() {
     console.log(`PASS ${items.length - failed.length} / ${items.length}`);
     if (failed.length) failed.forEach((f) => console.log('  [FAIL] ' + f.name + ' :: ' + f.detail));
     console.log('READER_MIGRATION = ' + (failed.length ? 'NOT_COMPLETE（存在 FAIL 项）' : 'COMPLETE'));
-    console.log('⚠️ COMPLETE ≠ PRODUCTION AUTHORIZED；RUN_HISTORY_INDEX 仍 PENDING；'
+    console.log('⚠️ COMPLETE ≠ PRODUCTION AUTHORIZED；RUN_HISTORY_INDEX 仍 PENDING（代码侧 RH1~RH4 ✅ + HD-10 结构侧 ✅ 已完成；缺数据侧：生产提升 + 切换日登记）；'
       + 'FREEZE / PR / MERGE / DEPLOY 均需单独授权。');
   }
   process.exit(failed.length ? 1 : 0);

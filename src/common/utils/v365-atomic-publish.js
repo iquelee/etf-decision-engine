@@ -36,12 +36,21 @@ const {
 // 拒因枚举**单一来源**：与适配器共用同一 CAS 语义层（机制无关）
 const { CAS_REASON } = require('./v365-publish-store.js');
 
-/** 逻辑集合名（PoC 抽象；未创建任何生产 collection） */
+/**
+ * 逻辑集合名 —— **唯一来源**为 `v365-contracts.js::V365_COLLECTIONS`（OD-5 冻结）。
+ *
+ * ⚠️ WP-RH1：本文件原先**自带一份** `POC_COLLECTIONS` 硬编码表，与 `V365_COLLECTIONS`
+ *    构成**双源**（HD12-0 实测：两侧字面值一致 ⇒ 当前可工作，但**改名任一侧即静默错配**）。
+ *    ⇒ 现改为从契约模块读取，并保留 `POC_COLLECTIONS` 作为**过渡别名**（不破坏既有调用方）。
+ * ⛔ 不得在本文件重新硬编码集合名。
+ */
+const { V365_COLLECTIONS } = require('./v365-contracts.js');
+/** @deprecated 过渡别名 —— 请直接使用 `V365_COLLECTIONS`；本别名将在后续版本移除 */
 const POC_COLLECTIONS = Object.freeze({
-  RUN_MANIFEST: 'run_manifest',
-  RUN_CANDIDATE_DECISION: 'run_candidate_decision',
-  RUN_CANDIDATE_PORTFOLIO: 'run_candidate_portfolio',
-  ACTIVE_RUN_POINTER: 'active_run_pointer'
+  RUN_MANIFEST: V365_COLLECTIONS.RUN_MANIFEST,
+  RUN_CANDIDATE_DECISION: V365_COLLECTIONS.CANDIDATE_DECISION,
+  RUN_CANDIDATE_PORTFOLIO: V365_COLLECTIONS.CANDIDATE_PORTFOLIO,
+  ACTIVE_RUN_POINTER: V365_COLLECTIONS.ACTIVE_POINTER
 });
 
 const POINTER_ACTION = Object.freeze({

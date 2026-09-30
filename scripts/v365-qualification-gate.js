@@ -32,6 +32,9 @@ const ap = require(path.join(REPO, 'src/common/utils/v365-atomic-publish.js'));
 const contracts = require(path.join(REPO, 'src/common/utils/v365-contracts.js'));
 const { createMemoryAdapter } = require(path.join(REPO, 'scripts/lib/v365-p3-memory-adapter.js'));
 const { verify: verifyManifest } = require(path.join(REPO, 'scripts/verify-v365-candidate-manifest.js'));
+// HD12-1 §七：决策分类**唯一来源** —— ⛔ 本文件不再维护本地 CORE 数组
+// （HD12-0 实测：本文件的 `CORE`(11) 与 parity 的 `DECISION_CORE`(12) 曾漂移 3 项）
+const CLASSIFICATION = require(path.join(REPO, 'scripts/lib/v365-decision-classification.js'));
 
 const CODES = ['513310', '515880', '159582', '518880', '159570'];
 const EXPECTED = '2026-09-23';
@@ -108,12 +111,12 @@ async function main() {
   {
     let ok = true; let detail = [];
     // (a) 决策核心文件零改动（改动清单由 bash 传入，脚本内不调子进程）
-    const CORE = [
-      'src/common/utils/decision.js', 'src/common/utils/decision-v3.js', 'src/common/utils/trend-stage.js',
-      'src/common/utils/correlation.js', 'src/common/utils/defense.js', 'src/common/utils/swing-structure.js',
-      'src/common/utils/market-regime.js', 'src/common/utils/indicators.js',
-      'src/common/utils/v3-shadow.js', 'src/common/utils/portfolio-mode.js', 'src/common/utils/portfolio-cash.js'
-    ];
+    // 分类来自**唯一来源**（HD12-1 §七）：本文件不再硬编码 CORE 数组。
+    // ⚠️ 取 `calcOrch()` = CALC ∪ ORCH（不含 MIXED / INFRA），理由：
+    //    · 旧本地 CORE(11 项) **全部**落在 CALC ∪ ORCH 内 ⇒ `REMOVED_PROTECTED_FILES = 0`
+    //    · 不含 MIXED（RDE）与 INFRA（replay harness）⇒ 不引入超出「新增 CALC 覆盖」的收紧
+    //      （RDE 的 fail-closed 由 parity 门禁承担，行为与改前一致）
+    const CORE = CLASSIFICATION.calcOrch();
     if (changedFile) {
       const changed = fs.readFileSync(changedFile, 'utf8')
         .split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map((s) => s.replace(/\\/g, '/'));
@@ -132,7 +135,8 @@ async function main() {
           const b = d.byCode[c];
           return [c, b.trend_stage, b.final_target, b.final_action, b.binding_constraint];
         })))).digest('hex');
-      const a = harness.replay(win); const b = harness.replay(win);
+      // RPG-F2-B：`replay()` 已改为 async ⇒ 须 await（不传 protocol ⇒ 默认 V1，判据不变）
+      const a = await harness.replay(win); const b = await harness.replay(win);
       const sa = sha(a); const sb = sha(b);
       detail.push(`replay anchor = ${sa}`);
       detail.push(`两次回放一致 = ${sa === sb}`);
@@ -588,7 +592,8 @@ async function main() {
     console.log('Q7_PLATFORM_CAS = ' + (failed.length ? 'NOT_PASS' : 'PASS'));
     console.log('V365_IMPLEMENTATION = ' + (failed.length ? 'NOT_QUALIFIED（存在实现级 FAIL 项）' : 'QUALIFIED_CANDIDATE'));
     console.log('⚠️ QUALIFIED_CANDIDATE ≠ PRODUCTION AUTHORIZED；'
-      + 'READER_MIGRATION / RUN_HISTORY_INDEX 仍 PENDING；FREEZE / PR / MERGE / DEPLOY 均需单独授权。');
+      + 'READER_MIGRATION = COMPLETE；RUN_HISTORY_INDEX 仍 PENDING（代码侧 RH1~RH4 ✅ + HD-10 结构侧 ✅ 已完成；缺数据侧：生产提升 + 切换日登记）；'
+      + 'FREEZE / PR / MERGE / DEPLOY 均需单独授权。');
   }
   fs.writeFileSync(path.join(REPO, 'outputs', 'v365-qualification.json'),
     JSON.stringify({ at: new Date().toISOString(), checks, failed: failed.length, platformBlocked }, null, 2), 'utf8');

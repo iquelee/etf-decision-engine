@@ -45,12 +45,19 @@ const PUBLISH_PROTOCOL_VERSION = 'v365-two-stage-v1';
 
 /* ------------------------------------------------------------------ *
  * 发布协议的集合命名（语义，不是"必须用这些物理名"）
+ *
+ * ⚠️ WP-RH1：本表是 **v365 集合名的唯一来源**（OD-5 冻结）。
+ *    ⛔ 不把这些名字复制进 `src/common/constants.js` —— 该文件属
+ *       `DECISION_CALCULATION_CORE`（HD12-D8），受**绝对**保护；
+ *       且 OD-5 已裁定集合名收敛到本文件 ⇒ 复制会造成双源漂移。
  * ------------------------------------------------------------------ */
 const V365_COLLECTIONS = Object.freeze({
   RUN_MANIFEST: 'run_manifest',
   CANDIDATE_DECISION: 'run_candidate_decision',
   CANDIDATE_PORTFOLIO: 'run_candidate_portfolio',
-  ACTIVE_POINTER: 'active_run_pointer'
+  ACTIVE_POINTER: 'active_run_pointer',
+  /** WP-RH1/RH2：run 目录（timeline）。OD-1 方案 A′：单表、只追加、只存前向 `supersedes_run_id` */
+  RUN_HISTORY: 'run_history'
 });
 
 const POINTER_SCOPE_PRODUCTION = 'production';

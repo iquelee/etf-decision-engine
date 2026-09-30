@@ -16,6 +16,12 @@ cloudbaserc.json
 .env.local
 .env.production
 .env.development
+# CloudBase / TCB 本地凭证（CLI 登录态 / 服务账号 key，严禁入库）
+.tcb-home/
+.tcb-keys/
+**/.cloudbase/
+**/auth.json
+**/*.tcbkey
 
 # 数据（行情/训练数据，大文件）
 deliverables/

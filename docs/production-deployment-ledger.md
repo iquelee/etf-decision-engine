@@ -219,6 +219,124 @@
 未部署 · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
 · 未补 FINDING-1/2 字段 · 未处置 OBS-001 · 未回滚 · 未追溯修正历史 `days_in_stage`。
 
+---
+
+### D-007 · 2026-09-29 · C-021 只读核验 —— 线上仍为 V3.6.4（零漂移）+ 部署候选冻结登记
+
+> **本行为只读核验 + 设计登记（docs-only）**：**未部署、未改任何云函数、未改 `param_config`、
+> 未动冻结件、未移动 tag、未执行 production run、未初始化 pointer**。
+> 依 `## 3. 追加规范` 第 2 条（只读核验亦追加一行）登记。
+> **`supersedes`：无** —— D-001~D-006 全部字段**逐字未动**。
+
+#### 1. 只读核验（§2 Production Deployment Baseline Audit）
+
+| 字段 | 值 |
+|---|---|
+| `record_date` | 2026-09-29 |
+| `record_type` | 只读核验 + 部署候选冻结设计登记（**无部署**） |
+| `deploy/mod_time` | **未变** —— `runDecisionEngine` 仍 `2026-09-22 16:29:48` |
+| `runDecisionEngine.FunctionId` | `lam-eiye285p` |
+| `runDecisionEngine.Runtime` | `Nodejs16.13` |
+| `runDecisionEngine.Handler` | `index.main` |
+| `runDecisionEngine.ModTime` | **2026-09-22 16:29:48（未变，= D-005 / D-006）** |
+| `runDecisionEngine.CodeSize` | **4013498（未变，= D-005 / D-006）** |
+| `index_sha256_raw` | `072b40089c7bc260a888bda913e68b1afb546b49a3d19ef88d4eec7fe9ae477b`（**本地下载复算，逐位一致**） |
+| `index_sha256_lf` | `77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529`（同） |
+| `source_parity`（复算） | **EXACT_MATCH 74 / 76**（`CONTENT_DIFF 0`；`ONLY_ONLINE 2` = `GEN1_GUARDED_EFFECTIVE_{FREEZE,EVIDENCE}.json`，build 注入属预期） |
+| `CodeSha256`（CLI 字段） | **N/A —— `tcb fn detail` 不返回该字段** ⇒ 以 `index.js` 双 SHA + 逐文件 parity 替代，⛔ 不得因字段缺失判漂移 |
+| `CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY` | **V3.6.4**（冻结 `aa634e264270f26207c59c19ef3e1c31dde01e64`） |
+| `PRODUCTION_DEPLOYMENT_DRIFT` | **NO**（三重独立一致：`ModTime`/`CodeSize` + `index.js` 双 SHA + 逐文件 parity `diff=0`） |
+| `DEPLOYMENT_IDENTITY_VERIFIED` | **false** —— ⛔ 线上 = V3.6.4，**并非**本轮 V3.6.5 candidate ⇒ 部署身份**尚未**成立（正是 C-021 缺口） |
+| `rollback artifact（独立验证）` | **PASS** —— 线上包下载 → 本地复算 `index.js` 双 SHA == D-006 记录值（独立双源一致）；⛔ 非仅存下载链接 |
+| `production writes` | **NO**（全程只读） |
+| `deploy triggered` | **NO** |
+| `production run triggered` | **NO** |
+| `pointer initialized` | **NO** |
+| `switch date` | **null（未设置）** |
+
+#### 2. 部署候选冻结登记（§3 / §4 · 设计层，尚未部署）
+
+| 字段 | 值 |
+|---|---|
+| `candidate base_head_sha` | `c6bd006fd76ffc5358cddd07347df8ed23d9e61d` |
+| `candidate_manifest_sha` | `8c53f93fa66bbc2768f23843530f3997e2c9d38030e58b65c2bc0d7497c501c1`（两次重算逐位一致 ⇒ deterministic） |
+| `candidate_content_sha` = `dependency_closure_sha` | `e80ea8c20785f3c8c4da70e8316d84321cfe944cb7ba25f85df2dba04ff79016` |
+| `V365_DEPLOYMENT_REQUIRED_FILES` | **91**（function own 2 + canonical common 87 + extra frozen 2） |
+| `V365_DEPLOYMENT_EXCLUDED_FILES` | **69**（docs 24 / scripts 26 / tests 15 / 其它 4） |
+| `changed_in_closure` | **7**（⛔ 非 76 全量部署） |
+| `materializeIndicators_touched` | **false** |
+| `expected runtime / handler` | `Nodejs16.13` / `index.main` |
+| `build_method` | `scripts/build-cloudfunctions.js` |
+| `build_tool_versions` | `node v22.22.2` · `tcb_cli CloudBase CLI 3.8.1` |
+| `mutable_working_tree_deploy_forbidden` | **true**（⛔ 禁止直接从 mutable working tree 部署） |
+| `gate_d_status` | **PENDING_OWNER_DEPLOYMENT_APPROVAL**（`may_deploy = false`；`owner_deployment_authorization = NOT_GRANTED`） |
+
+#### 3. 本次记录未做的事（边界声明）
+
+**未部署** · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
+· 未执行 production run · 未初始化 pointer · 未写任何业务数据 · 未设置 switch date · 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{deployment-identity-audit,deployment-scope,deployment-candidate-manifest,rollback-artifact}.json`
+> 设计详情：`docs/V365_DEPLOYMENT_IDENTITY_AND_CANDIDATE_FREEZE.md`
+
+---
+
+### D-008 · 2026-09-30 · C-021.1 只读核验 —— 部署 bundle 已物化（**未部署**）
+
+> **本行为只读核验 + 本地 bundle 物化登记（local-only）**：**未部署、未改任何云函数、未改 `param_config`、
+> 未动冻结件、未移动 tag、未执行 production run、未初始化 pointer**。
+> 依 `## 3. 追加规范` 第 2 条（只读核验亦追加一行）登记。
+> **`supersedes`：无** —— D-001~D-007 全部字段**逐字未动**。
+
+#### 1. 只读核验（线上身份复核 —— 与 D-007 逐位一致）
+
+| 字段 | 值 |
+|---|---|
+| `record_date` | 2026-09-30 |
+| `record_type` | 只读核验 + **本地** deployment bundle 物化登记（**无部署**） |
+| `deploy/mod_time` | **未变** —— `runDecisionEngine` 仍 `2026-09-22 16:29:48` |
+| `runDecisionEngine.FunctionId` | `lam-eiye285p`（未变） |
+| `runDecisionEngine.Runtime / Handler` | `Nodejs16.13` / `index.main`（未变） |
+| `runDecisionEngine.ModTime / CodeSize` | **2026-09-22 16:29:48 / 4013498（未变，= D-005 / D-006 / D-007）** |
+| `index_sha256_raw / lf` | `072b4008…477b` / `77f7d500…1529`（本地下载复算，**逐位一致**） |
+| `source_parity`（复算） | **EXACT_MATCH 74 / 76**（`CONTENT_DIFF 0`） |
+| `CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY` | **V3.6.4**（冻结 `aa634e264270f26207c59c19ef3e1c31dde01e64`） |
+| `PRODUCTION_DEPLOYMENT_DRIFT` | **NO** |
+| `DEPLOYMENT_IDENTITY_VERIFIED` | **false** —— ⛔ 线上仍为 V3.6.4，**并非**本轮 V3.6.5 candidate |
+| `production writes` | **NO**（全程只读；本地 bundle 仅写入 `deliverables/`） |
+| `deploy triggered` | **NO** |
+| `production run triggered` | **NO** |
+| `pointer initialized` | **NO** |
+| `switch date` | **null（未设置）** |
+
+#### 2. 本地 deployment bundle 物化登记（§1~§5 · 尚未部署）
+
+| 字段 | 值 |
+|---|---|
+| `DEPLOYMENT_ARTIFACT_MATERIALIZED` | **true** |
+| `DEPLOYMENT_BUNDLE_SHA` | **`e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4`** |
+| `bundle_content_manifest_sha` | `0e544793534552c693807f6e1985cdebdb7c235f5244c28296a29512bf00e5d4` |
+| `bundle_path / size / format` | `deliverables/v365-production-history/c021/bundle/runDecisionEngine.V365.e996e88ae808.tar` / `1161728` / `ustar-deterministic`（mtime=0 · uid=0 · gid=0 · mode=0644） |
+| `required_file_count` | **91**（= D-007 登记值） |
+| `BUNDLE_SOURCE_PARITY` | **EXACT_MATCH**（`MISSING_REQUIRED_FILE 0` · `UNEXPECTED_FILE 0` · `CONTENT_DIFF 0` · `ONLINE_IRRELEVANT_ARTIFACT_DIFF 0`） |
+| `§1 source drift` | **0 / 91**（逐文件 `sha256(current) == manifest.expected`；⛔ 不一致 ⇒ `STOP = CANDIDATE_SOURCE_DRIFT`） |
+| `§4 UNEXPECTED_PACKAGE_DIFF` | **0**（`added 15` · `modified 4` · `deleted 0` · `unchanged 72`） |
+| `§4 计数对账` | `19 = 7 working-tree + 12 committed-since-aa634e2`；C-021 §3 的 `7` ⊂ 本 delta `19`（**包含**关系） |
+| `§4 红线三项` | `materializeIndicators_changed = false` · `param_config_semantic_change = false` · `protected_CALC_unexpected_change = false` |
+| `DEPLOYMENT_ROLLBACK_BINDING` | **BOUND** |
+| `previous_package_sha`（回滚目标） | `aa576c20599528a66737f154b31b8cca87f25c1cf50068093bc243ed7084caea`（线上 V3.6.4 · 台账 D-006） |
+| `rollback_bundle_sha256`（V3.6.4 源码级） | `4c7949f5dcf3da99b1cbbc20e159fee8a86f8279c2b5f89c9a57982563d0295e`（76 文件 · 独立复核 `EXACT_MATCH` · `index.js` 双 SHA 匹配 D-006） |
+| `gate_d_status` | **PENDING_OWNER_DEPLOYMENT_APPROVAL**（D-01~D-09 PASS · **D-10 `owner_deployment_authorization` = NOT_GRANTED**；`may_deploy = false`） |
+| `authorization_binding`（未来授权必需） | `base_head_sha` + `candidate_manifest_sha` + **`deployment_bundle_sha`** + `production_env` + `function_name`（⛔ 仅绑 HEAD SHA 一律 REJECTED） |
+
+#### 3. 本次记录未做的事（边界声明）
+
+**未部署** · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
+· 未执行 production run · 未初始化 pointer · 未写任何业务数据 · 未设置 switch date · 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{deployment-artifact,pre-deploy-package-diff,deployment-rollback-binding}.json` · `c021/bundle/` · `c021/rollback/`
+> 设计详情：`docs/V365_DEPLOYMENT_IDENTITY_AND_CANDIDATE_FREEZE.md`（附 §A.1~§A.11）
+
 ## 2. 勘误指针（不改历史行）
 
 | # | 对象 | 已过期的字段 | 现状 | 处理 |
@@ -238,3 +356,107 @@
 3. 只允许追加；更正用新行 + `supersedes: D-xxx`。
 4. `source_repo_sha` 若无法确证，必须显式写「推定」，不得默认属实。
 5. 不得在此文件写入密钥、envId 之外的真实凭据、或任何个人资金数据。
+
+---
+
+### D-009 · 2026-09-30 · **V3.6.5 CONTROLLED DEPLOYMENT 已执行**（owner 授权 §3 · 单次 · runDecisionEngine only）
+
+> **本行为真实生产部署**（owner 于 C-021.2 §3 明确授权，五元组逐位绑定）。
+> `supersedes`：无 —— D-001~D-008 全部字段**逐字未动**（append-only）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`CONTROLLED DEPLOYMENT AUTHORIZATION = GRANTED`**（owner §3；⛔ 不含 FIRST CONTROLLED RUN） |
+| `base_head_sha` | `c6bd006fd76ffc5358cddd07347df8ed23d9e61d` |
+| `candidate_manifest_sha` | `8c53f93fa66bbc2768f23843530f3997e2c9d38030e58b65c2bc0d7497c501c1` |
+| `deployment_bundle_sha`（授权值） | `e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4` |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine`（**仅此一个**；⛔ 未部署 materializeIndicators 或任何其他函数） |
+| `AUTHORIZATION_SCOPE_RATIFIED_BY_OWNER` | `true` · `changed_files_count = 85` |
+| `APPROVAL_MANIFEST_SHA256` | `a972cb914b6df4aee5d03da5a718c0e3ebf0ee43afbfe0caa428baed68323594` |
+| `CHANGED_FILES_LIST_SHA256` | `c124f178a635b0aeaaf58251efea5987576ce90bf1212a934f1ce4c4b58cb50e` |
+| `CHANGED_REGIONS_LIST_SHA256` | `59cceefaccb008a8ded07912833bfb3f1e366d0481f590c9834919a05470e899` |
+
+#### 2. 部署输入（⛔ 非 mutable working tree）
+
+| 字段 | 值 |
+|---|---|
+| `deploy_input_method` | **解包已冻结 bundle**（⛔ 非 `build-cloudfunctions.js` / 非 mutable worktree） |
+| `bundle_sha_recomputed`（部署前从磁盘复算） | `e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4`（**逐位 == 授权值**） |
+| `STAGED_SOURCE_PARITY` | **`EXACT_MATCH`**（91 文件 · MISSING 0 · EXTRA 0 · CONTENT_DIFF 0） |
+| `staging_removed_stale` | `common/MANIFEST.json`（陈旧残留，⛔ 不在 bundle 内 ⇒ 已移除，避免多带文件） |
+| `preserved_ignore_policy` | `node_modules/**` · `config.json`（由快照恢复，不在 bundle 闭包内） |
+
+#### 3. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deployment_started_at` | `2026-09-30T05:37:19Z`（= 2026-09-30 13:37:19 +08） |
+| `deployment_finished_at` | `2026-09-30T05:38:13Z`（= 2026-09-30 13:38:13 +08） |
+| `deploy_command` | `tcb fn deploy runDecisionEngine --dir dist-functions/runDecisionEngine --force -e <env>` |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ [runDecisionEngine] Cloud function deployed successfully!`**（exit 0） |
+| `deployment_count` | **1**（单次；⛔ 未重试） |
+
+#### 4. 部署后线上身份（§8 POST_DEPLOY_IDENTITY_GATE · 只读）
+
+| 字段 | 部署前（V3.6.4） | **部署后（V3.6.5）** |
+|---|---|---|
+| `FunctionId` | `lam-eiye285p` | `lam-eiye285p`（未变） |
+| `Runtime` | `Nodejs16.13` | **`Nodejs16.13`** ✅ exact match |
+| `Handler` | `index.main` | **`index.main`** ✅ exact match |
+| `ModTime` | `2026-09-22 16:29:48` | **`2026-09-30 13:38:07`** |
+| `CodeSize` | `4013498` | **`4465434`** |
+| `Status` | `Active` | `Active` |
+| `Timeout` | `120` | `120` |
+| `CodeSha256`（CLI 字段） | `N/A` | `N/A`（`tfn detail` 不返回；以逐文件 parity + `index.js` 双 SHA 替代） |
+
+#### 5. 部署后源码 parity（LF-normalized · vs **授权 bundle**）
+
+```text
+线上源码文件                 = 91（部署前 76）
+bundle 文件                  = 91
+MISSING_REQUIRED_FILE        = 0
+UNEXPECTED_FILE              = 0
+CONTENT_DIFF                 = 0
+ONLINE_SOURCE_PARITY         = EXACT_MATCH
+UNEXPECTED_PACKAGE_DIFF      = 0
+
+index.js raw sha  online = eb1868cb0f386bee4b89452833a1f9167a8c17723a0381c8f659aef1d55c5178
+                  bundle = eb1868cb0f386bee4b89452833a1f9167a8c17723a0381c8f659aef1d55c5178  ✅
+index.js LF  sha  online = 7e339fb2a9eeb87d857d8a30205df5e1d4c67c65049f6a28c871066c7281d84c
+                  bundle = 7e339fb2a9eeb87d857d8a30205df5e1d4c67c65049f6a28c871066c7281d84c  ✅
+```
+
+> ⚠️ 上表 LF 行以证据件 `post-deploy-identity-gate.json` 为准（逐位一致）。
+> 修正记录（2026-09-30 · 同一轮内）：本行 `bundle` 侧曾误录为 `…d4c67e65049f…`（漏一个 `c`），
+> 已按证据件更正为 `…d4c67c65049f…`。**部署事实与判定不受影响**（online/bundle 双侧实为逐位一致）。
+
+#### 6. 部署后判定（§9）
+
+```text
+DEPLOYMENT_IDENTITY_VERIFIED            = true
+CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY  = V3.6.5
+READY_FOR_V365_FIRST_CONTROLLED_RUN     = PENDING_OWNER_RUN_APPROVAL
+OWNER_RUN_AUTHORIZATION                 = false
+PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
+```
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | V3.6.4 production package `aa576c20599528a66737f154b31b8cca87f25c1cf50068093bc243ed7084caea`（已独立验证） |
+| `rollback_used` | **NO**（部署后身份核验全部 PASS） |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未执行 production run · ⛔ 未初始化 `active_run_pointer` · ⛔ 未写 `run_manifest` / `run_history` ·
+⛔ 未设置 `V365_ENFORCE_SWITCH_DATE` · ⛔ 未建立 `PROSPECTIVE_EPOCH` · ⛔ 未改 `param_config` ·
+⛔ 未改生产 schema · ⛔ 未创建/删除生产 collection · ⛔ 未 backfill · ⛔ 未改 CALC 文件 ·
+⛔ 未改 immutable lock · ⛔ 未部署任何其他 Cloud Function · ⛔ 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{pre-deploy-gate,staged-deploy-input,post-deploy-identity-gate,authorization-ratification}.json`
+> 部署日志：`_v365-deploy/deploy-output.log` · 时点：`_v365-deploy/deploy-{started,finished}-at.txt`

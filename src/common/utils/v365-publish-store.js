@@ -380,5 +380,9 @@ module.exports = {
   classifyPointerPromotion,
   probeCasCapability,
   promotionAllowed,
-  createCloudbaseStore
+  createCloudbaseStore,
+  // R2-c：转出指针作用域常量 ⇒ 调用方（RDE）无需新增模块级 `require('v365-contracts')`。
+  // ⚠️ 模块级 require 会落在任何 orch zone **之外** ⇒ 被 zone 包含性判据拒绝；
+  //    此处转出可保持**单一来源**（⛔ 不硬编码 'production'）。
+  POINTER_SCOPE_PRODUCTION: CONTRACTS.POINTER_SCOPE_PRODUCTION
 };

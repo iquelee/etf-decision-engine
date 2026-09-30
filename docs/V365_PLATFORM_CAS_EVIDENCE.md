@@ -197,7 +197,8 @@ Q7 的真实判据（语义层）：
 
 - ❌ 不支撑 SDK 层 `db.runTransaction` 的行为（该通道无对应命令，无法执行）。
 - ❌ 不支撑极端并发压力下的行为（见 §2.1 证据强度限定）。
-- ❌ 不支撑 reader 侧迁移 —— 那是 **READER_MIGRATION**（PENDING）的独立工作包。
+- ❌ 不支撑 reader 侧迁移 —— 那是 **READER_MIGRATION** 的独立工作包
+  （2026-09-24 状态收口：**已 COMPLETE**，见 `docs/V365_READER_MIGRATION.md`；本证据文档不覆盖其判据）。
 - ❌ 不构成部署授权；V3.6.5 仍未 freeze / 未 PR / 未 merge / 未 deploy。
 
 **关联实现**：`src/common/utils/v365-publish-store.js::compareAndSetPointer`

@@ -84,6 +84,189 @@ const ALLOWED_LATEST_READS = Object.freeze([
   { collection: 'trade_log', axis: 'MANUAL_LEDGER', note: '人工操作记录' }
 ]);
 
+/* ------------------------------------------------------------------ *
+ * RH4（WP-RH4）· CLASS C **双源读取**的迁移登记（OD-4 §4.5）
+ *
+ * 事实前提（OD-4 §4.4 决策 = 方案 B「只读冻结」）：
+ *   `decision_result` / `portfolio_snapshot` 在 V3.6.5 切换日**之后不再新增**；
+ *   而 CLASS C 读者需要**跨切换日区间** ⇒ 必须**双源**：
+ *     `to < V365_ENFORCE_SWITCH_DATE`   ⇒ 全段 legacy
+ *     `from >= V365_ENFORCE_SWITCH_DATE` ⇒ 全段 run 轴
+ *     跨切换日                            ⇒ **两段拼接 + 必须显式标注 provenance**
+ *
+ * ⛔ 硬约束：**不得**把两段静默拼成一条序列（会产生「同一序列两种 run 语义」的混读）。
+ * ⇒ 每处 CLASS C 读点必须携带**机器可判定**的 provenance，而非空泛注释。
+ *
+ * ⚠️ **未完成条件（本表即里程碑）**：`run 轴` 需要 `run_history → run_candidate_*`
+ *    的历史**索引**。该能力**尚未**建成（`RUN_HISTORY_INDEX = PENDING`，依赖受治理的
+ *    生产历史数据）⇒ 当前 `run_axis_available = false` ⇒ CLASS C **仍只读 legacy 段**，
+ *    且**必须如实标注** `run_axis_available:false` + `coverage:legacy_only`
+ *    ⇒ ⛔ 不得谎称已双源。
+ * ------------------------------------------------------------------ */
+
+/** V3.6.5 ENFORCE 切换日（双源分段边界；由部署时登记，⛔ 未登记 ⇒ 双源不可判定） */
+const V365_ENFORCE_SWITCH_DATE = null;
+
+/** 双源覆盖状态（如实反映"数据是否真的够"） */
+const CLASS_C_COVERAGE = Object.freeze({
+  LEGACY_ONLY: 'legacy_only',                 // 切换日未登记 / run 轴索引未建成
+  RUN_AXIS_ONLY: 'run_axis_only',
+  CROSS_SWITCH_STITCHED: 'cross_switch_stitched',   // 两段拼接（必须带分段 provenance）
+  INCOMPLETE_GAP: 'incomplete_gap'            // ⚠️ 切换日后无 run 轴数据 ⇒ 有缺口
+});
+
+/**
+ * CLASS C 读点**迁移登记表**（RH4 的可审计清单）。
+ * ⚠️ 与 `ALLOWED_LATEST_READS` 的**区别**：后者是"这不是权威读"的**许可**，
+ *    本表是"这是历史区间读、且**迁移状态**如何"的**进度登记**。二者不可互相替代。
+ */
+const CLASS_C_READ_POINTS = Object.freeze([
+  {
+    id: 'apiGateway.getDecisions',
+    file: 'cloudfunctions/apiGateway/index.js',
+    collection: 'decision_result',
+    range: true,
+    run_axis_target: 'run_history → run_candidate_decision',
+    migrated: true,
+    note: '历史区间（from/to）、limit 500/60'
+  },
+  {
+    id: 'apiGateway.getReview.decisions',
+    file: 'cloudfunctions/apiGateway/index.js',
+    collection: 'decision_result',
+    range: true,
+    run_axis_target: 'run_history → run_candidate_decision',
+    migrated: true,
+    note: '复盘区间、limit 500'
+  },
+  {
+    id: 'apiGateway.getReview.snapshots',
+    file: 'cloudfunctions/apiGateway/index.js',
+    collection: 'portfolio_snapshot',
+    range: true,
+    run_axis_target: 'run_history → run_candidate_portfolio',
+    migrated: true,
+    note: '复盘区间快照、limit 200'
+  },
+  {
+    id: 'cooldown.resolveLastBuyAddMode',
+    file: 'src/common/utils/cooldown.js',
+    collection: 'decision_result',
+    range: false,
+    run_axis_target: 'run_history（按 buyDate 定位当日 run）',
+    migrated: true,
+    // ⛔⛔ **CALC 绝对保护**（HD12-D8）：该文件属 `DECISION_CALCULATION_CORE`，无授权路径。
+    //    ⇒ RH4 **不得**在此文件内加任何标记（连注释都不行）。
+    //    ⇒ 迁移状态只能**带外登记**（本表即其审计记录），并由测试 H-12/H-13 守卫。
+    in_file_marker_allowed: false,
+    marker_style: 'OUT_OF_BAND_REGISTRY_ONLY',
+    note: '⚠️ **按买入日单点回查**（非区间）—— 带内该票决策的 add_mode；'
+      + '⛔ 文件属 CALC ⇒ 零改动；迁移进度以本表带外记录'
+  },
+  {
+    id: 'runIntegratedShadowEod.baselineLatest',
+    file: 'cloudfunctions/runIntegratedShadowEod/index.js',
+    collection: 'decision_result',
+    range: false,
+    run_axis_target: 'run_history（latest-by-trade-date）',
+    migrated: true,
+    note: 'V3.6.1 基线**落后度判定**（gate 语义）—— 用 latest 是**原语义**，非"猜权威结果"'
+  },
+  {
+    id: 'runGen1ShadowEod.latestMarketRegime',
+    file: 'cloudfunctions/runGen1ShadowEod/index.js',
+    collection: 'portfolio_snapshot',
+    range: false,
+    run_axis_target: '（不需要：影子观察域诊断值，⛔ 不参与 run 轴迁移）',
+    migrated: true,
+    // ⛔⛔ **Gen-1 Feature Pipeline Lock 冻结文件**（`GEN1_FEATURE_PIPELINE_LOCK.json`
+    //    role = `feature_builder_and_params`，**字节级** SHA 冻结）。
+    //    ⇒ RH4 **不得**改（连注释都不行，注释也会使 SHA 失配）。
+    //    ⇒ 迁移状态只能**带外登记**。
+    in_file_marker_allowed: false,
+    marker_style: 'OUT_OF_BAND_REGISTRY_ONLY',
+    frozen_by: 'GEN1_FEATURE_PIPELINE_LOCK.json#feature_builder_and_params',
+    note: '⚠️ 仅取 `market_regime`；缺失不阻断 EOD ⇒ 影子观察域诊断值。'
+      + '⛔ Gen-1 Lock 字节级冻结 ⇒ 零改动；其"非权威"性质以本表带外声明'
+  }
+]);
+
+/**
+ * RH4：构造 CLASS C 响应的**分段 provenance**（additive）。
+ *
+ * @param {object} input
+ *   - from / to {string|null} 查询区间
+ *   - run_axis_rows_available {boolean} run 轴历史索引是否**真的**可用
+ * @returns {object} 分段 provenance（⛔ `stitched` 为 true 时**必须**携带 `segments`）
+ */
+function buildClassCProvenance(input) {
+  const i = input || {};
+  const switchDate = V365_ENFORCE_SWITCH_DATE;
+  const runAxisOk = i.run_axis_rows_available === true && switchDate != null;
+
+  const from = i.from != null ? String(i.from) : null;
+  const to = i.to != null ? String(i.to) : null;
+
+  // 分段判定（⛔ 三条边界必须显式，不得靠 `<=` 猜）
+  const crossesSwitch = !!(switchDate && from && to && from < switchDate && to >= switchDate);
+  const entirelyRunAxis = !!(switchDate && from && from >= switchDate);
+
+  let coverage;
+  if (!switchDate) coverage = CLASS_C_COVERAGE.LEGACY_ONLY;
+  else if (crossesSwitch) coverage = runAxisOk ? CLASS_C_COVERAGE.CROSS_SWITCH_STITCHED : CLASS_C_COVERAGE.INCOMPLETE_GAP;
+  else if (entirelyRunAxis) coverage = runAxisOk ? CLASS_C_COVERAGE.RUN_AXIS_ONLY : CLASS_C_COVERAGE.INCOMPLETE_GAP;
+  else coverage = CLASS_C_COVERAGE.LEGACY_ONLY;
+
+  const segments = [];
+  if (switchDate && from && to && from < switchDate) {
+    segments.push({
+      axis: 'LEGACY_ARCHIVE', collection_source: 'decision_result / portfolio_snapshot',
+      from, to: to < switchDate ? to : switchDate, selector: 'decision_date / snapshot_date'
+    });
+  }
+  if (switchDate && to && to >= switchDate) {
+    segments.push({
+      axis: 'RUN_AXIS', collection_source: 'run_history → run_candidate_*',
+      from: from && from > switchDate ? from : switchDate, to, selector: 'run_id（经 run_history 索引）',
+      available: runAxisOk
+    });
+  }
+
+  return {
+    reader_class: READER_CLASS.HISTORICAL_RANGE,
+    axis: 'HISTORICAL_RANGE',
+    // ⛔ 两条轴不得混成一句：分段清单是**必需**字段（当发生跨切换日拼接时）
+    coverage,
+    switch_date: switchDate,
+    from, to,
+    crosses_switch_date: crossesSwitch,
+    stitched: segments.length > 1,
+    segments,
+    run_axis_available: runAxisOk,
+    run_axis_status: runAxisOk ? 'AVAILABLE' : 'PENDING_RUN_HISTORY_INDEX',
+    // ⛔ 明确声明：不得把两段静默拼成一条序列
+    silent_stitch_forbidden: true,
+    latest_fallback_used: false,
+    note: runAxisOk
+      ? '双源分段读取；segments 逐段实名'
+      : '⚠️ run 轴历史索引未建成（RUN_HISTORY_INDEX=PENDING，依赖受治理生产历史数据）'
+        + ' ⇒ 仅 legacy 段有数据；⛔ 不得对外声称已双源'
+  };
+}
+
+/**
+ * RH4：判定某文件是否仍有**未迁移**的 CLASS C 读点（供门禁与测试使用）。
+ * @returns {object[]} 每项 = { id, collection, migrated, reason }
+ */
+function auditClassCReadPoints() {
+  return CLASS_C_READ_POINTS.map((p) => ({
+    id: p.id, file: p.file, collection: p.collection,
+    migrated: p.migrated === true,
+    run_axis_target: p.run_axis_target,
+    reason: p.migrated === true ? 'REGISTERED' : 'UNREGISTERED'
+  }));
+}
+
 /** 消费侧分类（任务书 §三） */
 const READER_CLASS = Object.freeze({
   CURRENT_AUTHORITATIVE: 'CLASS_A_CURRENT_AUTHORITATIVE',
@@ -92,18 +275,53 @@ const READER_CLASS = Object.freeze({
 });
 
 /** 扫描一段源码文本，返回命中的禁止形态（只读；不修改文件） */
-function scanForbiddenReads(sourceText, label) {
+/**
+ * RH4：**已声明读点**的豁免标记（与 `v365-reader-migration-gate.js:ALLOW_MARKER` 同一口径）。
+ * ⛔ **不是**"放宽判据"，而是把**已显式登记的读点**与**未声明的违规**区分开：
+ *    前者带轴标记 + 语义理由，后者没有任何声明 ⇒ 必须报出。
+ * ⚠️ 豁免**要求标记与查询同行**（使迁移进度可逐行审计）。
+ */
+const ALLOW_MARKER_RE = /v365-reader-allow:(mutable-axis|input-data|history-deferred|non-authoritative-diagnostic)/;
+
+/**
+ * 扫描被禁止的 authoritative 读取形态。
+ *
+ * @param {string} sourceText 源代码文本
+ * @param {string} [label] 文件标签（用于定位）
+ * @param {object} [opts]
+ *   - `ignoreDeclared` {boolean}（**RH4 新增，建议 ON**）忽略**已带轴声明标记**的行。
+ *     这些行已由 `CLASS_C_READ_POINTS` / `ALLOWED_LATEST_READS` 显式登记，
+ *     ⛔ 不再当作违规；但 `declared_below` 会**如实统计**数量，避免"静默豁免"。
+ * @returns {{hits: object[], declared_ignored: number}}
+ *   ⚠️ 返回形态由**数组**升级为**对象**（additive 破坏：调用方须同步）。
+ *      为兼容旧调用方，同时把 `hits` 数组本身挂在返回值的 `0` 索引上（见下方兼容层）。
+ */
+function scanForbiddenReadsDetailed(sourceText, label, opts) {
+  const o = opts || {};
+  const ignoreDeclared = o.ignoreDeclared !== false;   // 默认 ON（RH4 口径）
   const s = String(sourceText || '');
   const hits = [];
+  let declaredIgnored = 0;
   FORBIDDEN_READ_PATTERNS.forEach((p) => {
     const lines = s.split(/\r?\n/);
     lines.forEach((line, idx) => {
       if (p.detect.test(line)) {
+        if (ignoreDeclared && ALLOW_MARKER_RE.test(line)) { declaredIgnored += 1; return; }
         hits.push({ pattern: p.id, collection: p.collection, file: label || null, line: idx + 1, code: line.trim().slice(0, 160), why: p.why });
       }
     });
   });
-  return hits;
+  return { hits, declared_ignored: declaredIgnored };
+}
+
+/**
+ * 向后兼容包装：旧调用方期望**数组**。
+ * ⇒ 返回 `hits` 数组，并把 `declared_ignored` 挂为数组的非枚举属性。
+ */
+function scanForbiddenReads(sourceText, label, opts) {
+  const r = scanForbiddenReadsDetailed(sourceText, label, opts);
+  Object.defineProperty(r.hits, 'declared_ignored', { value: r.declared_ignored, enumerable: false });
+  return r.hits;
 }
 
 /**
@@ -431,6 +649,8 @@ module.exports = {
   ALLOWED_LATEST_READS,
   FORBIDDEN_READ_PATTERNS,
   scanForbiddenReads,
+  scanForbiddenReadsDetailed,
+  ALLOW_MARKER_RE,
   resolveActivePointer,
   readActiveRunDataset,
   // ---- Reader Migration 正式 API ----
@@ -439,5 +659,11 @@ module.exports = {
   readActiveDecision,
   buildAuthoritativeProvenance,
   buildMutableStateProvenance,
-  planCompatibilityProjection
+  planCompatibilityProjection,
+  // ---- RH4：CLASS C 双源读取（OD-4 §4.5）----
+  CLASS_C_COVERAGE,
+  CLASS_C_READ_POINTS,
+  V365_ENFORCE_SWITCH_DATE,
+  buildClassCProvenance,
+  auditClassCReadPoints
 };

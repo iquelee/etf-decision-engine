@@ -528,7 +528,13 @@ exports.main = async (event = {}, context = {}) => {
     const v365EngineRunIdBase = (v365Inbound.present ? v365Inbound.pipeline_run_id + '::' : '')
       + 'engine:' + new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
       + ':b' + String(startedAt);
+    // >>> v365-orch-zone: lifecycle_writer
     const v365CandidateCodes = [];
+    /** R2-c：收集 ENFORCE 下已写入的候选**文档**（供 `publishCandidateFirst` 复用 —— 它会做 `calc_date` 归一，
+     *  ⛔ 若只让它回读，读回的文档缺 `calc_date` ⇒ 会被 mixed-date gate 判失败 ⇒ 永不能提升）。 */
+    const v365CandidateDocs = [];
+    /** R2-d：history 写入失败时记录（⛔ 不得静默；由 telemetry 暴露） */
+    let v365HistoryWriteError = null;
 
     /**
      * decision_result 写入路由。
@@ -539,6 +545,7 @@ exports.main = async (event = {}, context = {}) => {
       if (v365Mode !== 'ENFORCE') {
         return db.upsert(COLLECTIONS.DECISION_RESULT, doc, { code, decision_date: doc.decision_date });
       }
+      v365CandidateDocs.push(doc);   // R2-c：留档（供 publishCandidateFirst 写入 + calc_date 归一）
       await v365Store.putCandidate(
         runIntegrity.V365_COLLECTIONS.CANDIDATE_DECISION, v365EngineRunIdBase, String(code), doc);
       v365CandidateCodes.push(String(code));
@@ -554,6 +561,7 @@ exports.main = async (event = {}, context = {}) => {
         runIntegrity.V365_COLLECTIONS.CANDIDATE_PORTFOLIO, v365EngineRunIdBase, 'portfolio', doc);
       return { created: true, deferred: true };
     }
+    // <<< v365-orch-zone: lifecycle_writer
 
     const results = [];
     const shadowItems = [];
@@ -1310,11 +1318,14 @@ exports.main = async (event = {}, context = {}) => {
       })
     };
 
+    // >>> v365-orch-zone: lifecycle_writer
     // ================= V3.6.5 (B1)：fail-closed 发布门 =================
     // 语义（任务书 §8/§9）：candidate 先写；只有 **COMPLETE 且校验通过**才允许成为 authoritative。
     // ⛔ 不得出现「前三票写成功、后两票失败，最终前台看到半个 portfolio」。
     // ⚠️ ENFORCE：先写 candidate；authoritative 切换需经**单指针 CAS 提升**。
-    //    平台级 CAS 并发证据尚未取得（§10）⇒ 本轮结构性 `ATOMIC_PROMOTION_BLOCKED`。
+    //    ✅ 平台级 CAS 并发证据**已取得**（`docs/V365_PLATFORM_CAS_EVIDENCE.md`；
+    //       `CAS_EVIDENCE.platform_single_document_cas_verified === true`）⇒ `promotionAllowed() === true`。
+    //    ⚠️ 但 RDE 侧**尚未接线**提升调用（OD-3 属 WP-RH2/R2-c）⇒ 当前实际仍是 "candidate 已写、指针未切"。
     const v365PortfolioPublish = (v365Finality.status === runIntegrity.RUN_STATUS.COMPLETE)
       ? await v365WritePortfolio(v365SnapshotDoc, snapshotDate)
       : {
@@ -1322,6 +1333,97 @@ exports.main = async (event = {}, context = {}) => {
         reason: 'run_not_complete:' + v365Finality.status
       };
 
+    // ================= R2-c（OD-3 A）：接线 publishCandidateFirst =================
+    // 复用**已被测试覆盖**的编排函数（⛔ 不复制协议）：
+    //   candidate → manifest → 回读 → 分类 → 校验 → **CAS 提升**
+    // ⚠️ 必须传**决策文档本体**（`decisions`）：函数写入时做 `calc_date` 归一；
+    //    ⛔ 若只让它回读，读回的文档缺 `calc_date` ⇒ 被 mixed-date gate 判失败 ⇒ 永不能提升。
+    let v365PublishResult = null;
+    let v365HistoryRow = null;
+    if (v365Mode === 'ENFORCE') {
+      const v365Scope = publishStore.POINTER_SCOPE_PRODUCTION;
+      // revision = **逻辑单调时钟**（promotion **前** pointer.revision + 1）⇒ 过 NON_MONOTONIC_REVISION 门
+      const v365PointerBefore = await v365Store.getPointer(v365Scope).catch(() => null);
+      const v365Revision = (v365PointerBefore && Number.isFinite(Number(v365PointerBefore.revision))
+        ? Number(v365PointerBefore.revision) : 0) + 1;
+      const v365Manifest = {
+        run_id: v365EngineRunIdBase,
+        revision: v365Revision,
+        expected_trade_date: snapshotDate,
+        expected_codes: v365CandidateCodes.slice(),
+        input_hash: 'engine:' + v365EngineRunIdBase,
+        status: 'CALCULATING',
+        created_at: new Date().toISOString()
+      };
+      try {
+        v365PublishResult = await runIntegrity.publishCandidateFirst({
+          store: v365Store,
+          scope: v365Scope,
+          manifest: v365Manifest,
+          expected_codes: v365CandidateCodes.slice(),
+          decisions: v365CandidateDocs,
+          portfolio: v365SnapshotDoc
+        });
+      } catch (e) {
+        v365PublishResult = { promoted: false, cas_reason: null, publish_error: String(e.message || e) };
+      }
+
+      // ================= R2-d（OD-2 时序）：run_history **单次写入** =================
+      // ⛔ 时序硬约束（WP-RH2 §8 条不变量）：
+      //    candidate → manifest/finality → **CAS promotion attempt** → **本次写入**；
+      //    ⛔ 严格禁止 `run_history append → CAS promotion`（否则 CAS 失败会留下"从未成为 active"的伪历史）。
+      // ✅ CAS **rejected 也留痕**（`promoted:false` + `cas_reason`）—— OD-2 Reason ③ 明确要求。
+      // ✅ `promoted_at` **仅**在真实 promotion 成功时写入。
+      // ⛔ 严格 append-only：同 run_id 已存在 ⇒ **不更新**（retry 幂等；`uk_run_id` 兜底 fail-closed）。
+      const v365Plan = (v365PublishResult && v365PublishResult.plan) || {};
+      const v365Now = new Date().toISOString();
+      v365HistoryRow = {
+        run_id: v365Manifest.run_id,
+        scope: v365Scope,
+        expected_trade_date: v365Manifest.expected_trade_date,
+        revision: v365Manifest.revision,
+        status: (v365PublishResult && v365PublishResult.finality
+          && v365PublishResult.finality.status) || v365Finality.status,
+        engine_version: runIntegrity.ENGINE_VERSION,
+        input_hash: v365Manifest.input_hash,
+        expected_codes: v365Manifest.expected_codes,
+        decision_count: v365CandidateDocs.length,
+        portfolio_present: v365SnapshotDoc != null,
+        // ✅ 来自 promotion **前**的实际 active pointer（由 planPointerPromotion 依 current 计算）
+        supersedes_run_id: v365Plan.supersedes_run_id != null ? v365Plan.supersedes_run_id : null,
+        // ✅ RH3：**同一交易日** supersede 标记（R4「必须显式可追溯」）—— 取自 promotion 前的 plan，
+        //    ⛔ 非事后推断；与 `supersedes_run_id` **同源** ⇒ 二者不可互相矛盾。
+        same_trade_date_supersede: v365Plan.same_trade_date_supersede === true,
+        // ✅ RH3：由 pointer 提升**前**的 active run（`next_pointer.promoted_from_run_id` 同源）
+        promoted_from_pointer_run_id: (v365Plan.next_pointer
+          && v365Plan.next_pointer.promoted_from_run_id != null)
+          ? v365Plan.next_pointer.promoted_from_run_id : null,
+        promoted: v365PublishResult ? v365PublishResult.promoted === true : false,
+        promoted_at: (v365PublishResult && v365PublishResult.promoted === true) ? v365Now : null,
+        promoted_from_run_id: v365PublishResult && v365PublishResult.previous_run_id != null
+          ? v365PublishResult.previous_run_id : null,
+        // ✅ RH3：CAS 写后独立回读一致性（CAS-7）。⛔ 仅提升成功时有意义，否则 null。
+        read_after_write_consistent: (v365PublishResult && v365PublishResult.promoted === true)
+          ? (v365PublishResult.read_after_write_consistent === true) : null,
+        cas_reason: v365PublishResult && v365PublishResult.cas_reason != null
+          ? v365PublishResult.cas_reason : null,
+        created_at: v365Now
+      };
+      try {
+        const v365HistoryColl = runIntegrity.V365_COLLECTIONS.RUN_HISTORY;
+        const v365Dup = await db.query(v365HistoryColl, { run_id: v365HistoryRow.run_id }, { limit: 1 })
+          .catch(() => []);
+        if (!v365Dup || !v365Dup.length) {
+          await db.getCollection(v365HistoryColl).add(v365HistoryRow);
+        }
+      } catch (e) {
+        // fail-open：history 写失败**不得**影响已完成的 promotion（指针已切，回滚反而会让读者 fail-closed）
+        // ⚠️ 该失败必须可见 ⇒ 记入 runtimeStatus 的 v365_history_write_error（telemetry zone）
+        v365HistoryWriteError = String(e.message || e);
+      }
+    }
+
+    // <<< v365-orch-zone: lifecycle_writer
     let shadowLog = null;
     if (shadowEnabled && shadowItems.length) {
       shadowLog = buildShadowDailyEntry({
@@ -1417,6 +1519,26 @@ exports.main = async (event = {}, context = {}) => {
     };
 
     // 运行状态单一真相：前后端 / shadow log 统一读这个对象，禁止再凭 VERSION.txt / 硬编码各说一套。
+    // >>> v365-orch-zone: telemetry
+    // ---- OD-6 批2：派生字段（⛔ 不改旧字段值；旧字段另标 DEPRECATED）----
+    // `promotion_allowed` 由 `CAS_EVIDENCE` 派生（平台 CAS 已 CLOSED ⇒ true）；
+    // `promotion_skipped_reason` 改为**派生**：无跳过时 `null` ⇒ 与 `promotion_allowed` 不再自相矛盾。
+    const v365PromotionAllowed = runIntegrity.promotionAllowed();
+    const v365PromotionSkippedReason = v365PromotionAllowed
+      ? null
+      : 'ATOMIC_PROMOTION_BLOCKED:platform_cas_unverified';
+    // `authoritative_publish_status`：**反映真相**（发布与否取决于指针是否提升，⛔ 不由 mode 推断）。
+    // ✅ R2-c（OD-3 接线）已落地 ⇒ 读取**真实提升结果**：
+    //    `null`            = 非 ENFORCE（LEGACY 直写路径，无 candidate/promotion 语义）
+    //    'PROMOTED'        = CAS 提升成功（含 ALREADY_ACTIVE 幂等）⇒ 该 run 即 authoritative
+    //    'NOT_PROMOTED'    = 已尝试/未尝试，但指针未切 ⇒ 仍 **非** authoritative
+    //    'PROMOTION_FAILED'= 提升过程抛错（指针状态不确定，⛔ 不得当作已发布）
+    const v365AuthoritativePublishStatus = v365Mode !== 'ENFORCE'
+      ? null
+      : (v365PublishResult == null ? 'NOT_PROMOTED'
+        : (v365PublishResult.publish_error != null ? 'PROMOTION_FAILED'
+          : (v365PublishResult.promoted === true ? 'PROMOTED' : 'NOT_PROMOTED')));
+
     const runtimeStatus = {
       key: 'runtime-status',
       production_engine: productionEngine,
@@ -1508,12 +1630,30 @@ exports.main = async (event = {}, context = {}) => {
         }
       }),
       v365_finality_status: v365Finality.status,
+      // ⚠️ DEPRECATED（OD-6 批2）：按 `mode !== 'ENFORCE'` 推断"已发布" —— **推理链错误**
+      //    （发布与否取决于**指针是否提升**）。⛔ 值**未改**（保历史兼容）；请改用下行派生字段。
       v365_authoritative_published: v365Mode !== 'ENFORCE',
+      /** 派生：反映真相（null=LEGACY / PROMOTED / NOT_PROMOTED / PROMOTION_FAILED） */
+      v365_authoritative_publish_status: v365AuthoritativePublishStatus,
+      /** R2-c：CAS 提升是否**被尝试**（区分"未尝试"与"尝试被拒"） */
+      v365_promotion_attempted: v365Mode === 'ENFORCE' && v365PublishResult != null
+        ? v365PublishResult.promotion_attempted === true : null,
+      /** R2-c：结构化 CAS 拒因（STALE_EXPECTED_POINTER / NON_MONOTONIC_REVISION / …）；无拒因 ⇒ null */
+      v365_cas_reason: v365Mode === 'ENFORCE' && v365PublishResult != null
+        && v365PublishResult.cas_reason != null ? String(v365PublishResult.cas_reason) : null,
+      /** R2-d：**唯一** history row 的写入结果（'ok' / 'failed' / null=非 ENFORCE） */
+      v365_history_status: v365Mode !== 'ENFORCE' ? null
+        : (v365HistoryRow == null ? 'not_written'
+          : (v365HistoryWriteError == null ? 'ok' : 'failed')),
+      /** R2-d：history 写失败原因（⛔ 不得静默 —— 失败必须可见；成功 ⇒ null） */
+      v365_history_write_error: v365HistoryWriteError,
       decision_date: snapshotDate,
       updated_at: new Date().toISOString()
     };
     await db.upsert(COLLECTIONS.RUNTIME_STATUS, runtimeStatus, { key: 'runtime-status' });
+    // <<< v365-orch-zone: telemetry
 
+    // >>> v365-orch-zone: telemetry
     return {
       ok: true,
       version,
@@ -1522,8 +1662,12 @@ exports.main = async (event = {}, context = {}) => {
       production_engine: productionEngine,
       shadow_engine: shadowEngine,
       // ---- V3.6.5 (B1)：run 完整性对外声明（新增；既有字段语义未变）----
-      // ⚠️ 诚实边界：ENFORCE 下 candidate 已写，但 **authoritative 未发布**
-      //    —— 单指针 CAS 提升需平台级并发实证（§10），当前 `ATOMIC_PROMOTION_BLOCKED`。
+      // ⚠️ 诚实边界：ENFORCE 下 candidate 已写，authoritative 是否发布取决于**指针是否提升**。
+      //    ✅ 平台 CAS 证据已 CLOSED ⇒ `promotionAllowed() === true`（不再被平台条件阻塞）。
+      //    ⚠️ RDE 侧提升调用**尚未接线**（OD-3 / WP-RH2 R2-c）⇒ 当前为 "CANDIDATE_ONLY_NOT_PROMOTED"。
+      //    ⚠️ 下方 `v365_authoritative_published` / `authoritative_published` 为 **DEPRECATED**：
+      //       它们按 `mode !== 'ENFORCE'` 推断"已发布"，**推理链错误**（发布与否取决于指针）；
+      //       ⛔ 值**未改**（保历史兼容）；请改用 `authoritative_publish_status`（派生）。
       v365: {
         mode: v365Mode,
         engine_version: runIntegrity.ENGINE_VERSION,
@@ -1549,12 +1693,28 @@ exports.main = async (event = {}, context = {}) => {
         failed_codes: v365Finality.failed_codes,
         missing_codes: v365Finality.missing_codes,
         publishable: v365Finality.publishable && v365Gate.publishable,
+        // ⚠️ DEPRECATED（OD-6 批2）：同上，按 mode 推断发布状态 —— 推理链错误。⛔ 值**未改**。
         authoritative_published: v365Mode !== 'ENFORCE',
+        /** 派生：反映真相 */
+        authoritative_publish_status: v365AuthoritativePublishStatus,
         candidate_codes: v365CandidateCodes.slice(),
         portfolio_publish: v365PortfolioPublish,
-        promotion_allowed: runIntegrity.promotionAllowed(),
-        promotion_skipped_reason: v365Mode === 'ENFORCE'
-          ? 'ATOMIC_PROMOTION_BLOCKED:platform_cas_unverified' : null
+        promotion_allowed: v365PromotionAllowed,
+        // ✅ OD-6 批2：改为**派生**（无跳过时 null）⇒ 与 promotion_allowed 不再自相矛盾
+        promotion_skipped_reason: v365PromotionSkippedReason,
+        // R2-c/R2-d：提升结果 + history 写入可见性（⛔ 不得静默）
+        promotion_attempted: v365PublishResult ? v365PublishResult.promotion_attempted === true : false,
+        promoted: v365PublishResult ? v365PublishResult.promoted === true : false,
+        cas_reason: v365PublishResult && v365PublishResult.cas_reason != null
+          ? v365PublishResult.cas_reason : null,
+        run_history: v365HistoryRow ? {
+          run_id: v365HistoryRow.run_id,
+          revision: v365HistoryRow.revision,
+          supersedes_run_id: v365HistoryRow.supersedes_run_id,
+          promoted: v365HistoryRow.promoted,
+          promoted_at: v365HistoryRow.promoted_at
+        } : null,
+        history_write_error: v365HistoryWriteError
       },
       config_version: merged.config_version || null,
       v3_6_1_enabled: merged.v3_6_1_enabled === true,
@@ -1570,6 +1730,7 @@ exports.main = async (event = {}, context = {}) => {
         summary: summarizeEntry(shadowLog)
       } : null
     };
+    // <<< v365-orch-zone: telemetry
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }

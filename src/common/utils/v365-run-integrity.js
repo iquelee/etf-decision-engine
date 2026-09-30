@@ -246,6 +246,9 @@ async function publishCandidateFirst(input) {
     pointer_unchanged: exec.promoted !== true,
     current_pointer: exec.pointer || currentPointer,
     cas: exec.cas || null,
+    // ✅ RH3：写后独立回读一致性（CAS-7）；**仅提升成功时**有意义，其余 ⇒ null
+    read_after_write_consistent: exec.promoted === true && exec.cas != null
+      ? (exec.cas.read_after_write_consistent === true) : null,
     exec_action: exec.action
   };
 }

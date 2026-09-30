@@ -21,6 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..', '..');
 const U = (f) => require(path.join(REPO, 'src/common/utils', f));
@@ -32,8 +33,12 @@ const { resolveMarketEnvironment } = U('market-regime.js');
 const { swingHighLow } = U('swing-structure.js');
 const { planRunInput, finalizeState } = U('trade-date-idempotence.js');
 const { sectorOccupation } = U('gen1-canary.js');
+// RPG-F2-A（RFP-V2-CF）：复用**生产同一纯函数**计算 effective_tech_cap（⛔ 不重实现算法、⛔ 不硬编码）
+const correlation = U('correlation.js');
+// RPG-F2-B（RFP-V2）：复用**生产同一纯函数**计算 cooldown（⛔ 不重实现算法、⛔ 不硬编码天数）
+const cooldown = U('cooldown.js');
 const constants = require(path.join(REPO, 'src/common/constants.js'));
-const { DEFAULT_PARAMS, TECH_SECTORS, SEMI_SECTORS } = constants;
+const { DEFAULT_PARAMS, TECH_SECTORS, SEMI_SECTORS, COLLECTIONS } = constants;
 
 const CSV_DIR = path.join(REPO, 'deliverables/etf_daily_ml_pool');
 
@@ -227,20 +232,195 @@ function buildPortfolio(book, regime) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * RPG-F2-B —— cooldown 保真：**两条分支严格分开**
+ *
+ * ⚠️ 语义裁定（owner 冻结，2026-09-29）：
+ *
+ *   Model A —— `decision implies execution`
+ *     = **REJECTED**（不得再由决策推断成交）
+ *
+ *   Model B —— `explicit actual execution ledger`
+ *     = **ADOPTED**（唯一可用于 production-fidelity 的来源）
+ *
+ *   Synthetic / counterfactual branch
+ *     = **allowed only as supplemental branch coverage**
+ *     = ⛔ **MUST NOT enter production-fidelity anchor**
+ *
+ * ⇒ 因此本 harness 暴露**两个互不替代**的协议：
+ *
+ *   ① `'V2-CF-COOLDOWN'` —— **SYNTHETIC/COUNTERFACTUAL** 分支
+ *        账面 = counterfactual assumed execution（`nextBook = suggested_position`）
+ *        成交 = **由决策模拟生成**（`BUILD/ADD && 仓位上升 ⇒ 记一条 buy`）
+ *        用途 = 证明 production cooldown **函数的分支可被行使** + recommendation→assumed-fill 情景
+ *        `production_fidelity = false` · `qualification_authoritative = false`
+ *
+ *   ② `'V2-AE'` —— **ACTUAL EXECUTION** 分支（RPG-F2-B 正式目标）
+ *        成交 = **仅来自受治理 `trade_log` 实际执行行**（⛔ 不由决策推断）
+ *        用途 = RPG-002 production-fidelity 判定的唯一合法来源
+ *        账面 = 仍为 counterfactual（RPG-003-PH 未完成）⇒ 独立于 ① 记录
+ *
+ * 共同点：cooldown 一律走**生产同一函数** `cooldown.js::computeCooldownDays()`。
+ *
+ * ⛔ 红线（严格遵守）：
+ *   - ⛔ **不重实现** cooldown 算法（天数分档 5/2/params 一律由生产函数决定）
+ *   - ⛔ **不硬编码** cooldownDays 数值（禁止 `cooldownDays: 1` 之类）
+ *   - ⛔ **不臆测** add_mode（`V2-AE` 下必须复现生产 resolveLastBuyAddMode 三步链）
+ *   - bars 一律 as-of-date（`trade_date <= d`）⇒ ⛔ 无前视
+ *   - V1 / V2-CF 行为**逐位不变**（仅新协议启用 cooldown）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 受治理的实际执行账本（来自 `deliverables/v365-production-history/raw/trade_log.ndjson`）。
+ * ⛔ 只读；⛔ 不由决策生成；⛔ 不补写 add_mode。
+ * @param {string} repoRoot
+ * @param {string} decisionResultPath 受治理导出的 decision_result（用于 add_mode 第 2 步回查）
+ * @returns {{ledgerByCode:Object<string,Array>, sources:Object}}
+ */
+function loadActualExecutionLedger(repoRoot, decisionResultPath) {
+  const base = path.join(repoRoot, 'deliverables', 'v365-production-history');
+  const rawPath = path.join(base, 'raw', 'trade_log.ndjson');
+  const provPath = path.join(base, 'provenance', 'trade_log.provenance.json');
+  const manPath = path.join(base, 'manifest.json');
+
+  const sources = {
+    trade_log_raw: rawPath,
+    trade_log_provenance: provPath,
+    manifest: manPath,
+    decision_result: decisionResultPath || null
+  };
+  if (!fs.existsSync(rawPath)) {
+    const err = new Error(`缺少受治理实际执行账本：${rawPath}`);
+    err.code = 'ACTUAL_LEDGER_MISSING';
+    throw err;
+  }
+
+  const ledgerByCode = {};
+  const rows = fs.readFileSync(rawPath, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean)
+    .map((l) => JSON.parse(l));
+  rows.forEach((r) => {
+    if (!ledgerByCode[r.code]) ledgerByCode[r.code] = [];
+    ledgerByCode[r.code].push(r);
+  });
+  // provenance / manifest 摘要（供 anchor 绑定）
+  sources.trade_log_sha256 = crypto.createHash('sha256')
+    .update(fs.readFileSync(rawPath)).digest('hex');
+  if (fs.existsSync(provPath)) {
+    const p = JSON.parse(fs.readFileSync(provPath, 'utf8'));
+    sources.provenance_status = p.provenance_status;
+    sources.actual_date_span = p.actual_date_span;
+    sources.query_filter = p.query_filter;
+    sources.pagination_complete = p.pages === 1;
+  }
+  if (fs.existsSync(manPath)) {
+    const m = JSON.parse(fs.readFileSync(manPath, 'utf8'));
+    sources.governed_data_gate = m.governed_data_gate;
+    sources.integrity = m.integrity && m.integrity.trade_log ? m.integrity.trade_log : null;
+  }
+  sources.rows_by_code = Object.keys(ledgerByCode).reduce((acc, c) => {
+    acc[c] = ledgerByCode[c].length; return acc;
+  }, {});
+  return { ledgerByCode, sources };
+}
+
+/**
+ * 创建 cooldown 桩 db（仅供 `computeCooldownDays` 使用）。
+ *
+ * ⚠️ 两种 TRADE_LOG 来源：
+ *   - `mode = 'synthetic'`   ⇒ 用**决策模拟账本**
+ *   - `mode = 'actual'`      ⇒ 用**受治理实际执行账本**（⛔ 唯一的 production-fidelity 来源）
+ *
+ * ⚠️ DECISION_RESULT 的第 2 步回查（`resolveLastBuyAddMode`）：
+ *   生产真实路径会按 `decision_date = buyDate` 回查该票**当日决策**的 add_mode。
+ *   若调用方提供了受治理的 decision_result 导出 ⇒ 复现该步；
+ *   ⛔ 否则**不得**用当前 replay 决策猜历史 buy 的 add_mode（那会把 counterfactual 混进 fidelity）。
+ *
+ * @param {Object<string,Array>} ledgerByCode 实际/模拟成交（按 code）
+ * @param {Object<string,Array>} barsByCode   真实 bars
+ * @param {Object<string,string>} decisionAddModeByCodeDate  `${code}|${decision_date}` → add_mode
+ * @returns {{query:Function}} 形如生产 db 的只读桩
+ */
+function createCooldownStubDb(ledgerByCode, barsByCode, decisionAddModeByCodeDate) {
+  const drIndex = decisionAddModeByCodeDate || {};
+  return {
+    query: async (collection, filter = {}, opts = {}) => {
+      const code = filter.code;
+      if (collection === COLLECTIONS.TRADE_LOG) {
+        const rows = (ledgerByCode[code] || []).filter((r) => r.action === 'buy');
+        // 生产按 trade_date **desc** 取最近一次 buy
+        const sorted = rows.slice().sort((a, b) => (a.trade_date < b.trade_date ? 1 : -1));
+        return opts.limit ? sorted.slice(0, opts.limit) : sorted;
+      }
+      if (collection === COLLECTIONS.ETF_DAILY) {
+        // 生产按 trade_date **asc** 取全部可用日线
+        return (barsByCode[code] || []).slice().sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1));
+      }
+      if (collection === COLLECTIONS.DECISION_RESULT) {
+        // resolveLastBuyAddMode 第 2 步：按 (code, decision_date) 单点回查
+        const k = `${code}|${filter.decision_date}`;
+        if (Object.prototype.hasOwnProperty.call(drIndex, k)) {
+          const v = drIndex[k];
+          return v == null || v === '' ? [] : [{ code, decision_date: filter.decision_date, add_mode: v }];
+        }
+        return [];   // ⛔ 无受治理数据 ⇒ 空 ⇒ 回落 fallbackAddMode（不臆测）
+      }
+      return [];
+    }
+  };
+}
+
+/**
+ * 计算某标在某日的 replay cooldown（复用生产纯函数）。
+ * @returns {Promise<number>} ≥ 0 的剩余冷静交易日数
+ */
+async function computeReplayCooldown(ledgerByCode, barsByCode, code, d, fallbackAddMode, drIndex) {
+  const stubDb = createCooldownStubDb(ledgerByCode, barsByCode, drIndex);
+  return cooldown.computeCooldownDays(stubDb, code, d, PROD_PARAMS, fallbackAddMode);
+}
+
 /**
  * 单次「一天」的运行（可 1 次或 N 次）。
  * @returns {{ outputs:Array, state:Object, book:Object, sectorUsedTrace:Array }}
  */
-function runOneDay(ctx) {
+async function runOneDay(ctx) {
   const {
     d, barsByCode, indexBars, book, state, shockState, slowBreak,
-    runsPerDay, slowBreakMode
+    runsPerDay, slowBreakMode, protocol, ledgerByCode, decisionAddModeIndex
   } = ctx;
+
+  // 哪些协议启用 cooldown 注入？（⛔ V1 / V2-CF 一律不启用 ⇒ 行为逐位不变）
+  const COOLDOWN_PROTOCOLS = ['V2', 'V2-CF-COOLDOWN', 'V2-AE'];
+  const useCooldown = COOLDOWN_PROTOCOLS.indexOf(protocol) >= 0;
+  // 哪些协议注入 effective_tech_cap？（V2-CF 及其后继协议）
+  const CAP_PROTOCOLS = ['V2-CF', 'V2', 'V2-CF-COOLDOWN', 'V2-AE'];
+  const useCap = CAP_PROTOCOLS.indexOf(protocol) >= 0;
 
   const regime = regimeFor(indexBars, d);
   const portfolio = buildPortfolio(book, regime);
+
+  // ---- RPG-F2-A（RFP-V2-CF）：production-faithful effective_tech_cap ----
+  // ⛔ 仅当协议启用了 cap 注入时生效；V1 下**不设该字段** ⇒ 下方 effTechMax 走 fallback
+  //    ⇒ V1 行为**逐位不变**（RFP-V1 anchor 必须保持 25ccbfc7…1723）。
+  // 复用生产**同一纯函数** `correlation.effectiveTechCap()`（⛔ 不重实现算法、⛔ 不硬编码 63.1/0.97）。
+  // bars 一律 as-of-date（`b.trade_date <= d`）⇒ ⛔ 无前视。
+  if (useCap) {
+    const baseCap = PROD_PARAMS.tech_sector_max != null
+      ? PROD_PARAMS.tech_sector_max
+      : DEFAULT_PARAMS.tech_sector_max;
+    const asOf = {};
+    UNIVERSE.forEach((u) => { asOf[u.code] = (barsByCode[u.code] || []).filter((b) => b.trade_date <= d); });
+    const techCapInfo = correlation.effectiveTechCap(baseCap, asOf);
+    portfolio.effective_tech_cap = techCapInfo.effective_cap;   // 与 RDE:686 同式
+    portfolio.correlation_discount = techCapInfo.discount;      // 与 RDE:687 同式
+    portfolio.tech_correlation = techCapInfo;                   // 与 RDE:688 同式
+  }
+
   const v3Portfolio = buildV3Portfolio(portfolio, null); // v3MarketEnv 由 portfolio 提供
-  const effTechMax = PROD_PARAMS.tech_sector_max != null ? PROD_PARAMS.tech_sector_max : 65;
+  // 与 RDE:707 同构：`effectiveTechMax = portfolio.effective_tech_cap ?? techMax`
+  // ⚠️ V1 下 `effective_tech_cap` 为 undefined ⇒ 取值与改前**完全一致**（PROD_PARAMS.tech_sector_max ?? 65）
+  const effTechMax = portfolio.effective_tech_cap != null
+    ? portfolio.effective_tech_cap
+    : (PROD_PARAMS.tech_sector_max != null ? PROD_PARAMS.tech_sector_max : 65);
   let sectorUsed = portfolio.tech_position;
   const nextBook = { ...book };
   let nextSlow = { ...slowBreak };
@@ -277,11 +457,24 @@ function runOneDay(ctx) {
       const isTech = TECH_SECTORS.indexOf(u.sector) >= 0;
       const sectorRemainingLimit = isTech ? Math.max(0, effTechMax - sectorUsed) : null;
 
+      // ---- RPG-F2-B：cooldown 注入（复用生产**同一函数**，⛔ 不硬编码天数）----
+      // ⛔ 仅当协议启用 cooldown 时计算；V1 / V2-CF 保持硬编码 0 ⇒ 行为逐位不变。
+      // ⚠️ fallbackAddMode 必须与生产同源：生产取**当日探针** add_mode 的缺失兜底。
+      //    `V2-AE` 的账本来自受治理实际执行数据 ⇒ add_mode 走生产三步链（trade_log → decision_result → fallback）。
+      let cooldownDays = 0;
+      if (useCooldown) {
+        cooldownDays = await computeReplayCooldown(
+          ledgerByCode || {}, barsByCode, u.code, d,
+          (nextBook[u.code] || 0) > 0 ? '横盘加仓' : '无',
+          decisionAddModeIndex
+        );
+      }
+
       const res = decisionV3.runDecision(etf, snapshot, positions, PROD_PARAMS, {
         fundamental: FUNDAMENTAL_CONST,
         risk: RISK_CONST,
         portfolio: v3Portfolio,
-        cooldownDays: 0,
+        cooldownDays,
         sectorRemainingLimit,
         trendStageState: engineState,
         shockState: nextShock[u.code] || null,
@@ -326,7 +519,11 @@ function runOneDay(ctx) {
         binding_constraint: res.binding_constraint,
         engine_path: res.engine_path,
         opportunity_grade: res.opportunity_grade,
-        w_state: res.w_state
+        w_state: res.w_state,
+        // RPG-F2-B：记录本日实际使用的 cooldown 值（启用协议下为真实值；V1/V2-CF 恒 0）
+        // ⚠️ 仅启用 cooldown 的协议下参与归因；为**保证 V1/V2-CF 的 anchor 逐位不变**，
+        //    该字段**仅在启用协议**时注入。
+        ...(useCooldown ? { cooldown_days: cooldownDays, add_mode: res.add_mode || '无' } : {})
       };
 
       // 赛道额度：每次运行都在**本运行内**按科技票处理顺序累加（run 开始处已重置为当日起点）
@@ -337,7 +534,27 @@ function runOneDay(ctx) {
 
       // 账面推进：只在**最后一次运行**后生效（同日重跑不改仓位 —— 当天没有成交）
       if (run === runsPerDay - 1) {
-        nextBook[u.code] = res.suggested_position != null ? res.suggested_position : (nextBook[u.code] || 0);
+        const prev = nextBook[u.code] || 0;
+        const nextPos = res.suggested_position != null ? res.suggested_position : prev;
+        nextBook[u.code] = nextPos;
+
+        // ---- RPG-F2-B：**SYNTHETIC/COUNTERFACTUAL** 模拟成交账本 ----
+        // ⛔ 仅 `V2-CF-COOLDOWN` / `V2` 使用；`V2-AE` **绝不**由此生成成交（Model A = REJECTED）。
+        // 语义：当日**净加仓**（nextPos > prev）且动作属加仓类 ⇒ 记一条 buy。
+        // ⛔ 仅用于喂给 `computeCooldownDays` 的桩 db，⛔ 不写任何生产存储。
+        // `add_mode` 取决策真实返回值（= counterfactual 语义，故**不得**用于 production fidelity）。
+        if ((protocol === 'V2-CF-COOLDOWN' || protocol === 'V2')
+          && nextPos > prev + 1e-9
+          && (res.final_action === 'BUILD' || res.final_action === 'ADD')) {
+          if (!ledgerByCode) ledgerByCode = {};
+          if (!ledgerByCode[u.code]) ledgerByCode[u.code] = [];
+          ledgerByCode[u.code].push({
+            code: u.code,
+            action: 'buy',
+            trade_date: d,
+            add_mode: res.add_mode || '无'
+          });
+        }
       }
     }
     outputs.push(runOut);
@@ -349,12 +566,29 @@ function runOneDay(ctx) {
 
 /**
  * 全序列重放。
- * @param {object} opts { from, to, slowBreakMode:'old'|'new', runsPerDay:1|3, collectRuns:boolean }
+ * @param {object} opts { from, to, slowBreakMode:'old'|'new', runsPerDay:1|3, collectRuns:boolean,
+ *                        protocol:'V1'|'V2-CF'|'V2'|'V2-CF-COOLDOWN'|'V2-AE',
+ *                        actualLedger:boolean,  actualExecution:Object,  decisionAddModeIndex:Object }
+ *   ⚠️ `protocol` 默认 `'V1'` ⇒ **不传即与改前行为完全一致**（RFP-V1 anchor 必须保持逐位不变）。
+ *      `'V2-CF'`         = RFP-V2-CF（counterfactual assumed-execution book + production-faithful
+ *                          `effective_tech_cap`；⛔ **不**实现 cooldown）。
+ *      `'V2'`            = 兼容别名，等价于 `'V2-CF-COOLDOWN'`。
+ *      `'V2-CF-COOLDOWN'`= **SYNTHETIC/COUNTERFACTUAL** 分支：在 V2-CF 基础上**再加**
+ *                          production-faithful **cooldown**，成交由**决策模拟**。
+ *                          `production_fidelity = false` · ⛔ 不得进入 production-fidelity anchor。
+ *      `'V2-AE'`         = **ACTUAL EXECUTION** 分支（RPG-F2-B 正式目标）：
+ *                          成交**仅来自受治理 `trade_log` 实际执行行**（⛔ 不由决策推断）。
+ *   ⚠️ `actualLedger` 
+ *        `'V2-AE'` 下必须为 true；此时用 `actualExecution` 的账本（或按 REPO 默认路径加载）。
+ * @returns {Promise<object>} ⚠️ 自 RPG-F2-B 起为 **async**（cooldown 需 await 桩 db）。
  */
-function replay(opts) {
+async function replay(opts) {
   const o = opts || {};
   const runsPerDay = o.runsPerDay || 1;
   const slowBreakMode = o.slowBreakMode || 'new';
+  // `'V2'` 保留为兼容别名 ⇒ 语义等同 `'V2-CF-COOLDOWN'`
+  const rawProtocol = o.protocol || 'V1';
+  const protocol = rawProtocol === 'V2' ? 'V2-CF-COOLDOWN' : rawProtocol;
   const { barsByCode, indexBars } = loadBars();
   const axis = commonAxis(barsByCode, { from: o.from, to: o.to });
 
@@ -364,12 +598,29 @@ function replay(opts) {
   const book = {};
   UNIVERSE.forEach((u) => { book[u.code] = 0; });
 
+  /* ---- 成交账本：synthetic 与 actual **严格分开** ---- */
+  let ledgerByCode = {};
+  let ledgerSource = 'NONE';
+  let executionLedgerMeta = null;
+  if (protocol === 'V2-AE') {
+    const ae = o.actualExecution || loadActualExecutionLedger(REPO, o.decisionResultPath);
+    ledgerByCode = ae.ledgerByCode;
+    executionLedgerMeta = ae.sources;
+    ledgerSource = 'GOVERNED_ACTUAL_EXECUTION';
+  } else if (protocol === 'V2-CF-COOLDOWN') {
+    UNIVERSE.forEach((u) => { ledgerByCode[u.code] = []; });
+    ledgerSource = 'SYNTHETIC_COUNTERFACTUAL_DECISION_IMPLIED';
+  } else {
+    UNIVERSE.forEach((u) => { ledgerByCode[u.code] = []; });
+  }
+  const decisionAddModeIndex = o.decisionAddModeIndex || null;
+
   const days = [];
   const runDiffs = [];
-  axis.forEach((d) => {
-    const r = runOneDay({
+  for (const d of axis) {
+    const r = await runOneDay({
       d, barsByCode, indexBars, book, state, shockState, slowBreak,
-      runsPerDay, slowBreakMode
+      runsPerDay, slowBreakMode, protocol, ledgerByCode, decisionAddModeIndex
     });
     const last = r.outputs[r.outputs.length - 1];
     const first = r.outputs[0];
@@ -400,12 +651,20 @@ function replay(opts) {
     Object.keys(r.book).forEach((k) => { book[k] = r.book[k]; });
     Object.keys(r.slowBreak).forEach((k) => { slowBreak[k] = r.slowBreak[k]; });
     Object.keys(r.shockState).forEach((k) => { shockState[k] = r.shockState[k]; });
-  });
+  }
 
   return {
     axis,
+    // RFP 协议标识（`'V1'` | `'V2-CF'` | `'V2-CF-COOLDOWN'` | `'V2-AE'`）—— 供 anchor / 归因工具读取。
+    // ⚠️ 不进入 parity 的 `summarize()`（它只挑 meta 的固定字段）⇒ 不影响 V1 anchor。
+    protocol,
+    protocol_requested: rawProtocol,
     days,
     runDiffs,
+    // RPG-F2-B：暴露成交账本（供归因工具取证）+ 其**来源**（synthetic vs actual）
+    ledgerByCode,
+    ledger_source: ledgerSource,
+    execution_ledger: executionLedgerMeta,
     // 序列结束时的完整状态（Gate B 用于「RUN_ONCE_STATE === RUN_3X_STATE」比对）
     finalState: state,
     finalBook: book,
@@ -470,5 +729,9 @@ module.exports = {
   commonAxis,
   replay,
   forwardStats,
-  loadCsv
+  loadCsv,
+  // RPG-F2-B：受治理实际执行账本（⛔ 只读；仅供 `'V2-AE'` 使用）
+  loadActualExecutionLedger,
+  createCooldownStubDb,
+  computeReplayCooldown
 };

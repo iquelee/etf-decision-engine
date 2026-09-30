@@ -1649,13 +1649,27 @@ reader 迁移改变了「前台看到什么」，若不受完整性覆盖，「w
 ## 23.8 状态
 
 ```
-V365_WRITER_PATH  = QUALIFIED
-READER_MIGRATION  = COMPLETE
-RUN_HISTORY_INDEX = PENDING          ← 下一步：WP-V365-RH1
+V365_WRITER_PATH      = QUALIFIED
+V365_IMPLEMENTATION   = QUALIFIED_CANDIDATE
+READER_MIGRATION      = COMPLETE
+RUN_HISTORY_INDEX     = PENDING          ← ⚠️ 契约/结构（HD-10 已建 5 集合）/读者（RH1~RH4）✅ 已完成；PENDING 仅因数据侧未就绪
 
 V365_FULL_QUALIFICATION = NOT_YET_COMPLETE
 READY_FOR_FREEZE_REVIEW = NO
 ```
+
+> ★ 2026-09-29 二次精化：`RUN_HISTORY_INDEX = PENDING` 的**唯一原因**是**数据侧**：
+> ① 5 个 v365 集合**已建但全部 `n=0`**（HD-10 = `CREATE EMPTY STRUCTURE ONLY`，✅ COMPLETE；⛔ 无业务写入）；
+> ② 无生产提升发生 ⇒ `active_run_pointer` 无行 ⇒ CLASS C 如实报 `run_axis_available = false` · `coverage = 'legacy_only'`；
+> ③ `V365_ENFORCE_SWITCH_DATE = null`（部署时登记）。
+> **代码侧证据**：`tests/v365-rh1-contract-registry.test.js`（E-01~12）· `v365-rh2-runtime-fields.test.js`（F-01~12）
+> · `v365-rh3-promotion-history.test.js`（G-01~11）· `v365-rh4-class-c-readers.test.js`（H-01~12）全 PASS；
+> `v365-reader-migration-gate.js` = 8/8。
+> **结构侧证据**：`deliverables/v365-production-history/hd10/hd10-completion-evidence.json`（5/5 集合 · 7/7 索引 · `documents_written = 0`）。
+> ⛔ **代码就绪 ≠ 数据就绪** —— 不得因测试全绿改写 `RUN_HISTORY_INDEX`。
+> 上文 §22.7 的 `READER_MIGRATION = PENDING` 属**该节时点的历史记录**（§21/§22 逐字保留，见 §23 开头的追加说明），
+> ⛔ 不追溯改写；以本块为准。`V365_IMPLEMENTATION = QUALIFIED_CANDIDATE` 由资格门 `PASS 38 / 38` 输出，
+> ⛔ ≠ `PRODUCTION AUTHORIZED`。
 
 ## 23.9 本轮边界履行
 

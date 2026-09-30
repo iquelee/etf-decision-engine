@@ -664,7 +664,7 @@ async function getDecisions(code, from, to) {
     where.decision_date = _.lte(to);
   }
   const rows = await db.query(COLLECTIONS.DECISION_RESULT, where, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }], // v365-reader-allow:history-deferred (CLASS C：历史区间，等 Run History Index)
+    orderBy: [{ field: 'decision_date', direction: 'desc' }], // v365-reader-allow:history-deferred (CLASS C apiGateway.getDecisions：历史区间；run 轴索引 RUN_HISTORY_INDEX=PENDING ⇒ 当前 legacy 段，⛔ 不得静默双源拼接)
     limit: (from || to) ? 500 : 60
   });
   return (rows || []).map(withChineseActionLabel);
@@ -773,7 +773,7 @@ async function getReview(from, to) {
     tradeWhere.trade_date = _.lte(to);
   }
   const decisions = await db.query(COLLECTIONS.DECISION_RESULT, decisionWhere, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 500 // v365-reader-allow:history-deferred (CLASS C：复盘历史区间)
+    orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 500 // v365-reader-allow:history-deferred (CLASS C apiGateway.getReview.decisions：复盘区间；run 轴索引 PENDING)
   });
   const trades = await db.query(COLLECTIONS.TRADE_LOG, tradeWhere, {
     orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 500
@@ -781,7 +781,7 @@ async function getReview(from, to) {
   // 持仓要能看到筛选日前的快照/成交，不能跟复盘日期带绑死
   const [snapshots, heldTrades] = await Promise.all([
     db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
-      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200 // v365-reader-allow:history-deferred (CLASS C：复盘历史区间)
+      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200 // v365-reader-allow:history-deferred (CLASS C apiGateway.getReview.snapshots：复盘区间；run 轴索引 PENDING)
     }),
     (from || to)
       ? db.query(COLLECTIONS.TRADE_LOG, {}, {
