@@ -47,6 +47,30 @@ function isProhibitionLine(line) {
   return /⛔|不得|禁止|反例|违规/.test(line);
 }
 
+/**
+ * 判断某行是否位于**违规文案声明表**内部。
+ * 缘由：`domain/lifecycle.js` 里 `FORBIDDEN_LIFECYCLE_PHRASES = Object.freeze([...])`
+ * 把违规短语**作为数据声明**（供本守卫复用），那不是"使用违规文案"。
+ * ⇒ 必须跳过整段声明，否则守卫会自命中。
+ */
+function phraseDeclarationRanges(lines) {
+  const ranges = [];
+  let start = -1;
+  lines.forEach((line, i) => {
+    if (start < 0 && /FORBIDDEN_LIFECYCLE_PHRASES\s*=|FORBIDDEN_PHRASES\s*=/.test(line) && /\[/.test(line)) {
+      start = i;
+      if (/\]\s*\)?\s*;?\s*$/.test(line)) { ranges.push([start, i]); start = -1; }
+      return;
+    }
+    if (start >= 0 && /\]\s*\)?\s*;?\s*$/.test(line)) {
+      ranges.push([start, i]);
+      start = -1;
+    }
+  });
+  if (start >= 0) ranges.push([start, lines.length - 1]);
+  return ranges;
+}
+
 const FORBIDDEN_PHRASES = [
   '正式生产运行',
   '生产运行中',
@@ -55,18 +79,36 @@ const FORBIDDEN_PHRASES = [
   '生产周期已开始'
 ];
 
-ok('⛔ rewrite 源码不得出现违规生命周期文案（排除禁令说明行）', () => {
+ok('⛔ rewrite 源码不得出现违规生命周期文案（排除禁令说明行与声明表）', () => {
   const hits = [];
   for (const f of sources()) {
     const stripped = stripComments(fs.readFileSync(f, 'utf8'));
-    stripped.split(/\r?\n/).forEach((line, i) => {
-      if (isProhibitionLine(line)) return;              // 说明禁令本身，跳过
+    const lines = stripped.split(/\r?\n/);
+    const decl = phraseDeclarationRanges(lines);
+    lines.forEach((line, i) => {
+      if (isProhibitionLine(line)) return;                       // 说明禁令本身，跳过
+      if (decl.some(([a, b]) => i >= a && i <= b)) return;       // 违规短语的**声明**，跳过
       for (const p of FORBIDDEN_PHRASES) {
         if (line.includes(p)) hits.push(path.relative(REWRITE, f) + ':' + (i + 1) + ' → ' + p);
       }
     });
   }
   assert.equal(hits.length, 0, hits.join('; '));
+});
+
+ok('自检：声明表跳过逻辑有效，且守卫确实能发现真实违规（防永真）', () => {
+  // 1) lifecycle.js 的声明表必须被跳过
+  const lc = stripComments(fs.readFileSync(path.join(REWRITE, 'domain', 'lifecycle.js'), 'utf8'));
+  const lines = lc.split(/\r?\n/);
+  const decl = phraseDeclarationRanges(lines);
+  assert.ok(decl.length >= 1, '未识别到声明表区间');
+  const declText = decl.map(([a, b]) => lines.slice(a, b + 1).join('\n')).join('\n');
+  assert.ok(declText.includes('正式生产运行'), '声明表区间应覆盖违规短语');
+
+  // 2) 构造一个真实违规行，守卫必须能命中
+  const fake = 'const x = "V3.6.5 已进入正式生产运行";';
+  const fakeHits = FORBIDDEN_PHRASES.filter((p) => fake.includes(p));
+  assert.equal(fakeHits.length, 1, '守卫必须能发现真实违规文案');
 });
 
 ok('⛔ 前端不得硬编码生命周期状态值（SPEC §1.3 / §7.3）', () => {

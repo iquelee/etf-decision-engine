@@ -7,7 +7,7 @@
  */
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { routes, ADMIN_HOME } from './routes.js';
-import { isAuthed } from './compose/useSession.js';
+import { isAuthed, installUnauthorizedRedirect } from './compose/useSession.js';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -36,5 +36,11 @@ router.afterEach((to) => {
   const t = (to.meta && to.meta.title) || '决策系统';
   document.title = `${t} · ETF 仓位决策`;
 });
+
+/**
+ * SPEC §8.3：把 401 的导航语义安装在 app 层
+ * （HTTP 客户端只负责清 token 与抛错，⛔ 不改 location）。
+ */
+installUnauthorizedRedirect(router);
 
 export default router;

@@ -11,11 +11,26 @@
  * M2 会把 401 语义集中到这里（SPEC §8.3），届时 `api.js` 不再直接改 location。
  */
 import { ref, computed } from 'vue';
-import { getToken, setToken, admin } from '../api.js';
+import { getToken, setToken, admin, setUnauthorizedHandler } from '../api.js';
 
 /** 非响应式：给 router 守卫这类非组件上下文使用 */
 export function isAuthed() {
   return !!getToken();
+}
+
+/**
+ * ★ SPEC §8.3：401 的**会话与导航语义**集中在 app 层，不在 HTTP 客户端里。
+ * 本函数由 app 级（router.js）安装：未授权时清 token 并引导到登录页，**保留来源**。
+ * @param {import('vue-router').Router} router
+ */
+export function installUnauthorizedRedirect(router) {
+  setUnauthorizedHandler(() => {
+    const cur = router.currentRoute && router.currentRoute.value;
+    const redirect = cur && cur.fullPath ? cur.fullPath : null;
+    // 已在登录页则不重复跳转
+    if (cur && cur.path === '/login') return;
+    router.replace({ path: '/login', query: redirect ? { redirect } : {} });
+  });
 }
 
 /** 响应式会话状态（组件内使用） */

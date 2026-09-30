@@ -198,25 +198,61 @@ web/src/rewrite/
 
 **唯一权威**：`src/common/utils/gen1-ui-view-model.js`（PR-UI-01），由 `apiGateway` 下发。前端以 `production` / `gen1` / `system_runtime` / `legacy` 四块为 canonical。
 
-### 6.2 canonical 结构（`[SPEC]`）
+### 6.2 canonical 结构（`[SPEC]`，**以契约实跑结果为准**）
+
+> ★★ **本节已按真实契约输出更正（2026-09-30）**。
+> 初版是按源码片段**推断**的，与实跑结果不符 —— 例如曾误记 `gen1.signal.calibrated_probability`
+> 与 `gen1.authority_label`，**实跑证明二者都不存在**（真实为 `signal.threshold`；
+> `authority_label` 只在 `system_runtime.gen1`）。
+> **结论：契约形状必须由实跑产出，不得由源码片段推断。**
+> 实跑证据：`web/tests/fixtures/canonical/*.json`（由 `_v365-fe-audit-20260930/tools/gen-m2-fixtures.cjs`
+> 直接调用 `src/common/utils/gen1-ui-view-model.js` 生成）。
 
 ```
-data.production      = { action_code, suggested_pct, final_target_pct, current_pct }
-data.gen1            = { authority, authority_label, status,
-                         signal:        { signal_status, probability, calibrated_probability,
-                                          stage, model_candidate, health_status, domain_status, ... },
-                         stages:        { signal, baseline, effective },
-                         safety:        { eod_stage, baseline_stage, binding_stage,
-                                          binding_stage_source, ... },
-                         applicability: { domain_status, domain_permission, ... },
-                         counterfactual:{ target_pct, suggested_pct, delta_pct, ... } }
-data.system_runtime  = { production: { status, engine, engine_source },
-                         gen1: { authority, authority_label, health_status, health_gate_status,
-                                 safety_source, counterfactual_authorized/_health_allowed/_active,
-                                 production_write, production_fast_path_enabled, auto_execution,
-                                 safety_invariant_ok },
-                         gen2: { mode, source, production_write_source } }
-data.legacy          = { deprecated, do_not_use_for_authority, fields[] }
+data.production = {
+  engine, engine_source,               // 该决策自身的引擎版本（⛔ 不是当前生产引擎）
+  action_code, action_label,
+  current_pct, final_target_pct, suggested_pct,   // 仓位百分比
+  risk_flag, binding_constraint
+}
+
+data.gen1 = {
+  authority,                            // CANARY / ADVISORY / PRODUCTION / OFF
+  status,                               // ★ 字符串枚举 NO_OPPORTUNITY|OBSERVED|CANDIDATE|BLOCKED|DEGRADED
+  stages:        { signal, baseline, effective },   // ★ 三拆，⛔ 不得串位
+  signal:        { stage, probability, threshold, model_candidate, signal_status },
+  data:          { health_status, source_trade_date, benchmark_latest_date },
+  applicability: { domain_status, domain_permission, label, message },
+  safety:        { permission, reason_code, reason, source,
+                   eod_stage, baseline_stage, binding_stage, binding_stage_source },
+  counterfactual:{ target_pct, suggested_pct, delta_pct,
+                   stage_changed, clamped, baseline_floor_breached }
+  // ⚠️ 无 authority_label；无 calibrated_probability；无 health_status/domain_status（在 signal / data 内）
+}
+
+data.system_runtime = {
+  runtime_status_available,             // 三态判定的前提
+  production: { engine, engine_source, status },
+  gen1: { authority, authority_label, health_status, health_gate_status, health_source,
+          safety_source,
+          counterfactual_authorized, counterfactual_health_allowed, counterfactual_active,
+          counterfactual_inactive_reason, counterfactual_invocations, ledger_ok,
+          production_write, production_fast_path_enabled, auto_execution,   // ★ 三态 true/false/null
+          safety_invariant_ok },
+  gen2: { mode, source, production_write, production_write_source }          // ★ gen2.production_write 可为 null
+}
+
+data.legacy = { deprecated, do_not_use_for_authority, note, fields[] }
+```
+
+**复盘行**（`/api/review` 的 `decisions[]`）附：
+
+```
+decisions[i].production = { engine, engine_source, action, action_label, target, suggested, current_position }
+decisions[i].gen1       = { authority, status, signal_status, probability, stages,
+                            baseline_suggested_pct, counterfactual{…},
+                            counterfactual_suggested_pct, delta_pct, domain_status, safety_permission }
+                          // ⛔ 不得携带 final* / action_code（UI-G1-13）
 ```
 
 ### 6.3 `[SPEC]` canonical 优先 + legacy fallback 规则
@@ -513,7 +549,105 @@ H. 再进入 M2+（Adapter/Domain contract migration → Dashboard → Workbench
 
 ---
 
-## 附录 A：本规格引用的既有权威件
+## 附录 A：★ 字段单位语义表（M2-P0 结论，2026-09-30）
+
+> **性质**：**canonical 字段单位契约**。所有 formatter 选择**必须**依本表，⛔ 不得依数值大小推断。
+> **证据源**（只读）：① `src/common/schema.js` 的 `desc` 字段；② producer 代码
+> （`src/common/utils/decision-v3.js` / `trend-stage.js` / `v3-constants.js`）；
+> ③ 线上真实响应 `_v365-fe-audit-20260930/live/*.json`；④ 历史 33 条决策分布。
+
+### A.1 ★ `final_target` 单位裁定（M2-P0 核心结论）
+
+```text
+final_target 单位 = **仓位百分比（数值即百分数）**
+证据 1（schema）：src/common/schema.js:288
+   final_target: { type:'number', desc: '最终目标仓位%（经组合约束）' }
+证据 2（producer）：decision-v3.js 中 final_target 直接取自 sizing/target 的百分数量级
+证据 3（历史分布，513310 共 33 条）：
+   final_target ∈ {0, 0.5, 1, 1.5, 4.5, 7.5, 21, 28.5}    min=0  max=28.5
+   含 21 / 27 / 28.5 / 30（与 max_position=30、target_max=30 同量级）
+证据 4（减法自洽）：position_gap 与 target_delta 均为百分点差值，量级与 final_target 一致
+   · 2026-08-20 target_delta? position_gap=11.9 = 21 − 9.1 ✓
+   · 2026-08-18 position_gap=23.04 = 28.5 − 5.46 ✓
+   · 2026-08-14 position_gap=15.54 = 21 − 5.46 ✓
+   · 2026-09-29 target_delta=−7.8 = 0.5 − 8.3 ✓
+⇒ **`final_target = 0.5` 表示 0.5%**（不是 50%，也不是 0.5 个点）。
+⇒ 旧前端 `pct()` 启发式（`|v| ≤ 1.5 → ×100`）会把它渲染成 **50%**，属**真实缺陷**；M0 已删除。
+```
+
+### A.2 字段语义表
+
+| 字段 | 原始单位 | 业务含义 | UI formatter |
+|---|---|---|---|
+| `final_target` | **仓位百分比** | 最终目标仓位（经组合约束） | `formatPercent` |
+| `target_position`（decision） | 仓位百分比 | 等价 `final_target`（**deprecated 别名**） | `formatPercent` |
+| `target_min` / `target_std` / `target_max`（**decision**） | 仓位百分比 | **本次决策的最终目标带**（经阶段/市场/组合约束后） | `formatPercent` |
+| `target_min` / `target_std` / `target_max`（**position**） | 仓位百分比 | **配置的标准目标带**（来自 `etf_basic`，≠ decision 同名项） | `formatPercent` |
+| `current_position` / `suggested_position` / `core_position` / `trade_position` / `position_after` | 仓位百分比 | 各口径仓位 | `formatPercent` |
+| `max_position` / `max_strategic_position` | 仓位百分比 | 仓位硬上限 | `formatPercent` |
+| `position_gap` | 百分点差值（**≥0，服务端已算**） | 加仓缺口 | `formatPercentSigned`（⛔ 前端**不得重算**） |
+| `target_delta` | 百分点差值（**可负**） | 目标变动 | `formatPercentSigned` |
+| `weight` / `holding_weight` | 占净值百分比 | 权重 | `formatPercent` |
+| `premium_rate` / `change_5d` / `bias_20d` / `sideway_range` / `ma20_slope` | 百分比 | 行情类 | `formatPercent` |
+| `cash_ratio` / `cash_ratio_raw` / `tech_position` / `gold_position` / `innovation_position` / `semi_position` / `drug_position` | 百分比 | 组合类 | `formatPercent` |
+| `target_position`（etf_basic） | 仓位百分比 | 标的标准目标 | `formatPercent` |
+| `total_asset` / `cash_balance` / `holdings_mv` / `total_pnl` / `amount` | **元** | 金额 | `formatAmount` |
+| `price` | 元 | 价格 | `formatPrice` |
+| `shares` / `volume` | **份** | 数量 | `formatCount` |
+| `probability` / `calibrated_probability` / `ml_probability` / `gen1_model_probability` | **比例 0~1** | 概率 | `formatProbability` |
+| `confidence` | **比例 0~1**（schema `range:[0,1]`） | 置信度 | `formatProbability` |
+| `price_position` | **比例 0~1** | 收盘价在 20 日区间的位置 | `formatRatio` 或 `formatRatioAsPercent`（调用方显式选择） |
+| **`stage_factor` / `market_factor` / `factor_breakdown.{mf,sf,of,ff,dp,rf}`** | ★ **乘性系数 0~1** | 阶段/市场/机会/基本面等调节系数 | `formatRatio`（⛔ **绝不可当百分比**；`0.25` 是 0.25，不是 25%） |
+| `gen1_model_threshold_p` | 比例（0.65） | 模型阈值 | `formatRatio` |
+| `opportunity_score` / `consolidation_score` | **点数 0~100**（无单位） | 评分 | `formatScore`（⛔ 不加 `%`） |
+| `scores.{trend,volume,fundamental,crowding,risk}` | **点数**（各维上限 25/25/25/15/10） | 五维评分 | `formatScore` |
+| `opportunity_factor` | 系数 | 机会系数 | `formatRatio` |
+| `cooldown_days` / `sideway_days` / `persistence_days` / `data_age_days` | 天 | 计数 | `formatCount` |
+| `premium_flag` / `over_alloc_status` / `risk_flag` / `add_mode` | 枚举字符串 | 状态 | `domain/labels.js` |
+
+`stage_factor` 取值域证据：`src/common/utils/v3-constants.js`
+```js
+const V3_STAGE_FACTORS = Object.freeze({ S0:0.00, S1:0.25, S2:0.40, S3:0.70, S4:0.85, S5:1.00 });
+⇒ 系数，非百分比。
+```
+
+### A.3 ⛔ 禁止事项（与 §10.1 一致）
+
+```text
+⛔ 0.5 自动理解成 0.5%
+⛔ 0.5 自动理解成 50%
+⛔ <1 就乘 100
+⛔ >1 就认为已经是百分比
+⛔ 同名不同义字段（decision.target_std vs position.target_std）共用一个 formatter 判定
+```
+
+### A.4 登记：同名字段不同义（★ 易错点）
+
+| 字段名 | 出现处 A | 出现处 B | 差异 |
+|---|---|---|---|
+| `target_min` / `target_std` / `target_max` | `decision.*`（本次最终目标带） | `position.*`（配置标准目标带） | 线上实测 A=0.4/0.5/0.5、B=20/25/30 —— **同名不同义** |
+| `target_position` | `decision.*`（= `final_target`，deprecated） | `etf_basic` / `position.*`（标的标准目标） | 实测 0.5 vs 25 |
+
+`[SPEC]` adapter **必须**按**来源路径**区分，⛔ 不得按字段名统一处理。
+
+### A.5 `position_gap` 的精确语义（修正 schema 注释）
+
+`schema.js:297` 注释写「仓位缺口 final_target − current」。实测**不成立**：
+2026-09-29 `final_target=0.5` / `current=8.3` ⇒ 差 −7.8，但线上 `position_gap = 0`。
+逐条验证后，实际语义 = **`max(0, final_target − suggested_position)`**（只报正向加仓缺口）：
+```
+2026-08-20: 21 − 9.1  = 11.9  ✓（= gap）
+2026-08-18: 28.5−5.46 = 23.04 ✓
+2026-08-14: 21 − 5.46 = 15.54 ✓
+2026-09-29: 0.5− 8.3  = −7.8 → max(0,·) = 0 ✓
+2026-08-28: 4.5− 8.8  = −4.3 → 0 ✓
+```
+⇒ `[SPEC]` 前端**只展示服务端下发的 `position_gap`**，⛔ **不得自行重算**（重算必错）。
+`[登记]` 本项属**文档注释与实现不符**，非本次修改范围；已记录待 owner 决定是否更正 schema 注释。
+
+---
+
+## 附录 B：本规格引用的既有权威件
 
 | 件 | 路径 |
 |---|---|
@@ -524,7 +658,7 @@ H. 再进入 M2+（Adapter/Domain contract migration → Dashboard → Workbench
 | Gen-1 UI 契约 | `src/common/utils/gen1-ui-view-model.js` + `tests/gen1-ui-contract.test.js` |
 | 线上证据 | `_v365-fe-audit-20260930/{live/*.json, livechunks/*.js, idx.html}` |
 
-## 附录 B：`[OPEN]` 待 owner 裁定的剩余事项
+## 附录 C：`[OPEN]` 待 owner 裁定的剩余事项
 
 | # | 事项 | 本规格的当前处置 |
 |---|---|---|

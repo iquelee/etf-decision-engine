@@ -95,6 +95,28 @@ export function formatNumber(v, digits = 1) {
   return Number(v).toFixed(digits);
 }
 
+/**
+ * 评分（点数 0~100 或各维上限）。⛔ **不加 `%`** —— 机会分/横盘分/五维分都是点数。
+ * @returns {string} 例 '67' / '28.5'
+ */
+export function formatScore(v, digits = 0) {
+  if (isNil(v)) return EMPTY;
+  const n = Number(v);
+  return digits > 0 ? n.toFixed(digits) : String(Math.round(n));
+}
+
+/**
+ * 比例（0~1）**按调用方显式声明**渲染成百分比。
+ * ⚠️ 与 `formatProbability` 的区别：本函数**不做** 0~1 合法性校验，
+ *    仅用于「语义确为比例、但业务上要显示成 %」的字段（如 `price_position`）。
+ *    ⛔ 不得用它给 stage_factor / market_factor 这类**系数**加 %（系数不是比例份额）。
+ * @returns {string} 例 '72.0%'
+ */
+export function formatRatioAsPercent(v, digits = 1) {
+  if (isNil(v)) return EMPTY;
+  return (Number(v) * 100).toFixed(digits) + '%';
+}
+
 /* ---------------- 日期类 ---------------- */
 
 /** 日期：保留 YYYY-MM-DD 前 10 位。 */

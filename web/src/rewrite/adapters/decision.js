@@ -1,0 +1,194 @@
+/**
+ * decision 适配器（web/src/rewrite/adapters/decision.js）
+ * 规范依据：SPEC §2 / §6 / §9 / 附录 A
+ *
+ * 职责单一：把 `decision_result` 原始文档 → 决策领域对象（全 Field<T>）。
+ *
+ * ⛔ 不做的事：
+ *   · 不重算 `position_gap`（SPEC 附录 A.5：服务端已算，语义是 max(0, final_target − suggested)）
+ *   · 不改写 action / risk 语义（只做大小写与别名归一，归一在 display 层）
+ *   · 不做阈值判断（在 domain/thresholds.js）
+ *
+ * ★ 单位（SPEC 附录 A）：`final_target` / `target_*` / `*_position` = **仓位百分比**；
+ *   `stage_factor` / `market_factor` = **系数 0~1**（⛔ 不是百分比）。
+ */
+import { readField, readBlock, provided, missing, unavailable, pickCanonicalThenLegacy, provenance, hasValue } from '../domain/provenance.js';
+import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
+import { normalizeAction, overAllocLabel, riskLabel, stateLabel } from '../domain/labels.js';
+import { ELIGIBILITY_ITEMS, opportunityLevel } from '../domain/thresholds.js';
+
+const SRC = 'api:/api/etf/:code#decision';
+
+function prov(field) {
+  return provenance({ source: SRC + '.' + field, authority: AUTHORITY.SAFETY_CORE });
+}
+
+/**
+ * @param {object|null} decision `decision_result` 原始文档（可能 null）
+ * @returns {object} 决策领域对象
+ */
+export function adaptDecision(decision) {
+  if (!decision || typeof decision !== 'object') {
+    return Object.freeze({
+      available: false,
+      reason: MISSING_REASON.CONTRACT_NOT_PROVIDED,
+      action: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, provenance({ source: SRC, authority: AUTHORITY.SAFETY_CORE }))
+    });
+  }
+
+  const actionF = readField(decision, 'final_action', prov('final_action'));
+  const gradeF = readField(decision, 'opportunity_grade', prov('opportunity_grade'));
+  const scoreF = readField(decision, 'opportunity_score', prov('opportunity_score'));
+
+  return Object.freeze({
+    available: true,
+
+    /* ---- 标的与日期 ---- */
+    code: readField(decision, 'code', prov('code')),
+    decisionDate: readField(decision, 'decision_date', prov('decision_date')),
+
+    /* ---- 动作（唯一权威字段 = final_action）---- */
+    action: hasValue(actionF)
+      ? provided(normalizeAction(actionF.value) || actionF.value, actionF.provenance)
+      : actionF,
+    actionLabel: readField(decision, 'action_label', prov('action_label')),
+
+    /* ---- 风险与状态码 ---- */
+    riskFlag: readField(decision, 'risk_flag', prov('risk_flag')),
+    riskOverride: readField(decision, 'risk_override', prov('risk_override')),
+    premiumFlag: readField(decision, 'premium_flag', prov('premium_flag')),
+    states: Object.freeze({
+      w: readField(decision, 'w_state', prov('w_state')),
+      d: readField(decision, 'd_state', prov('d_state')),
+      h: readField(decision, 'h_state', prov('h_state')),
+      v: readField(decision, 'v_state', prov('v_state')),
+      f: readField(decision, 'f_state', prov('f_state')),
+      c: readField(decision, 'c_state', prov('c_state'))
+    }),
+
+    /* ---- 目标与仓位（单位：仓位百分比）---- */
+    finalTarget: readField(decision, 'final_target', prov('final_target')),
+    targetBand: Object.freeze({
+      min: readField(decision, 'target_min', prov('target_min')),
+      std: readField(decision, 'target_std', prov('target_std')),
+      max: readField(decision, 'target_max', prov('target_max'))
+    }),
+    maxPosition: readField(decision, 'max_position', prov('max_position')),
+    suggestedPosition: readField(decision, 'suggested_position', prov('suggested_position')),
+    /** ⚠️ 服务端已算（max(0, final_target − suggested)）⇒ ⛔ 前端不得重算 */
+    positionGap: readField(decision, 'position_gap', prov('position_gap')),
+    corePosition: readField(decision, 'core_position', prov('core_position')),
+    tradePosition: readField(decision, 'trade_position', prov('trade_position')),
+    overAllocStatus: readField(decision, 'over_alloc_status', prov('over_alloc_status')),
+    targetDelta: readField(decision, 'target_delta', prov('target_delta')),
+
+    /* ---- 加仓资格（★ 10 项，含旧前端遗漏的 cooldown / regime）---- */
+    addEligibility: adaptEligibility(decision),
+    cooldownDays: readField(decision, 'cooldown_days', prov('cooldown_days')),
+    nextAddCondition: readField(decision, 'next_add_condition', prov('next_add_condition')),
+
+    /* ---- 评分（点数，⛔ 非百分比）---- */
+    scores: adaptScores(decision),
+    opportunity: Object.freeze({
+      grade: gradeF,
+      score: scoreF,
+      level: opportunityLevel(hasValue(gradeF) ? gradeF.value : null, hasValue(scoreF) ? scoreF.value : null)
+    }),
+
+    /* ---- 决策链 ---- */
+    explainChain: adaptChain(decision),
+
+    /* ---- 系数（0~1，⛔ 非百分比）---- */
+    factors: Object.freeze({
+      stage: readField(decision, 'stage_factor', prov('stage_factor')),
+      market: readField(decision, 'market_factor', prov('market_factor'))
+    }),
+
+    /* ---- 审计元数据 ---- */
+    audit: Object.freeze({
+      engineVersion: readField(decision, 'engine_version', prov('engine_version')),
+      configVersion: readField(decision, 'config_version', prov('config_version')),
+      decisionTimestamp: readField(decision, 'decision_timestamp', prov('decision_timestamp')),
+      enginePath: readField(decision, 'engine_path', prov('engine_path')),
+      effectiveMarketRegime: readField(decision, 'effective_market_regime', prov('effective_market_regime'))
+    })
+  });
+}
+
+/** 加仓资格：按 canonical 10 项逐一取；`overall` 单独取 */
+function adaptEligibility(decision) {
+  const block = decision.add_eligibility;
+  const prov0 = provenance({ source: SRC + '.add_eligibility', authority: AUTHORITY.SAFETY_CORE });
+  if (!block || typeof block !== 'object') {
+    return Object.freeze({
+      available: false,
+      items: ELIGIBILITY_ITEMS.map((it) => ({ ...it, field: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0) })),
+      overall: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0)
+    });
+  }
+  return Object.freeze({
+    available: true,
+    items: ELIGIBILITY_ITEMS.map((it) => ({
+      ...it,
+      field: readField(block, it.key, provenance({ source: SRC + '.add_eligibility.' + it.key, authority: AUTHORITY.SAFETY_CORE }))
+    })),
+    overall: readField(block, 'overall', provenance({ source: SRC + '.add_eligibility.overall', authority: AUTHORITY.SAFETY_CORE }))
+  });
+}
+
+/** 五维评分（点数）。⛔ 有意不导出 `total`（旧实现「禁显总分」）。 */
+function adaptScores(decision) {
+  const s = decision.scores;
+  const prov0 = provenance({ source: SRC + '.scores', authority: AUTHORITY.SAFETY_CORE });
+  if (!s || typeof s !== 'object') {
+    return Object.freeze({
+      trend: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0),
+      volume: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0),
+      fundamental: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0),
+      crowding: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0),
+      risk: unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, prov0)
+    });
+  }
+  return Object.freeze({
+    trend: readField(s, 'trend', prov0),
+    volume: readField(s, 'volume', prov0),
+    fundamental: readField(s, 'fundamental', prov0),
+    crowding: readField(s, 'crowding', prov0),
+    risk: readField(s, 'risk', prov0)
+  });
+}
+
+/** 决策链：`[{step, condition, result}]`，⛔ 不改写文案（洗数在 display 层） */
+function adaptChain(decision) {
+  const c = decision.explain_chain;
+  const prov0 = provenance({ source: SRC + '.explain_chain', authority: AUTHORITY.SAFETY_CORE });
+  if (!Array.isArray(c)) return missing(MISSING_REASON.FIELD_ABSENT, prov0);
+  const steps = c
+    .filter((x) => x && typeof x === 'object')
+    .map((x) => Object.freeze({
+      step: readField(x, 'step', prov0),
+      condition: readField(x, 'condition', prov0),
+      result: readField(x, 'result', prov0)
+    }));
+  return provided(steps, prov0);
+}
+
+/* ------------------------------------------------------------------ */
+/* 显示层便捷函数（⛔ 只做「Field → 文案」，不做业务判断）            */
+/* ------------------------------------------------------------------ */
+
+export function displayRisk(decisionVm) {
+  return hasValue(decisionVm.riskFlag) ? riskLabel(decisionVm.riskFlag.value) : '—';
+}
+
+export function displayOverAlloc(decisionVm) {
+  // ⚠️ 修正旧前端拼写错误：over_all_status → over_alloc_status（审计 §3.6 #8）
+  return hasValue(decisionVm.overAllocStatus) ? overAllocLabel(decisionVm.overAllocStatus.value) : '—';
+}
+
+export function displayState(decisionVm, kind) {
+  const f = decisionVm.states && decisionVm.states[kind];
+  return hasValue(f) ? stateLabel(f.value) : '—';
+}
+
+export { FIELD_STATE, pickCanonicalThenLegacy, readBlock };

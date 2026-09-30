@@ -11,7 +11,18 @@
 'use strict';
 
 const SUITES = [
+  /* --- domain --- */
   './rewrite/format.test.js',
+  './rewrite/format-semantics.test.js',
+  './rewrite/lifecycle.test.js',
+  /* --- adapters（M2） --- */
+  './rewrite/adapters-gen1.test.js',
+  './rewrite/adapters-pages.test.js',
+  './rewrite/gen2-boundary.test.js',
+  './rewrite/edge-malformed.test.js',
+  /* --- transport（M2 清理） --- */
+  './rewrite/api-client.test.js',
+  /* --- 工程守卫（M0/M1） --- */
   './rewrite/design-tokens.test.js',
   './rewrite/router-contract.test.js',
   './rewrite/layering.test.js',

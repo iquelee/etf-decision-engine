@@ -1,0 +1,57 @@
+{
+  "engine_mode": 123,
+  "v3_mode": null,
+  "cards": [
+    null,
+    42,
+    "x",
+    {
+      "code": 513310,
+      "name": null,
+      "scores": "not-an-object"
+    }
+  ],
+  "overview": "should-be-object",
+  "three_questions": [],
+  "basic": {
+    "code": "513310",
+    "name": "",
+    "max_position": "NaN"
+  },
+  "snapshot": {
+    "sideway_days": "abc",
+    "price_position": null
+  },
+  "decision": {
+    "final_target": "x",
+    "target_min": null,
+    "scores": [],
+    "explain_chain": "nope",
+    "add_eligibility": null
+  },
+  "position": {
+    "current_position": null,
+    "target_min": "y"
+  },
+  "gen1": {
+    "status": 0,
+    "signal": null,
+    "stages": [],
+    "safety": "no",
+    "applicability": false
+  },
+  "production": {
+    "action_code": null
+  },
+  "system_runtime": {
+    "production": null,
+    "gen1": "no",
+    "gen2": []
+  },
+  "legacy": {
+    "deprecated": "yes",
+    "fields": "not-array"
+  },
+  "risk_events": "not-array",
+  "items": null
+}
