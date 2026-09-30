@@ -937,3 +937,75 @@ M3 首轮实现曾在 Dashboard 标题写『V3.6.5 生产状态』—— 该**�
 **遗留**：后台 `routes.js` / `ProductionState.vue`（M1 骨架）标题仍含版本号 →
 已登记 SPEC 附录 C-5（D-8），**M10 前待裁**。
 
+---
+
+## 附录 C（续 2）：M4-P0 侦察新发现（append-only）
+
+> 完整侦察见 `docs/V365_M4_ETF_WORKBENCH_CONTRACT.md`。此处只登记**新缺陷/新事实**。
+
+### C-10 ★★ 严重：`/api/etf/:code/kline` 返回的不是最新 320 根，而是**最旧 320 根**
+
+**实测**（2026-09-30 线上只读 GET）：
+| 标的 | 条数 | 日期范围 | 决策日 |
+|---|---|---|---|
+| 513310 | 320 | `2023-05-09 → 2024-08-27` | 2026-09-29 |
+| 518880 | 320 | `2023-05-08 → 2024-08-26` | 2026-09-29 |
+
+⇒ **K 线末端比决策日晚约两年**；同一页面若同时展示 `snapshot.calc_date=2026-09-29` 与 K 线（2024-08），
+用户会看到自相矛盾的时间线。
+
+**根因（源码可证 `[SRC]`）**：`cloudfunctions/apiGateway/index.js#getKline`
+```js
+const rows = await db.query(COLLECTIONS.ETF_DAILY, { code },
+  { orderBy: [{ field: 'trade_date', direction: 'asc' }], limit: 320 });
+```
+**升序 + limit** ⇒ 命中前 320 行 = **最旧** 320 行（weekly 分支同样为 `asc` + limit 260）。
+返回条数恰好等于 limit（320），说明集合中行数 ≥ 320。
+
+`[UNKNOWN]`：集合内是否存在 > 2024-08 的数据 —— 需 DB 只读权限，本轮未取。
+⇒ **两种可能**（未选边）：① 单纯取数方向 bug，库里有新数据被截掉；② 数据同步本身就停在 2024-08（**阶段-1 数据正确性**问题）。
+**⛔ 本轮不改 backend**；前端侧唯一正确做法是**把 K 线自身时点显著标出**（M4-D2 待裁）。
+
+### C-11 ★ `/api/etf/:code` 的 `decision` 块有 **146 个键 / 7,571 B**，其中约一半与前端无关
+
+其中 Gen-1 legacy 内嵌 **56 键**（`gen1_*` / `ml_rule_*` / `eod_precheck_*` / `v361_baseline_*` / `gen1_guarded_*`），
+是**契约未部署期间线上唯一的 Gen-1 来源**。
+⇒ 前端要么显式声明「legacy 通道」，要么显示「数据未提供」（M4-D1 待裁）。
+
+### C-12 ★ `explain_chain`（"为什么"）文案与同文档字段**互相矛盾**
+
+同一份 `decision` 文档内（513310，2026-09-29）：
+
+| 链中文字 | 同文档字段 |
+|---|---|
+| step 10「仓位缺口 **-7.8pct**」 | `position_gap = **0**` |
+| step 9「核心 **12.6%** · 交易 **0%**」 | `decision.core_position=**0.2**` / `trade_position=**0.3**`（12.6 等于 `position.core_position`） |
+| step 8「目标区间 **[18~24]%** 标准目标 **21%**」 | `position.target_min/max=**20/30**`（std 25） |
+
+⇒ 该链由**另一条计算路径**产生，与决策字段不同源。前端展示「为什么」时不得把两组数字并列而不解释（M4-D3 待裁）。
+
+### C-13 ★ 块级同名字段不同义再增 2 例：`core_position` / `trade_position`
+
+| 字段 | `decision`（**建议**） | `position`（**实际当前**） |
+|---|---|---|
+| `core_position` | `0.2` | `12.6` |
+| `trade_position` | `0.3` | `8.4` |
+
+（`position.suggested_core/suggested_trade` = `0.2/0.3` 与 `decision` 同值 ⇒ 说明前者是建议、后者是实仓。）
+连同 `target_std`（决策带 0.5 / 配置带 25）与 `trend_stage`（dashboard `S0` / detail `S7`），
+**"同名字段跨块/跨端点不同义" 至少 7 例** —— adapter 必须按「端点 + 块」建字段，⛔ 不得建全局 heuristic。
+
+### C-14 `amount` / `premium_rate` 在 K 线上 320/320 全为 `null`（死字段）
+
+⇒ 前端不消费；建议后端后续清理（⛔ 非本轮）。
+
+### C-15 旧 EtfDetail「模型审计 / 基线对照」折叠区在生产上约 **16/24 行恒为 `—`**
+
+旧页面读取的 `ml_shadow` 字段中，线上**不存在**的有 16 个：
+`effective_stage` · `baseline_stage` · `category` · `domain_status` · `domain_status_label` ·
+`domain_status_message` · `category_coverage` · `model_capability` · `market_regime` ·
+`advisory_effective` · `advisory_target_pct` · `baseline_target_pct` · `source_trade_date` ·
+`feature_schema_hash` · `rule_permission_reason` · `rule_permission_source`。
+（审计 §3.6 #9 的同一模式：**前端契约假设与后端实际不符**。）
+
+

@@ -1,0 +1,73 @@
+{
+  "basic": {
+    "code": "513310",
+    "name": "中韩半导体ETF(QDII)",
+    "sector": "storage",
+    "is_qdii": true,
+    "max_position": 30,
+    "target_position": 25,
+    "status": "enable"
+  },
+  "snapshot": {
+    "code": "513310",
+    "calc_date": "2026-09-29",
+    "w_state": "W4",
+    "d_state": "D5",
+    "h_state": "H4",
+    "v_state": "V1",
+    "price_position": 0.3032,
+    "change_5d": -4.09,
+    "data_complete": true
+  },
+  "decision": {
+    "code": "513310",
+    "decision_date": "2026-09-29",
+    "final_action": "HOLD",
+    "action_label": "持有",
+    "risk_flag": "NORMAL",
+    "final_target": 28.5,
+    "target_min": 27,
+    "target_std": 28.5,
+    "target_max": 30,
+    "position_gap": 0,
+    "over_alloc_status": "normal",
+    "binding_constraint": "none",
+    "scores": {
+      "trend": 5,
+      "volume": 25,
+      "fundamental": 20,
+      "crowding": 15,
+      "risk": 10,
+      "total": 75
+    },
+    "opportunity_score": 67,
+    "opportunity_grade": "B",
+    "stage_factor": 0,
+    "market_factor": 0.25,
+    "explain_chain": [
+      {
+        "step": 1,
+        "condition": "市场环境 防守",
+        "result": "维持"
+      }
+    ]
+  },
+  "position": {
+    "code": "513310",
+    "current_position": 0,
+    "target_position": 25,
+    "max_position": 30,
+    "target_min": 20,
+    "target_std": 25,
+    "target_max": 30
+  },
+  "risk_events": [],
+  "fundamental": {
+    "code": "513310",
+    "f_state": "F2",
+    "f_score": 20,
+    "updated_at": "2026-09-30T00:00:57.827Z"
+  },
+  "holdings": [],
+  "holdings_date": null
+}
