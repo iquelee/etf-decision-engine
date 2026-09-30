@@ -36,24 +36,36 @@ export function regimeLabel(v) { return REGIME_LABELS[String(v||'').toLowerCase(
 export function etfName(code, list=[]) {
   return list.find(x=>x.code===code)?.name || ETF_NAMES[code] || code || '—';
 }
-export function pct(v, digits=1) {
-  if (v===null || v===undefined || Number.isNaN(Number(v))) return '—';
-  const n=Number(v);
-  return (Math.abs(n)<=1.5 ? n*100 : n).toFixed(digits)+'%';
-}
-export function rawPct(v,digits=1) {
-  if (v===null || v===undefined || Number.isNaN(Number(v))) return '—';
-  return Number(v).toFixed(digits)+'%';
-}
-export function num(v,digits=1) {
-  if (v===null || v===undefined || Number.isNaN(Number(v))) return '—';
-  return Number(v).toFixed(digits);
-}
-export function dateText(v) {
-  if (!v) return '—';
-  const s=String(v);
-  return s.length>10 ? s.slice(0,16) : s;
-}
+/**
+ * ★ V365 / D-7（2026-09-30，owner 裁定）：**已删除**基于数值范围的启发式 `pct()`。
+ *
+ * 被删除的实现是：
+ *     return (Math.abs(n) <= 1.5 ? n * 100 : n).toFixed(digits) + '%';
+ * 它会把线上真实的 `final_target = 0.5`（语义 0.5%）渲染成 `50%`。
+ *
+ * 替代（SPEC §10.2，语义化，由字段语义而非数值大小决定）：
+ *   仓位/权重百分比（输入已是百分数） → formatPercent(v)     例 0.5 → '0.5%'
+ *   概率（输入 0~1）                 → formatProbability(v) 例 0.72 → '72.0%'
+ *   比例（输入 0~1，原样输出）        → formatRatio(v)
+ *   ⛔ 三者不得互相代用。
+ */
+export {
+  formatPercent,
+  formatProbability,
+  formatRatio,
+  formatAmount,
+  formatPrice,
+  formatCount,
+  formatNumber,
+  formatDate,
+  formatDateTime
+} from './domain/format.js';
+
+/** 百分数（输入已是百分数，⛔ 不做 ×100 推断）。保留旧名以兼容调用方，语义明确。 */
+export { formatPercent as rawPct } from './domain/format.js';
+export { formatNumber as num } from './domain/format.js';
+export { formatDateTime as dateText } from './domain/format.js';
+
 export function toneForAction(code) {
   if (['ADD','BUILD'].includes(code)) return 'accent';
   if (code==='HOLD') return 'good';
