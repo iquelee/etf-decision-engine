@@ -885,3 +885,55 @@ owner 裁定：**暂不用部署解决**，属独立 backend deployment gate。
 `[登记]` 本项**不是**本轮阻断（NO DEPLOY 生效中），但 **M9 之前必须处置**：
 建议在部署前把 rewrite 入口改为**按环境变量开关**（如 `VITE_ENABLE_REWRITE_ENTRY=1`），
 或在部署脚本中显式排除 `rewrite.html` 及其 chunk。已同步登记至 SPEC §18。
+
+---
+
+## 附录 C（续）：M3 阶段新发现（append-only）
+
+### C-6 ★ 严重：`app.js` 用运行时字符串模板 ⇒ 生产构建**静默白屏**（M1 遗留，M3 发现并已修复）
+
+`web/src/rewrite/app.js`（M1 骨架）用
+`createApp({ template: '<router-view />' })` 装配根组件。
+Vite 生产构建使用 **runtime-only** 的 Vue（不含模板编译器）⇒
+
+| 环境 | 表现 |
+|---|---|
+| `vite dev` | 控制台一条告警（`Component provided template option but runtime compilation is not supported`） |
+| `vite build` 产物 | **静默渲染为空** —— `#rewrite-app` 只剩一个空注释节点，页面全白 |
+
+⚠️ **该缺陷同时躲过 `vite build`（PASS）与全部单元测试**：`build` 不执行渲染，
+单测只断言适配器/守卫，都不挂载真实 DOM。**只有真实浏览器渲染才暴露**（M3 视觉核验第一轮即为白屏）。
+
+**取证**：`grep -o 'template:"<router-view />"' dist/assets/rewrite-*.js` → 命中（修复前）；
+修复后同命令 **0 命中**。
+**修复**：改为 `createApp({ render: () => h(RouterView) })`。
+**防回归**：新增 `web/tests/rewrite/app-shell.test.js`（5 项）——静态守卫「⛔ 全 rewrite 源码不得出现
+`template: '...'` 字符串选项」，并断言根组件必须提供 `render`。
+
+### C-7 ★ `overall_risk` 线上下发**中文**，旧 `toneForRisk()` 只认英文枚举 ⇒ 风险色域丢失
+
+线上 `/api/dashboard` 的 `overview.overall_risk` 实测值为 **`"正常"`**（中文），
+而 `domain/labels.js` 的 `toneForRisk()` 原先只识别 `NORMAL/YELLOW/RED`（英文枚举）
+⇒ `"正常"` 落到 `muted`，**「风险正常」会显示为灰色而非风控绿色**，语义丢失且与「未知」不可区分。
+
+**修复**：`labels.js` 增补 `normalizeRisk()`（中文→枚举的**唯一**归一处，`riskLabel()` 与 `toneForRisk()` 共用）。
+**登记**：`over_alloc_status`（中文「中度」，M2 已处理）与 `overall_risk`（中文「正常」，M3 发现）
+属**同类问题**，说明该 API 的枚举字段**中英混合**是系统性特征。
+⇒ 后续所有枚举字段的归一**必须先实测线上值再实现**，⛔ 不得按字段名假设语言。
+
+### C-8 `most_worth` 线上恒为 `null` ⇒ 首页「值得关注」显示『字段缺失』
+
+`three_questions.most_worth` 线上实测 `null`（`NULL_IN_CONTRACT`）。按 SPEC §9「缺失必须显式」，
+首页该格显示『字段缺失』+ 悬停原因。**诚实但增噪**。
+`[登记]` 是否改为隐藏该格、或由 `most_defend` 邻域推导 → **待 owner 裁定（SPEC 附录 C-6）**；
+⛔ 本轮不擅自推导（推导即产生新的业务口径）。
+
+### C-9 生命周期「部署版本身份」在前台的口径收紧
+
+M3 首轮实现曾在 Dashboard 标题写『V3.6.5 生产状态』—— 该**版本号不由本页任何 API 支撑**
+（API 给的 `production_engine = 'v3.6.1'`），属 SPEC §五 明令禁止的「凭台账写死」。
+**已修正**为『生产生命周期状态』+ 明示『本页不声明部署版本身份（不写具体版本号）』，
+并把该口径写成渲染测试断言（⛔ Dashboard HTML 不得出现 `V3.6.5`）。
+**遗留**：后台 `routes.js` / `ProductionState.vue`（M1 骨架）标题仍含版本号 →
+已登记 SPEC 附录 C-5（D-8），**M10 前待裁**。
+

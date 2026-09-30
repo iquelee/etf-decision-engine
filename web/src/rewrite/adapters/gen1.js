@@ -101,7 +101,7 @@ function emptyProduction() {
 
 /* ================= gen1 块 ================= */
 
-function adaptGen1Block(g) {
+export function adaptGen1Block(g) {
   if (!g || typeof g !== 'object') return emptyGen1Block();
   const sig = g.signal && typeof g.signal === 'object' ? g.signal : null;
   const dat = g.data && typeof g.data === 'object' ? g.data : null;
@@ -342,3 +342,32 @@ export function scanForbiddenKeys(block) {
 }
 
 export { FIELD_STATE, MISSING_REASON, hasValue, readBlock };
+
+/* ================= 卡片级 Gen-1（Dashboard / 标的页用） =================
+ * ⚠️ 实测：`/api/dashboard` 的 canonical 夹具把 `production` / `gen1` 放在**每张 card** 上，
+ *    页面顶层只有 `system_runtime` / `legacy`。
+ *    ⇒ 卡片级 Gen-1 必须单独适配，⛔ 不得用页面顶层的 `gen1` 冒充（那是系统级状态）。
+ */
+const P_CARD_GEN1 = provenance({ source: 'contract:cards[].gen1', authority: AUTHORITY.GEN1 });
+
+/**
+ * 把单张卡片的 `gen1` 块包成 `Field<Gen1CardVm>`。
+ * - 块不存在 ⇒ `UNAVAILABLE / CONTRACT_NOT_PROVIDED`（线上旧 apiGateway 即此态）
+ * - 块存在   ⇒ `PROVIDED`，值为适配后的领域对象
+ */
+export function cardGen1Field(rawBlock) {
+  if (rawBlock === null || rawBlock === undefined || typeof rawBlock !== 'object') {
+    return unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, P_CARD_GEN1);
+  }
+  return provided(adaptGen1Block(rawBlock), P_CARD_GEN1);
+}
+
+/** 卡片级 `production` 块（canonical 契约的安全口径） */
+const P_CARD_PROD = provenance({ source: 'contract:cards[].production', authority: AUTHORITY.SAFETY_CORE });
+
+export function cardProductionField(rawBlock) {
+  if (rawBlock === null || rawBlock === undefined || typeof rawBlock !== 'object') {
+    return unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, P_CARD_PROD);
+  }
+  return provided(adaptProduction(rawBlock), P_CARD_PROD);
+}

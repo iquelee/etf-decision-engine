@@ -20,11 +20,15 @@ const SUITES = [
   './rewrite/adapters-pages.test.js',
   './rewrite/gen2-boundary.test.js',
   './rewrite/edge-malformed.test.js',
+  /* --- Dashboard（M3） --- */
+  './rewrite/dashboard-adapter.test.js',
+  './rewrite/dashboard-render.test.js',
   /* --- transport（M2 清理） --- */
   './rewrite/api-client.test.js',
   /* --- 工程守卫（M0/M1） --- */
   './rewrite/design-tokens.test.js',
   './rewrite/router-contract.test.js',
+  './rewrite/app-shell.test.js',
   './rewrite/layering.test.js',
   './rewrite/spec-guards.test.js'
 ];

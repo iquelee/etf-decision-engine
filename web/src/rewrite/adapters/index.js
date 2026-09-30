@@ -21,6 +21,7 @@ export {
   FETCH_STATUS, RISK_EVENT_TYPES
 } from './adminRuntime.js';
 export {
-  adaptGen1, legacyFallback, hasCanonicalContract, resolveAuthority,
+  adaptGen1, adaptGen1Block, cardGen1Field, cardProductionField,
+  legacyFallback, hasCanonicalContract, resolveAuthority,
   scanForbiddenKeys, LEGACY_SEMANTIC_KEYS, CANONICAL_BLOCKS
 } from './gen1.js';

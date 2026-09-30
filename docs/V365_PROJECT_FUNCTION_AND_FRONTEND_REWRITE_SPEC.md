@@ -662,7 +662,107 @@ const V3_STAGE_FACTORS = Object.freeze({ S0:0.00, S1:0.25, S2:0.40, S3:0.70, S4:
 
 | # | 事项 | 本规格的当前处置 |
 |---|---|---|
-| 1 | `runtime_status.production_engine='v3.6.1'` vs 台账 `V3.6.5` | 前端**同时展示两源**（§7.4）；最终口径待裁 |
+| 1 | `runtime_status.production_engine='v3.6.1'` vs 台账 `V3.6.5` | ✅ M3 已按最保守方式落地：Dashboard **只展示 API 可读的引擎版本**（维度显示名＝「线上引擎版本」+ 显式 caveat「与台账 Production Deployment Identity 不是同一概念」），并写明『本页不声明部署版本身份』。台账身份是否要在前台重复声明 → 待裁 |
 | 2 | 台账顶部 A 快照（`= V3.6.4` / `G-25=false`）与 C-021.2 互斥 | 已登记；⛔ 本规格不改台账 |
 | 3 | 前端版本号口径（V2.0 / V3.6.1 / V4.0） | 本规格取「**版本号只从 `/api/constants` 读，前端零硬编码**」；该值本身待裁（连带 1） |
 | 4 | `apiGateway` 部署授权 | 唯一阻塞 `GEN1_FRONTEND_EFFECTIVE_ON_PROD` 的项 |
+| 5 | **D-8**：后台页标题写死「V3.6.5 生产状态」 | `routes.js` / `ProductionState.vue`（M1 骨架）标题含版本号。Dashboard 已按 §五 移除版本声明；后台是否保留该标题 → **M10 前待裁**（保留＝明示页面主题；移除＝与 Dashboard 同口径） |
+| 6 | `most_worth` 线上恒 `null` | 首页「值得关注」会显示『字段缺失』。诚实但增噪；是否改由 `most_defend` 推导或隐藏该格 → 待裁（⛔ 本规格不擅自推导） |
+
+---
+
+## 附录 D：M3 Dashboard 实现记录（2026-09-30 · 参考实现）
+
+> 本附录是 Dashboard 的**实现级记录**（IA / VM / 映射 / 差异 / 验证）。
+> 它是 M4~M10 各页面的**结构样板**：其余页面按同一分层与同一「缺失显式化」口径落地。
+
+### D.1 已实现的 IA（自上而下，视觉权重递减）
+
+| 序 | 区块 | 回答的问题 | 主要数据来源 |
+|---|---|---|---|
+| 0 | 页面头：标题 + 数据快照日 + 决策日 + **新鲜度** + 刷新 | 数据够不够新 | `overview.snapshot_date` · `runtime_status.decision_date` |
+| 1 | **市场环境** | 现在是什么市场环境 | `overview.market_regime`（枚举，优先）· `overview.overall_risk` · `three_questions.*` |
+| 2 | **正式决策 / 风险**（视觉权重最高） | 当前系统建议与风险是什么 | `cards[].{action,final_target,position_gap,risk_flag,over_alloc_status}` |
+| 3 | **Gen-1 时机建议** | Gen-1 建议与适用性如何 | `system_runtime.gen1` → `runtime_status.gen1_*` → 未提供 |
+| 4 | **全部标的** | 哪些 ETF 需要关注 | `cards[]`（含决策链折叠、标的级 Gen-1） |
+| 5 | **数据质量**：时点 / 新鲜度 / 来源 / 生命周期 / 边界字段组 / 系统状态（折叠） | 证据够不够支撑上面结论 | 多源（逐项标 provenance） |
+
+**⛔ 首页不出现**：Gen-2 任何数据、账户交易明细、原始后端字段堆叠、基本面长文本。
+正式决策区显式标注归属 `V3 Safety Core`；Gen-1 区显式标注 `GEN-1 · TIMING / ADVISORY`。
+
+### D.2 ViewModel 结构（`adaptDashboard(data, runtimeStatus, {retrievedAt})`）
+
+| 键 | 内容 |
+|---|---|
+| `available` | 响应是否可用 |
+| `market` | `regime/regimeLabel/regimeTone/regimeIsFallback/regimeSourceNote` · `statusText` · `risk/riskLabel/riskTone` · `mostDefendLabel` · `mostWorthText` |
+| `decision` | `identity`(Safety Core) · `riskLabel/riskTone` · `counts`(动作分类计数) · `attention[]`(需动作标的) · `bindingConstraintText` · `targetTotal`(⛔ 不出数字) · `gap` · `gen1Available` |
+| `portfolio` | `etfTotal/cashRatio/techPosition/goldPosition/innovationPosition`（% ）+ `money.{totalAsset,holdingsMv,cashBalance,totalPnl}`（元，默认遮罩） |
+| `cards` | `Field<卡数组>`，每卡含 M2 全字段 + `production`(契约) + `display{}`（展示文案 + 决策链 + Gen-1 摘要） |
+| `gen1` | `sourceChannel`(CANONICAL/RUNTIME_STATUS/NONE) · `channelCaveat` · `authorityLabel`(后端标签优先) · `healthLabel/healthTone` · `healthGateLabel` · `safetySource` · `counterfactual{}` · `safety{productionWrite,productionFastPathEnabled,autoExecution,safetyInvariantOk}`(三态) · `perCard{total,available,unavailable}` |
+| `lifecycle` | `items[8]`（`provided/valueText/reasonText/sourceText/caveat`）· `axesView[3]` · `unavailableCount/totalCount` |
+| `boundaryFields` | 7 项边界字段 + 反例 + 三态展示值 |
+| `systemStatus` | `ml_shadow` 折叠区（历史兼容字段，明示不参与判定） |
+| `asOf` / `freshness` | 时点四项 · `{snapshot,decision,overall}`（level/ageHours/slaHours/text） |
+| `provenance` / `boundaries` | 来源与回退 · 三方身份文案（Safety Core / Gen-1 / Gen-2） |
+
+### D.3 raw → adapter → domain → UI 映射（关键行）
+
+| 页面位置 | raw 字段 | adapter 输出 | domain formatter | 说明 |
+|---|---|---|---|---|
+| 市场环境·主值 | `overview.market_regime` | `market.regimeLabel` | `regimeLabel()` | 枚举优先；枚举缺失才用 `three_questions.market_status` 且标 `derived` |
+| 市场环境·风险 | `overview.overall_risk` | `market.riskLabel` | `riskLabel()` + `toneForRisk()` | ★ 线上为**中文**「正常」⇒ M3 增补中文别名归一（见审计 C-7） |
+| 正式决策·动作 | `cards[].action` | `card.display.action` | `actionLabel()` + `toneForAction()` | 动作域色；动作**必带文字** |
+| 正式决策·目标 | `cards[].final_target` | `card.display.target` | `formatPercent()` | 百分数原样：`0.5` → `0.5%` |
+| 正式决策·缺口 | `cards[].position_gap` | `card.display.gap` | `formatPercent(v,1,true)` | 服务端值透传，⛔ 不重算 |
+| 标的目标带 | `cards[].target_min/max` | `card.display.band` | `formatPercent()` ×2 | 渲染为「0.4% ~ 0.5%」 |
+| 机会等级 | `opportunity_grade/score` | `card.display.opportunity` | `opportunityLevel()`（后端 grade 优先） | 点数，⛔ 不加 `%` |
+| Gen-1 档位 | `system_runtime.gen1.authority` / `runtime_status.gen1_authority` | `gen1.authorityLabel` | `gen1AuthorityLabel(code, backendLabel)` | **后端中文标签优先** |
+| Gen-1 健康 | `…gen1_health_status` (+`…gen1_health_label`) | `gen1.healthLabel` / `healthTone` | `gen1HealthLabel()` + `toneForGen1Health()` | 风控色域 |
+| Gen-1 概率 | `cards[].gen1.signal.probability` | `display.gen1.probabilityText` | `formatProbability()` | 唯一允许 0~1→% 的语义 |
+| Gen-1 阈值 | `cards[].gen1.signal.threshold` | `display.gen1.thresholdText` | `formatRatio()` | **系数**，⛔ 不加 `%` |
+| 生命周期 | `runtime_status.*` / `system_runtime.*` | `lifecycle.items[]` | `readLifecycle()` + `lifecycleValueText()` | 无数据 ⇒ 「数据未提供」+ 原因码文案 |
+| 边界字段组 | `runtime_status.ml_*` / `gen1_*` | `boundaryFields[].value` | `dispTri()` | 三态 `true/false/null` ⛔ 不压扁 |
+| 组合金额 | `overview.{total_asset,cash_balance,holdings_mv,total_pnl}` | `portfolio.money.*` | `formatAmount()` | 元 → 万/亿；前台默认遮罩 |
+| 新鲜度 | `snapshot_date` / `decision_date` | `freshness.{snapshot,decision,overall}` | `assess()` + `describe()` | FRESH / STALE / MISSING 三态文案互不相同 |
+
+**缺失态统一文案**（`domain/labels.js`，唯一来源）：
+`数据未提供`（契约未下发）· `字段缺失`（字段不存在）· `未提供（null）`（契约内 null）· `数据已过期` · `读取失败`。
+
+### D.4 与旧 Dashboard 的差异
+
+**删除**（理由）
+| 项 | 理由 |
+|---|---|
+| `three_questions.market_regime` / `gen1_advice` / `risk_status` | 线上**不存在**（审计 #1/#2/#3）；改读正确字段 |
+| 隐杠杆区块（`leverage_alert` / `total_book_pct`） | 线上不存在，⛔ 不再虚构（审计 #4，SPEC §11.4①） |
+| 旧「五维雷达 + 全量指标」首屏堆叠 | 密度过高、无优先级（SPEC §4.2）；雷达移至「看盘」 |
+| 前端硬编码 `ENGINE_VERSION = 'V3.6.1'` | 版本只从 `/api/constants` 读（SPEC §12.5） |
+| 数值范围启发式 `pct()` | D-7；改为语义化 formatter |
+| `cards[].gen1` 伪装（用 `ml_shadow` 顶替） | 审计 #5；契约未下发即显示「数据未提供」 |
+
+**保留**（能力不丢）
+标的动作 / 当前→目标仓位 / 风险旗标 / 机会等级 / 趋势阶段描述 / 组合仓位与现金比例 / 金额显隐切换 / 刷新 / 系统运行状态（折叠）/ 数据新鲜度。
+
+**新增**
+① 数据质量区（时点 + 三态新鲜度 + provenance + 通道警示）；② 生命周期三轴 8 维（全部来自状态机，无写死）；③ 边界字段组（含反例）；④ 关注标的的**决策链折叠**；⑤ 标的级 Gen-1 摘要 + 可适用性说明；⑥ 桌面表 / 移动卡双形态；⑦ 页面四态（loading/error/empty/ready-degraded）。
+
+### D.5 测试与验证（M3 实测结果）
+
+```
+rewrite 套件     15/15 PASS（M2 为 12）
+用例总数         207 项（M2 为 157）
+vite build       PASS（双入口；旧前端产物不变，Structure 仍 1,044.68 kB；新 Dashboard chunk 7.3 kB）
+浏览器视觉核验    7 场景 × 6 断点 = 42 张截图；横向溢出 0；≥1024 出表格、≤768 出移动卡、状态页出现状态块
+文本口径核验      0 problems（必需文案全命中、禁止项零命中）
+非回归           src/ · cloudfunctions/ · tests/ · scripts/ · 旧 web/src/** 的 git diff 全为空
+```
+
+**验证方法**（可复现，工具在工作区根、⛔ 不入库）：
+`_v365-fe-audit-20260930/tools/{m3-static-server.cjs, m3-visual-check.py, m3-text-check.py}`；
+证据：`_v365-fe-audit-20260930/m3-visual/{*.png, report.json, text__*.txt}`。
+
+### D.6 M3 新发现
+
+见审计附录 **C-6 ~ C-9**（运行时模板白屏、中文风险值色域丢失、生命周期版本身份口径、`most_worth` 噪音）。
+
