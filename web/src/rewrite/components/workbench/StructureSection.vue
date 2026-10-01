@@ -19,7 +19,7 @@ defineProps({
 </script>
 
 <template>
-  <section class="section">
+  <section class="section prio-evidence">
     <SectionHeader
       eyebrow="结构"
       title="阶段识别与横盘 / 量价"

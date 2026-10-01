@@ -31,7 +31,9 @@ const byPath = new Map(flat.map((x) => [x.abs, x.def]));
 const names = new Set(flat.map((x) => x.def.name).filter(Boolean));
 
 const REQUIRED_NAMES = [
-  'Dashboard', 'EtfWorkbench', 'Structure', 'Intel', 'Review',
+  /* ★ M5-P1 D-M5-1：'Structure' 已从名单移除 —— 看盘归并到 `/etf/:code`，
+     `/structure/:code` 是**无 name 的兼容 redirect**（⛔ 不建第二套 Workbench）。 */
+  'Dashboard', 'EtfWorkbench', 'Intel', 'Review',
   'AdminGen1', 'AdminGen2', 'AdminProduction', 'AdminData', 'AdminFundamental',
   'AdminParam', 'AdminRisk', 'AdminTrade', 'AdminPassword',
   'Login'
@@ -84,15 +86,28 @@ function resolves(pathname) {
   });
 }
 
-ok('旧 URL 兼容跳转存在且目标为真实路由', () => {
-  const expect = { '/portfolio': '/dashboard', '/fundamentals': '/intel', '/etf': '/etf/513310', '/structure': '/structure/513310' };
+ok('旧 URL 兼容跳转存在且目标为真实路由（★ M5-P1 D-M5-1：/structure 归并到 /etf/:code）', () => {
+  const expect = {
+    '/portfolio': '/dashboard',
+    '/fundamentals': '/intel',
+    '/etf': '/etf/513310',
+    '/structure': '/etf/513310'
+  };
   for (const [from, to] of Object.entries(expect)) {
     const def = byPath.get(from);
     assert.ok(def, '缺少旧 URL 兼容: ' + from);
     assert.equal(def.redirect, to, from + ' 应重定向到 ' + to);
     assert.ok(resolves(to), '目标路由无法解析: ' + to);
   }
-  assert.equal(LEGACY_REDIRECTS.length, 4, 'LEGACY_REDIRECTS 应声明 4 条');
+  assert.equal(LEGACY_REDIRECTS.length, 5, 'LEGACY_REDIRECTS 应声明 5 条');
+
+  /* ★ M5-P1 D-M5-1：`/structure/:code` 必须是**参数化 redirect**，
+   *   ⛔ 不得再挂 component（即 ⛔ 不得存在第二套 ETF 看盘页面）。 */
+  const p = byPath.get('/structure/:code');
+  assert.ok(p, '缺少 /structure/:code 兼容跳转');
+  assert.equal(typeof p.redirect, 'function', '/structure/:code 应为函数式 redirect');
+  assert.equal(p.redirect({ params: { code: '518880' } }), '/etf/518880', '参数必须透传');
+  assert.equal(p.component, undefined, '⛔ /structure/:code 不得挂 component（禁止第二套 Workbench）');
 });
 
 ok('前台导航每项都能解析到真实路由', () => {
@@ -100,6 +115,21 @@ ok('前台导航每项都能解析到真实路由', () => {
     const hit = flat.some((x) => x.abs === m.path || x.abs.startsWith(m.path + '/'));
     assert.ok(hit, '前台导航指向死链: ' + m.path);
   }
+});
+
+ok('★ M5-P1-OBS-1：前台导航 ⛔ 不得再含 /structure「看盘」（且必须是 4 项固定顺序）', () => {
+  /* ① 导航收敛：删除「看盘」后严格为 全局 · 标的 · 情报 · 复盘（⛔ 不重排 情报/标的） */
+  assert.deepEqual(FRONT_NAV.map((m) => m.title), ['全局', '标的', '情报', '复盘'],
+    '前台导航应严格为 全局 · 标的 · 情报 · 复盘');
+  /* ② 看盘 / /structure 不得回填进导航（含 path 与 title 两种写法） */
+  assert.ok(!FRONT_NAV.some((m) => m.path === '/structure'), '⛔ FRONT_NAV 不得包含 /structure');
+  assert.ok(!FRONT_NAV.some((m) => m.title === '看盘'), '⛔ FRONT_NAV 不得包含「看盘」');
+  /* ③ ★ 关键：删除导航 ≠ 删除兼容入口 —— 两条 redirect 必须仍在（防"顺手一起删"） */
+  assert.ok(byPath.has('/structure'), '⛔ 不得删除 /structure 兼容 redirect');
+  assert.ok(byPath.has('/structure/:code'), '⛔ 不得删除 /structure/:code 兼容 redirect');
+  assert.equal(byPath.get('/structure').redirect, '/etf/513310', '/structure 应仍 redirect 到 /etf/513310');
+  /* ④ 唯一正式 Workbench 入口不变 */
+  assert.equal(byPath.get('/etf/:code').name, 'EtfWorkbench', '/etf/:code 应仍为 EtfWorkbench');
 });
 
 ok('后台导航每项都能解析到真实路由，且都有分组名', () => {

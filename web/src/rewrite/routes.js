@@ -7,16 +7,20 @@
  *   而 router.js 负责装配 createRouter / 守卫。
  *
  * 硬性要求：
- *  - 前台 5 页 + 后台 10 页（含新增 /admin/production）+ 登录页；⛔ 无「空壳业务页」；
+ *  - 前台 4 页（/dashboard · /etf/:code · /intel · /review）+ 后台 9 页（含 /admin/production 与
+ *    /admin/password）+ 登录页；⛔ 无「空壳业务页」；
+ *    ★ M5-P1-OBS-1（2026-10-01）：`/structure` 与 `/structure/:code` **不再是页**（仅剩兼容 redirect）；
  *  - 旧 URL 保留 redirect 兼容（§11.5），⛔ 不再维护无业务内容的空页面；
  *  - `/review` 保持鉴权（§8.1）。
  */
 
-/** 前台主 IA：全局 · 标的 · 看盘 · 情报 · 复盘（SPEC §4.1） */
+/** 前台主 IA：全局 · 标的 · 情报 · 复盘（SPEC §4.1）
+ *  ★ M5-P1-OBS-1（2026-10-01）：删除「看盘」导航项 —— `/structure` 已无独立产品职责
+ *   （归并为兼容 redirect，见下方 LEGACY_REDIRECTS），⛔ 不得再回填进导航；
+ *   兼容入口必须保留，删除导航 ≠ 删除 redirect。 */
 export const FRONT_NAV = Object.freeze([
   { path: '/dashboard', title: '全局', needsAuth: false },
   { path: '/etf', title: '标的', needsAuth: false },
-  { path: '/structure', title: '看盘', needsAuth: false },
   { path: '/intel', title: '情报', needsAuth: false },
   { path: '/review', title: '复盘', needsAuth: true }
 ]);
@@ -52,7 +56,10 @@ export const LEGACY_REDIRECTS = Object.freeze([
   { path: '/portfolio', target: '/dashboard' },
   { path: '/fundamentals', target: '/intel' },
   { path: '/etf', target: '/etf/513310' },
-  { path: '/structure', target: '/structure/513310' }
+  /* ★ M5-P1 / owner D-M5-1（合并 + redirect）：看盘**不再单独建设第二套 Workbench**，
+   *   `/structure` 与 `/structure/:code` 一律归并到 `/etf/:code`（唯一 ETF 看盘载体）。 */
+  { path: '/structure', target: '/etf/513310' },
+  { path: '/structure/:code', target: '/etf/:code', param: 'code' }
 ]);
 
 export const routes = [
@@ -68,8 +75,9 @@ export const routes = [
       { path: 'etf', redirect: '/etf/513310' },
       { path: 'etf/:code', name: 'EtfWorkbench', component: () => import('./views/front/EtfWorkbench.vue'), meta: { title: '标的', zone: 'front' } },
 
-      { path: 'structure', redirect: '/structure/513310' },
-      { path: 'structure/:code', name: 'Structure', component: () => import('./views/front/Structure.vue'), meta: { title: '看盘', zone: 'front' } },
+      /* ★ M5-P1 D-M5-1：看盘 → 归并到 ETF 工作台（⛔ 不建第二套 Workbench） */
+      { path: 'structure', redirect: '/etf/513310' },
+      { path: 'structure/:code', redirect: (to) => '/etf/' + encodeURIComponent(String(to.params.code || '')) },
 
       { path: 'fundamentals', redirect: '/intel' },             // 旧 URL 兼容
       { path: 'intel', name: 'Intel', component: () => import('./views/front/Intel.vue'), meta: { title: '情报', zone: 'front' } },

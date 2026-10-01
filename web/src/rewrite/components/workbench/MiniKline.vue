@@ -3,7 +3,7 @@
  * 轻量 SVG K 线（web/src/rewrite/components/workbench/MiniKline.vue）
  * 规范依据：SPEC §12.3（反装饰）+ owner 裁定 M4-D2
  *
- * ★ 零依赖、纯函数式渲染（⛔ 不引 ECharts —— 体积问题属 M5「看盘」范围）。
+ * ★ 零依赖、纯函数式渲染（⛔ 不引 ECharts —— 图表体积优化属独立的性能议题，不在本轮范围）。
  * ★ 颜色跟随**中国股市惯例：涨=红（--mkt-up）、跌=绿（--mkt-down）**。
  *   ⛔ 与风险色域（--risk-*）、动作 tone（--tone-*）物理隔离，不得混用。
  * ★ **陈旧数据照常绘制**（owner 裁定 D2：⛔ 不隐藏、⛔ 不插值、⛔ 不猜最新价）；

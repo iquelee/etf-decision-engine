@@ -10,7 +10,7 @@
  *   · `detail.total_layer_weight` = 百分比（覆盖度）
  *   · `detail.layer_breakdown[*].signal` = 分层信号值（**有正负**，用于强弱分档）
  */
-import { provided, missing, unavailable, readField, readBlock, provenance } from '../domain/provenance.js';
+import { provided, missing, readField, readBlock, provenance } from '../domain/provenance.js';
 import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
 
 const SRC_F = 'api:/api/fundamentals';

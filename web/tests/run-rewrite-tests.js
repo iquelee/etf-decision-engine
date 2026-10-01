@@ -26,6 +26,12 @@ const SUITES = [
   /* --- ETF 工作台（M4-P1） --- */
   './rewrite/etf-detail-adapter.test.js',
   './rewrite/etf-detail-render.test.js',
+
+  /* --- 单源展示（M5-P1） --- */
+  './rewrite/single-source.test.js',
+  /* --- 语义边界 / 状态语义（M5-P2 / M5-P4 / M5-P5 / M5-P6 / M5-P7） --- */
+  './rewrite/semantic-boundary.test.js',
+  './rewrite/state-semantics.test.js',
   './rewrite/etf-radar.test.js',
   './rewrite/etf-history-intel.test.js',
   /* --- transport（M2 清理） --- */

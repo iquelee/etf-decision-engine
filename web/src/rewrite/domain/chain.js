@@ -67,6 +67,37 @@ export function hasQuant(text) {
 }
 
 /**
+ * ★ M6 / **UI-001**（2026-10-01，owner 正式裁定 = `RESOLVED`）—— 两个「市场环境」语义消歧
+ *
+ *   背景：同一页出现**两个不同层级**的事实，都用「市场环境」措辞：
+ *     · 页头「**组合环境**」= 组合快照 `overview.market_regime`（组合级）；
+ *     · 决策链第 1 步的「市场环境」= **引擎决策时点**的上下文（后端 `explain_chain` 原文）。
+ *   实测二者可以不同（如 组合级=防守 vs 链上=系统性风险）⇒ 用户会误以为是同一件事。
+ *
+ *   裁定：**两个数据点都保留**（⛔ 不删除、不合并、不重算、⛔ 不用其一覆盖另一个），
+ *         只把**链上**那条的标签改写为「**决策时点市场环境**」以消歧。
+ *
+ *   ⛔ 本函数只动**展示文案里开头那一个词**：不改数据、不改字段、不改来源、不改计算逻辑；
+ *      原文仍完整保留在 `conditionRaw`（供审计与未来恢复）。
+ */
+const ENGINE_CONTEXT = /^市场环境\s*(?:[·・]\s*)?([\s\S]*)$/;
+
+/**
+ * 把链条件的**前导**「市场环境」改写为「决策时点市场环境 ·」。
+ * 非该形态的文案**逐字返回**（⛔ 不做任何其它改写）。
+ * @param {string|null|undefined} text
+ * @returns {string|null|undefined}
+ */
+export function disambiguateEngineContext(text) {
+  if (text === null || text === undefined) return text;
+  const s = String(text);
+  const m = ENGINE_CONTEXT.exec(s);
+  if (!m) return s;
+  const rest = m[1].trim();
+  return rest ? '决策时点市场环境 · ' + rest : '决策时点市场环境';
+}
+
+/**
  * 单条链步骤 → 定性展示对象。
  * @param {object} rawStep `{ step, condition, result }`（已适配的 Field 三元组）
  * @returns {object} `{ step, condition, conditionDisplay, result, resultDisplay, quantHidden, resultQuantHidden }`
@@ -85,8 +116,8 @@ export function qualitativeStep(rawStep) {
     /** 原文（供测试断言与未来恢复；⛔ UI 不得渲染） */
     conditionRaw: conditionText,
     resultRaw: resultText,
-    /** 可渲染文案（已遮蔽 / 已判定隐藏） */
-    conditionDisplay: conditionText === null ? null : maskQuant(conditionText),
+    /** 可渲染文案（已遮蔽 + ★ UI-001 消歧） */
+    conditionDisplay: conditionText === null ? null : disambiguateEngineContext(maskQuant(conditionText)),
     resultDisplay: resultText === null ? null : (resultMasked ? null : resultText),
     /** 结果含定量 ⇒ 用固定说明替代（⛔ 不做部分替换） */
     resultHiddenText: resultMasked ? CHAIN_RESULT_QUANT_HIDDEN : null,

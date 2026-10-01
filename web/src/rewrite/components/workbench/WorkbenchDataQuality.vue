@@ -19,7 +19,7 @@ const freshTone = (level) => (level === 'FRESH' ? 'good' : level === 'STALE' ? '
 </script>
 
 <template>
-  <section class="section">
+  <section class="section prio-evidence">
     <SectionHeader
       eyebrow="数据质量"
       title="新鲜度 / 来源 / 缺什么"
@@ -42,6 +42,17 @@ const freshTone = (level) => (level === 'FRESH' ? 'good' : level === 'STALE' ? '
       <div class="kv">
         <span class="kv-k">基本面（fundamental）</span>
         <span class="kv-v"><ToneBadge :text="vm.freshness.fundamental.text" :tone="freshTone(vm.freshness.fundamental.level)" small /></span>
+      </div>
+      <!-- ★ M5-P1：组合环境新鲜度（只读引用 `/api/dashboard`；无契约 ⇒ 未提供，⛔ 不猜） -->
+      <div class="kv">
+        <span class="kv-k">{{ vm.marketRegime.title }}（{{ vm.marketRegime.available ? '只读引用' : '未提供' }}）</span>
+        <span class="kv-v">
+          <ToneBadge
+            :text="vm.marketRegime.available ? vm.marketRegime.freshness.text : '数据未提供'"
+            :tone="vm.marketRegime.available ? freshTone(vm.marketRegime.freshness.level) : 'muted'"
+            small
+          />
+        </span>
       </div>
       <div class="kv">
         <span class="kv-k">Gen-1 可用性</span>
@@ -74,6 +85,14 @@ const freshTone = (level) => (level === 'FRESH' ? 'good' : level === 'STALE' ? '
       —— 属 M6「基本面」页与后台范围，⛔ 不搬进工作台。
     </p>
     <p class="state-sub">{{ vm.provenance.listEndpointNote }}</p>
+
+    <!-- ★ M5-P1：单源展示原则（本页唯一出处，⛔ 不在各区块重复声明） -->
+    <p class="state-sub">
+      <b>单源展示</b>：{{ vm.boundaries.singleSourcePrinciple }}
+      <span class="text-11" style="color:var(--c-text-3)">
+        （组合环境来源：{{ vm.marketRegime.sourceNote }}）
+      </span>
+    </p>
 
     <!-- 缺什么：把各域的显式缺失/未提供集中列出（⛔ 不静默） -->
     <template v-if="vm.missingItems && vm.missingItems.length">

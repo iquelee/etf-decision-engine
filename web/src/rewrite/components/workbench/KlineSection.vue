@@ -11,6 +11,8 @@
 import SectionHeader from '../SectionHeader.vue';
 import ToneBadge from '../domain/ToneBadge.vue';
 import MiniKline from './MiniKline.vue';
+import Fact from '../domain/Fact.vue';
+import { FACT } from '../../domain/ownership.js';
 
 defineProps({
   /** adapter 的 `vm.kline` */
@@ -21,20 +23,25 @@ defineProps({
 </script>
 
 <template>
-  <section class="section">
-    <SectionHeader
-      eyebrow="行情"
-      title="K 线"
-      :subtitle="kline.available ? ('数据截至 ' + kline.lastBarDateText) : ''"
-    >
-      <template #actions>
-        <ToneBadge
-          :text="kline.statusLabel"
-          :tone="kline.isSeverelyStale ? 'risk' : (kline.freshness.level === 'FRESH' ? 'good' : 'muted')"
-          small
-        />
-      </template>
-    </SectionHeader>
+  <section class="section prio-evidence">
+    <!-- ★ M5-P1：K 线时点的**主位**标记放在**始终渲染**的区块标题上 ——
+         否则当 K 线不可用（空/缺失/失败）时，页头的引用位会变成「悬空引用」
+         （由 `m5-visual-check.py` 的更严规则：ref>0 而 owner=0 即缺陷）。 -->
+    <Fact :fact="FACT.KLINE_LAST_DATE">
+      <SectionHeader
+        eyebrow="行情"
+        title="K 线"
+        :subtitle="kline.available ? ('数据截至 ' + kline.lastBarDateText) : ''"
+      >
+        <template #actions>
+          <ToneBadge
+            :text="kline.statusLabel"
+            :tone="kline.isSeverelyStale ? 'risk' : (kline.freshness.level === 'FRESH' ? 'good' : 'muted')"
+            small
+          />
+        </template>
+      </SectionHeader>
+    </Fact>
 
     <!-- ⓪ 请求失败 ⇒ 必须与「空」和「缺失」都区分开（⛔ 不把错误说成空） -->
     <div v-if="kline.state === 'ERROR'" class="banner mb-3">

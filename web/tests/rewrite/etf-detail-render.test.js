@@ -22,9 +22,13 @@ const REAL = '2026-09-30T20:00:00.000Z';
 const LIVE = () => FIXTURES.m4('etf-normal.json');
 const K60 = () => FIXTURES.m4('kline-live60.json');
 
-/** 完整 VM（带 K 线 + 历史） */
+/** 完整 VM（带 K 线 + 历史 + 组合环境只读引用） */
 const VM = (data, opts = {}) => adaptEtfDetail(data, null, {
-  klineRaw: K60(), decisionsRaw: FIXTURES.m4('decisions-normal.json'), retrievedAt: REAL, ...opts
+  klineRaw: K60(),
+  decisionsRaw: FIXTURES.m4('decisions-normal.json'),
+  marketRaw: FIXTURES.liveDashboard(),
+  retrievedAt: REAL,
+  ...opts
 });
 /** 无 K 线的 VM */
 const VM_NO_K = (data, opts = {}) => adaptEtfDetail(data, null, { klineRaw: [], retrievedAt: REAL, ...opts });
@@ -90,7 +94,7 @@ try {
   await ok('A normal：三类仓位分区渲染（建议 / 实际 / 配置标准 各带标签）', async () => {
     const html = await renderVm(VM(LIVE()));
     assert.ok(html.includes('实际（当前持仓）'), '必须显式标注「实际」');
-    assert.ok(html.includes('配置标准（etf_basic）'), '必须显式标注「配置标准」');
+    assert.ok(html.includes('配置标准（标的配置表）'), '必须显式标注「配置标准」');
     assert.ok(html.includes('8.3%'), '当前仓位应渲染');
     assert.ok(html.includes('12.6%'), '实际核心应渲染');
     assert.ok(html.includes('0.2%'), '建议核心应渲染（⛔ 与实际 12.6% 分开）');
@@ -130,11 +134,12 @@ try {
   await ok('★ C Gen-1：通道角标 = `Legacy Channel`，caveat 逐字渲染', async () => {
     const html = await renderVm(VM(LIVE()));
     assert.ok(html.includes('Legacy Channel'), '必须渲染 Legacy Channel 角标');
-    // ⚠️ Vue 会转义文本里的英文双引号（" ⇒ &quot;）⇒ 分段断言，⛔ 不比对整句含引号原文
-    assert.ok(html.includes('当前页面使用的是现有 legacy 通道数据；它不是 V3.6.5 canonical'),
-      'caveat 前半句必须逐字渲染');
-    assert.ok(html.includes('system_runtime.gen1'), 'caveat 后半句（字段名）必须存在');
-    assert.ok(html.includes('契约。'), 'caveat 结尾必须存在');
+    // ⚠️ 本断言在 M5-P8 被**修正**：原文案里写着后端字段路径 `system_runtime.gen1`，
+    //    旧断言反而**要求该字段名必须存在** —— 那是错误预期（把泄露当成规范）。
+    //    现改为：渲染新的大白话文案，并**显式要求字段名不存在**。
+    assert.ok(html.includes('当前页面使用的是历史兼容通道的数据'), 'caveat 前半句必须逐字渲染');
+    assert.ok(!html.includes('system_runtime'), '★ M5-P8：caveat ⛔ 不得出现后端字段路径');
+    assert.ok(html.includes('正式 Gen-1 契约数据。'), 'caveat 结尾必须存在');
     assert.ok(html.includes('Legacy 通道'), '逐字段角标必须存在');
   });
 
@@ -337,8 +342,13 @@ try {
 
   await ok('G 基本面：只渲染摘要，⛔ 不搬 fundamental_config / fundamental_series', async () => {
     const html = await renderVm(VM(LIVE()));
-    assert.ok(html.includes('摘要'));
-    assert.ok(html.includes('只给摘要'), '必须声明「本页只给摘要」的边界');
+    assert.ok(html.includes('基本面摘要与证据'), '情报区标题须存在');
+    /**
+     * ★ M5-P1：原页尾重复的 `fundamentalsSummary` 段已删除 ⇒ 边界声明改由**情报区**承担：
+     *   「本区**不消费**的载荷块：… 属「基本面」页（M6）范围，⛔ 不搬进工作台。」
+     */
+    assert.ok(html.includes('本区<b>不消费</b>的载荷块：'), '必须声明本区不消费的载荷块（边界）');
+    assert.ok(html.includes('属「基本面」页（M6）范围，⛔ 不搬进工作台。'), '必须声明深层内容的归属页');
     /**
      * ⚠️ 第二阶段起 `layer_breakdown` **已在情报区展示**（属 `fundamental.detail` 内嵌，
      *    M4-P0 曾误记为「属 M6」）⇒ 本条只拦真正不消费的两个**块**。
@@ -391,7 +401,7 @@ try {
      */
     assert.ok(!html.includes('>1.00<'), '⛔ 不得把缺失的系数补成 1.00');
     /** ⚠️ 切片必须止于**紧邻的下一个区块**（`gen1-advisory`）；否则会把 Gen-1 区的真值 `0` 圈进来 */
-    const seg = sectionOf(html, 'rank-defense', ['gen1-advisory', 'mkline']);
+    const seg = sectionOf(html, 'prio-risk', ['gen1-advisory', 'mkline']);
     assert.ok(seg.length > 0 && seg.length < html.length, '切片必须真的截断');
     assert.ok(!/>0</.test(seg), '⛔ 缺失分数不得渲染成 0');
   });
@@ -405,15 +415,17 @@ try {
     assert.ok(!html.includes('fundamental_config'), '⛔ 不得出现后端块名');
   });
 
-  await ok('★ H 历史：真实 6 条 + 变化点（桌面表 + 移动卡同数据）', async () => {
+  await ok('★ H 历史：真实记录 + 变化点（★ M5-P1 D-M5-2：只渲染最近 5 条）', async () => {
     const html = await renderVm(VM(LIVE()));
-    assert.ok(html.includes('历史决策变化'));
-    assert.ok(html.includes('2026-09-29') && html.includes('2026-09-22'));
+    assert.ok(html.includes('最近决策变化'), '标题须为「最近决策变化」');
+    assert.ok(html.includes('2026-09-29') && html.includes('2026-09-22'), '覆盖区间仍应含首尾日期');
     assert.ok(html.includes('变化点（相邻记录对比）'));
     assert.ok(html.includes('hist-tbl') && html.includes('hist-cards'), '双形态必须同时存在');
     const cards = (html.match(/hist-card-nums/g) || []).length;
-    assert.equal(cards, 6, '移动卡必须 6 张，实际 ' + cards);
+    assert.equal(cards, 5, '★ 移动卡必须为最近 5 条（D-M5-2），实际 ' + cards);
+    assert.ok(html.includes('另有 1 条更早记录，完整审阅见「复盘」页。'), '必须显式说明截断与归口');
     assert.ok(html.includes('不由当前字段拼装'), '必须声明不伪造');
+    assert.ok(html.includes('完整历史审阅属「复盘」页'), '必须声明完整历史不在此复制');
   });
 
   await ok('★★ H 历史四态：文案**两两不同**且都**不伪造**条目', async () => {
@@ -428,8 +440,8 @@ try {
       const html = await renderVm(adaptEtfDetail(LIVE(), null, { klineRaw: [], decisionsRaw: raw, retrievedAt: REAL }));
       assert.ok(html.includes(expectWord), name + ' 应包含「' + expectWord + '」');
       assert.ok(!html.includes('hist-card-nums'), name + ' ⛔ 不得渲染任何历史条目（伪造）');
-      assert.ok(html.includes('rank-history'), name + ' 区块本身必须存在（⛔ 不是隐藏）');
-      texts.push((html.match(/rank-history[\s\S]{0,400}/) || [''])[0]);
+      assert.ok(html.includes('prio-history'), name + ' 区块本身必须存在（⛔ 不是隐藏）');
+      texts.push((html.match(/prio-history[\s\S]{0,400}/) || [''])[0]);
     }
     assert.equal(new Set(texts).size, 4, '四态渲染片段必须互不相同');
   });
@@ -452,20 +464,26 @@ try {
     }
   });
 
-  await ok('★ H 视觉层级：Formal Decision → Defense → History（DOM 顺序 + 分档类）', async () => {
+  await ok('★ H 视觉层级：Formal Decision → Risk & Defense → History（DOM 顺序 + 语义优先级类）', async () => {
     const html = await renderVm(VM(LIVE()));
-    const seq = ['primary-decision', 'rank-defense', 'rank-history'];
+    /* ★ M5-P1 D-M5-4：类名改用**语义优先级**（⛔ 不再用数字档位） */
+    const seq = ['primary-decision', 'prio-risk', 'prio-history'];
     let prev = -1;
     for (const cls of seq) {
       const at = html.indexOf(cls);
-      assert.ok(at > -1, '缺分档类: ' + cls);
+      assert.ok(at > -1, '缺优先级类: ' + cls);
       assert.ok(at > prev, cls + ' 顺序错误');
       prev = at;
     }
-    // 分档类必须真的挂在区块上（⛔ 不是只存在于 CSS）
-    assert.ok(/class="[^"]*rank-defense/.test(html));
-    assert.ok(/class="[^"]*rank-advisory/.test(html));
-    assert.ok(/class="[^"]*rank-history/.test(html));
+    // 优先级类必须真的挂在区块上（⛔ 不是只存在于 CSS）
+    assert.ok(/class="[^"]*prio-risk/.test(html));
+    assert.ok(/class="[^"]*prio-advisory/.test(html));
+    assert.ok(/class="[^"]*prio-history/.test(html));
+    assert.ok(/class="[^"]*prio-position/.test(html));
+    // ⛔ 旧数字档位类名必须已清除（D-M5-4）
+    for (const old of ['rank-defense', 'rank-advisory', 'rank-evidence', 'rank-history']) {
+      assert.ok(!html.includes(old), '⛔ 旧数字档位类名残留: ' + old);
+    }
   });
 } finally {
   await server.close();

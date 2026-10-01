@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 防守雷达（web/src/rewrite/components/workbench/DefenseRadar.vue）
- * 规范依据：owner M4-P1b §四 / §九.1
+ * 规范依据：owner M4-P1b §四 / §九.1 ＋ owner 裁定 M5-P1（2026-10-01）
  *
  * ★★ 本区**只用后端已算结果**：
  *   `defense_state.level`（数字 0~4）· `.reason` · `.score`（0~100 分）· `.factor`（乘性系数）
@@ -11,11 +11,18 @@
  *   `37` 是**分数**（⛔ 不加 %）；`0.95` 是**乘性系数**（⛔ 不是 95%）；`level` 是**数字档位**。
  *   三个值各带 `.note` 说明，⛔ 不得只给数字让人猜。
  *
- * ★ 视觉权重：Risk / Defense 属**第 2 档**（低于正式决策、高于仓位与证据）。
+ * ★ M5-P1（Single-Source）本区**主位**：防守 level / score / factor · 溢价状态与溢价率 ·
+ *   超配状态。
+ *   `risk_flag` 为**引用位**（主位「正式决策」）；`risk_events` 为**引用位**
+ *   （主位「情报 / 基本面」，完整清单只在那里渲染 —— ⛔ 不再两处各自解释同一批事件）。
+ *
+ * ★ 视觉优先级：Risk & Defense 属**第二优先**（低于 Formal Decision、高于 Advisory／Evidence）。
  */
 import SectionHeader from '../SectionHeader.vue';
 import FieldValue from '../domain/FieldValue.vue';
 import ToneBadge from '../domain/ToneBadge.vue';
+import Fact from '../domain/Fact.vue';
+import { FACT, OWNER } from '../../domain/ownership.js';
 
 defineProps({
   /** adapter 的 `vm.defense` */
@@ -24,7 +31,7 @@ defineProps({
 </script>
 
 <template>
-  <section class="section rank-defense">
+  <section class="section prio-risk">
     <SectionHeader
       eyebrow="防守雷达"
       title="防守状态与风险"
@@ -38,6 +45,8 @@ defineProps({
         />
       </template>
     </SectionHeader>
+
+    <p class="state-sub mb-3">{{ defense.scopeNote }}</p>
 
     <!-- 防守不可用：⛔ 不显示 0 分 / ⛔ 不显示 1.00 -->
     <div v-if="!defense.available" class="banner mb-3">
@@ -53,8 +62,10 @@ defineProps({
         <div class="def-hero-main">
           <div class="def-hero-label">防守等级</div>
           <div class="def-hero-value">
-            <span class="def-level" :class="'text-tone-' + defense.levelTone">{{ defense.levelLabel }}</span>
-            <span class="def-level-raw">level = {{ defense.levelNumber === null ? '—' : defense.levelNumber }}</span>
+            <Fact :fact="FACT.DEFENSE_STATE">
+              <span class="def-level" :class="'text-tone-' + defense.levelTone">{{ defense.levelLabel }}</span>
+              <span class="def-level-raw">level = {{ defense.levelNumber === null ? '—' : defense.levelNumber }}</span>
+            </Fact>
           </div>
           <div class="def-hero-note">原因：{{ defense.reasonText }}</div>
         </div>
@@ -82,9 +93,14 @@ defineProps({
       </div>
 
       <div class="kv-grid">
+        <!-- 风险旗标 = 引用位（主位在「正式决策」，⛔ 本区不形成第二个风险结论） -->
         <div class="kv">
           <span class="kv-k">风险旗标</span>
-          <span class="kv-v"><ToneBadge :text="defense.riskLabel" :tone="defense.riskTone" dot /></span>
+          <span class="kv-v">
+            <Fact :fact="FACT.RISK_FLAG" role="ref" :ref-to="OWNER.PRIMARY_DECISION">
+              <ToneBadge :text="defense.riskLabel" :tone="defense.riskTone" dot />
+            </Fact>
+          </span>
         </div>
         <div class="kv">
           <span class="kv-k">人工覆盖</span>
@@ -92,49 +108,41 @@ defineProps({
         </div>
         <div class="kv">
           <span class="kv-k">超配状态</span>
-          <span class="kv-v">{{ defense.overAllocText }}</span>
+          <span class="kv-v"><Fact :fact="FACT.OVER_ALLOC">{{ defense.overAllocText }}</Fact></span>
         </div>
         <div class="kv">
           <span class="kv-k">溢价状态</span>
-          <span class="kv-v">{{ defense.premiumText }}</span>
+          <span class="kv-v"><Fact :fact="FACT.PREMIUM_FLAG">{{ defense.premiumText }}</Fact></span>
         </div>
         <div class="kv">
           <span class="kv-k">溢价率</span>
-          <span class="kv-v"><FieldValue :d="defense.premiumRateText" /></span>
+          <span class="kv-v"><Fact :fact="FACT.PREMIUM_RATE"><FieldValue :d="defense.premiumRateText" /></Fact></span>
         </div>
       </div>
 
       <hr class="divider" />
 
-      <!-- ★ 风险事件：★ 空数组只能说「没有返回事件数据」（用户 §六） -->
-      <div class="section-head" style="margin-bottom:8px">
+      <!-- ★ M5-P1：风险事件 = **引用位**（主位在「情报 / 基本面」）⇒ 本区只给条数，⛔ 不重复渲染清单 -->
+      <div class="section-head">
         <div>
           <div class="section-title">风险事件</div>
           <div class="section-sub">
-            <template v-if="defense.events.isEmpty">{{ defense.events.emptyNote }}</template>
-            <template v-else-if="defense.events.available">共 {{ defense.events.count }} 条</template>
-            <template v-else>该字段未提供，已按「无事件可展示」处理并标注</template>
+            完整清单与空数组文案由「情报 / 基本面」承载（主位）；本区只作条数引用。
           </div>
         </div>
         <ToneBadge
-          :text="defense.events.available ? (defense.events.isEmpty ? '无事件记录' : defense.events.count + ' 条') : '数据未提供'"
+          :text="defense.events.available ? (defense.events.isEmpty ? '无事件记录' : '共 ' + defense.events.count + ' 条') : '数据未提供'"
           tone="outline"
           small
         />
       </div>
-
-      <div v-if="defense.events.isEmpty" class="banner">
-        <div class="banner-text">{{ defense.events.emptyText }}</div>
-      </div>
-      <ul v-else-if="defense.events.available" class="block-list">
-        <li v-for="(e, i) in defense.events.items" :key="i">
-          <b>{{ e.reasonText }}</b>
-          <span class="text-11" style="color:var(--c-text-3)">
-            · {{ e.statusText }}<template v-if="e.riskFlag && e.riskFlag.value"> · {{ e.riskFlag.value }}</template>
-            · {{ e.triggerTimeText }}
-          </span>
-        </li>
-      </ul>
+      <p class="state-sub mt-2">
+        <Fact :fact="FACT.RISK_EVENTS" role="ref" :ref-to="OWNER.INTELLIGENCE">
+          {{ defense.events.available
+            ? (defense.events.isEmpty ? defense.events.emptyText : '共 ' + defense.events.count + ' 条风险事件')
+            : '数据未提供' }}
+        </Fact>
+      </p>
     </template>
   </section>
 </template>

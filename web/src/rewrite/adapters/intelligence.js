@@ -98,7 +98,7 @@ function adaptLayers(lb, detail) {
       available: false,
       items: Object.freeze([]),
       totalLayerWeight: null,
-      note: '后端未提供分层明细（`fundamental.detail.layer_breakdown` 缺失）'
+      note: '后端未提供分层明细（该明细字段缺失，⛔ 不推测也不补零）'
     });
   }
   const items = Object.entries(lb).map(([k, v]) => {

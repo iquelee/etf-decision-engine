@@ -14,8 +14,11 @@
  * ⛔ 实现约束（SPEC §2.2）：
  *    本文件 ⛔ 不得 import api/ 或 adapters/；⛔ 模板中不得出现后端原始字段名；
  *    ⛔ 不得自行格式化数字或拼装业务文案；⛔ 不得在此重算任何服务端已算好的值。
- * ⛔ 本阶段**不**调用 `/api/etf/list` 与 `/api/etf/:code/decisions`
- *    （前者是禁止 2「跨 endpoint 偷补」的入口；后者属 M7 历史复盘范围）。
+ * ★ 请求（全部经 compose/useEtfDetail，只读）：
+ *   `/api/etf/:code`（主数据）· `/api/constants`（Gen-1 兜底）· `/api/etf/:code/kline`（K 线）
+ *   · `/api/etf/:code/decisions`（历史决策，M4-P1b 起）· `/api/dashboard`（组合环境**只读引用**，M5-P1）
+ * ⛔ **不**调用 `/api/etf/list`（禁止 2「跨 endpoint 偷补」的入口）。
+ * ⚠️ 勘误（M5-P1）：本注释此前写「本阶段不调用 decisions（属 M7）」，与实现不符，已更正。
  * ⛔ 样式：走全局原子类与 components.css，⛔ 不在此重复声明。
  */
 import { watch } from 'vue';

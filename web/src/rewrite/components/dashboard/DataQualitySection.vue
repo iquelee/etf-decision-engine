@@ -126,7 +126,7 @@ defineProps({
     <details class="fold">
       <summary>系统运行状态（历史兼容字段 · 默认折叠）</summary>
       <div v-if="!systemStatus.available" class="banner mt-2">
-        <div class="banner-text">ml_shadow：<b>数据未提供</b>（后端未下发该块）。</div>
+        <div class="banner-text">历史兼容字段：<b>数据未提供</b>（后端未下发该块）。</div>
       </div>
       <div v-else class="kv-grid mt-2">
         <div v-for="it in systemStatus.items" :key="it.key" class="kv">

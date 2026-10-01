@@ -12,12 +12,14 @@ import ToneBadge from './ToneBadge.vue';
 defineProps({
   text: { type: String, required: true },
   tone: { type: String, default: 'muted' },
-  small: { type: Boolean, default: false }
+  small: { type: Boolean, default: false },
+  /** ★ M5-P8：hero 用大号形态（⛔ 此前调用方传 `large` 但未声明 ⇒ 静默失效 + 属性泄漏） */
+  large: { type: Boolean, default: false }
 });
 </script>
 
 <template>
   <span data-domain="action" aria-label="动作">
-    <ToneBadge :text="text" :tone="tone" :small="small" />
+    <ToneBadge :text="text" :tone="tone" :small="small" :large="large" />
   </span>
 </template>

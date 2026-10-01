@@ -18,7 +18,7 @@
  * ⛔ 本模块**不**做跨通道字段级拼接（禁止 2）：一旦选定通道，缺失字段就是缺失，
  *   ⛔ 不得"canonical 缺 X 就去 legacy 找 X 补上"。
  */
-import { provided, missing, unavailable, readField, provenance, hasValue } from '../domain/provenance.js';
+import { unavailable, readField, provenance, hasValue } from '../domain/provenance.js';
 import { FIELD_STATE, MISSING_REASON, AUTHORITY, GEN1_CHANNEL } from '../domain/enums.js';
 import {
   GEN1_SECTION_TITLE, GEN1_CHANNEL_LABEL, GEN1_CHANNEL_CAVEAT, GEN1_CHANNEL_TONE,

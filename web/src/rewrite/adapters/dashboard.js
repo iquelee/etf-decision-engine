@@ -45,7 +45,7 @@ import {
   IDENTITY_GEN1, IDENTITY_SAFETY_CORE, IDENTITY_GEN2, GEN1_BOUNDARY_NOTE, GEN2_BOUNDARY_NOTE
 } from '../domain/labels.js';
 import { opportunityLevel, CHAIN_COLLAPSE_AFTER } from '../domain/thresholds.js';
-import { formatPercent, formatScore, formatDate, formatDateTime, formatRatio, formatProbability, formatAmount } from '../domain/format.js';
+import { formatPercent, formatDate, formatDateTime, formatRatio, formatProbability, formatAmount } from '../domain/format.js';
 /** ★ 展示映射统一实现在 domain/display.js（M4 起 M3/M4 共用；⛔ 不得再在 adapter 内私有实现） */
 import { disp, dispTri, pctText, scoreText, dateText, dateTimeText, rawText } from '../domain/display.js';
 

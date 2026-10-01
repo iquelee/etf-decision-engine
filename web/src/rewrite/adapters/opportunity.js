@@ -15,15 +15,17 @@
  *   · `opportunity_factor` = **机会系数**（⛔ 不是百分比）
  *   · `add_mode`           = 字符串枚举（'横盘加仓' / '突破加仓' / '无'）
  */
-import { readField, unavailable, provenance, hasValue } from '../domain/provenance.js';
+import { unavailable, provenance, hasValue } from '../domain/provenance.js';
 import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
 import { scoreText, ratioText, rawText, pctText } from '../domain/display.js';
 import {
   fieldStateText, addModeLabel, eligibilityStatusLabel,
   OPPORTUNITY_FACTOR_NOTE, OPPORTUNITY_SCORE_NOTE,
-  OPPORTUNITY_SECTION_NOTE, OPPORTUNITY_NO_DERIVE_NOTE
+  OPPORTUNITY_SECTION_NOTE, OPPORTUNITY_NO_DERIVE_NOTE, OPPORTUNITY_SCOPE_NOTE,
+  CONDITION_QUANT_STRIPPED_NOTE
 } from '../domain/labels.js';
 import { ELIGIBILITY_ITEMS, eligibilityTone, opportunityLevel } from '../domain/thresholds.js';
+import { sanitizeConditionText } from '../domain/condition.js';
 
 const SRC = 'api:/api/etf/:code#decision';
 const P = (f) => provenance({ source: SRC + '.' + f, authority: AUTHORITY.SAFETY_CORE });
@@ -41,10 +43,17 @@ export function adaptOpportunity(decisionVm) {
     hasValue(gradeF) || hasValue(scoreF) || hasValue(d.opportunityFactor) || hasValue(d.addMode)
   ));
 
+  /** ★ M5-P1：条件文案去冲突定量（只做一次，供下面复用；⛔ 不在此处判断业务语义） */
+  const condSanitized = sanitizeConditionText(
+    hasValue(d.nextAddCondition) ? String(d.nextAddCondition.value) : null
+  );
+
   return Object.freeze({
     available: avail,
     sectionNote: OPPORTUNITY_SECTION_NOTE,
     noDeriveNote: OPPORTUNITY_NO_DERIVE_NOTE,
+    /** ★ M5-P1：本区边界自述（承载什么 / 只引用什么） */
+    scopeNote: OPPORTUNITY_SCOPE_NOTE,
 
     /* ---- 机会分 / 等级（★ 点数，⛔ 不加 %） ---- */
     score: scoreF || unavailable(MISSING_REASON.CONTRACT_NOT_PROVIDED, P('opportunity_score')),
@@ -69,9 +78,26 @@ export function adaptOpportunity(decisionVm) {
     cooldownDays: d.cooldownDays || null,
     cooldownText: scoreText(d.cooldownDays || unavailable(MISSING_REASON.FIELD_ABSENT, P('cooldown_days'))),
 
-    /* ---- 下一加仓条件（后端给定长句，⛔ 不改写、⛔ 不从中提取数字做判断） ---- */
+    /* ---- 下一加仓条件（★ M5-P1 第六阶段：移除与结构化字段冲突的缺口数字片段） ----
+     * 实测冲突：原文含「Gap -8%」，而同块 `position_gap = 0`（口径见 DS-006）。
+     * 处置：**只移除**该片段，其余文字**逐字保留**（⛔ 不换算、⛔ 不重算、⛔ 不用 position_gap 生成新文案）。
+     */
     nextAddCondition: d.nextAddCondition || null,
-    nextAddConditionText: rawText(d.nextAddCondition || unavailable(MISSING_REASON.FIELD_ABSENT, P('next_add_condition'))),
+    /** ⛔ 后端原文（供审计与测试；**UI 不得渲染**） */
+    nextAddConditionRaw: hasValue(d.nextAddCondition) ? String(d.nextAddCondition.value) : null,
+    nextAddConditionText: hasValue(d.nextAddCondition)
+      ? Object.freeze({
+        field: d.nextAddCondition,
+        text: condSanitized.text,
+        missing: false,
+        reason: null,
+        reasonText: ''
+      })
+      : rawText(d.nextAddCondition || unavailable(MISSING_REASON.FIELD_ABSENT, P('next_add_condition'))),
+    /** 被移除的片段（⛔ UI 不得渲染） */
+    conditionQuantRemoved: condSanitized.removed,
+    conditionQuantStripped: condSanitized.hadConflict,
+    conditionQuantNote: condSanitized.hadConflict ? CONDITION_QUANT_STRIPPED_NOTE : '',
 
     /* ---- 加仓资格（★ 10 项判据 + overall） ---- */
     eligibility: adaptEligibility(d.addEligibility),

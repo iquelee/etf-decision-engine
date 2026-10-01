@@ -416,9 +416,13 @@ export const GEN1_CHANNEL_LABEL = Object.freeze({
 });
 
 /** 通道说明（★ DECISION_LEGACY 的措辞由 owner 逐字给定，⛔ 不得改写） */
+/**
+ * 通道警示（大白话，⛔ 不得出现后端字段路径 —— M5-P8 修正：
+ *   原文案写的是 `system_runtime.gen1` 这类内部路径，用户看不懂且属于字段名泄露）。
+ */
 export const GEN1_CHANNEL_CAVEAT = Object.freeze({
-  CANONICAL: '数据来源：V3.6.5 canonical 契约 system_runtime.gen1。',
-  DECISION_LEGACY: '当前页面使用的是现有 legacy 通道数据；它不是 V3.6.5 canonical "system_runtime.gen1" 契约。',
+  CANONICAL: '数据来源：V3.6.5 的正式 Gen-1 契约。',
+  DECISION_LEGACY: '当前页面使用的是历史兼容通道的数据；它不是 V3.6.5 的正式 Gen-1 契约数据。',
   NONE: ''
 });
 
@@ -485,7 +489,14 @@ export const KLINE_STATUS_LABEL = Object.freeze({
   MISSING: '无时间戳',
   UNAVAILABLE: '未提供',
   /** ★ 请求失败 —— ⛔ 必须与「空数据」和「缺失」都不同（把错误说成空是 SPEC §9 明令禁止的） */
-  ERROR: '读取失败'
+  ERROR: '读取失败',
+  /**
+   * ★ M5-P7（2026-10-01）新增：**畸形载荷**（非数组 / 无可解析日期）⇒ 字段缺失。
+   *   此前该态与「无时间戳」共用同一标签 ⇒ 两种语义塌陷成一个（违反 SPEC §9 与 §十一）。
+   */
+  FIELD_MISSING: '字段缺失',
+  /** ★ M5-P7 新增：**合法空数组**（0 根）—— 与「缺失」「失败」都不同 */
+  EMPTY: '无行情数据（0 根）'
 });
 
 /** K 线图区固定说明（解释"为何图还在"） */
@@ -520,7 +531,7 @@ export const POSITION_KIND_LABEL = Object.freeze({
   suggested: '建议（本次决策）',
   actual: '实际（当前持仓）',
   target: '目标（决策带）',
-  config: '配置标准（etf_basic）'
+  config: '配置标准（标的配置表）'
 });
 
 export const POSITION_KIND_NOTE = Object.freeze({
@@ -677,3 +688,60 @@ export const HISTORY_CHANGE_KINDS = Object.freeze([
 ]);
 
 export const HISTORY_CHANGE_NOTE = '变化 = 相邻两条后端记录的实测值差异（⛔ 不推断原因）。';
+
+/* ---------------- M5-P1 · 组合环境（只读引用，owner D-M5-3） ----------------
+ * ★ 契约已证实（2026-10-01 只读核对）：
+ *   · `src/common/schema.js:240`  `market_regime` desc = '组合环境 aggressive/structural/range/defensive/crisis'
+ *   · `cloudfunctions/apiGateway/index.js:465`  dashboard.overview.market_regime ← 组合快照
+ *   ⇒ 属**可证明的正式 contract**，故允许只读引用；
+ *     ⛔ 但**不得**由标的字段（如 snapshot 的 trend_context）推导市场状态。
+ */
+export const MARKET_REGIME_TITLE = '组合环境';
+export const MARKET_REGIME_SOURCE_NOTE =
+  '只读引用：/api/dashboard#overview.market_regime（组合级事实，⛔ 不由标的字段推导）';
+export const MARKET_REGIME_UNAVAILABLE = '数据未提供';
+export const MARKET_REGIME_UNAVAILABLE_NOTE =
+  '未取到正式契约的组合环境 ⇒ NOT_PROVIDED（⛔ 本页不猜测市场状态）。';
+
+/* ---------------- M5-P1 · 条件文案去冲突定量（owner D-M5-5） ---------------- */
+export const CONDITION_QUANT_STRIPPED_NOTE =
+  '后端原文中含与结构化字段口径冲突的缺口数字，该片段已移除（⛔ 不换算、⛔ 不重算；待后端统一口径后恢复）。';
+
+/* ---------------- M5-P1 · 工作台历史边界（owner D-M5-2） ---------------- */
+export const HISTORY_INLINE_NOTE =
+  '工作台只展示与当前判断直接相关的**最近变化**；完整历史审阅属「复盘」页，⛔ 不在此复制完整历史能力。';
+
+/**
+ * 截断提示（`shown` 之外还有记录时使用）。
+ * @param {number} total 后端返回总条数
+ * @param {number} shown 本页展示条数
+ */
+export function historyTruncateNote(total, shown) {
+  const rest = Number(total || 0) - Number(shown || 0);
+  if (!(rest > 0)) return '';
+  return '另有 ' + rest + ' 条更早记录，完整审阅见「复盘」页。';
+}
+
+/* ---------------- M5-P1 · 单源展示声明（Single-Source Display） ---------------- */
+export const SINGLE_SOURCE_PRINCIPLE =
+  '同一后端事实在本页只有一个主位；其它区块如出现，一律为带标记的引用位，⛔ 不产生第二套判断。';
+
+/** 「正式决策」区的边界自述：本区不复述其它主位的事实 */
+export const PRIMARY_DECISION_SCOPE_NOTE =
+  '本区只给正式决策自身的事实（动作 / 最终目标 / 风险旗标）与决策链；'
+  + '目标带、建议仓位、仓位上限、冷静期、超配、机会等级、加仓条件由各自主位区块承载，本区 ⛔ 不复述。';
+
+/** 「仓位与风险」区的边界自述 */
+export const POSITION_RISK_SCOPE_NOTE =
+  '本区承载仓位四轴（实际 / 建议 / 目标带 / 配置标准）与仓位缺口；'
+  + '风险旗标与风险事件的主位分别在「正式决策」与「情报 / 基本面」，本区只作引用。';
+
+/** 「防守雷达」区的边界自述 */
+export const DEFENSE_SCOPE_NOTE =
+  '本区承载防守等级 / 分数 / 系数、溢价与超配；风险旗标为引用位（主位在「正式决策」），'
+  + '风险事件为引用位（主位在「情报 / 基本面」）。';
+
+/** 「机会 / 辅助信号」区的边界自述 */
+export const OPPORTUNITY_SCOPE_NOTE =
+  '本区承载机会分 / 等级 / 系数、加仓资格与加仓条件；仓位缺口为引用位（主位在「仓位与风险」），'
+  + '⛔ 本区不据缺口或机会分推导任何动作。';

@@ -31,11 +31,20 @@ const PROVIDED_STATES = ['PROVIDED', 'STALE'];
  */
 export async function loadEtfDetail(code, loader = api, meta = {}) {
   const retrievedAt = meta.retrievedAt || new Date().toISOString();
-  const [detailRes, constRes, klineRes, decRes] = await Promise.allSettled([
+  /**
+   * ⚠️ `dashboard` 可能不存在于注入式 loader（测试用的最小桩）⇒ 缺省视为「未请求」
+   *    （UNAVAILABLE / NOT_PROVIDED），⛔ 不得让缺失的方法把整页打成 ERROR。
+   */
+  const dashboardLoader = typeof loader.dashboard === 'function'
+    ? loader.dashboard()
+    : Promise.resolve(undefined);
+
+  const [detailRes, constRes, klineRes, decRes, marketRes] = await Promise.allSettled([
     loader.etfDetail(code),
     loader.constants(),
     loader.kline(code, 'daily'),
-    loader.decisions(code)
+    loader.decisions(code),
+    dashboardLoader
   ]);
 
   // 主数据失败 ⇒ 整页失败（由页面转 error 态）
@@ -55,11 +64,20 @@ export async function loadEtfDetail(code, loader = api, meta = {}) {
   const decFailed = decRes.status === 'rejected';
   const decisionsRaw = decFailed ? null : decRes.value;
 
+  /**
+   * ★ M5-P1（D-M5-3）：组合环境为**只读引用**，⛔ 不阻断整页；
+   *   失败 ⇒ `null`（ERROR），未请求/无方法 ⇒ `undefined`（UNAVAILABLE ⇒ NOT_PROVIDED）。
+   */
+  const marketFailed = marketRes.status === 'rejected';
+  const marketRaw = marketFailed ? null : marketRes.value;
+
   return adaptEtfDetail(detailRes.value, rs || null, {
     klineRaw,
     klineError: klineFailed ? ((klineRes.reason && klineRes.reason.message) || 'kline request failed') : null,
     decisionsRaw,
     decisionsError: decFailed ? ((decRes.reason && decRes.reason.message) || 'decisions request failed') : null,
+    marketRaw,
+    marketError: marketFailed ? ((marketRes.reason && marketRes.reason.message) || 'dashboard request failed') : null,
     retrievedAt
   });
 }

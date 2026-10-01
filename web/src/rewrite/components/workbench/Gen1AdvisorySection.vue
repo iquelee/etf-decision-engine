@@ -44,8 +44,8 @@ defineProps({
     <!-- 无任何来源 ⇒ 全字段「数据未提供」（⛔ 不显示「正常 / 无信号 / 关闭」） -->
     <div v-if="!gen1.available" class="banner mb-3">
       <div class="banner-text">
-        Gen-1 <b>数据未提供</b>：既无 canonical 契约（`system_runtime.gen1`），
-        也无 legacy 通道字段（`decision.gen1_*` / `ml_shadow`）。
+        Gen-1 <b>数据未提供</b>：本次响应里既没有新的 Gen-1 契约字段，
+        也没有<b>历史兼容通道</b>字段。
         ⛔ 本页不会据此推断档位、健康或是否生效。
       </div>
     </div>
@@ -156,8 +156,9 @@ defineProps({
 
       <!-- 诚实登记：本区**有意不消费**的 legacy 键（⛔ 不是"漏了"） -->
       <p v-if="gen1.notConsumed && gen1.notConsumed.length" class="state-sub mt-3">
-        本区有意不消费的 legacy 键（{{ gen1.notConsumed.length }} 个）：{{ gen1.notConsumed.join('、') }}。
-        扩面需单独授权。
+        本区有意不消费的历史兼容键共 <b>{{ gen1.notConsumed.length }}</b> 个
+        （清单登记在适配层审计信息里，⛔ 不在此列出原始键名）。
+        ⛔ 不因「看起来有用」而扩大消费面 —— 扩面需单独授权。
       </p>
     </template>
 

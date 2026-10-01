@@ -226,12 +226,15 @@ t.ok('★ Gen-1：canonical 在场 ⇒ CANONICAL 通道', () => {
   assert.equal(vm.gen1Detail.fieldTag, '', 'canonical 不挂 legacy 角标');
 });
 
-t.ok('★ Gen-1：legacy 通道 caveat **逐字**等于 owner 给定措辞', () => {
+t.ok('★ Gen-1：legacy 通道 caveat **逐字**等于 owner 给定措辞（★ M5-P8 去除后端字段路径后）', () => {
   const vm = full(LIVE());
   assert.equal(
     vm.gen1Detail.channelCaveat,
-    '当前页面使用的是现有 legacy 通道数据；它不是 V3.6.5 canonical "system_runtime.gen1" 契约。'
+    '当前页面使用的是历史兼容通道的数据；它不是 V3.6.5 的正式 Gen-1 契约数据。'
   );
+  /* ★ M5-P8：caveat ⛔ 不得出现后端字段路径 / snake_case（此前文案里写着 `system_runtime.gen1`） */
+  assert.ok(!/system_runtime|gen1_[a-z]|[a-z]_[a-z]/.test(vm.gen1Detail.channelCaveat),
+    '⛔ caveat 不得包含后端字段名');
 });
 
 t.ok('★ Gen-1：三级全空 ⇒ NONE，「数据未提供」（⛔ 不得显示「正常/无信号/关闭」）', () => {

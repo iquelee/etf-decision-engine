@@ -52,10 +52,19 @@ const LAYOUTS = walk(path.join(REWRITE, 'layouts'), (n) => n.endsWith('.vue'));
 const COMPOSE = walk(path.join(REWRITE, 'compose'), (n) => n.endsWith('.js'));
 
 ok('views/ components/ layouts/ compose/ 均有文件（守卫自身有效）', () => {
-  assert.ok(VIEWS.length >= 15, 'views 数量异常: ' + VIEWS.length);
+  /**
+   * ★ M5-P1 D-M5-1：`views/front/Structure.vue`（M1 骨架）已删除 —— 看盘归并到
+   *   `/etf/:code`，⛔ 不再存在第二套 Workbench 页面 ⇒ 视图数 15 → 14。
+   */
+  assert.ok(VIEWS.length >= 14, 'views 数量异常: ' + VIEWS.length);
   assert.ok(COMPS.length >= 3, 'components 数量异常: ' + COMPS.length);
   assert.ok(LAYOUTS.length >= 2, 'layouts 数量异常: ' + LAYOUTS.length);
   assert.ok(COMPOSE.length >= 1, 'compose 数量异常: ' + COMPOSE.length);
+});
+
+ok('★ M5-P1：⛔ 不得存在第二套 ETF 看盘视图（Structure 骨架已删除）', () => {
+  const skeleton = VIEWS.filter((f) => /views[\\/]front[\\/]Structure\.vue$/.test(f));
+  assert.equal(skeleton.length, 0, '⛔ 看盘不得再单独建视图: ' + skeleton.join(', '));
 });
 
 /** 判定某说明符是否指向 api / adapters 层 */

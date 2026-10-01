@@ -155,13 +155,17 @@ web/src/rewrite/
 
 ## §4 前台信息架构
 
-### 4.1 页面总表（`[SPEC]`，5 页，⛔ 无空壳页）
+### 4.1 页面总表（`[SPEC]`，前台 **4 页** + 1 条归并兼容路由，⛔ 无空壳页）
+
+> ★ **M5-P1-OBS-1（2026-10-01）**：前台导航由 **5 项收敛为 4 项** ——
+> `全局 · 标的 · 情报 · 复盘`（⛔ 已移除「看盘」导航项；⛔ 「情报 / 标的」顺序**未调整**）。
+> `/structure` 与 `/structure/:code` 作为**兼容 redirect 保留**（删除导航 ≠ 删除兼容入口）。
 
 | 路由 | 名称 | 业务职责（一句话） | 主要数据来源 |
 |---|---|---|---|
 | `/dashboard` | **全局** | 用最短路径回答：市场环境 / 需关注的 ETF / 系统建议 / 仓位与目标 / 为什么 / 什么证据 / 最近变化 | `GET /api/dashboard` · `GET /api/constants` |
-| `/etf/:code` | **标的** | 单只 ETF 全链路：动作 → 仓位 → 解释 → 环境 → WDHVF → K线 → 加仓/防守雷达 → Gen-1 timing → 基本面 → 情报 → 历史 | `/api/etf/:code` · `/api/etf/list` · `/api/etf/:code/kline` · `/api/etf/:code/decisions` |
-| `/structure/:code` | **看盘** | 以**结构识别**为中心（阶段 / 横盘 / 量价结构 / 破位与防守） | `/api/etf/:code` · `/api/etf/:code/kline` |
+| `/etf/:code` | **标的** | 单只 ETF 全链路：动作 → 仓位 → 解释 → 环境 → WDHVF → K线 → 加仓/防守雷达 → Gen-1 timing → 基本面 → 情报 → 最近变化 | `/api/etf/:code` · `/api/etf/:code/kline` · `/api/etf/:code/decisions` · `/api/constants` · `/api/dashboard`（仅组合环境，只读引用）<br>⛔ **不使用 `/api/etf/list`**（禁止 2「跨 endpoint 偷补」） |
+| `/structure/:code` | **看盘（已归并）** | ★ **M5-P1 / owner D-M5-1（合并 + redirect）**：看盘**不再单独建设第二套 Workbench**；`/structure` 与 `/structure/:code` 均为**兼容 redirect** → `/etf/:code`（带参数透传）。⛔ 不得复制建设 | （无独立数据源；使用 `/etf/:code` 的全部来源） |
 | `/intel` | **基本面/情报** | 当前结论 / 硬数据 / 景气财报 / 事件 / AI 证据 / 来源与时间 / 数据完整性 | `/api/fundamentals` · `/api/intel?limit=` |
 | `/review` | **历史复盘** | 决策事件 → 系统建议 → 实际操作 → 偏差 → 响应时间 → 历史趋势（**需鉴权**，见 §8） | `GET /api/review`（带 token） |
 
@@ -170,7 +174,7 @@ web/src/rewrite/
 - **全局**：结论带（市场环境 · 风险 · 数据截至）→ **生命周期条** → Gen-1 主建议（契约缺则显式态）→ 5 张标的卡（动作 / 仓位→目标 / 风险 / 阶段码）→ 组合状态（金额默认遮罩 + 显隐）→ 重要风险条 → 数据新鲜度 → 系统运行状态（折叠）。⛔ 首屏不得堆原始指标。
 - **标的**（前台最重要页）：基础信息 → 当前动作 → 当前/目标仓位 → 决策解释 → 市场环境 → `W/D/H/V/F` → K线/量价 → 加仓雷达 → 防守雷达 → Gen-1 timing → 基本面摘要 → 相关情报 → 历史决策变化。
   层级：**L1 常显**（动作/仓位/为什么前 3 步/风险）· **L2 紧凑**（WDHVF + K线）· **L3 折叠**（Safety Core 技术详情 / Gen-1 审计 / 决策链全量）· **L4 按需**（原始字段 k-v）。
-- **看盘**：结构总览（阶段码 + 横盘四重确认）→ K线/量价（结构标注）→ 加仓结构雷达 → 防守结构雷达。
+- **看盘**：★ **M5-P1 / D-M5-1 已归并** —— 看盘不再单独成页；`/structure/:code` 为兼容 redirect → `/etf/:code`。原规划的「结构总览 → K线/量价 → 加仓结构雷达 → 防守结构雷达」**并入「标的」页**（见上条与附录 F.1）。
 - **基本面/情报**：当前结论 → 硬数据 → 景气/财报 → 事件 → AI 研究证据 → 来源和时间 → 数据完整性。保留 5 分钟轮询 + 可见性暂停。**手动刷新不在此页**（见 §5、§8）。
 - **历史复盘**：统计 8 项 → 事件流（决策-执行配对，可展开）→ 偏差 → 历史趋势。表格降级为可选视图。
 
@@ -866,27 +870,72 @@ vite build     PASS（双入口；旧前端不变，Structure 仍 1,044.68 kB；
 > 目标升级：从「看懂一只 ETF」→「**能够审阅这只 ETF 当前决策及其变化、风险和辅助证据**」。
 > 本轮 **只读侦察 → 确认契约 → 实现**，⛔ 未改 backend；`NO PUSH / NO MERGE / NO DEPLOY`。
 
-### F.1 IA（12 段 · 六档视觉权重）
+### F.1 IA（12 段 · **语义优先级**）
 
-| # | 区块 | 档 | 组件 |
-|---|---|---|---|
-| ① | Header | — | `WorkbenchHeader` |
-| ② | K 线滞后提示 | — | `StaleBanner` |
-| ③ | **正式决策** | **档 1** | `PrimaryDecision` |
-| ④ | 仓位（实际/建议/目标/配置） | 档 3 | `PositionRiskSection` |
-| ⑤ | **机会 / 辅助信号** | 档 4 | `OpportunityRadar` |
-| ⑥ | **防守雷达** | **档 2** | `DefenseRadar` |
-| ⑦ | Gen-1 Legacy Advisory | 档 4 | `Gen1AdvisorySection` |
-| ⑧ | K 线 | 档 5 | `KlineSection` |
-| ⑨ | 结构 | 档 5 | `StructureSection` |
-| ⑩ | 情报 / 基本面摘要 | 档 5 | `IntelligenceSection` |
-| ⑪ | **历史决策变化** | **档 6** | `DecisionHistorySection` |
-| ⑫ | 数据质量 / 来源 | 档 5 | `WorkbenchDataQuality` |
+> ★ **M5-P1 变更（owner D-M5-4）**：取消「数字档位」命名（易与 DOM 顺序冲突），
+> 改用**语义优先级**；DOM 顺序**保持真实认知顺序**，⛔ 不为编号调整。
+
+| # | 区块 | 语义优先级 | 类名 | 组件 |
+|---|---|---|---|---|
+| ① | Header（身份 · **组合环境** · 价格 · 三个日期 · 新鲜度） | Identity | `.wb-head` | `WorkbenchHeader` |
+| ② | K 线滞后提示 | — | `.stale-banner` | `StaleBanner` |
+| ③ | **正式决策** | **Formal Decision** | `.primary-decision` | `PrimaryDecision` |
+| ④ | 仓位（实际/建议/目标/配置）＋ 仓位缺口**主位** | **Risk & Position** | `.prio-position` | `PositionRiskSection` |
+| ⑤ | **机会 / 辅助信号** | **Advisory & Opportunity** | `.prio-advisory` | `OpportunityRadar` |
+| ⑥ | **防守雷达** | **Risk & Defense** | `.prio-risk` | `DefenseRadar` |
+| ⑦ | Gen-1 Legacy Advisory | Advisory（降权） | `.gen1-advisory` | `Gen1AdvisorySection` |
+| ⑧ | K 线 | Evidence | `.prio-evidence` | `KlineSection` |
+| ⑨ | 结构 | Evidence | `.prio-evidence` | `StructureSection` |
+| ⑩ | 情报 / 基本面摘要 · **风险事件主位** | Evidence | `.prio-evidence` | `IntelligenceSection` |
+| ⑪ | **最近决策变化**（只 5 条） | History（最弱） | `.prio-history` | `DecisionHistorySection` |
+| ⑫ | 数据质量 / 来源 | Provenance | `.prio-evidence` | `WorkbenchDataQuality` |
 
 **权重靠三件事共同表达**（⛔ 不靠单一颜色）：
-① 左侧强调边线（`.primary-decision` 强调色 / `.rank-defense` 风险色 / `.rank-advisory` 弱边线 / 无 / 无）
+① 左侧强调边线（`.primary-decision` 强调色 / `.prio-risk` 风险色 / `.prio-position` 强调色 / `.prio-advisory` 弱边线 / 无 / 无）
 ② 数字字号（hero `28px` > 次级 `20px` > 常规 `14px`）
 ③ 区块自身声明（副标题里写明"这是辅助信号，不是加仓建议"）。
+
+### F.1b ★ M5-P1 —— 单源展示（Single-Source Display）
+
+> owner 裁定（2026-10-01）：«同一个 backend 事实，在页面中必须有唯一明确的主位；
+> 其他区块如必须出现，只能作为引用位，不能再次解释成另一套判断。»
+
+| 项 | 内容 |
+|---|---|
+| **归属表** | `web/src/rewrite/domain/ownership.js` —— 24 个事实：`owner`（唯一）+ `refs`（白名单）+ `rule` + `forbid` |
+| **标记组件** | `components/domain/Fact.vue` → `data-fact` / `data-role`（owner·ref）/ `data-ref-to`；引用位附可见「引用 · 见「X」」 |
+| **主位分配（要点）** | 正式决策族 → ③；仓位缺口 / 建议仓位 / 目标带 / 配置标准 → ④；防守 / 溢价 / 超配 → ⑥；机会 / 资格 / 条件 / 冷静期 → ⑤；风险事件 / 基本面摘要 → ⑩；组合环境 → ①；K 线时点 → ⑧；历史 → ⑪ |
+| **引用位（保留）** | `finalTarget`（④引用③）、`targetBand`（③引用④）、`positionGap`（③与⑤引用④）、`riskFlag`（④与⑥引用③）、`riskEvents`（⑥引用⑩，只给条数）、`klineLastDate`（①引用⑧） |
+| **删除** | 页尾重复的 `fundamentalsSummary` 段（主位已在⑩） |
+| **验证** | `tests/rewrite/single-source.test.js`（16 项）+ 浏览器 DOM 核验（24 事实 owner 全 1） |
+| **不变式** | ⛔ 无新增业务信息；⛔ 未改 adapter 业务语义；⛔ 未改后端；⛔ 未把辅助信号升格为正式决策 |
+
+### F.1c ★ M5-P1 —— 组合环境（只读引用）与条件去冲突定量
+
+| 项 | 内容 |
+|---|---|
+| **组合环境** | 契约已证实：`schema.js:240`（枚举 `aggressive/structural/range/defensive/crisis`）+ `apiGateway:465`（组合快照）⇒ 允许**只读引用** `/api/dashboard#overview.market_regime`；带 `provenance` + `freshness`；取不到 ⇒ **NOT_PROVIDED**（⛔ 不由标的字段推导） |
+| **条件去冲突定量** | `next_add_condition` 原文含「Gap -8%」与结构化字段 `position_gap = 0` 冲突（**DS-006**）⇒ `domain/condition.js` **只移除**该片段，其余**逐字保留**（⛔ 不换算 / ⛔ 不重算 / ⛔ 不用 gap 生成新文案）；原文保留在 `nextAddConditionRaw` |
+| **历史边界** | 工作台只渲染**最近 5 条**（`history.recent`）+ 变化点；完整审阅属「复盘」页（⛔ 不复制完整历史能力）；最后一条 `items` 全量仍保留在 VM |
+
+### F.1d ★ M5-P2 ~ M5-P11 —— 前端连续自主执行记录（2026-10-01 · `NO COMMIT`）
+
+> 执行方式：owner 授权**连续自主执行**（只在 GATE-1~5 停下询问）。
+> 全程 `NO COMMIT / NO PUSH / NO MERGE / NO DEPLOY / NO PRODUCTION RUN`；⛔ 未改 backend 与 production。
+
+| 阶段 | 已实现的事实（★ 只登记**已落地**者） |
+|---|---|
+| **M5-P2** 语义边界 | 十段区块的**语义优先级 class** 与 DOM 顺序被 `tests/rewrite/semantic-boundary.test.js` **精确锁定**；每段只承载注册表允许的事实（`isAllowedAt` 逐条判定） |
+| **M5-P3** 单源固化 | 归属表 **24 → 25** 个事实（补 `actualPosition` = §六(2) 点名的「实际持仓」主位）；守卫扩为 **15 个点名事实表驱动** + **19 场景**多变体不变式（`owner=1` / `refs ≤ 白名单` / `refs>0 ⇒ owner=1`）+ HTML 与**可见文本**零 `snake_case` |
+| **M5-P4** 数据语义 | `canonical > 显式 legacy > unavailable` 三通道判定；`NULL_IN_CONTRACT`（`null` 保持缺失态，⛔ 不 fallback、⛔ 不当 0）；**不跨 endpoint 偷补**（以 `missingItems` 集合相等为证） |
+| **M5-P5** 组合环境 | 三态（正常 / 字段缺失 / 请求失败）说明文案**两两不同**；★ 实测**标的侧另有 `effective_market_regime = crisis`**，与组合级 `defensive` **不同** ⇒ 守卫证明前端只取组合级、组件层**零引用**标的侧字段 |
+| **M5-P6** DS-006 | 处置不变（手术式移除冲突片段 + 原文可审计）；新增 VM 层与渲染层双向断言 |
+| **M5-P7** K 线 | **七态分离**（读取失败 / 未提供 / 字段缺失 / 合法空 0 根 / 无时间戳 / 滞后 / 新鲜）—— 修掉「畸形载荷」与「合法空」共用「无时间戳」的**两态塌陷**；陈旧时保留历史 + 真实 cutoff + 与决策新鲜度**独立** |
+| **M5-P8/P9** 视觉 QA | 本地预览 + 无头浏览器：**13 场景 × 5 断点（1920/1440/1024/768/390）+ 13 个补充场景 = 91 次运行**，problems = **0**（横向溢出 0 / 语义损失型截断 0 / 主位重复 0 / 悬空引用 0 / 字段名泄露 0 / 禁用语义 0；390px 首屏正式决策 top=591 < 视口高） |
+| **M5-P10** 结构清理 | 删除 **10 处 dead import**（8 个文件）+ 3 处过期 IA 文案（`routes.js` 文件头页数 · `adapters/kline.js` · `MiniKline.vue`）；⛔ 未动 legacy `web/src/**` |
+| **M5-P11** 文档闭环 | 本附录 ＋ 风险台账 M5-P2~P11 段（含 `FE-DEF-007~011`）；⛔ 未写 `production activated` / `deployment complete` |
+
+**测试规模**：**22 套件 / 362 用例全过**（新增 `semantic-boundary`（11 项）· `state-semantics`（12 项）；`single-source` 16 → 19 项）。
 
 ### F.2 新增 ViewModel 四组
 

@@ -10,7 +10,7 @@
  *   ⇒ 本适配器**只透传** selection / ranking 字段，
  *     ⛔ 不产出任何名为 `final_target` / `target_pct` 的字段。
  */
-import { provided, missing, unavailable, readField, readBlock, provenance } from '../domain/provenance.js';
+import { provided, missing, readField, readBlock, provenance } from '../domain/provenance.js';
 import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
 
 const P = (src, f) => provenance({ source: 'api:' + src + (f ? '.' + f : ''), authority: AUTHORITY.OPERATOR });

@@ -24,6 +24,7 @@ import { scoreText, ratioText, rawText, disp, pctText } from '../domain/display.
 import {
   defenseLevelLabel, toneForDefenseLevel, riskLabel, toneForRisk, overAllocLabel,
   normalizeRisk, fieldStateText, DEFENSE_SCORE_NOTE, DEFENSE_PENALTY_NOTE, DEFENSE_READONLY_NOTE,
+  DEFENSE_SCOPE_NOTE,
   RISK_EVENTS_EMPTY_TEXT, RISK_EVENTS_EMPTY_NOTE, riskEventStatusLabel
 } from '../domain/labels.js';
 
@@ -121,7 +122,9 @@ export function adaptDefense(decisionVm, riskEventsField, snapshot) {
     premiumRateText: pctText(readField(snapshot, 'premium_rate', P('snapshot.premium_rate'))),
 
     events,
-    readonlyNote: DEFENSE_READONLY_NOTE
+    readonlyNote: DEFENSE_READONLY_NOTE,
+    /** ★ M5-P1：本区边界自述（承载什么 / 只引用什么） */
+    scopeNote: DEFENSE_SCOPE_NOTE
   });
 }
 

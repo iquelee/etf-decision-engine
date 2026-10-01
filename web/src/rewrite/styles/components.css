@@ -52,6 +52,8 @@
 .badge.outline { background: transparent; border-color: var(--c-border-strong); color: var(--c-text-2); }
 .badge.mono { font-family: var(--font-mono); font-size: var(--fs-11); }
 .badge.sm { padding: 1px 6px; font-size: var(--fs-11); }
+/* ★ M5-P8：hero 大号形态（「正式决策」的动作徽标 = 全页最高视觉权重） */
+.badge.lg { padding: 4px 12px; font-size: var(--fs-16); }
 
 /* ==================== 区块 / 小标题 ==================== */
 
@@ -541,17 +543,19 @@ details.fold > summary::marker { color: var(--c-text-3); }
 }
 
 /* ================================================================
- * M4-P1 第二阶段 · 视觉权重分档（⛔ 不得退化成"一长串等重卡片"）
- *   档 1 Formal Decision（.primary-decision 已定义）
- *   档 2 Risk / Defense      → .rank-defense
- *   档 3 Position            → 沿用 .pos-grid
- *   档 4 Advisory            → .rank-advisory（Gen-1 / 机会）
- *   档 5 Evidence            → .rank-evidence（K线 / 结构 / 情报）
- *   档 6 History             → .rank-history（最弱）
+ * 视觉优先级（★ M5-P1 / owner D-M5-4：改用**语义优先级**，⛔ 不再用数字档位命名）
+ *   Formal Decision        → .primary-decision（已定义）
+ *   Risk & Position        → .prio-risk / .prio-position
+ *   Advisory & Opportunity → .prio-advisory（Gen-1 / 机会）
+ *   Evidence               → .prio-evidence（K线 / 结构 / 情报）
+ *   History                → .prio-history（最弱）
+ * ⚠️ DOM 顺序**保持真实认知顺序**，⛔ 不为档位编号调整顺序（D-M5-4）。
  * ================================================================ */
 
-/* 档 2：风险 / 防守 —— 有强调边线 + 次级大数字（弱于 hero 的 fs-28） */
-.rank-defense { border-left: 3px solid var(--risk-yellow); }
+/* Risk & Defense：强调边线 + 次级大数字（弱于 hero 的 fs-28） */
+.prio-risk { border-left: 3px solid var(--risk-yellow); }
+/* Risk & Position（仓位轴）：中性强调边线，与防守区分 */
+.prio-position { border-left: 3px solid var(--c-accent); }
 .def-hero {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -567,8 +571,8 @@ details.fold > summary::marker { color: var(--c-text-3); }
 .def-level { font-size: var(--fs-20); font-weight: var(--fw-bold); }
 .def-level-raw { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--c-text-3); }
 
-/* 档 4：Advisory —— 弱边线（Gen-1、机会） */
-.rank-advisory { border-left: 3px solid var(--c-border-strong); }
+/* Advisory & Opportunity —— 弱边线（Gen-1、机会） */
+.prio-advisory { border-left: 3px solid var(--c-border-strong); }
 .advisory-note {
   margin: 0 0 var(--sp-3);
   font-size: var(--fs-12);
@@ -590,12 +594,30 @@ details.fold > summary::marker { color: var(--c-text-3); }
 .elig-label { font-size: var(--fs-11); color: var(--c-text-3); }
 .elig-value { font-size: var(--fs-13); font-weight: var(--fw-medium); }
 
-/* 档 5：Evidence —— 无强调边线 */
-.rank-evidence { border-left: 3px solid transparent; }
+/* Evidence —— 无强调边线 */
+.prio-evidence { border-left: 3px solid transparent; }
 
-/* 档 6：History —— 最弱（略降不透明度，⛔ 不是隐藏） */
-.rank-history { border-left: 3px solid transparent; }
-.rank-history .section-title { font-size: var(--fs-14); }
+/* History —— 最弱（略降字号，⛔ 不是隐藏） */
+.prio-history { border-left: 3px solid transparent; }
+.prio-history .section-title { font-size: var(--fs-14); }
+
+/* ---------------- ★ M5-P1 单源展示：主位 / 引用位标记 ---------------- */
+
+/* 主位不做视觉强调（权威由区块层级表达），⛔ 不额外加色 */
+.fact { display: inline; }
+
+/* 引用位：必须**可见地**标明来源，⛔ 不得与主位同权重 */
+.fact-ref {
+  margin-left: 4px;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+.fact[data-role="ref"] { color: inherit; }
+
+/* 页头「组合环境」 */
+.wb-regime { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
 /* ---------------- 历史决策表 ---------------- */
 .hist-tbl-wrap { overflow-x: auto; }

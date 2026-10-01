@@ -36,6 +36,7 @@ import { adaptDecision } from './decision.js';
 import { adaptGen1, legacyFallback } from './gen1.js';
 import { adaptGen1ForDetail } from './gen1Detail.js';
 import { adaptKline } from './kline.js';
+import { adaptMarketRegime } from './marketRegime.js';
 import { adaptDefense } from './defense.js';
 import { adaptOpportunity } from './opportunity.js';
 import { adaptIntelligence } from './intelligence.js';
@@ -50,9 +51,12 @@ import {
   IDENTITY_SAFETY_CORE, IDENTITY_GEN1, GEN1_BOUNDARY_NOTE, IDENTITY_GEN2, GEN2_BOUNDARY_NOTE,
   KLINE_STALE_TITLE, KLINE_STATUS_LABEL, KLINE_STALE_KEEP_NOTE, klineStaleBannerText,
   CHAIN_SECTION_TITLE, CHAIN_MODE_NOTE, chainHiddenSummary,
-  POSITION_KIND_LABEL, POSITION_KIND_NOTE, GAP_SOURCE_NOTE, NO_RECOMPUTE_NOTE
+  POSITION_KIND_LABEL, POSITION_KIND_NOTE, GAP_SOURCE_NOTE, NO_RECOMPUTE_NOTE,
+  SINGLE_SOURCE_PRINCIPLE, PRIMARY_DECISION_SCOPE_NOTE,
+  POSITION_RISK_SCOPE_NOTE, DEFENSE_SCOPE_NOTE, OPPORTUNITY_SCOPE_NOTE
 } from '../domain/labels.js';
-import { opportunityLevel } from '../domain/thresholds.js';
+/* ★ M5-P10（2026-10-01）：删除 dead import `opportunityLevel`
+   （该标识符在本文件内零引用 —— 用未使用导入扫描器逐项核实） */
 
 const SRC = 'api:/api/etf/:code';
 const SRC_K = 'api:/api/etf/:code/kline';
@@ -63,8 +67,10 @@ const P_OPS = (f) => provenance({ source: SRC + (f ? '.' + f : ''), authority: A
 /**
  * @param {object|null} data `/api/etf/:code` 的 data
  * @param {object|null} runtimeStatus `/api/constants` 的 runtime_status（可选）
- * @param {{klineRaw?:any, retrievedAt?:string}} [options]
+ * @param {{klineRaw?:any, decisionsRaw?:any, marketRaw?:any, retrievedAt?:string}} [options]
  *        `klineRaw`：`/api/etf/:code/kline` 的 data（可选；未传 ⇒ UNAVAILABLE）
+ *        `decisionsRaw`：`/api/etf/:code/decisions` 的 data（未传 = 未请求 · null = 失败）
+ *        `marketRaw`：`/api/dashboard` 的 data（M5-P1 只读引用组合环境；未传 ⇒ UNAVAILABLE）
  *        `retrievedAt`：取数时刻，由 **compose 层**注入（⛔ 适配器不自造时间）
  */
 export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
@@ -107,6 +113,13 @@ export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
 
     /* ---- 标的身份 ---- */
     identity: adaptIdentity(basic, snapshot, retrievedAt(options)),
+
+    /**
+     * ---- 组合环境（M5-P1 D-M5-3：**只读引用** /api/dashboard#overview.market_regime）----
+     * `options.marketRaw`：`undefined` = 未请求 · `null` = 请求失败 · 对象 = 已取到
+     * ⇒ 取不到时 **NOT_PROVIDED**，⛔ 不由标的字段（trend_context 等）推导市场状态。
+     */
+    marketRegime: adaptMarketRegime(options.marketRaw),
 
     /* ---- ① 正式决策（V3 Safety Core · 唯一权威层） ---- */
     decision: adaptDecisionView(decision),
@@ -180,7 +193,13 @@ export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
       chainTitle: CHAIN_SECTION_TITLE,
       chainNote: CHAIN_MODE_NOTE,
       /** 统一「不重算」声明（⛔ 组件不硬编码） */
-      noRecomputeNote: NO_RECOMPUTE_NOTE
+      noRecomputeNote: NO_RECOMPUTE_NOTE,
+      /* ---- M5-P1：单源展示（Single-Source Display）自述文案，⛔ 组件不硬编码 ---- */
+      singleSourcePrinciple: SINGLE_SOURCE_PRINCIPLE,
+      primaryDecisionScopeNote: PRIMARY_DECISION_SCOPE_NOTE,
+      positionRiskScopeNote: POSITION_RISK_SCOPE_NOTE,
+      defenseScopeNote: DEFENSE_SCOPE_NOTE,
+      opportunityScopeNote: OPPORTUNITY_SCOPE_NOTE
     }),
 
     /* ══ 以下为 M2 既有键（⛔ 保留，零回归）══ */
@@ -215,6 +234,7 @@ export function adaptEtfDetail(data, runtimeStatus = null, options = {}) {
  *    且清单本身即"本页承诺要显示什么"的可测契约。
  */
 const MISSING_SCAN = Object.freeze([
+  ['组合环境', (b) => b.marketRegime.regime],
   ['决策 · 动作', (b) => b.decision.action],
   ['决策 · 最终目标', (b) => b.decision.finalTarget],
   ['决策 · 仓位缺口', (b) => b.decision.positionGap],
@@ -656,15 +676,20 @@ function adaptKlineView(k, klineFreshness, decisionFreshness, decisionDateRaw) {
     staleDays: staleDays(klineFreshness),
     /**
      * 状态标签（与 decision freshness 分开展示）。
-     * ★ 五态必须**互不相同**：读取失败 ≠ 未提供 ≠ 字段缺失(无时间戳) ≠ 滞后 ≠ 新鲜。
-     *   ⚠️ 未请求（UNAVAILABLE）必须先判：它的 `lastBarDate` 也是 null，
-     *      若落到末尾分支会被误显示成「无时间戳」（= 把"没请求"说成"没时间戳"）。
+     * ★★ 七态必须**互不相同**（M5-P7 修正；此前「字段缺失(畸形)」与「合法空」都落到「无时间戳」⇒ 两态塌陷）：
+     *    ① 读取失败（ERROR）      ② 未提供（UNAVAILABLE）   ③ 字段缺失（MISSING：非数组/无日期字段）
+     *    ④ 无行情数据 0 根（PROVIDED + 空数组，**合法**）    ⑤ 无时间戳（有行但推不出日期）
+     *    ⑥ 数据滞后（STALE）      ⑦ 数据新鲜（FRESH）
+     *   ⚠️ 顺序即优先级：先判「结构性不可用」，再判「有行但无日期」，最后才落到新鲜度。
+     *      「未请求」必须先判 —— 它的 `lastBarDate` 也是 null，否则会被说成「无时间戳」。
      */
     statusLabel: k.state === FIELD_STATE.ERROR ? KLINE_STATUS_LABEL.ERROR
       : k.state === FIELD_STATE.UNAVAILABLE ? KLINE_STATUS_LABEL.UNAVAILABLE
-        : klineFreshness.level === FRESHNESS.FRESH ? KLINE_STATUS_LABEL.FRESH
-          : klineFreshness.level === FRESHNESS.STALE ? KLINE_STATUS_LABEL.STALE
-            : KLINE_STATUS_LABEL.MISSING,
+        : k.state === FIELD_STATE.MISSING ? KLINE_STATUS_LABEL.FIELD_MISSING
+          : (bars !== null && bars.length === 0) ? KLINE_STATUS_LABEL.EMPTY
+            : klineFreshness.level === FRESHNESS.FRESH ? KLINE_STATUS_LABEL.FRESH
+              : klineFreshness.level === FRESHNESS.STALE ? KLINE_STATUS_LABEL.STALE
+                : KLINE_STATUS_LABEL.MISSING,
     /** 读取失败原因（⛔ 不回显堆栈） */
     errorText: k.state === FIELD_STATE.ERROR ? String(k.missingReason || '') : '',
 

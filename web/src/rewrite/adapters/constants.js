@@ -9,7 +9,7 @@
  *   ⛔ 不在此处做「后端没给就用本地值顶上」——缺失就报缺失（SPEC §9）。
  *   本地兜底文案属于 `domain/labels.js` 的**独立**能力，由 UI 决定是否启用。
  */
-import { provided, missing, unavailable, readField, readBlock, provenance } from '../domain/provenance.js';
+import { unavailable, readField, readBlock, provenance } from '../domain/provenance.js';
 import { FIELD_STATE, MISSING_REASON, AUTHORITY } from '../domain/enums.js';
 
 const SRC = 'api:/api/constants';

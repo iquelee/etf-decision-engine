@@ -23,11 +23,19 @@ import {
   actionLabel, toneForAction, riskLabel, toneForRisk, overAllocLabel,
   defenseLevelLabel, toneForDefenseLevel, fieldStateText,
   HISTORY_SOURCE_NOTE, HISTORY_EMPTY_TEXT, HISTORY_EMPTY_NOTE,
-  HISTORY_UNAVAILABLE_TEXT, HISTORY_UNAVAILABLE_NOTE, HISTORY_CHANGE_KINDS, HISTORY_CHANGE_NOTE
+  HISTORY_UNAVAILABLE_TEXT, HISTORY_UNAVAILABLE_NOTE, HISTORY_CHANGE_KINDS, HISTORY_CHANGE_NOTE,
+  HISTORY_INLINE_NOTE, historyTruncateNote
 } from '../domain/labels.js';
 import { assess, describe } from '../domain/freshness.js';
 
 const SRC = 'api:/api/etf/:code/decisions';
+
+/**
+ * ★ M5-P1（owner D-M5-2）：工作台只给「与当前判断直接相关的**最近变化**」。
+ *   完整历史审阅属「复盘」页 ⇒ 本模块额外派生 `recent`（最近 N 条）与 `truncateNote`，
+ *   ⛔ `items` 仍保留全量（供未来「复盘」页与测试使用，⛔ 但工作台不得整表渲染）。
+ */
+export const HISTORY_RECENT_LIMIT = 5;
 const P = provenance({ source: SRC, authority: AUTHORITY.SAFETY_CORE });
 
 /** 与后端一致的上限（`getDecisions` 默认 60，带区间 500） */
@@ -43,7 +51,13 @@ export function adaptDecisionHistory(raw, meta = {}) {
     sourceNote: HISTORY_SOURCE_NOTE,
     changeNote: HISTORY_CHANGE_NOTE,
     changeKinds: HISTORY_CHANGE_KINDS,
-    retrievedAt: (meta && meta.retrievedAt) || null
+    retrievedAt: (meta && meta.retrievedAt) || null,
+    /* ---- M5-P1（D-M5-2）：工作台只展示最近变化 ---- */
+    inlineNote: HISTORY_INLINE_NOTE,
+    recentLimit: HISTORY_RECENT_LIMIT,
+    /** 最近 N 条（工作台唯一应渲染的记录集合）；⛔ 全量在 `items`（属「复盘」页） */
+    recent: Object.freeze([]),
+    truncateNote: ''
   };
 
   /* ---- ① 未请求 ⇒ UNAVAILABLE（可自愈：一旦请求即恢复） ---- */
@@ -117,6 +131,9 @@ export function adaptDecisionHistory(raw, meta = {}) {
     reason: null,
     count: items.length,
     items: Object.freeze(items),
+    /** ★ 工作台渲染用：最近 N 条（D-M5-2） */
+    recent: Object.freeze(items.slice(0, HISTORY_RECENT_LIMIT)),
+    truncateNote: historyTruncateNote(items.length, HISTORY_RECENT_LIMIT),
     changes: Object.freeze(changes),
     changedCount: changes.length,
     text: '',

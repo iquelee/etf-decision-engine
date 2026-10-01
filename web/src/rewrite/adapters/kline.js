@@ -1,6 +1,6 @@
 /**
  * K 线适配器（web/src/rewrite/adapters/kline.js）
- * 规范依据：SPEC §2 / §4.2 看盘 / 附录 A
+ * 规范依据：SPEC §2 / §4.2 标的（K 线 / 量价证据区）/ 附录 A
  *
  * 单位（SPEC 附录 A.2）：价格 = 元；`volume` = **份**；`amount` = **元**。
  * ⛔ 不在这里做任何补点 / 插值 / 缺失填充。
