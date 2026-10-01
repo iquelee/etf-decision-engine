@@ -542,14 +542,30 @@ H. 再进入 M2+（Adapter/Domain contract migration → Dashboard → Workbench
 
 ---
 
-## §18 `[SPEC]` 部署前必须处理（M9 之前，⛔ 本轮不做）
+## §18 `[SPEC]` 部署前必须处理（M9 之前）
 
-| # | 事项 | 原因 | 建议处置 |
+> ★ 进度（2026-10-01）：**§18-1 已处置**（owner 裁定 **A2**，实现已入库，见 §18.1）；**§18-2 / §18-3 / §18-4 仍未处理**。
+> ⛔ 本节任何条目都**不构成部署授权**：生产部署与激活仍需独立授权。
+
+| # | 事项 | 原因 | 处置 |
 |---|---|---|---|
-| 1 | **新前端入口会随 dist 上线** | `web/vite.config.js` 为多入口（`index.html` + `rewrite.html`），而 `scripts/deploy-hosting-web.js` 上传整个 `dist/` ⇒ 新前端会以 `/rewrite.html` 可达 | 部署前把 rewrite 入口改为环境变量开关（`VITE_ENABLE_REWRITE_ENTRY=1`），或在部署脚本中显式排除 `rewrite.html` 及其专属 chunk |
+| 1 | **新前端入口会随 dist 上线** | `web/vite.config.js` 为多入口（`index.html` + `legacy.html` + `rewrite.html`），而 `scripts/deploy-hosting-web.js` 上传整个 `dist/` ⇒ 新前端会以 `/rewrite.html` 可达 | ✅ **已处置（A2，2026-10-01）**：**根入口**由 `VITE_ENABLE_REWRITE_ENTRY` 决定承载哪一套 UI；`/legacy.html` 固定为 Legacy 入口；`/rewrite.html` 保持独立 + `noindex`。实现见 **§18.1** |
 | 2 | **`apiGateway` 契约未部署** | 线上仍为 2026-09-01 版，未下发 `production` / `gen1` / `system_runtime` / `legacy` | 单独授权部署（属独立 backend deployment gate）——在此之前 Gen-1 主口径只能显示 `UNAVAILABLE` |
 | 3 | **旧路径清理** | 迁移完成后 `web/src/**`（旧前端）与新前端并存 | 由 owner 单独决定收敛与清理时机，⛔ 不在本轮 |
 | 4 | **`api.js` 的 401 location 副作用** | SPEC §8.3 要求 401 语义集中在 app 层 | M2 迁移（现已在守卫中登记为待办） |
+
+### §18.1（2026-10-01）入口收敛裁定与实现（A2）
+
+| 项 | 内容 |
+|---|---|
+| **裁定** | owner 选 **A2**。开关**只有** `VITE_ENABLE_REWRITE_ENTRY`（仅精确 `"1"` 视为开启，未设置 / 其它值一律为关闭）。 |
+| **入口语义** | **未设置 / `=0`**（默认）⇒ `/` = **Legacy**（与收敛前一致）· `/legacy.html` = Legacy · `/rewrite.html` = Rewrite（`noindex`）<br>**`=1`** ⇒ `/` = **V3.6.5 Rewrite UI** · `/legacy.html` = Legacy · `/rewrite.html` = Rewrite |
+| **源文件** | `web/index.html`（根入口源；默认即 Legacy 引导）· `web/legacy.html`（**新增**，与 `index.html` **逐字节一致**）· `web/rewrite.html`（不变） |
+| **实现** | `web/vite-config/rewrite-root-entry.js` —— Vite 官方 `transformIndexHtml`，**`order:'pre'`**。依据本仓 Vite 5.4.21 源码取证：`buildHtmlPlugin` 先 `applyHtmlTransforms(html, preHooks, …)`，**之后**才扫 `scriptUrls` 发现入口 ⇒ `pre` 钩子注入/替换出的 `<script type="module" src="/src/rewrite/app.js">` 会被正常登记为入口。**fail-closed**：开关开启且根入口锚点缺失 ⇒ 抛错，拒绝产出错误产物。⛔ 无第三方插件 · ⛔ 不对 `dist` 做事后改写 · ⛔ 不改 `web/src/**`。 |
+| **构建** | 默认（根 = Legacy）：`npm --prefix web run build`；生产候选（根 = Rewrite）：bash 下 `VITE_ENABLE_REWRITE_ENTRY=1 npm --prefix web run build`（Windows cmd 需先 `set VITE_ENABLE_REWRITE_ENTRY=1`）。★ **`scripts/deploy.sh` 无需改动** —— 环境变量由 shell 透传给其中的 `vite build`。 |
+| **回退** | `VITE_ENABLE_REWRITE_ENTRY=0` 重新构建 → 走**既有** `scripts/deploy.sh --frontend-only`（`tcb hosting deploy web/dist`）⇒ 根 `/` 回到 Legacy。⛔ 本轮**不建**秒级回退（⛔ 不写 CloudBase `RoutingRules`）。⚠️ **该回退路径尚未演练**。 |
+| **守卫** | `web/tests/rewrite/entry-convergence.test.js`（Case A~G ＋ fail-closed ＋ `index.html ≡ legacy.html` 漂移守卫）；产物级校验器 `web/tests/tools/verify-entry-artifact.cjs`（真实构建后 / CI 使用）。 |
+| **⛔ 边界** | 本轮**未部署 / 未激活**。生产切换、`production-deployment-ledger` 的 `D-007` 记录、回退演练，均待**独立授权**。 |
 
 ---
 

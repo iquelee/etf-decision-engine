@@ -36,6 +36,8 @@ const SUITES = [
   './rewrite/etf-history-intel.test.js',
   /* --- transport（M2 清理） --- */
   './rewrite/api-client.test.js',
+  /* --- 入口收敛（E-006 / A2） --- */
+  './rewrite/entry-convergence.test.js',
   /* --- 工程守卫（M0/M1） --- */
   './rewrite/design-tokens.test.js',
   './rewrite/router-contract.test.js',

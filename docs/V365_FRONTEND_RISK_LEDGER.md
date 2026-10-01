@@ -169,7 +169,7 @@
 
 ---
 
-## E-006 —— 多入口构建带来部署期暴露面（★ 未决，M9 前必办）
+## E-006 —— 多入口构建带来部署期暴露面（★ 已裁定 A2 并实现 · 尚未部署）
 
 | 项 | 内容 |
 |---|---|
@@ -178,7 +178,12 @@
 | **风险** | `scripts/deploy-hosting-web.js` **上传整个 `dist/`**，其前置断言（`dist/index.html` + `dist/assets/Dashboard-*.js`）**仍然成立** ⇒ 若现在部署，会把新前端以 `/rewrite.html` **静默**一并带上线，不报错。 |
 | **缓解** | 本轮 `NO DEPLOY` 生效，**非阻断**。 |
 | **待办** | **M9 之前必须处置**。三选项：(A) 环境变量开关（`VITE_ENABLE_REWRITE_ENTRY=1`）；(B) 部署脚本显式排除 `rewrite.html` 及其专属 chunk；(C) 接受（已加 `noindex`，但 URL 可猜中）。 |
-| **状态** | `[OPEN]` —— 需 owner 裁定（登记于 SPEC §18-1 与审计附录 C-5） |
+| **★ 裁定（2026-10-01，owner）** | 选 **A2**：以环境变量开关决定**根入口**承载哪一套 UI —— `VITE_ENABLE_REWRITE_ENTRY=1` ⇒ 根 `/` = V3.6.5 Rewrite UI；未设置 / `=0`（默认）⇒ 根 `/` = Legacy UI（与收敛前一致）。`/legacy.html` 固定为 Legacy 入口；`/rewrite.html` 保持独立 + `noindex`。⛔ 本轮不采用 CloudBase `RoutingRules`、不建立秒级回退。 |
+| **★ 实现（已入库）** | `web/vite-config/rewrite-root-entry.js` —— Vite 官方 `transformIndexHtml`（`order:'pre'`，fail-closed）＋ `web/vite.config.js`（三入口）＋ 新增源文件 `web/legacy.html`。⛔ 未改 `web/src/rewrite/**`、⛔ 未改 `web/src/main.js`、⛔ 未对 `dist` 做事后改写、⛔ 未引入第三方插件。 |
+| **★ 机器守卫** | `web/tests/rewrite/entry-convergence.test.js`（Case A~G ＋ fail-closed ＋ `index.html ≡ legacy.html` 漂移守卫）；产物级校验器 `web/tests/tools/verify-entry-artifact.cjs`（真实构建后 / CI 使用）。 |
+| **★ 回退程序（本轮目标）** | 以 `VITE_ENABLE_REWRITE_ENTRY=0` 重新构建 → 走**既有** `scripts/deploy.sh --frontend-only` / `tcb hosting deploy` ⇒ 根 `/` 回到 Legacy。⚠️ **尚未演练**（本轮无部署）。 |
+| **状态** | **`A2 IMPLEMENTED`（代码＋测试在库）· ⛔ `NOT DEPLOYED` · ⛔ `NOT PRODUCTION ACTIVE`** —— 生产切换与回退演练仍需**独立部署授权**（见 SPEC §18-1 / §18-1.1）。 |
+| **⛔ 仍未做** | 未部署 · 未激活 · 未写 CloudBase 托管配置 · 无秒级回退（`RoutingRules`）· 未演练回退。部署后 `/rewrite.html` 仍**可被猜中**（以 `noindex` 缓解）。 |
 
 ---
 
