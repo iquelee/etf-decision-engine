@@ -143,7 +143,7 @@ defineProps({
 
       <p class="state-sub mt-3">
         本区<b>不消费</b>的载荷块：{{ intelligence.notConsumed.join('、') }}
-        —— 属「基本面」页（M6）范围，⛔ 不搬进工作台。
+        —— 属「基本面」页范围，⛔ 不搬进工作台。
       </p>
     </template>
   </section>

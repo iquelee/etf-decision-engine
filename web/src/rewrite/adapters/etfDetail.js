@@ -779,7 +779,7 @@ function adaptFundamentalsSummary(f) {
       fScoreText: scoreText(u()),
       updatedAt: u(),
       updatedAtText: dateTimeText(u()),
-      deepDetailNote: '分层权重与 AI 研究证据属「基本面」页（M6）；本页只给摘要。'
+      deepDetailNote: '分层权重与 AI 研究证据属「基本面」页；本页只给摘要。'
     });
   }
   const fState = readField(f, 'f_state', P0);
@@ -792,7 +792,7 @@ function adaptFundamentalsSummary(f) {
     updatedAt: readField(f, 'updated_at', P0),
     updatedAtText: dateTimeText(readField(f, 'updated_at', P0)),
     /** ⛔ 本页不搬 `fundamental_config` / `fundamental_series`（M6 范围） */
-    deepDetailNote: '分层权重与 AI 研究证据属「基本面」页（M6）；本页只给摘要。'
+    deepDetailNote: '分层权重与 AI 研究证据属「基本面」页；本页只给摘要。'
   });
 }
 
