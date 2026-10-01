@@ -15,7 +15,10 @@ const ROOT = path.join(__dirname, '..');
 const SECRET_FILES = [
   'cloudbaserc.json',
   'web/.env',
-  'web/.env.local'
+  'web/.env.local',
+  // 生产前端 API base（含真实网关域名）——本机 gitignored，
+  // 此处再兜一层：禁止被源码打包 / 发布流程误带入
+  'web/.env.production'
 ];
 
 const SKIP_DIR = new Set([

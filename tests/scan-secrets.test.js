@@ -16,6 +16,8 @@ assert.strictEqual(isSecretRel('cloudbaserc.example.json'), false);
 assert.strictEqual(isSecretRel('web/.env'), true);
 assert.strictEqual(isSecretRel('web/.env.example'), false);
 assert.strictEqual(isSecretRel('src/common/utils/decision.js'), false);
+// 生产前端 API base 文件（含真实网关域名）：禁止被源码打包 / 发布流程误带入
+assert.strictEqual(isSecretRel('web/.env.production'), true);
 
 const clean = looksLikeSecretAssignment('{"FRED_API_KEY":"{{FRED_API_KEY}}","DEEPSEEK_API_KEY":"{{DEEPSEEK_API_KEY}}","OPENDART_API_KEY":"{{OPENDART_API_KEY}}"}');
 assert.strictEqual(clean.length, 0, '占位符不应报警');
@@ -54,4 +56,4 @@ assert.strictEqual(looksLikeSecretAssignment('redacted: ' + 'ghp_' + 'A'.repeat(
 assert.strictEqual(looksLikeSecretAssignment('short ' + 'ghp_' + 'a'.repeat(10)).length, 0,
   '长度不足的串不应报警');
 
-console.log('scan-secrets 12 项通过');
+console.log('scan-secrets 13 项通过');
