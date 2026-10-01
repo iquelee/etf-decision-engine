@@ -1,0 +1,313 @@
+{
+  "stats": {
+    "decision_snapshot_count": 33,
+    "actionable_count": 18,
+    "execution_rate": 72.2,
+    "reverse_operation_count": 1,
+    "unexecuted_count": 5,
+    "build_execution_rate": 80,
+    "defense_execution_rate": 66.7,
+    "avg_response_days": 1.4
+  },
+  "decisions": [
+    {
+      "_id": "8e888ff96abbc4ab003666616e1cbe49",
+      "code": "513310",
+      "decision_date": "2026-09-29",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-29",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 0.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 0.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": "BLOCK"
+      }
+    },
+    {
+      "_id": "df17f1cc6aba732f054ac5d3244679fa",
+      "code": "513310",
+      "decision_date": "2026-09-28",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-28",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 0.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 0.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": "BLOCK"
+      }
+    },
+    {
+      "_id": "3618a99e6ab9ae2202168afa09b760d0",
+      "code": "513310",
+      "decision_date": "2026-09-25",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-25",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 0.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 0.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": null
+      }
+    },
+    {
+      "_id": "22dda3756ab52d3f03b1a55b3ec4b217",
+      "code": "513310",
+      "decision_date": "2026-09-24",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-24",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 0,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 0,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": "BLOCK"
+      }
+    },
+    {
+      "_id": "df17f1cc6ab3dbc902ff8d3000980afa",
+      "code": "513310",
+      "decision_date": "2026-09-23",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-23",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 1.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S1",
+          "effective": "S1"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 1.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": "BLOCK"
+      }
+    },
+    {
+      "_id": "22dda3756ab28a4402db3edc0f77a167",
+      "code": "513310",
+      "decision_date": "2026-09-22",
+      "final_action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "current_position": 8.3,
+      "position_source": "PORTFOLIO_SNAPSHOT",
+      "position_is_exact": true,
+      "position_as_of_date": "2026-09-22",
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": null,
+        "current_pct": 8.3,
+        "final_target_pct": 7.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "signal_status": "NO_OPPORTUNITY",
+        "probability": null,
+        "stages": {
+          "signal": null,
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "baseline_suggested_pct": 8.3,
+        "counterfactual": {
+          "target_pct": 7.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        },
+        "counterfactual_suggested_pct": 8.3,
+        "delta_pct": 0,
+        "domain_status": "PARTIAL_COVERAGE",
+        "safety_permission": "BLOCK"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "decision_id": "demo-1",
+      "date": "2026-08-20",
+      "operation_date": "2026-08-21",
+      "code": "513310",
+      "system_action": "HOLD",
+      "actual_action": "buy",
+      "deviation": "同向",
+      "matched_by": "same_direction_actionable"
+    }
+  ],
+  "trades": [
+    {
+      "trade_date": "2026-08-21",
+      "code": "513310",
+      "action": "buy",
+      "position_after": 9.1,
+      "system_action": "HOLD",
+      "system_decision_date": "2026-08-20",
+      "system_match_type": "prior_decision"
+    }
+  ]
+}

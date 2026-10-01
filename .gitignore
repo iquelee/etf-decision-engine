@@ -8,6 +8,8 @@ build/
 outputs/
 backtest-out/
 src/common/MANIFEST.json
+# Vite 读取配置文件时写出的临时文件（构建被中断时会残留）
+vite.config.*.timestamp-*.mjs
 
 # 密钥与配置（含真实密钥，严禁提交）
 **/config.json

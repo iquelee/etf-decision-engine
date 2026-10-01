@@ -1,0 +1,12 @@
+{
+  "generatedBy": "_v365-fe-audit-20260930/tools/gen-m2-fixtures.cjs",
+  "generatedAt": "2026-09-30T09:18:01.601Z",
+  "sources": {
+    "live-legacy/*": "线上 apiGateway 真实只读响应（2026-09-30 抓取；apiGateway 未部署 PR-UI-01 契约）",
+    "canonical/*": "**由后端权威契约模块 src/common/utils/gen1-ui-view-model.js 真实产出**（buildEtfUiViewModel / buildSystemRuntime / buildReviewGen1 / buildLegacyNotice）",
+    "edge/*": "在 canonical / legacy 基础上人工构造的边界场景"
+  },
+  "note": "canonical 的 production / gen1 / system_runtime / legacy 四块**不是手写**，避免了前端自造契约形状（审计 §3.7 的病根）",
+  "runtimeStatusAsOf": "2026-09-30T00:00:58.305Z",
+  "contractSignalInputCaveat": "signal 入参用线上 ml_shadow 的等价字段构造（真实 ml_shadow_signal 行不可得），仅影响 gen1 内部细节，不影响四块的键结构"
+}

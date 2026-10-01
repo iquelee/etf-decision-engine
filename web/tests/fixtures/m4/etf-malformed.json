@@ -1,0 +1,26 @@
+{
+  "basic": {
+    "code": "513310",
+    "name": null,
+    "sector": "storage",
+    "max_position": 30
+  },
+  "snapshot": "should-be-object",
+  "decision": {
+    "code": "513310",
+    "decision_date": 20260929,
+    "final_target": "0.5",
+    "target_min": null,
+    "scores": "not-an-object",
+    "explain_chain": "not-an-array",
+    "add_eligibility": null,
+    "over_alloc_status": "",
+    "risk_flag": "NORMAL"
+  },
+  "position": [],
+  "risk_events": "not-an-array",
+  "ml_shadow": 42,
+  "fundamental": null,
+  "holdings": null,
+  "holdings_date": null
+}

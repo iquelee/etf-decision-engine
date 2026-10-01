@@ -1,0 +1,70 @@
+/**
+ * 会话/鉴权 组合式 hook（web/src/rewrite/compose/useSession.js）
+ * 规范依据：docs/V365_PROJECT_FUNCTION_AND_FRONTEND_REWRITE_SPEC.md §2.2 / §8
+ *
+ * 为什么需要这一层：
+ *   SPEC §2.2 规定 `views/` `components/`（以及本轮同样纳入的 `layouts/`）
+ *   ⛔ 不得 import `api/` 或 `adapters/`。会话与登录属数据访问，必须经 `compose/` 暴露。
+ *   ⇒ 本文件是**唯一**允许 import `api.js` 的地方之一（另一个是 app 级装配）。
+ *
+ * M1 范围：会话读写 + 登录 + 登出。
+ * M2 会把 401 语义集中到这里（SPEC §8.3），届时 `api.js` 不再直接改 location。
+ */
+import { ref, computed } from 'vue';
+import { getToken, setToken, admin, setUnauthorizedHandler } from '../api.js';
+
+/** 非响应式：给 router 守卫这类非组件上下文使用 */
+export function isAuthed() {
+  return !!getToken();
+}
+
+/**
+ * ★ SPEC §8.3：401 的**会话与导航语义**集中在 app 层，不在 HTTP 客户端里。
+ * 本函数由 app 级（router.js）安装：未授权时清 token 并引导到登录页，**保留来源**。
+ * @param {import('vue-router').Router} router
+ */
+export function installUnauthorizedRedirect(router) {
+  setUnauthorizedHandler(() => {
+    const cur = router.currentRoute && router.currentRoute.value;
+    const redirect = cur && cur.fullPath ? cur.fullPath : null;
+    // 已在登录页则不重复跳转
+    if (cur && cur.path === '/login') return;
+    router.replace({ path: '/login', query: redirect ? { redirect } : {} });
+  });
+}
+
+/** 响应式会话状态（组件内使用） */
+export function useSession() {
+  const token = ref(getToken() || '');
+  const authed = computed(() => !!token.value);
+
+  function refresh() {
+    token.value = getToken() || '';
+  }
+
+  /**
+   * 登录。⛔ 不记录、不落盘密码；成功后只保存 token。
+   * @returns {Promise<{ok:true}>}
+   */
+  async function login(password) {
+    const res = await admin.login(password);
+    const t = res && res.token;
+    if (!t) throw new Error('登录响应缺少 token');
+    setToken(t);
+    refresh();
+    return { ok: true };
+  }
+
+  /** 登出：即便后端登出失败也清本地 token，避免残留会话 */
+  async function logout() {
+    try {
+      await admin.logout();
+    } catch (e) {
+      /* 见上：忽略后端失败 */
+    }
+    setToken(null);
+    refresh();
+  }
+
+  return { token, authed, refresh, login, logout };
+}

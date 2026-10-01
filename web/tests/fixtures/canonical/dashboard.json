@@ -1,0 +1,1060 @@
+{
+  "engine_mode": "defense",
+  "v3_mode": "cutover",
+  "ml_shadow": {
+    "enabled": true,
+    "effective": false,
+    "observe": true,
+    "fast_path_enabled": false,
+    "model_id": "HVT-A-ET-20260830",
+    "bundle_id": "shadow-bundle-v1",
+    "gen1_frozen": true,
+    "engine_version": "v3.6.1",
+    "ui_phase": "OBSERVE",
+    "production_permission": "BLOCKED",
+    "note": "ML 影子观察中 · 不影响正式仓位",
+    "generated_at": "2026-09-30T08:23:01.377Z"
+  },
+  "three_questions": {
+    "market_status": "防守",
+    "most_worth": null,
+    "most_defend": {
+      "code": "513310",
+      "name": "中韩半导体ETF(QDII)"
+    }
+  },
+  "overview": {
+    "total_asset": 99172.1,
+    "cash_balance": 83994.6,
+    "holdings_mv": 15177.5,
+    "asset_source": "live",
+    "tech_position": 15.4,
+    "gold_position": 0,
+    "cash_ratio": 84.6,
+    "total_pnl": -823.8,
+    "auto_pnl": -823.8,
+    "snapshot_date": "2026-09-30",
+    "market_regime": "defensive",
+    "etf_total": 15.4,
+    "innovation_position": 0,
+    "overall_risk": "正常"
+  },
+  "cards": [
+    {
+      "code": "513310",
+      "name": "中韩半导体ETF(QDII)",
+      "sector": "storage",
+      "stage": "中期趋势转弱，短期走弱，已横盘 29 个交易日（较充分），成交明显萎缩",
+      "wait_reason": null,
+      "action": "STRATEGIC_REDUCE",
+      "action_label": "战略减仓",
+      "opportunity_score": 67,
+      "opportunity_grade": "B",
+      "risk_flag": "NORMAL",
+      "risk_override": false,
+      "current_position": 8.3,
+      "target_position": 0.5,
+      "target_min": 0.4,
+      "target_std": 0.5,
+      "target_max": 0.5,
+      "max_position": 30,
+      "final_target": 0.5,
+      "position_gap": 0,
+      "over_alloc_status": "中度",
+      "core_position": 0.2,
+      "trade_position": 0.3,
+      "suggest_position": 8.3,
+      "data_time": "2026-09-29",
+      "explain_chain": [
+        {
+          "step": 1,
+          "condition": "市场环境 系统性风险",
+          "result": "现金目标 50%~100%"
+        },
+        {
+          "step": 2,
+          "condition": "周线 趋势破坏",
+          "result": "防守模式"
+        },
+        {
+          "step": 3,
+          "condition": "横盘 29 日 · 缩量比 69%",
+          "result": "缩量成立"
+        },
+        {
+          "step": 4,
+          "condition": "基本面 稳定",
+          "result": "可持有"
+        },
+        {
+          "step": 5,
+          "condition": "风险等级 正常",
+          "result": "无风险熔断"
+        },
+        {
+          "step": 6,
+          "condition": "拥挤度 正常 · 正常",
+          "result": "不限制"
+        },
+        {
+          "step": 7,
+          "condition": "机会等级 B · 机会分 67",
+          "result": "偏多"
+        },
+        {
+          "step": 8,
+          "condition": "目标区间 [18~24]%",
+          "result": "标准目标 21%"
+        },
+        {
+          "step": 9,
+          "condition": "当前仓位 8.3%",
+          "result": "核心 12.6% · 交易 0%"
+        },
+        {
+          "step": 10,
+          "condition": "仓位缺口 -7.8pct",
+          "result": "处于目标区间"
+        },
+        {
+          "step": 11,
+          "condition": "组合约束检查",
+          "result": "未触发"
+        },
+        {
+          "step": 12,
+          "condition": "交易闸门",
+          "result": "拦截（资格未满足）"
+        },
+        {
+          "step": 13,
+          "condition": "最终动作",
+          "result": "战略减仓（建议调整 0）"
+        }
+      ],
+      "shadow_targets": {
+        "v38_baseline": 8.3,
+        "v3_raw": 0.5,
+        "v3_6_1": 0.5,
+        "v3_2_math": null,
+        "v3_3_target": null,
+        "v3_4_stage": null,
+        "v3_5_structural": 0.5,
+        "o3_adjusted": null,
+        "target_delta": -7.8,
+        "action_delta": null,
+        "aggressive_divergence": false,
+        "v361_baseline_target": 0.5,
+        "v361_baseline_action": "STRATEGIC_REDUCE",
+        "v361_baseline_stage": "S0",
+        "gen1_advisory_target": null,
+        "gen1_advisory_action": null,
+        "gen1_advisory_effective": false
+      },
+      "trend_stage": "S0",
+      "trend_stage_overlay": "broken",
+      "binding_constraint": "none",
+      "engine_version": "v3.6.1",
+      "shadow_engine_version": "v3.6.1",
+      "target_delta": -7.8,
+      "aggressive_divergence": false,
+      "w_state": "W4",
+      "main_rally_utilization": null,
+      "v3_allowed_max": 0.5,
+      "momentum_acceleration": false,
+      "v3_shadow_gap": 0,
+      "ml_shadow": {
+        "enabled": true,
+        "effective": false,
+        "fast_path_enabled": false,
+        "model_id": "HVT-A-ET-20260830",
+        "probability": null,
+        "calibrated_probability": null,
+        "signal_status": "NO_OPPORTUNITY",
+        "would_trigger_fast_path": false,
+        "signal_date": "2026-09-29",
+        "data_age_days": 1,
+        "is_stale": true,
+        "has_signal_row": true
+      },
+      "production": {
+        "engine": "v3.6.1",
+        "engine_source": "DECISION_RESULT_ENGINE_VERSION",
+        "action_code": "STRATEGIC_REDUCE",
+        "action_label": "战略减仓",
+        "current_pct": 8.3,
+        "final_target_pct": 0.5,
+        "suggested_pct": 8.3,
+        "risk_flag": "NORMAL",
+        "binding_constraint": "none"
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "stages": {
+          "signal": "S1",
+          "baseline": "S0",
+          "effective": "S0"
+        },
+        "signal": {
+          "stage": "S1",
+          "probability": null,
+          "threshold": 0.65,
+          "model_candidate": false,
+          "signal_status": "NO_OPPORTUNITY"
+        },
+        "data": {
+          "health_status": null,
+          "source_trade_date": "2026-09-29",
+          "benchmark_latest_date": null
+        },
+        "applicability": {
+          "domain_status": "PARTIAL_COVERAGE",
+          "domain_permission": "CANARY_LIMITED",
+          "label": "部分覆盖",
+          "message": "部分校准子模型未见该类别（2/3）；未命中的 fold 将该类编码为 -1（unknown）。概率保留原值，仅附带适用性提示。"
+        },
+        "safety": {
+          "permission": "BLOCK",
+          "reason_code": "EOD_STAGE_NOT_ELIGIBLE",
+          "reason": "EOD 阶段预检：当前阶段 S1 不属于 S2/S3 观察许可范围",
+          "source": "SAFETY_CORE",
+          "eod_stage": "S1",
+          "baseline_stage": "S0",
+          "binding_stage": "S1",
+          "binding_stage_source": "EOD_STAGE_PRECHECK"
+        },
+        "counterfactual": {
+          "target_pct": 0.5,
+          "suggested_pct": 8.3,
+          "delta_pct": 0,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        }
+      }
+    },
+    {
+      "code": "515880",
+      "name": "通信ETF",
+      "sector": "ai_network",
+      "stage": "中期趋势转弱，短期走弱，尚未横盘，成交正常",
+      "wait_reason": "周线趋势未过；横盘结构未过",
+      "action": "WAIT",
+      "action_label": "等待",
+      "opportunity_score": 61,
+      "opportunity_grade": "C",
+      "risk_flag": "NORMAL",
+      "risk_override": false,
+      "current_position": 0,
+      "target_position": 0,
+      "target_min": 0,
+      "target_std": 0,
+      "target_max": 0,
+      "max_position": 30,
+      "final_target": 0,
+      "position_gap": 0,
+      "over_alloc_status": "normal",
+      "core_position": 0,
+      "trade_position": 0,
+      "suggest_position": 0,
+      "data_time": "2026-09-29",
+      "explain_chain": [
+        {
+          "step": 1,
+          "condition": "市场环境 系统性风险",
+          "result": "现金目标 50%~100%"
+        },
+        {
+          "step": 2,
+          "condition": "周线 趋势破坏",
+          "result": "防守模式"
+        },
+        {
+          "step": 3,
+          "condition": "横盘 0 日 · 缩量比 107%",
+          "result": "量能未收缩"
+        },
+        {
+          "step": 4,
+          "condition": "基本面 加速",
+          "result": "可持有"
+        },
+        {
+          "step": 5,
+          "condition": "风险等级 正常",
+          "result": "无风险熔断"
+        },
+        {
+          "step": 6,
+          "condition": "拥挤度 正常 · 正常",
+          "result": "不限制"
+        },
+        {
+          "step": 7,
+          "condition": "机会等级 C · 机会分 61",
+          "result": "偏多"
+        },
+        {
+          "step": 8,
+          "condition": "目标区间 [12~18]%",
+          "result": "标准目标 15%"
+        },
+        {
+          "step": 9,
+          "condition": "当前仓位 0%",
+          "result": "核心 9% · 交易 0%"
+        },
+        {
+          "step": 10,
+          "condition": "仓位缺口 0pct",
+          "result": "处于目标区间"
+        },
+        {
+          "step": 11,
+          "condition": "组合约束检查",
+          "result": "未触发"
+        },
+        {
+          "step": 12,
+          "condition": "交易闸门",
+          "result": "拦截（资格未满足）"
+        },
+        {
+          "step": 13,
+          "condition": "最终动作",
+          "result": "等待（建议调整 0）"
+        }
+      ],
+      "shadow_targets": {
+        "v38_baseline": 0,
+        "v3_raw": 0,
+        "v3_6_1": 0,
+        "v3_2_math": null,
+        "v3_3_target": null,
+        "v3_4_stage": null,
+        "v3_5_structural": 0,
+        "o3_adjusted": null,
+        "target_delta": 0,
+        "action_delta": null,
+        "aggressive_divergence": false,
+        "v361_baseline_target": 0,
+        "v361_baseline_action": "WAIT",
+        "v361_baseline_stage": "S0",
+        "gen1_advisory_target": null,
+        "gen1_advisory_action": null,
+        "gen1_advisory_effective": false
+      },
+      "trend_stage": "S0",
+      "trend_stage_overlay": "broken",
+      "binding_constraint": "none",
+      "engine_version": "v3.6.1",
+      "shadow_engine_version": "v3.6.1",
+      "target_delta": 0,
+      "aggressive_divergence": false,
+      "w_state": "W4",
+      "main_rally_utilization": null,
+      "v3_allowed_max": 0,
+      "momentum_acceleration": false,
+      "v3_shadow_gap": 0,
+      "ml_shadow": {
+        "enabled": true,
+        "effective": false,
+        "fast_path_enabled": false,
+        "model_id": "HVT-A-ET-20260830",
+        "probability": null,
+        "calibrated_probability": null,
+        "signal_status": "NO_OPPORTUNITY",
+        "would_trigger_fast_path": false,
+        "signal_date": "2026-09-29",
+        "data_age_days": 1,
+        "is_stale": true,
+        "has_signal_row": true
+      },
+      "production": {
+        "engine": null,
+        "engine_source": "UNKNOWN",
+        "action_code": null,
+        "action_label": "等待",
+        "current_pct": 0,
+        "final_target_pct": null,
+        "suggested_pct": null,
+        "risk_flag": null,
+        "binding_constraint": null
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "stages": {
+          "signal": null,
+          "baseline": null,
+          "effective": null
+        },
+        "signal": {
+          "stage": null,
+          "probability": null,
+          "threshold": null,
+          "model_candidate": false,
+          "signal_status": "NO_OPPORTUNITY"
+        },
+        "data": {
+          "health_status": null,
+          "source_trade_date": null,
+          "benchmark_latest_date": null
+        },
+        "applicability": {
+          "domain_status": "PARTIAL_COVERAGE",
+          "domain_permission": "CANARY_LIMITED",
+          "label": "部分覆盖",
+          "message": "部分校准子模型未见该类别（2/3）；未命中的 fold 将该类编码为 -1（unknown）。概率保留原值，仅附带适用性提示。"
+        },
+        "safety": {
+          "permission": null,
+          "reason_code": null,
+          "reason": null,
+          "source": "SAFETY_CORE",
+          "eod_stage": null,
+          "baseline_stage": null,
+          "binding_stage": null,
+          "binding_stage_source": null
+        },
+        "counterfactual": {
+          "target_pct": null,
+          "suggested_pct": null,
+          "delta_pct": null,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        }
+      }
+    },
+    {
+      "code": "159582",
+      "name": "半导体设备ETF",
+      "sector": "semi_equip",
+      "stage": "中期来回震荡，短期走弱，尚未横盘，成交温和萎缩",
+      "wait_reason": "市场环境防守",
+      "action": "HOLD",
+      "action_label": "持有",
+      "opportunity_score": 80,
+      "opportunity_grade": "A",
+      "risk_flag": "NORMAL",
+      "risk_override": false,
+      "current_position": 7.1,
+      "target_position": 0,
+      "target_min": 0,
+      "target_std": 0,
+      "target_max": 0,
+      "max_position": 30,
+      "final_target": 0,
+      "position_gap": 0,
+      "over_alloc_status": "中度",
+      "core_position": 0,
+      "trade_position": 0,
+      "suggest_position": 7.1,
+      "data_time": "2026-09-29",
+      "explain_chain": [
+        {
+          "step": 1,
+          "condition": "市场环境 系统性风险",
+          "result": "现金目标 50%~100%"
+        },
+        {
+          "step": 2,
+          "condition": "周线 周线震荡",
+          "result": "停止主动加仓"
+        },
+        {
+          "step": 3,
+          "condition": "横盘 8 日 · 缩量比 84%",
+          "result": "缩量成立"
+        },
+        {
+          "step": 4,
+          "condition": "基本面 加速",
+          "result": "可持有"
+        },
+        {
+          "step": 5,
+          "condition": "风险等级 正常",
+          "result": "无风险熔断"
+        },
+        {
+          "step": 6,
+          "condition": "拥挤度 正常 · 正常",
+          "result": "不限制"
+        },
+        {
+          "step": 7,
+          "condition": "机会等级 A · 机会分 80",
+          "result": "偏多"
+        },
+        {
+          "step": 8,
+          "condition": "目标区间 [27~30]%",
+          "result": "标准目标 28.5%"
+        },
+        {
+          "step": 9,
+          "condition": "当前仓位 7.1%",
+          "result": "核心 12.6% · 交易 0%"
+        },
+        {
+          "step": 10,
+          "condition": "仓位缺口 -7.1pct",
+          "result": "处于目标区间"
+        },
+        {
+          "step": 11,
+          "condition": "组合约束检查",
+          "result": "未触发"
+        },
+        {
+          "step": 12,
+          "condition": "交易闸门",
+          "result": "拦截（资格未满足）"
+        },
+        {
+          "step": 13,
+          "condition": "最终动作",
+          "result": "持有（建议调整 0）"
+        }
+      ],
+      "shadow_targets": {
+        "v38_baseline": 7.1,
+        "v3_raw": 0,
+        "v3_6_1": 0,
+        "v3_2_math": null,
+        "v3_3_target": null,
+        "v3_4_stage": null,
+        "v3_5_structural": 0,
+        "o3_adjusted": null,
+        "target_delta": -7.1,
+        "action_delta": null,
+        "aggressive_divergence": false,
+        "v361_baseline_target": 0,
+        "v361_baseline_action": "HOLD",
+        "v361_baseline_stage": "S1",
+        "gen1_advisory_target": null,
+        "gen1_advisory_action": null,
+        "gen1_advisory_effective": false
+      },
+      "trend_stage": "S1",
+      "trend_stage_overlay": "broken",
+      "binding_constraint": "none",
+      "engine_version": "v3.6.1",
+      "shadow_engine_version": "v3.6.1",
+      "target_delta": -7.1,
+      "aggressive_divergence": false,
+      "w_state": "W3",
+      "main_rally_utilization": null,
+      "v3_allowed_max": 0,
+      "momentum_acceleration": false,
+      "v3_shadow_gap": 0,
+      "ml_shadow": {
+        "enabled": true,
+        "effective": false,
+        "fast_path_enabled": false,
+        "model_id": "HVT-A-ET-20260830",
+        "probability": 0.02652329749103943,
+        "calibrated_probability": 0.02652329749103943,
+        "signal_status": "OBSERVED",
+        "would_trigger_fast_path": false,
+        "signal_date": "2026-09-29",
+        "data_age_days": 1,
+        "is_stale": true,
+        "has_signal_row": true
+      },
+      "production": {
+        "engine": null,
+        "engine_source": "UNKNOWN",
+        "action_code": null,
+        "action_label": "持有",
+        "current_pct": 7.1,
+        "final_target_pct": null,
+        "suggested_pct": null,
+        "risk_flag": null,
+        "binding_constraint": null
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "stages": {
+          "signal": null,
+          "baseline": null,
+          "effective": null
+        },
+        "signal": {
+          "stage": null,
+          "probability": null,
+          "threshold": null,
+          "model_candidate": false,
+          "signal_status": "NO_OPPORTUNITY"
+        },
+        "data": {
+          "health_status": null,
+          "source_trade_date": null,
+          "benchmark_latest_date": null
+        },
+        "applicability": {
+          "domain_status": "PARTIAL_COVERAGE",
+          "domain_permission": "CANARY_LIMITED",
+          "label": "部分覆盖",
+          "message": "部分校准子模型未见该类别（2/3）；未命中的 fold 将该类编码为 -1（unknown）。概率保留原值，仅附带适用性提示。"
+        },
+        "safety": {
+          "permission": null,
+          "reason_code": null,
+          "reason": null,
+          "source": "SAFETY_CORE",
+          "eod_stage": null,
+          "baseline_stage": null,
+          "binding_stage": null,
+          "binding_stage_source": null
+        },
+        "counterfactual": {
+          "target_pct": null,
+          "suggested_pct": null,
+          "delta_pct": null,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        }
+      }
+    },
+    {
+      "code": "518880",
+      "name": "黄金ETF",
+      "sector": "gold",
+      "stage": "中期趋势转弱，短期走弱，已横盘 23 个交易日（较充分），成交温和萎缩",
+      "wait_reason": "周线趋势未过；市场环境防守",
+      "action": "WAIT",
+      "action_label": "等待",
+      "opportunity_score": 59,
+      "opportunity_grade": "C",
+      "risk_flag": "NORMAL",
+      "risk_override": false,
+      "current_position": 0,
+      "target_position": 0,
+      "target_min": 40,
+      "target_std": 50,
+      "target_max": 60,
+      "max_position": 30,
+      "final_target": 0,
+      "position_gap": 0,
+      "over_alloc_status": "normal",
+      "core_position": 0,
+      "trade_position": 0,
+      "suggest_position": 0,
+      "data_time": "2026-09-29",
+      "explain_chain": [
+        {
+          "step": 1,
+          "condition": "市场环境 系统性风险",
+          "result": "现金目标 50%~100%"
+        },
+        {
+          "step": 2,
+          "condition": "周线 趋势破坏",
+          "result": "防守模式"
+        },
+        {
+          "step": 3,
+          "condition": "横盘 23 日 · 缩量比 87%",
+          "result": "量能未收缩"
+        },
+        {
+          "step": 4,
+          "condition": "基本面 中性",
+          "result": "中性"
+        },
+        {
+          "step": 5,
+          "condition": "风险等级 正常",
+          "result": "无风险熔断"
+        },
+        {
+          "step": 6,
+          "condition": "拥挤度 正常 · 正常",
+          "result": "不限制"
+        },
+        {
+          "step": 7,
+          "condition": "机会等级 C · 机会分 59",
+          "result": "偏谨慎"
+        },
+        {
+          "step": 8,
+          "condition": "目标区间 [12~18]%",
+          "result": "标准目标 15%"
+        },
+        {
+          "step": 9,
+          "condition": "当前仓位 0%",
+          "result": "核心 9% · 交易 0%"
+        },
+        {
+          "step": 10,
+          "condition": "仓位缺口 0pct",
+          "result": "处于目标区间"
+        },
+        {
+          "step": 11,
+          "condition": "组合约束检查",
+          "result": "未触发"
+        },
+        {
+          "step": 12,
+          "condition": "交易闸门",
+          "result": "拦截（资格未满足）"
+        },
+        {
+          "step": 13,
+          "condition": "最终动作",
+          "result": "等待（建议调整 0）"
+        }
+      ],
+      "shadow_targets": {
+        "v38_baseline": 0,
+        "v3_raw": 0,
+        "v3_6_1": 0,
+        "v3_2_math": null,
+        "v3_3_target": null,
+        "v3_4_stage": null,
+        "v3_5_structural": null,
+        "o3_adjusted": null,
+        "target_delta": 0,
+        "action_delta": null,
+        "aggressive_divergence": false,
+        "v361_baseline_target": 0,
+        "v361_baseline_action": "WAIT",
+        "v361_baseline_stage": "S0",
+        "gen1_advisory_target": null,
+        "gen1_advisory_action": null,
+        "gen1_advisory_effective": false
+      },
+      "trend_stage": "S0",
+      "trend_stage_overlay": "broken",
+      "binding_constraint": "none",
+      "engine_version": "v3.6.1",
+      "shadow_engine_version": "v3.6.1",
+      "target_delta": 0,
+      "aggressive_divergence": false,
+      "w_state": "W4",
+      "main_rally_utilization": null,
+      "v3_allowed_max": 0,
+      "momentum_acceleration": false,
+      "v3_shadow_gap": 0,
+      "ml_shadow": {
+        "enabled": true,
+        "effective": false,
+        "fast_path_enabled": false,
+        "model_id": "HVT-A-ET-20260830",
+        "probability": null,
+        "calibrated_probability": null,
+        "signal_status": "NO_OPPORTUNITY",
+        "would_trigger_fast_path": false,
+        "signal_date": "2026-09-29",
+        "data_age_days": 1,
+        "is_stale": true,
+        "has_signal_row": true
+      },
+      "production": {
+        "engine": null,
+        "engine_source": "UNKNOWN",
+        "action_code": null,
+        "action_label": "等待",
+        "current_pct": 0,
+        "final_target_pct": null,
+        "suggested_pct": null,
+        "risk_flag": null,
+        "binding_constraint": null
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "stages": {
+          "signal": null,
+          "baseline": null,
+          "effective": null
+        },
+        "signal": {
+          "stage": null,
+          "probability": null,
+          "threshold": null,
+          "model_candidate": false,
+          "signal_status": "NO_OPPORTUNITY"
+        },
+        "data": {
+          "health_status": null,
+          "source_trade_date": null,
+          "benchmark_latest_date": null
+        },
+        "applicability": {
+          "domain_status": "OUT_OF_DOMAIN",
+          "domain_permission": "BLOCK_CANARY",
+          "label": "域外",
+          "message": "该资产类别未进入 Gen-1 校准训练分布；概率仅供观察，不改变任何规则。"
+        },
+        "safety": {
+          "permission": null,
+          "reason_code": null,
+          "reason": null,
+          "source": "SAFETY_CORE",
+          "eod_stage": null,
+          "baseline_stage": null,
+          "binding_stage": null,
+          "binding_stage_source": null
+        },
+        "counterfactual": {
+          "target_pct": null,
+          "suggested_pct": null,
+          "delta_pct": null,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        }
+      }
+    },
+    {
+      "code": "159570",
+      "name": "港股通创新药ETF",
+      "sector": "biotech",
+      "stage": "中期趋势转弱，短期高位震荡，已横盘 20 个交易日（较充分），成交正常",
+      "wait_reason": "周线趋势未过；量能未缩",
+      "action": "WAIT",
+      "action_label": "等待",
+      "opportunity_score": 57,
+      "opportunity_grade": "C",
+      "risk_flag": "NORMAL",
+      "risk_override": false,
+      "current_position": 0,
+      "target_position": 3,
+      "target_min": 2.1,
+      "target_std": 3,
+      "target_max": 3,
+      "max_position": 20,
+      "final_target": 3,
+      "position_gap": 0,
+      "over_alloc_status": "normal",
+      "core_position": 0.9,
+      "trade_position": 2.1,
+      "suggest_position": 0,
+      "data_time": "2026-09-29",
+      "explain_chain": [
+        {
+          "step": 1,
+          "condition": "市场环境 系统性风险",
+          "result": "现金目标 50%~100%"
+        },
+        {
+          "step": 2,
+          "condition": "周线 趋势破坏",
+          "result": "防守模式"
+        },
+        {
+          "step": 3,
+          "condition": "横盘 20 日 · 缩量比 100%",
+          "result": "量能未收缩"
+        },
+        {
+          "step": 4,
+          "condition": "基本面 中性",
+          "result": "中性"
+        },
+        {
+          "step": 5,
+          "condition": "风险等级 正常",
+          "result": "无风险熔断"
+        },
+        {
+          "step": 6,
+          "condition": "拥挤度 正常 · 正常",
+          "result": "不限制"
+        },
+        {
+          "step": 7,
+          "condition": "机会等级 C · 机会分 57",
+          "result": "偏谨慎"
+        },
+        {
+          "step": 8,
+          "condition": "目标区间 [8~12]%",
+          "result": "标准目标 10%"
+        },
+        {
+          "step": 9,
+          "condition": "当前仓位 0%",
+          "result": "核心 6% · 交易 0%"
+        },
+        {
+          "step": 10,
+          "condition": "仓位缺口 +3pct",
+          "result": "低于目标，倾向加仓"
+        },
+        {
+          "step": 11,
+          "condition": "组合约束检查",
+          "result": "未触发"
+        },
+        {
+          "step": 12,
+          "condition": "交易闸门",
+          "result": "拦截（资格未满足）"
+        },
+        {
+          "step": 13,
+          "condition": "最终动作",
+          "result": "等待（建议调整 0）"
+        }
+      ],
+      "shadow_targets": {
+        "v38_baseline": 0,
+        "v3_raw": 3,
+        "v3_6_1": 3,
+        "v3_2_math": null,
+        "v3_3_target": null,
+        "v3_4_stage": null,
+        "v3_5_structural": 3,
+        "o3_adjusted": null,
+        "target_delta": 3,
+        "action_delta": null,
+        "aggressive_divergence": false,
+        "v361_baseline_target": 3,
+        "v361_baseline_action": "WAIT",
+        "v361_baseline_stage": "S0",
+        "gen1_advisory_target": null,
+        "gen1_advisory_action": null,
+        "gen1_advisory_effective": false
+      },
+      "trend_stage": "S0",
+      "trend_stage_overlay": "normal",
+      "binding_constraint": "none",
+      "engine_version": "v3.6.1",
+      "shadow_engine_version": "v3.6.1",
+      "target_delta": 3,
+      "aggressive_divergence": false,
+      "w_state": "W4",
+      "main_rally_utilization": null,
+      "v3_allowed_max": 3,
+      "momentum_acceleration": false,
+      "v3_shadow_gap": 0,
+      "ml_shadow": {
+        "enabled": true,
+        "effective": false,
+        "fast_path_enabled": false,
+        "model_id": "HVT-A-ET-20260830",
+        "probability": null,
+        "calibrated_probability": null,
+        "signal_status": "NO_OPPORTUNITY",
+        "would_trigger_fast_path": false,
+        "signal_date": "2026-09-29",
+        "data_age_days": 1,
+        "is_stale": true,
+        "has_signal_row": true
+      },
+      "production": {
+        "engine": null,
+        "engine_source": "UNKNOWN",
+        "action_code": null,
+        "action_label": "等待",
+        "current_pct": 0,
+        "final_target_pct": null,
+        "suggested_pct": null,
+        "risk_flag": null,
+        "binding_constraint": null
+      },
+      "gen1": {
+        "authority": "CANARY",
+        "status": "NO_OPPORTUNITY",
+        "stages": {
+          "signal": null,
+          "baseline": null,
+          "effective": null
+        },
+        "signal": {
+          "stage": null,
+          "probability": null,
+          "threshold": null,
+          "model_candidate": false,
+          "signal_status": "NO_OPPORTUNITY"
+        },
+        "data": {
+          "health_status": null,
+          "source_trade_date": null,
+          "benchmark_latest_date": null
+        },
+        "applicability": {
+          "domain_status": "IN_DOMAIN",
+          "domain_permission": "ALLOW",
+          "label": "域内",
+          "message": "该类别在全部校准子模型中均有训练覆盖。"
+        },
+        "safety": {
+          "permission": null,
+          "reason_code": null,
+          "reason": null,
+          "source": "SAFETY_CORE",
+          "eod_stage": null,
+          "baseline_stage": null,
+          "binding_stage": null,
+          "binding_stage_source": null
+        },
+        "counterfactual": {
+          "target_pct": null,
+          "suggested_pct": null,
+          "delta_pct": null,
+          "stage_changed": false,
+          "clamped": false,
+          "baseline_floor_breached": false
+        }
+      }
+    }
+  ],
+  "system_runtime": {
+    "runtime_status_available": true,
+    "production": {
+      "engine": "v3.6.1",
+      "engine_source": "RUNTIME_STATUS",
+      "status": "ACTIVE"
+    },
+    "gen1": {
+      "authority": "CANARY",
+      "authority_label": "灰度反事实",
+      "health_status": "DEGRADED",
+      "health_gate_status": "ACTIVE",
+      "health_source": "GEN1_HEALTH_STATE_LATCH",
+      "safety_source": "SAFETY_CORE",
+      "counterfactual_authorized": true,
+      "counterfactual_health_allowed": false,
+      "counterfactual_active": false,
+      "counterfactual_inactive_reason": "HEALTH_NOT_ALLOWED",
+      "counterfactual_invocations": 0,
+      "ledger_ok": true,
+      "production_write": false,
+      "production_fast_path_enabled": false,
+      "auto_execution": false,
+      "safety_invariant_ok": true
+    },
+    "gen2": {
+      "mode": "SHADOW",
+      "source": "STATIC_CURRENT_CONTRACT",
+      "production_write": null,
+      "production_write_source": "STATIC_CURRENT_CONTRACT"
+    }
+  },
+  "legacy": {
+    "deprecated": true,
+    "do_not_use_for_authority": true,
+    "note": "历史兼容字段（保留一轮，仅供展示/排错）：禁止用于权限或阶段判定；真实运行权限只看 system_runtime / production / gen1。",
+    "fields": [
+      "ml_shadow",
+      "ml_shadow.ui_phase",
+      "ml_shadow.production_permission",
+      "ml_shadow.fast_path_enabled",
+      "ml_shadow.advisory_enabled",
+      "advisory_enabled",
+      "fast_path_enabled"
+    ]
+  }
+}
