@@ -12,14 +12,15 @@
  *   F  Rewrite 路由 smoke：`#/etf/513310` · `#/structure` · `#/structure/513310`
  *   G  Legacy：`/legacy.html` 能正常加载（源码级 smoke）
  *
- * ⚠️ 环境限制（诚实登记，⛔ 不伪造 PASS）：
- *   「产物级」检查（C/D/E 与产出的入口映射）需要**一次真实构建**。本 Agent 环境里
- *   `vite build` 会被沙箱批量删除守卫拦截（`CODEBUDDY_SAFE_DELETE_BULK_GUARD`：
- *   `emptyOutDir` 清空 `dist/assets` 触发），且本轮**禁止**关闭 guard / 改 guard /
- *   用临时 outDir 规避 ⇒ 这些项在本环境**无法执行**。
- *   ⇒ 无「新于本次改动」的产物时，本套件对它们输出 `[SKIP]` + 原因；
- *     真实构建后（非 shim 环境或 CI）用同一套件，或
- *     `node tests/tools/verify-entry-artifact.cjs` 完成产物验证。
+ * ⚠️ 产物级检查（C/D/E + 产物入口身份）需要**一次真实构建**：
+ *   · 无产物 / 产物早于本次改动 ⇒ 本段输出 `[SKIP]` + 原因（**显式打印**，⛔ 不伪装成 PASS）；
+ *   · 有新鲜产物 ⇒ 本段**真正执行**。判据是**语义入口身份**（比对入口模块文件本身），
+ *     ⛔ **不按 chunk 文件名**判身份 —— 命名随模式漂移：`legacy-root` = `main-*`/`rewrite-*`，
+ *     `rewrite-root` = `legacy-*`/`app-*`。
+ *   ⚠️ **静默 SKIP 会造成假绿**：`dist` 长期过期时本段从未真正执行，直到 2026-10-01
+ *     `dist` 因重建而变新，才暴露「`bootOf()` 只认源码形态 ⇒ 产物恒判 `unknown`」的缺陷。
+ *     改完入口相关代码后请跑一次 `npm run build` 再跑本套件。
+ *   产物亦可单独用 `node tests/tools/verify-entry-artifact.cjs [--expect=legacy-root|rewrite-root]` 校验。
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -48,11 +49,48 @@ const INDEX_SRC = read(path.join(CWD, 'index.html'));
 const LEGACY_SRC = read(path.join(CWD, 'legacy.html'));
 const REWRITE_SRC = read(path.join(CWD, 'rewrite.html'));
 
-/** 从 HTML 里取引导身份：rewrite / legacy / unknown */
+/**
+ * 从 HTML 里取引导身份：rewrite / legacy / unknown。
+ *
+ * ★ 必须同时支持**两种形态**（2026-10-01 修正）：
+ *   · 源码形态：挂载点 + `<script src="/src/…">` **同时**命中；
+ *   · 产物形态：Vite 已把 script src 改写为 `./assets/*-<hash>.js`（`/src/**` 字样消失）
+ *     ⇒ 退回**挂载点**判定 —— 产物里 `#app` 与 `#rewrite-app` **互斥**，判定唯一。
+ * ⚠️ 原实现只认源码形态 ⇒ 对真实构建产物**恒返回 `'unknown'`**，使产物级断言永远不可能通过
+ *    （此前被 `distIsFresh()` 静默 SKIP 掩盖，直到 dist 变新才暴露）。
+ * ⛔ 不按 chunk 文件名判身份（命名随模式漂移），⛔ 不依赖产物里的 `/src/**` 字样。
+ */
 function bootOf(html) {
-  if (/id="rewrite-app"/.test(html) && /src="\/src\/rewrite\/app\.js"/.test(html)) return 'rewrite';
-  if (/id="app"/.test(html) && /src="\/src\/main\.js"/.test(html)) return 'legacy';
+  const hasRewriteApp = /id="rewrite-app"/.test(html);
+  const hasApp = /id="app"/.test(html);
+  if (hasRewriteApp && /src="\/src\/rewrite\/app\.js"/.test(html)) return 'rewrite';
+  if (hasApp && /src="\/src\/main\.js"/.test(html)) return 'legacy';
+  // —— 产物形态：script src 已被改写 ⇒ 用挂载点退化判定（两者互斥，故无歧义）
+  if (hasRewriteApp) return 'rewrite';
+  if (hasApp) return 'legacy';
   return 'unknown';
+}
+
+/**
+ * 取「主要 entry module」的文件名（如 `main-BDPxIthH.js`）—— **语义判据**。
+ *
+ * 规则与 `tests/tools/verify-entry-artifact.cjs` **同源**（只写本套件所需的最小判断，
+ * ⛔ 不把验证器整份实现复制成第二份）：
+ *   入口 = 文档中**最后**一个 `<script type="module" src="./assets/*.js">`
+ *   —— Vite 先注入被提升的共享 chunk，再注入入口 chunk；属性顺序不敏感。
+ * ⛔ 绝不按 chunk 文件名（`rewrite-*` / `index-*` / `app-*` …）判身份。
+ *
+ * @param {string} html
+ * @returns {string|null} 形如 `assets/app-BWRjnT2Z.js`；未找到 ⇒ null
+ */
+function entryModule(html) {
+  const srcs = [];
+  for (const m of html.matchAll(/<script\b[^>]*>/g)) {
+    if (!/\btype="module"/.test(m[0])) continue;
+    const s = /\bsrc="\.\/(assets\/[^"]+\.js)"/.exec(m[0]);
+    if (s) srcs.push(s[1]);
+  }
+  return srcs.length ? srcs[srcs.length - 1] : null;
 }
 
 /** 取 HTML 引用的产物资源（`./assets/*`） */
@@ -244,20 +282,57 @@ if (!distIsFresh()) {
   const why = fs.existsSync(DIST)
     ? 'dist 存在但不是本次改动之后的构建产物（或缺 legacy.html）'
     : 'dist 不存在';
-  skip('Case C  引用的 JS/CSS 实际存在', why + '；本环境 vite build 被沙箱批量删除守卫拦截，无法产出');
+  const how = '；先在 web/ 执行一次 npm run build 即可让本段真正执行'
+    + '（⚠️ 产物过期 ⇒ 本段静默 SKIP ⇒ 「一直 PASS、其实从未执行」的假绿）';
+  skip('Case C  引用的 JS/CSS 实际存在', why + how);
   skip('Case D  `base:"./"` 下 asset URL 形如 ./assets/...', why);
   skip('Case E  content-hashed asset 与 HTML 引用一致', why);
-  skip('产物映射：flag=0/1 下 / 与 /legacy.html 的引导身份', why);
+  skip('产物入口身份：A2 语义不变量（legacy-root / rewrite-root）', why);
 } else {
-  ok('Case C/D/E + 产物映射：按当前开关核对 dist 三入口', () => {
-    const enabled = isRewriteRootEntryEnabled();
+  ok('Case C/D/E + 产物入口身份：A2 语义不变量（⛔ 不按 chunk 文件名判身份）', () => {
     const dIndex = read(distIndex);
     const dLegacy = read(distLegacy);
     const dRewrite = read(distRewrite);
 
-    assert.equal(bootOf(dIndex), enabled ? 'rewrite' : 'legacy', 'dist/index.html 引导身份不符');
+    /* ① 与开关无关的两个固定事实 */
     assert.equal(bootOf(dLegacy), 'legacy', 'dist/legacy.html 必须为 Legacy');
     assert.equal(bootOf(dRewrite), 'rewrite', 'dist/rewrite.html 必须为 Rewrite');
+
+    /* ② 根入口身份 = **语义不变量**（与 chunk 文件名、与源码 `<script src>` 均无关）：
+     *      legacy-root  ⇒ index ≡ legacy 且 index ≠ rewrite
+     *      rewrite-root ⇒ index ≡ rewrite 且 index ≠ legacy
+     *    —— 必须**恰好满足其中一种**（互斥；同时满足或都不满足都判错）。 */
+    const eIndex = entryModule(dIndex);
+    const eLegacy = entryModule(dLegacy);
+    const eRewrite = entryModule(dRewrite);
+    assert.ok(eIndex && eLegacy && eRewrite, '三个入口都必须解析出 entry module');
+
+    const shapes = {
+      'legacy-root': eIndex === eLegacy && eIndex !== eRewrite,
+      'rewrite-root': eIndex === eRewrite && eIndex !== eLegacy
+    };
+    const matched = Object.keys(shapes).filter((k) => shapes[k]);
+    assert.equal(matched.length, 1,
+      'dist/index.html 的入口身份必须恰满足一种 A2 契约'
+      + '（legacy-root: index≡legacy 且 index≠rewrite；rewrite-root: index≡rewrite 且 index≠legacy）；'
+      + '实际 index=' + eIndex + ' · legacy=' + eLegacy + ' · rewrite=' + eRewrite);
+    const shape = matched[0];
+
+    /* ③ 仅当环境**显式**设置开关时，才要求产物与该开关一致。
+     *    未设置时不约束 —— 否则「磁盘上残留另一种形态的产物」会造成误报
+     *    （这正是 2026-10-01 暴露的失败形态）。 */
+    if (process.env[ENV_FLAG] !== undefined) {
+      const want = isRewriteRootEntryEnabled() ? 'rewrite-root' : 'legacy-root';
+      assert.equal(shape, want,
+        '显式 ' + ENV_FLAG + '=' + process.env[ENV_FLAG] + ' 时产物必须为 ' + want + '，实际 ' + shape);
+    }
+
+    /* ④ 挂载点（保留）：根入口挂载点必须与所选形态一致 */
+    assert.equal(bootOf(dIndex), shape === 'rewrite-root' ? 'rewrite' : 'legacy',
+      'dist/index.html 挂载点与入口形态不符');
+
+    console.log('    · 产物入口形态 = ' + shape
+      + '（index=' + eIndex + ' · legacy=' + eLegacy + ' · rewrite=' + eRewrite + '）');
 
     for (const [n, html] of [['index', dIndex], ['legacy', dLegacy], ['rewrite', dRewrite]]) {
       const refs = assetRefs(html);
