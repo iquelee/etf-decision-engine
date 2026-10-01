@@ -85,7 +85,10 @@ function bootOf(html) {
  */
 function entryModule(html) {
   const srcs = [];
-  for (const m of html.matchAll(/<script\b[^>]*>/g)) {
+  /* ★ `i` 标志**必需**（非装饰）：标签匹配必须兼顾大小写 HTML（`<SCRIPT>`），
+   *   否则触发 CodeQL `js/bad-tag-filter`（"does not match upper case <SCRIPT> tags"）。
+   *   输入是本仓 `vite build` 自产 HTML，本就全小写 ⇒ 加 `i` 对真实产物**零语义变化**。 */
+  for (const m of html.matchAll(/<script\b[^>]*>/gi)) {
     if (!/\btype="module"/.test(m[0])) continue;
     const s = /\bsrc="\.\/(assets\/[^"]+\.js)"/.exec(m[0]);
     if (s) srcs.push(s[1]);
