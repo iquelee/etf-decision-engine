@@ -82,7 +82,7 @@ const freshTone = (level) => (level === 'FRESH' ? 'good' : level === 'STALE' ? '
 
     <p class="state-sub mt-2">
       本页<b>不消费</b>的载荷块：{{ vm.provenance.notConsumedBlocks.join('、') }}
-      —— 属 M6「基本面」页与后台范围，⛔ 不搬进工作台。
+      —— 属「基本面」页与后台范围，⛔ 不搬进工作台。
     </p>
     <p class="state-sub">{{ vm.provenance.listEndpointNote }}</p>
 

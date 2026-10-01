@@ -24,21 +24,9 @@
     </header>
 
     <div class="pending">
-      <div class="pending-title">待实现（M8）</div>
-      <div class="pending-sub">数据来源：GET /api/admin/gen1/health</div>
+      <div class="pending-title">当前版本暂未提供</div>
+      <div class="pending-sub">本页功能将在后续版本开放。</div>
     </div>
 
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">约定区块</div>
-          <div class="section-sub">以下区块按 SPEC §5 系统运行 落实，实现后删除本占位块</div>
-        </div>
-      </div>
-      <ul class="block-list">
-        <li>模型 / 冻结工件 / 主建议 / 快速通道 / 自动交易 / 核验日期</li>
-        <li>最新 EOD 信号表</li>
-      </ul>
-    </div>
   </section>
 </template>
