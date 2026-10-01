@@ -7,7 +7,10 @@
  * 目标（A2）：
  *   `VITE_ENABLE_REWRITE_ENTRY=1`   ⇒ `dist/index.html` = V3.6.5 Rewrite UI
  *   未设置 / `=0`（默认）            ⇒ `dist/index.html` = Legacy UI
- *                                     （默认态产物与收敛前**逐字节一致**）
+ *                                     （默认态**根入口行为**与收敛前一致；⚠️ ⛔ 不声称整个 HTML
+ *                                      产物 byte-for-byte identical —— 新增第三个入口后 Vite 的
+ *                                      shared chunk 拆分可能变化，产物字节可以不同，但**根入口
+ *                                      承载哪一套 UI** 不变）
  *   无论开关如何：
  *     · `/legacy.html`  = Legacy 入口（引导 `/src/main.js`，⛔ 永不改造）
  *     · `/rewrite.html` = Rewrite 入口（保持 `noindex`，独立可达）
@@ -89,7 +92,7 @@ export function isRootEntryHtml(pathLike) {
  * @throws {Error} 开关开启 + 目标是根入口 + 引导锚点缺失（fail-closed）
  */
 export function convergeRootEntry(html, pathLike, enabled) {
-  if (!enabled) return html;                    // 默认路径：逐字节不动
+  if (!enabled) return html;                    // 默认路径：变换不触碰 HTML（原样返回入参）
   if (!isRootEntryHtml(pathLike)) return html;  // 只改根入口
 
   const src = String(html);

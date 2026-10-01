@@ -182,6 +182,7 @@
 | **★ 实现（已入库）** | `web/vite-config/rewrite-root-entry.js` —— Vite 官方 `transformIndexHtml`（`order:'pre'`，fail-closed）＋ `web/vite.config.js`（三入口）＋ 新增源文件 `web/legacy.html`。⛔ 未改 `web/src/rewrite/**`、⛔ 未改 `web/src/main.js`、⛔ 未对 `dist` 做事后改写、⛔ 未引入第三方插件。 |
 | **★ 机器守卫** | `web/tests/rewrite/entry-convergence.test.js`（Case A~G ＋ fail-closed ＋ `index.html ≡ legacy.html` 漂移守卫）；产物级校验器 `web/tests/tools/verify-entry-artifact.cjs`（真实构建后 / CI 使用）。 |
 | **★ 回退程序（本轮目标）** | 以 `VITE_ENABLE_REWRITE_ENTRY=0` 重新构建 → 走**既有** `scripts/deploy.sh --frontend-only` / `tcb hosting deploy` ⇒ 根 `/` 回到 Legacy。⚠️ **尚未演练**（本轮无部署）。 |
+| **★ 部署/激活 SOP（2026-10-01）** | ⚠️ `scripts/deploy.sh` **内部会重新 build** ⇒ **激活必须显式带开关**：`VITE_ENABLE_REWRITE_ENTRY=1 bash scripts/deploy.sh --frontend-only`。**忘记该变量 ⇒ 重建为 `index.html = Legacy` ⇒ `tcb hosting deploy` 成功但生产根页面仍为 Legacy（静默、无报错）**。详见 SPEC §18.1。⛔ 不改 `scripts/deploy.sh` 行为。 |
 | **状态** | **`A2 IMPLEMENTED`（代码＋测试在库）· ⛔ `NOT DEPLOYED` · ⛔ `NOT PRODUCTION ACTIVE`** —— 生产切换与回退演练仍需**独立部署授权**（见 SPEC §18-1 / §18-1.1）。 |
 | **⛔ 仍未做** | 未部署 · 未激活 · 未写 CloudBase 托管配置 · 无秒级回退（`RoutingRules`）· 未演练回退。部署后 `/rewrite.html` 仍**可被猜中**（以 `noindex` 缓解）。 |
 
