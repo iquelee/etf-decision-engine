@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-C-1 门逻辑打红自证（mutation test）—— **v5.0 语义**
+C-1 门逻辑打红自证（mutation test）—— **v6.0 语义**
+
+v6.0 迁移（V6.0 FREEZE 同批次，契约 §11 规则 5）：§[6] 由**单窗口 22:30** 改为
+**W1 [22:30,23:30) ∪ W2 次日工作日 [08:30,09:30) + first-window-wins**；
+新增 §[6b] 会话序 / §[6c] same-bundle 非独立 + different-provenance / §[6d] ★★ 反向证明
+（恢复旧「单窗口」规则 ⇒ red-proof 必 FAIL）。
 
 纪律（本仓既定）：
   · 真实数据作基线 ⇒ 先如实报告实时态；
@@ -160,23 +165,125 @@ for label, idx, res in EMUT:
                                           "EXCLUDED" if good else "OK(!!)"))
 
 print()
-print("=== [6] checkpoint 边界（v5.0：工作日 [22:30, 23:30)）===")
+print("=== [6] §5.8 checkpoint（v6.0：W1 ∪ W2，半开区间 [start, end)）===")
 CK = [
-    ("2026-10-01 22:29 周四", datetime.datetime(2026, 10, 1, 22, 29), False),
-    ("2026-10-01 22:30 周四", datetime.datetime(2026, 10, 1, 22, 30), True),
-    ("2026-10-01 23:29 周四", datetime.datetime(2026, 10, 1, 23, 29), True),
-    ("2026-10-01 23:30 周四", datetime.datetime(2026, 10, 1, 23, 30), False),
-    ("2026-10-01 09:00 周四", datetime.datetime(2026, 10, 1, 9, 0), False),
-    ("2026-10-01 22:35 周四", datetime.datetime(2026, 10, 1, 22, 35), True),
-    ("2026-10-03 22:35 周六", datetime.datetime(2026, 10, 3, 22, 35), False),
-    ("2026-10-04 22:35 周日", datetime.datetime(2026, 10, 4, 22, 35), False),
-    ("2026-10-02 22:45 周五", datetime.datetime(2026, 10, 2, 22, 45), True),
+    ("2026-10-01 22:29 周四", datetime.datetime(2026, 10, 1, 22, 29), False, None),
+    ("2026-10-01 22:30 周四", datetime.datetime(2026, 10, 1, 22, 30), True, "W1"),
+    ("2026-10-01 23:29 周四", datetime.datetime(2026, 10, 1, 23, 29), True, "W1"),
+    ("2026-10-01 23:30 周四", datetime.datetime(2026, 10, 1, 23, 30), False, None),
+    ("2026-10-02 08:29 周五", datetime.datetime(2026, 10, 2, 8, 29), False, None),
+    ("2026-10-02 08:30 周五", datetime.datetime(2026, 10, 2, 8, 30), True, "W2"),
+    ("2026-10-02 09:29 周五", datetime.datetime(2026, 10, 2, 9, 29), True, "W2"),
+    ("2026-10-02 09:30 周五", datetime.datetime(2026, 10, 2, 9, 30), False, None),
+    # ★ 旧 v5.0 期望为 False（= 「09:00 单窗口 expectation」，v5.0 必然丢样）；v6.0 必须 True/W2
+    ("2026-10-01 09:00 周四", datetime.datetime(2026, 10, 1, 9, 0), True, "W2"),
+    ("2026-10-01 22:35 周四", datetime.datetime(2026, 10, 1, 22, 35), True, "W1"),
+    ("2026-10-03 22:35 周六", datetime.datetime(2026, 10, 3, 22, 35), False, None),
+    ("2026-10-04 08:45 周日", datetime.datetime(2026, 10, 4, 8, 45), False, None),
 ]
-for label, dt, expect in CK:
-    got = C.evaluate_checkpoint(dt)
-    good = (got == expect)
+for label, dt, exp_ok, exp_w in CK:
+    g = C.evaluate_checkpoint_v6(dt)
+    good = (g["ok"] == exp_ok) and (g["window_id"] == exp_w)
     ok_all &= good
-    print("   [%s] %-24s expect=%-5s got=%-5s" % ("OK" if good else "!!", label, expect, got))
+    print("   [%s] %-24s expect=(%-5s,%-4s) got=(%s,%s)"
+          % ("OK" if good else "!!", label, exp_ok, exp_w, g["ok"], g["window_id"]))
+
+print()
+print("=== [6b] first-window-wins（会话序，§5.8）===")
+FWW = [
+    ("W1 胜出且 W2 被跳过",
+     [{"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-30",
+       "target_decision_date": "2026-09-30"},
+      {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-09-30",
+       "target_decision_date": "2026-09-30"}],
+     {"winner_index": 0, "window_id": "W1", "bundles": 1}),
+    ("W1 不满足 ⇒ W2 兜底且仅 1 bundle",
+     [{"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-29",
+       "target_decision_date": "2026-09-30"},
+      {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-09-30",
+       "target_decision_date": "2026-09-30"}],
+     {"winner_index": 1, "window_id": "W2", "bundles": 1}),
+    ("全窗口不满足 ⇒ FAIL-CLOSED（bundles=0，⛔ 不倒填）",
+     [{"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-29",
+       "target_decision_date": "2026-09-30"},
+      {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-09-29",
+       "target_decision_date": "2026-09-30"}],
+     {"winner_index": None, "window_id": None, "bundles": 0}),
+]
+for label, sess, exp in FWW:
+    got = C.first_window_wins_checkpoint(sess)
+    good = (got == exp)
+    ok_all &= good
+    print("   [%s] %-34s got=%s" % ("OK" if good else "!!", label, got))
+
+print()
+print("=== [6c] ★ same-bundle 非独立 / different-provenance 各自成 bundle ===")
+_same = C.first_window_wins_checkpoint([
+    {"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-30",
+     "target_decision_date": "2026-09-30"},
+    {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-09-30",
+     "target_decision_date": "2026-09-30"}])
+g1 = (_same["bundles"] == 1)
+ok_all &= g1
+print("   [%s] SAME-BUNDLE：异窗口 + 同 decision_date ⇒ bundles=%s（⛔ 不得为 2；窗口身份非独立判据）"
+      % ("OK" if g1 else "!!", _same["bundles"]))
+_d1 = C.first_window_wins_checkpoint([
+    {"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-30",
+     "target_decision_date": "2026-09-30"}])
+_d2 = C.first_window_wins_checkpoint([
+    {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-10-01",
+     "target_decision_date": "2026-10-01"}])
+g2 = (_d1["bundles"] == 1 and _d2["bundles"] == 1
+      and _d1["window_id"] == "W1" and _d2["window_id"] == "W2")
+ok_all &= g2
+print("   [%s] DIFFERENT-PROVENANCE：异 decision_date ⇒ 各自 1 bundle（W1 / W2）" % ("OK" if g2 else "!!"))
+_src = inspect.getsource(C)
+g3 = ("§3.4A" in _src) and ("independent_event" not in _src)
+ok_all &= g3
+print("   [%s] ⛔ 采集工具**不**自行判定独立事件（独立性一律由契约 §3.4A 裁决）" % ("OK" if g3 else "!!"))
+
+print()
+print("=== [6d] ★★ 反向证明：恢复旧「单窗口」规则 ⇒ red-proof 必 FAIL ===")
+
+
+def _mutant_v5_single_window(now):
+    """故意恢复 v5.0 的 工作日 [22:30, 23:30) 单窗口规则（= 旧 09:00/22:30 单窗口语义）。"""
+    return (now.weekday() < 5) and (
+        (now.hour == 22 and now.minute >= 30) or (now.hour == 23 and now.minute < 30))
+
+
+_bad = []
+for label, dt, exp_ok, exp_w in CK:
+    want = (exp_ok, exp_w) if exp_ok else (False, None)
+    got = (True, "W1") if _mutant_v5_single_window(dt) else (False, None)
+    if got != want:
+        _bad.append(label)
+g4 = (len(_bad) > 0)
+ok_all &= g4
+print("   [%s] 旧单窗口规则下：%d/%d 条 v6.0 期望**必 FAIL**（实测 FAIL %d 条，例：%s）"
+      % ("OK" if g4 else "!!", len(_bad), len(CK), len(_bad), _bad[:3]))
+
+
+def _mutant_count_all_windows(sessions):
+    """变异：把所有命中窗口都计为 bundle（= 放弃 first-window-wins）。"""
+    n = 0
+    for s in sessions:
+        r = C.evaluate_checkpoint_v6(s["now"])
+        if r["ok"] and str(s.get("pinned_decision_date")) == str(s.get("target_decision_date")):
+            n += 1
+    return {"winner_index": None, "window_id": None, "bundles": n}
+
+
+_ov = _mutant_count_all_windows([
+    {"now": datetime.datetime(2026, 9, 30, 22, 45), "pinned_decision_date": "2026-09-30",
+     "target_decision_date": "2026-09-30"},
+    {"now": datetime.datetime(2026, 10, 1, 8, 45), "pinned_decision_date": "2026-09-30",
+     "target_decision_date": "2026-09-30"}])
+g5 = (_ov["bundles"] == 2)
+ok_all &= g5
+print("   [%s] 「计所有命中窗口」变异 ⇒ bundles=%s（=2 反证 first-window-wins 具约束力）"
+      % ("OK" if g5 else "!!", _ov["bundles"]))
+RP_CK = len(CK) + 2
 
 print()
 print("=== [7] 总判定 SCORING / NON_SCORING 组合 ===")
@@ -199,6 +306,6 @@ print()
 print("======================================================")
 print("打红自证结果：%s（%d 项变异/边界/结构自证全部符合预期）"
       % ("✅ ALL PASS" if ok_all else "❌ 存在不符",
-         len(MUT) + 1 + len(EMUT) + len(CK) + 4))
+         len(MUT) + 1 + len(EMUT) + len(CK) + len(FWW) + 3 + 3 + RP_CK + 4))
 print("======================================================")
 sys.exit(0 if ok_all else 1)
