@@ -217,10 +217,23 @@ python v6_contract_compatibility.py             # 46 PASS
 python v6_redproof.py                           # 20 PASS
 python r3_contract_consumption_test.py          # 12 PASS
 
-# ★ B2 新增三件（Seal 绑定自证 / Key 2 不变性 / owner §六 Negative Scan）
-python v6_seal_binding_selfcheck.py             # 19 PASS（逐绑定值重算 + S-17 别名一致性）
-python v6_key2_immutability_check.py            # 13 PASS（KEY_2_IMMUTABLE = PASS）
-python v6_negative_scan.py                      # 13 PASS
+# ★ B2 新增四件（Seal 绑定自证 / Key 2 不变性 / owner §六 Negative Scan / canonicalization）
+python v6_seal_binding_selfcheck.py              # 20 PASS（逐绑定值重算 + S-17 别名 + S-20 口径载体）
+python v6_key2_immutability_check.py             # 13 PASS（KEY_2_IMMUTABLE = PASS）
+python v6_negative_scan.py                       # 13 PASS（须在提交后运行）
+python v6_fingerprint_canonicalization_check.py  # 16 PASS（sha256lf 定义性 + 三向互证 + ⛔ 边界）
+
+# ★ evidence fingerprint canonicalization = sha256lf（owner 2026-10-02 裁定 A，Binding Decision §6.5）
+python - <<'PY'
+import hashlib
+lf = lambda p: hashlib.sha256(
+    open(p, "rb").read().replace(b"\r\n", b"\n").replace(b"\r", b"\n")).hexdigest()
+for p in ("../../../docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md",
+          "c1_capture.py", "c1_gate_redproof.py"):
+    print(lf(p), p)
+PY
+#   → 与上面的工作区 sha256 **逐位相同**（三对象实测纯 LF ⇒ 归一为无操作）
+#   ⛔ 该口径**不适用于** Key 2（Key 2 为 CRLF 口径，恒为 35040e5e…09e5，⛔ 不得重算 / 不得写入）
 ```
 
 ---
@@ -233,8 +246,10 @@ Production DB writes    = 0           Canary  = OFF           Auto-execution = O
 GE-04                   = NOT AUTHORIZED
 V3.6.6 Freeze           = NOT AUTHORIZED     V3.6.6 Production Attestation = NOT AUTHORIZED
 Evidence Execution      = NOT AUTHORIZED     Evidence Seal (Key 3) = NOT AUTHORIZED
+Push                    = NO                 Tag     = NO       .gitattributes = 未创建 / 未修改
 Key 2 seal artifact     = UNCHANGED（35040e5e…09e5）
-主分支可达性             = PENDING（仅载体分支；提交 4 / 5 未推送、未入 master）
+evidence fingerprint    = sha256lf（owner 2026-10-02 裁定 A；⛔ 不适用于 Key 2）
+主分支可达性             = PENDING（仅载体分支；提交 4 – 9 均未推送、未入 master）
 ```
 
 > ⛔ 本证据包**不构成**任何生产授权；⛔ **不表示**生产已消费 Gen-1 决策；

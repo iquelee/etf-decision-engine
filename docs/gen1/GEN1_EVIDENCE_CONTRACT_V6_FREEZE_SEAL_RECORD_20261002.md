@@ -331,24 +331,29 @@ docs/gen1/GEN1_FREEZE_SEAL_BINDING_DECISION.md  2980a08f6f49a19ff8022f7bfeb2b6a7
 
 | # | Gate 项 | 判定 | 判据载体（⛔ 全部脚本实读） |
 |---|---|---|---|
-| 1 | V6 Contract integrity | ✅ PASS | `v6_seal_binding_selfcheck.py` S-4 / S-5 / S-7（content sha256 · bytes · lines · EOL · blob 侧对拍） |
+| 1 | V6 Contract integrity | ✅ PASS | `v6_seal_binding_selfcheck.py` S-4 / S-5 / S-7（content **`sha256lf`** · bytes · lines · EOL · blob 侧对拍） |
 | 2 | Freeze carrier integrity | ✅ PASS | 同上 S-6 / S-7 / S-8（carrier commit · blob id · parent commit 均 `git` 实读） |
 | 3 | Tool alignment | ✅ PASS | `v6_contract_tool_alignment.py` 29 PASS / 0 FAIL（L1–L5） |
 | 4 | Migration tests | ✅ PASS | `c1_capture_v6_migration_test.py` **33/0（默认只读）· 34/0（`--emit-diff`）**——owner 记法 `34/0` 对应后者（口径见 §9 勘误） |
 | 5 | Version mismatch red-proof | ✅ PASS | RP-A FAIL（期望）· RP-B FAIL（期望）· RP-C PASS |
 | 6 | Key 2 immutability | ✅ PASS | `v6_key2_immutability_check.py` **13 PASS / 0 FAIL**（git 历史 before == after + blob 三方一致 + Charter §3.1 ⛔ `v6` 零命中） |
-| 7 | Binding decision | ✅ PASS | `GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md`（§3.1 三套命名互指 · §6.4 载体身份字段 · §10 owner §三 八条款对照） |
-| 8 | Fingerprint recomputation | ✅ PASS | 见 §9.2 与 §10（⛔ 零手填，全部由脚本读真实文件 / git 对象推导） |
+| 7 | Binding decision | ✅ PASS | `GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md`（§3.1 三套命名互指 · §6.4 载体身份字段 · **§6.5 canonicalization = `sha256lf` + §6.5.1 `git_blob_sha1` ≠ `evidence_sha256`** · §10 owner §三 八条款对照） |
+| 8 | Fingerprint recomputation | ✅ PASS | 见 §9.2 与 §10（⛔ 零手填，全部由脚本读真实文件 / git 对象推导）；**口径 = `sha256lf`**（owner 裁定 A / §6.5），三对象逐项复算 == Seal 绑定值 |
 | 9 | Negative scan | ✅ PASS | `v6_negative_scan.py` **13 PASS / 0 FAIL**（改动面白名单 · 生产路径零命中 · 上游治理层零改动 · 无 tag · 治理声明在场） |
 | 10 | Production safety | ✅ PASS | 改动面 ⛔ 零生产路径；Seal `production_effects` 18 键全 false / OFF / NOT AUTHORIZED（自证 S-16）；⛔ 未执行任何 deploy / rollback / DB 写 |
 
-### 9.2 ★ B2 新增的 executable self-check（3 件，独立于既有回归套件）
+### 9.2 ★ B2 新增的 executable self-check（4 件，独立于既有回归套件）
+
+> 口径提示（owner 2026-10-02 裁定 A）：第 11 / 14 两件一律以 **`sha256lf`** 取值（⛔ 不用裸字节 sha256）。
+> 对当前三绑定对象（实测**纯 LF**）两者同值 ⇒ 对既有判定**无任何改变**（⛔ 非放宽 / ⛔ 非收紧），
+> 但使判定在工作区被重新 checkout 成 CRLF 时**仍然成立**（口径耐久性）。
 
 | # | 脚本 | 结果 | 覆盖 |
 |---|---|---|---|
-| 11 | `v6_seal_binding_selfcheck.py` | ✅ **19 PASS / 0 FAIL** | 把 Seal 制品的**每一个绑定值**从真实文件 / git 对象重算：身份与层 · ⛔ 裸 `contract_version` 负向断言 · 契约 content/blobs/bytes/lines/EOL · carrier/parent/blob · 两工具 sha/bytes/lines · lifecycle 单调 · routes 4 DIRECT + 3 REFERENCE · Key 2 引用读数 · Key 3 `NOT_AUTHORIZED` · `production_effects` 18 键 · **S-17 别名一致性** · S-18 自指禁令 |
+| 11 | `v6_seal_binding_selfcheck.py` | ✅ **20 PASS / 0 FAIL** | 把 Seal 制品的**每一个绑定值**从真实文件 / git 对象重算（口径 = **`sha256lf`**）：身份与层 · ⛔ 裸 `contract_version` 负向断言 · 契约 content/blobs/bytes/lines/EOL（LF 规范口径） · carrier/parent/blob · 两工具 sha/bytes/lines · lifecycle 单调 · routes 4 DIRECT + 3 REFERENCE · Key 2 引用读数 · Key 3 `NOT_AUTHORIZED` · `production_effects` 18 键 · **S-17 别名一致性** · S-18 自指禁令 · **S-20 canonicalization 权威载体在场且 ⛔ 制品未扩 schema** |
 | 12 | `v6_key2_immutability_check.py` | ✅ **13 PASS / 0 FAIL** | `KEY_2_IMMUTABLE = PASS`：批次区间 `git diff` 逐字节空 · 自最后改动提交 `b6da0a3` 起亦空 · blob id 三方一致 `46142607…2dfa` · 四绑定键恰等 · `contract_version = WP-G1-GE-CH-1.0` 且 ⛔ 全文 `v6` 零命中 · Charter §3.1 / 上游裁定零改动 |
 | 13 | `v6_negative_scan.py` | ✅ **13 PASS / 0 FAIL** | owner §六 全项（改动面白名单 · 生产前缀零命中 · `ml/**` 零改动 · lock/FROZEN 类零命中 · 脏改动不越界 · 无 tag · 治理声明三处齐备 · 工具链无部署 / 变更类子命令 · ⛔ 无越界肯定式声明 · 未推送） |
+| 14 | `v6_fingerprint_canonicalization_check.py` | ✅ **16 PASS / 0 FAIL** | ★ owner 裁定 A：**`sha256lf` canonicalization** —— F-1…F-4 定义性自证（LF 无操作 · CRLF / 裸 CR 等价 · ⛔ 非 no-op 假象）· F-5 内容变异 ⇒ 指纹必变 · F-6 / F-7 / F-7b 三绑定对象（工作区 ⇄ git blob ⇄ 绑定值 **三向互证**）· F-8 `git_blob_sha1` ≠ `evidence_sha256` · F-9 量纲与规范化后内容一致 · F-10 ⛔ 归一仅用于 Fingerprint（工作区字节不变 · ⛔ 无 `.gitattributes` · `core.autocrlf` 未改）· F-11 ⛔ 不适用于 Key 2 · F-12 / F-13 文档宣告在场 · F-14a / F-14b 制品 ⛔ 未被重写 / ⛔ 未扩 schema |
 
 > ⚠️ **自曝一处脚本缺陷（已修）**：`v6_negative_scan.py` 的 N-6 首版用固定切片 `l[3:]` 解析
 > `git status --porcelain` 行，导致路径首字符被吃掉、**误报越界**；改为 `split(None, 1)` 后 N-6 PASS。
@@ -385,25 +390,45 @@ python -c "import json;d=json.load(open('docs/gen1/artifacts/GEN1_EVIDENCE_FREEZ
 print('contract_version' in d, d['evidence_contract_version'], d['seal_status'])"
 #   → False v6.0 EVIDENCE_FREEZE_SEALED
 
-# ⑤ ★ B2 新增三件 self-check（⛔ 只读；13 须在提交后运行 N-6 方为 0 项脏改动）
-python scripts/gen1/evidence-capture/v6_seal_binding_selfcheck.py   # → 19 PASS / 0 FAIL
-python scripts/gen1/evidence-capture/v6_key2_immutability_check.py  # → 13 PASS / 0 FAIL
-python scripts/gen1/evidence-capture/v6_negative_scan.py            # → 13 PASS / 0 FAIL
+# ⑤ ★ B2 新增四件 self-check（⛔ 只读；13 须在提交后运行 N-6 方为 0 项脏改动）
+python scripts/gen1/evidence-capture/v6_seal_binding_selfcheck.py              # → 20 PASS / 0 FAIL
+python scripts/gen1/evidence-capture/v6_key2_immutability_check.py             # → 13 PASS / 0 FAIL
+python scripts/gen1/evidence-capture/v6_negative_scan.py                       # → 13 PASS / 0 FAIL（提交后运行）
+python scripts/gen1/evidence-capture/v6_fingerprint_canonicalization_check.py  # → 16 PASS / 0 FAIL
+
+# ⑥ ★ evidence fingerprint canonicalization = sha256lf（owner 裁定 A）—— 三绑定对象逐项复算
+python - <<'PY'
+import hashlib
+lf = lambda p: hashlib.sha256(
+    open(p, "rb").read().replace(b"\r\n", b"\n").replace(b"\r", b"\n")).hexdigest()
+for p in ("docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md",
+          "scripts/gen1/evidence-capture/c1_capture.py",
+          "scripts/gen1/evidence-capture/c1_gate_redproof.py"):
+    print(lf(p), p)
+PY
+#   → 7e3e5d87…272e / d0acc9e4…a4337 / e795c934…aba0（须与 Seal 绑定值逐位相同）
 ```
 
-**★ 指纹口径与耐久性（⛔ 两种口径不得混用）**：
+**★ 指纹口径（owner 2026-10-02 裁定 A：`fingerprint_canonicalization = sha256lf`）**：
 
-| 对象 | 口径 | 实测换行 | 与 `sha256lf`（CRLF→LF 归一，2026-09-22 裁定 §2 算法） |
+| 对象 | 口径 | 实测换行 | 说明 |
 |---|---|---|---|
-| 证据契约 + 两工具（**本 Seal 三绑定对象**） | 工作区文件 sha256 | **纯 LF（CRLF = 0）** | ✅ **同值**（归一为无操作） |
-| Key 2 制品 `GEN1_GUARDED_EFFECTIVE_FREEZE.json` | 工作区文件 sha256 | **CRLF（16 对 / 881 B）** | ⚠️ **不同值**（CRLF 口径） |
+| 证据契约 + 两工具（**本 Seal 三绑定对象**） | **`sha256lf`**（CRLF/CR → LF 后 SHA-256） | **纯 LF（CRLF = 0）** | 归一为**无操作** ⇒ `sha256lf == 原始 sha256`；并以 git blob 侧互证 |
+| Key 2 制品 `GEN1_GUARDED_EFFECTIVE_FREEZE.json` | **Key 2 自身口径**（工作区文件 sha256 = `35040e5e…09e5`） | **CRLF（16 对 / 881 B）** | ⛔ `sha256lf` **不适用 / 不写入** Key 2；⛔ 不得据此重算 Key 2 绑定值 |
 
-⚠️ **耐久性提示（⛔ 未执行，须 owner 裁定）**：本仓 `core.autocrlf=true` 且本树**无** `.gitattributes`。
-本次提交时 `git` 对三对象逐条输出 *“LF will be replaced by CRLF the next time Git touches it”*
-⇒ 若三对象被**重新 checkout**，其**工作区** sha256 将变为 CRLF 口径 ⇒ 自证 S-4 / S-9 / S-10 与
-对齐校验 L3 会 FAIL（⛔ 那是**口径漂移**，不是内容漂移）。
-**当前**工作区为纯 LF、全部自证 PASS。可选处置（⛔ 本批次均未执行，等 owner 裁定）：
-① 为三路径加 `.gitattributes`（`text eol=lf`）；② 或把绑定口径**正式定为 `sha256lf`**。
+> ✅ **耐久性已由裁定 A 收口**：原「⚠️ 耐久性提示（⛔ 未执行，须 owner 裁定）」中的**方案 ②**
+> （*把绑定口径正式定为 `sha256lf`*）**已被 adopt** —— 见 Binding Decision **§6.5**。
+> ⛔ 方案 ① 未采用：⛔ 未创建 / 未修改 `.gitattributes`，⛔ 未改仓库级 Git 换行配置
+> （`core.autocrlf` 仍 = `true`）—— 由 `v6_fingerprint_canonicalization_check.py` **F-10** 断言。
+> 因三对象本为纯 LF，`sha256lf` 与既有绑定值**逐位相同** ⇒ 依 owner 明令 **⛔ 未重写 Seal 制品**
+> （`a585a33a…b62` / 10723 B，逐字节未变；由 **F-14a** 断言），⛔ 亦未向制品新增任何 schema 键（**F-14b**）。
+
+**★ `git_blob_sha1` ≠ `evidence_sha256`（⛔ 不得互相替代；Binding Decision §6.5.1）**：
+
+| 指纹 | 算法 | 量纲 | 作用域 |
+|---|---|---|---|
+| `git_blob_sha1` | Git 对象哈希（SHA-1，`blob <len>\0` 头） | 40 hex | **Git 对象身份**（寻址 / 可达性） |
+| `evidence_sha256` | **`sha256lf`** | 64 hex | **Evidence Fingerprint**（内容同一性论断） |
 
 ---
 
@@ -467,6 +492,7 @@ python scripts/gen1/evidence-capture/v6_negative_scan.py            # → 13 PAS
 | `scripts/gen1/evidence-capture/v6_seal_binding_selfcheck.py` | ★ B2 新增：Seal **绑定自证**（19 PASS；逐值重算 + 别名一致性 S-17 + 自指禁令 S-18） |
 | `scripts/gen1/evidence-capture/v6_key2_immutability_check.py` | ★ B2 新增：**Key 2 不变性**自证（13 PASS；git 历史 before == after） |
 | `scripts/gen1/evidence-capture/v6_negative_scan.py` | ★ B2 新增：owner §六 **Negative Scan**（13 PASS） |
+| `scripts/gen1/evidence-capture/v6_fingerprint_canonicalization_check.py` | ★ 裁定 A 新增：**`sha256lf` canonicalization** 自证（16 PASS；定义性 + 工作区⇄blob⇄绑定值三向互证 + ⛔ 边界 / 文档 / 制品未被重写） |
 | `scripts/gen1/evidence-capture/checkpoint_discriminator.js` / `trigger_registry.js` / `independence_discriminator*.js` / `fixtures/**` / `v6_*` / `r3_contract_consumption_test.py` | 生成轮可执行判据与自证构件 |
 | `docs/gen1/GEN1_EVIDENCE_CONTRACT_*V6*_20261002.md`（生成轮 6 件 + Schema Gap 报告 + 提案 / 复评） | 生成轮证据 |
 
@@ -479,7 +505,7 @@ python scripts/gen1/evidence-capture/v6_negative_scan.py            # → 13 PAS
 docs/gen1/artifacts/GEN1_EVIDENCE_FREEZE_SEAL_V6.json
   a585a33a25cd1fe4b508fc6ce0d1e69f324000cc49f96584865c4811f46a7b62  （10723 B）
 docs/gen1/GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md
-  32788f356e65558c738d6fd49bb345d0ad430bdab806e829ef734f18e9610aaa  （21868 B）
+  ff7c8b00adf216462fa1bdc1c1492cfbec3feac4fb1b7f8b28469f9c223f3f5e  （26766 B）
 ```
 
 ⚠️ 本记录**自身**的 sha256 ⛔ **不写入本记录**（自指悖论，与 §0 / 第 53 行同例）；

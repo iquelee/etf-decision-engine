@@ -243,12 +243,74 @@ S3  EVIDENCE_FREEZE_SEALED            ★ 制品落盘：三对象 SHA 逐项绑
 其一致性由 `v6_seal_binding_selfcheck.py` **S-17** 逐字节断言（⛔ 漂移即 FAIL）。
 **规范键名**仍为带 `evidence_contract_` 前缀者（namespace 纪律，见 §3 / §3.1）。
 
+### 6.5 ★ fingerprint canonicalization —— `sha256lf`（owner 2026-10-02 裁定 **A**）
+
+```text
+fingerprint_canonicalization = sha256lf
+```
+
+**定义（⛔ 逐字采用 owner 裁定文本）**：
+
+> 对参与 V6 Evidence Freeze Seal binding 的文本制品，先规范化 CRLF/CR → LF，再计算 SHA-256；
+> 该规范化**仅用于 Evidence Fingerprint**，⛔ **不修改 Git 工作区文件**，也⛔ **不改变 Git blob identity**。
+
+**实现（⛔ 本 Seal 的唯一算法来源 = 本节；任何人可复现）**：
+
+```python
+import hashlib
+def sha256lf(path):
+    b = open(path, "rb").read()
+    return hashlib.sha256(b.replace(b"\r\n", b"\n").replace(b"\r", b"\n")).hexdigest()
+```
+
+> ⚠️ 顺序**先 `CRLF → LF`、再 `裸 CR → LF`**，⛔ 不可颠倒。
+> ⛔ 仓库级 Git 换行配置（`core.autocrlf` / `.gitattributes`）**一律不动** ——
+> 归一**不**通过仓库配置实现，⛔ **不创建、不修改 `.gitattributes`**。
+
+**适用范围（⛔ 边界必须显式）**：
+
+| 域 | `sha256lf` | 说明 |
+|---|---|---|
+| V6 Evidence Freeze Seal **三绑定对象**（证据契约 + `c1_capture.py` + `c1_gate_redproof.py`） | ✅ **适用** | `evidence_contract_sha256` / `capture_tool_sha256` / `redproof_tool_sha256` **按 `sha256lf` 取值** |
+| 本 Seal 批次内其它 evidence-layer 文本制品（自证脚本 / 证据文档） | ✅ 适用 | 同一口径，便于审计（⛔ 非绑定值） |
+| **Key 2 制品** `ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json` | ⛔ **不适用 / ⛔ 不写入** | Key 2 保有其**自身**口径（工作区文件 sha256 = `35040e5e…09e5`，实测 **CRLF**）；⛔ 不得据此重算 Key 2 绑定值，⛔ 不得把 `sha256lf` 写入 Key 2 |
+| 仓库级 Git 换行配置（`.gitattributes` / `core.autocrlf`） | ⛔ **一律不动** | 归一⛔ 不通过仓库配置实现 |
+
+#### 6.5.1 ★ `git_blob_sha1` ≠ `evidence_sha256`（⛔ 二者不得互相替代）
+
+| 指纹 | 算法 | 量纲 | 作用域 | 本 Seal 实例 |
+|---|---|---|---|---|
+| `git_blob_sha1` | Git 对象哈希（SHA-1，含 `blob <len>\0` 头） | 40 hex | **Git 对象身份**（寻址 / 可达性） | `294259338ba3fa60f689ed9139072a35b2368b0e` |
+| `evidence_sha256` | `sha256lf`（CRLF/CR → LF 后 SHA-256） | 64 hex | **Evidence Fingerprint**（内容同一性论断） | `7e3e5d87…272e` |
+
+```text
+⛔ 二者**量纲不同 / 算法不同 / 用途不同** ⇒ **不得互相替代**（⛔ 不得用 blob sha1 充当 evidence sha256）
+✅ 二者可**互证**：同一对象上 `sha256lf(工作区文件) == sha256lf(git cat-file -p <blob>) == 绑定值`
+   ⇒ 由 `v6_fingerprint_canonicalization_check.py` F-6 / F-7 / F-7b 逐项断言
+```
+
+#### 6.5.2 ★ 本裁定的重新计算（owner §A.3；实测结果 = 「同值 ⇒ ⛔ 不重绑定」）
+
+| 对象 | `sha256lf(当前文件)` | Seal 已绑定 fingerprint | 判定 |
+|---|---|---|---|
+| `docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md` | `7e3e5d87…272e` | `7e3e5d87…272e` | ✅ **相同** |
+| `scripts/gen1/evidence-capture/c1_capture.py` | `d0acc9e4…a4337` | `d0acc9e4…a4337` | ✅ **相同** |
+| `scripts/gen1/evidence-capture/c1_gate_redproof.py` | `e795c934…aba0` | `e795c934…aba0` | ✅ **相同** |
+
+> 三对象实测**纯 LF（CRLF = 0）** ⇒ 归一为**无操作** ⇒ `sha256lf == 原始 sha256` ⇒ 依 owner 明令
+> **⛔ 不重写 Seal 制品**（其保持 `a585a33a…b62` / 10723 B，逐字节未变；由 F-14a 断言）。
+> ⛔ 本裁定⛔ **不**向 Seal 制品新增 schema 键（owner 明令：⛔ 不得自行扩展 schema）——
+> canonicalization 的**权威载体 = 本节**；Seal 制品经其 `binding_decision` 字段指向本文件。
+> ✅ 因此**未出现**「须改绑定值 / 治理层冲突」⇒ ⛔ **不触发** owner §A 的 STOP 条件。
+
 ---
 
 ## 7. authority / scope / change rule
 
 ```text
 AUTHORITY   owner 2026-10-02 裁定 O-1 = APPROVED（本裁定即为该项的授权载体）
+            owner 2026-10-02 裁定 A —— fingerprint_canonicalization = sha256lf（见 §6.5；
+            ⛔ 不动 .gitattributes / ⛔ 不改仓库级 Git 换行配置 / ⛔ 不重写 Seal 制品 / ⛔ 不扩 schema）
 SCOPE       · 对象：GEN1_EVIDENCE_CONTRACT_V6.md + c1_capture.py + c1_gate_redproof.py（三对象）
             · 层：DOCUMENT_LAYER / TOOLCHAIN_LAYER（⛔ 非生产制品层）
             · ⛔ 不含：生产代码 / 生产配置 / 制品 / 部署 / DB / Authority / lock / immutable_set
@@ -274,6 +336,7 @@ VERSION NS  gen1-evidence-contract（⛔ 与 gen1-guarded-effective-charter 互�
 | 8 | GE-04 Ready / GE-04 Authorization / GEN1 Decision Chain | ⛔ **未授权** |
 | 9 | merge / master integration / deploy / rollback / canary / `auto_execution` / 生产 DB 写入 | ⛔ **未授权** |
 | 10 | 建 V3.6.6 tag（或任何 tag） | ⛔ **未授权** |
+| 11 | 改 `.gitattributes` / 仓库级 Git 换行配置（`core.autocrlf`） | ⛔ **未授权 / 未执行**（归一由 §6.5 的 fingerprint 口径实现，⛔ 不通过仓库配置） |
 
 **生产侧零效应自证**：
 
@@ -315,6 +378,20 @@ PY
 python -c "import json;d=json.load(open('docs/gen1/artifacts/GEN1_EVIDENCE_FREEZE_SEAL_V6.json',encoding='utf-8'));\
 print('contract_version' in d, 'evidence_contract_version' in d, d['evidence_contract_version'])"
 #   → False True v6.0
+
+# ④ ★ evidence fingerprint canonicalization = sha256lf（§6.5）—— 三绑定对象逐项复算
+python - <<'PY'
+import hashlib
+lf = lambda p: hashlib.sha256(
+    open(p, "rb").read().replace(b"\r\n", b"\n").replace(b"\r", b"\n")).hexdigest()
+for p in ("docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md",
+          "scripts/gen1/evidence-capture/c1_capture.py",
+          "scripts/gen1/evidence-capture/c1_gate_redproof.py"):
+    print(lf(p), p)
+PY
+#   → 7e3e5d87…272e / d0acc9e4…a4337 / e795c934…aba0（须与 Seal 绑定值逐位相同）
+python scripts/gen1/evidence-capture/v6_fingerprint_canonicalization_check.py
+#   → 16 PASS / 0 FAIL
 ```
 
 ---
