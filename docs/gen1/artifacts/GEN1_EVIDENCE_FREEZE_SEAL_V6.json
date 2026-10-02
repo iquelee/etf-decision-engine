@@ -19,6 +19,10 @@
   "evidence_contract_lines": 1413,
   "evidence_contract_eol": "LF",
 
+  "carrier_commit": "ccb0f4b8cf402a16b16d468cbff1c02109d72476",
+  "carrier_blob_sha1": "294259338ba3fa60f689ed9139072a35b2368b0e",
+  "carrier_identity_alias_policy": "⛔ 该二键仅为 owner §二 所列术语（carrier_commit / carrier_blob_sha1）的**字面对齐别名**；**规范键名** = `evidence_contract_carrier_commit` / `evidence_contract_git_blob_sha1`（namespace 纪律，见 Binding Decision §3 / §6.4）。单一来源 = 载体提交实测；别名 ↔ 规范键的同值性由 `v6_seal_binding_selfcheck.py` **S-17 逐字节断言**（漂移即 FAIL ⇒ fail-closed）。",
+
   "source_sha256": "4fadfe1a6b93c0896c8f50984f0b13b2f14c8798ba0bc9a6fda7f9f026119e82",
   "model_sha256": "d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712",
   "threshold_version": "shadow-threshold-v1",

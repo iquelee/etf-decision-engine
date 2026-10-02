@@ -327,6 +327,33 @@ ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json 35040e5e9e809d6c278453a3bc130ec2
 docs/gen1/GEN1_FREEZE_SEAL_BINDING_DECISION.md  2980a08f6f49a19ff8022f7bfeb2b6a7637a066a53b33260f28c43dfb0d2e07d  ✅ 未变
 ```
 
+### 9.1 ★ B2 Seal Gate（owner §七 十项判定，逐项实测）
+
+| # | Gate 项 | 判定 | 判据载体（⛔ 全部脚本实读） |
+|---|---|---|---|
+| 1 | V6 Contract integrity | ✅ PASS | `v6_seal_binding_selfcheck.py` S-4 / S-5 / S-7（content sha256 · bytes · lines · EOL · blob 侧对拍） |
+| 2 | Freeze carrier integrity | ✅ PASS | 同上 S-6 / S-7 / S-8（carrier commit · blob id · parent commit 均 `git` 实读） |
+| 3 | Tool alignment | ✅ PASS | `v6_contract_tool_alignment.py` 29 PASS / 0 FAIL（L1–L5） |
+| 4 | Migration tests | ✅ PASS | `c1_capture_v6_migration_test.py` **33/0（默认只读）· 34/0（`--emit-diff`）**——owner 记法 `34/0` 对应后者（口径见 §9 勘误） |
+| 5 | Version mismatch red-proof | ✅ PASS | RP-A FAIL（期望）· RP-B FAIL（期望）· RP-C PASS |
+| 6 | Key 2 immutability | ✅ PASS | `v6_key2_immutability_check.py` **13 PASS / 0 FAIL**（git 历史 before == after + blob 三方一致 + Charter §3.1 ⛔ `v6` 零命中） |
+| 7 | Binding decision | ✅ PASS | `GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md`（§3.1 三套命名互指 · §6.4 载体身份字段 · §10 owner §三 八条款对照） |
+| 8 | Fingerprint recomputation | ✅ PASS | 见 §9.2 与 §10（⛔ 零手填，全部由脚本读真实文件 / git 对象推导） |
+| 9 | Negative scan | ✅ PASS | `v6_negative_scan.py` **13 PASS / 0 FAIL**（改动面白名单 · 生产路径零命中 · 上游治理层零改动 · 无 tag · 治理声明在场） |
+| 10 | Production safety | ✅ PASS | 改动面 ⛔ 零生产路径；Seal `production_effects` 18 键全 false / OFF / NOT AUTHORIZED（自证 S-16）；⛔ 未执行任何 deploy / rollback / DB 写 |
+
+### 9.2 ★ B2 新增的 executable self-check（3 件，独立于既有回归套件）
+
+| # | 脚本 | 结果 | 覆盖 |
+|---|---|---|---|
+| 11 | `v6_seal_binding_selfcheck.py` | ✅ **19 PASS / 0 FAIL** | 把 Seal 制品的**每一个绑定值**从真实文件 / git 对象重算：身份与层 · ⛔ 裸 `contract_version` 负向断言 · 契约 content/blobs/bytes/lines/EOL · carrier/parent/blob · 两工具 sha/bytes/lines · lifecycle 单调 · routes 4 DIRECT + 3 REFERENCE · Key 2 引用读数 · Key 3 `NOT_AUTHORIZED` · `production_effects` 18 键 · **S-17 别名一致性** · S-18 自指禁令 |
+| 12 | `v6_key2_immutability_check.py` | ✅ **13 PASS / 0 FAIL** | `KEY_2_IMMUTABLE = PASS`：批次区间 `git diff` 逐字节空 · 自最后改动提交 `b6da0a3` 起亦空 · blob id 三方一致 `46142607…2dfa` · 四绑定键恰等 · `contract_version = WP-G1-GE-CH-1.0` 且 ⛔ 全文 `v6` 零命中 · Charter §3.1 / 上游裁定零改动 |
+| 13 | `v6_negative_scan.py` | ✅ **13 PASS / 0 FAIL** | owner §六 全项（改动面白名单 · 生产前缀零命中 · `ml/**` 零改动 · lock/FROZEN 类零命中 · 脏改动不越界 · 无 tag · 治理声明三处齐备 · 工具链无部署 / 变更类子命令 · ⛔ 无越界肯定式声明 · 未推送） |
+
+> ⚠️ **自曝一处脚本缺陷（已修）**：`v6_negative_scan.py` 的 N-6 首版用固定切片 `l[3:]` 解析
+> `git status --porcelain` 行，导致路径首字符被吃掉、**误报越界**；改为 `split(None, 1)` 后 N-6 PASS。
+> ⇒ **记录在案**：该 FAIL 是**解析偏移**（断言器缺陷），⛔ 不是工作区越界。
+
 ---
 
 ## 10. 复算方法（任何人可独立复现，⛔ 不依赖本记录）
@@ -357,6 +384,11 @@ python scripts/gen1/evidence-capture/c1_gate_redproof.py                 # → 5
 python -c "import json;d=json.load(open('docs/gen1/artifacts/GEN1_EVIDENCE_FREEZE_SEAL_V6.json',encoding='utf-8'));\
 print('contract_version' in d, d['evidence_contract_version'], d['seal_status'])"
 #   → False v6.0 EVIDENCE_FREEZE_SEALED
+
+# ⑤ ★ B2 新增三件 self-check（⛔ 只读；13 须在提交后运行 N-6 方为 0 项脏改动）
+python scripts/gen1/evidence-capture/v6_seal_binding_selfcheck.py   # → 19 PASS / 0 FAIL
+python scripts/gen1/evidence-capture/v6_key2_immutability_check.py  # → 13 PASS / 0 FAIL
+python scripts/gen1/evidence-capture/v6_negative_scan.py            # → 13 PASS / 0 FAIL
 ```
 
 ---
@@ -418,11 +450,27 @@ print('contract_version' in d, d['evidence_contract_version'], d['seal_status'])
 | `scripts/gen1/evidence-capture/v6_frozen_carrier_assertions.py` | 冻结轮规范性不变性证明（25 PASS） |
 | `scripts/gen1/evidence-capture/v6_contract_tool_alignment.py` | 契约 ↔ 工具对齐校验器（29 PASS + RP-A/B/C） |
 | `scripts/gen1/evidence-capture/checkpoint_python_js_parity.py` | Python ↔ JS 奇偶（6 PASS） |
+| `scripts/gen1/evidence-capture/v6_seal_binding_selfcheck.py` | ★ B2 新增：Seal **绑定自证**（19 PASS；逐值重算 + 别名一致性 S-17 + 自指禁令 S-18） |
+| `scripts/gen1/evidence-capture/v6_key2_immutability_check.py` | ★ B2 新增：**Key 2 不变性**自证（13 PASS；git 历史 before == after） |
+| `scripts/gen1/evidence-capture/v6_negative_scan.py` | ★ B2 新增：owner §六 **Negative Scan**（13 PASS） |
 | `scripts/gen1/evidence-capture/checkpoint_discriminator.js` / `trigger_registry.js` / `independence_discriminator*.js` / `fixtures/**` / `v6_*` / `r3_contract_consumption_test.py` | 生成轮可执行判据与自证构件 |
 | `docs/gen1/GEN1_EVIDENCE_CONTRACT_*V6*_20261002.md`（生成轮 6 件 + Schema Gap 报告 + 提案 / 复评） | 生成轮证据 |
 
 > ⚠️ `scripts/gen1/evidence-capture/out/v5-baseline/`（`c1_*.v5.py`，由 `git show 7d2f39bd…` 抽取）
 > 为**对齐校验的运行时产物**，⛔ **不入库**（可随时由 git 重算）。
+
+**清单外指纹**（⛔ 各该对象自身不写入自身 sha256 ⇒ 在此**清单外**单列；as-of 本记录落笔）：
+
+```text
+docs/gen1/artifacts/GEN1_EVIDENCE_FREEZE_SEAL_V6.json
+  a585a33a25cd1fe4b508fc6ce0d1e69f324000cc49f96584865c4811f46a7b62  （10723 B）
+docs/gen1/GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md
+  32788f356e65558c738d6fd49bb345d0ad430bdab806e829ef734f18e9610aaa  （21868 B）
+```
+
+⚠️ 本记录**自身**的 sha256 ⛔ **不写入本记录**（自指悖论，与 §0 / 第 53 行同例）；
+其余交付物的最终指纹见 §9（实测）与 §10（复算命令）。
+❌ 上列值 ⛔ 不得与 §3 的**候选阶段**值（`e93420a3…bef4b1`）混用。
 
 ---
 

@@ -175,6 +175,9 @@ C1 = src/common/utils/gen1-*.js（17 文件）
 | 8 | `c1_capture_v6_migration_test.py` | ✅ 33 PASS / 0 FAIL（默认只读）/ 34（`--emit-diff`）|
 | 9 | `v6_contract_tool_alignment.py` | ✅ 29 PASS / 0 FAIL |
 | 10 | `v6_contract_tool_alignment.py --reverse-proofs` | ✅ RP-A / RP-B / RP-C 3/3 |
+| 11 | `v6_seal_binding_selfcheck.py` | ✅ ★ B2 新增：Seal **绑定自证** 19 PASS / 0 FAIL |
+| 12 | `v6_key2_immutability_check.py` | ✅ ★ B2 新增：**Key 2 不变性** 13 PASS / 0 FAIL（`KEY_2_IMMUTABLE = PASS`） |
+| 13 | `v6_negative_scan.py` | ✅ ★ B2 新增：**Negative Scan** 13 PASS / 0 FAIL |
 
 **五通道分工（⛔ 不得据其一推断其余）**：门级打红（⑦）· 契约级打红（④）· 对齐级反向证明（⑩）· 冻结不变性（①）· Python↔JS 奇偶（⑥）。
 
@@ -213,6 +216,11 @@ python v6_content_assertions.py                 # 39 PASS
 python v6_contract_compatibility.py             # 46 PASS
 python v6_redproof.py                           # 20 PASS
 python r3_contract_consumption_test.py          # 12 PASS
+
+# ★ B2 新增三件（Seal 绑定自证 / Key 2 不变性 / owner §六 Negative Scan）
+python v6_seal_binding_selfcheck.py             # 19 PASS（逐绑定值重算 + S-17 别名一致性）
+python v6_key2_immutability_check.py            # 13 PASS（KEY_2_IMMUTABLE = PASS）
+python v6_negative_scan.py                      # 13 PASS
 ```
 
 ---

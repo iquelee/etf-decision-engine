@@ -114,6 +114,19 @@ V6.0 Evidence Freeze Seal  ↓  GEN1_EVIDENCE_CONTRACT_V6.md（证据契约）
 **验收口径**：本 Seal 制品的键集**不含** `contract_version`；
 `evidence_contract_version` 与 `evidence_contract_sha256` 二键**必须同时在场**（成对，缺一即 schema 违规）。
 
+### 3.1 ★ owner 术语 ⇄ 本仓现行键名 ⇄ 本 Seal 规范键名（⛔ 防第三套命名）
+
+| owner 术语 | 本仓**现行**键名 | 值 | 处理 |
+|---|---|---|---|
+| `charter_version` | **`contract_version`**（Key 2 制品内） | `WP-G1-GE-CH-1.0` | ⛔ 本仓**不存在**名为 `charter_version` 的键（全仓命中 = **0**）⇒ 二者**互指**；⛔ **不新建该键**（新建 = 改 Key 2，属 `O-3`，已 REJECTED） |
+| `carrier_commit` | `carrier_commit`（字面别名）· `evidence_contract_carrier_commit`（规范名） | `ccb0f4b8…` | 同名同值，见 §6.4 |
+| `carrier_blob_sha1` | `carrier_blob_sha1`（字面别名）· `evidence_contract_git_blob_sha1`（规范名） | `29425933…` | 同名同值，见 §6.4 |
+
+⚠️ **三套命名必须显式互指**（owner 术语 / Key 2 现行键名 / 本 Seal 规范键名）——
+否则会重演 §1 表中已发生过的 `contract_version` **同名不同义**事故。
+⚠️ 第 3 项的**字面别名**是 owner §二 术语的落地形式；其同值性由
+`v6_seal_binding_selfcheck.py` **S-17 逐字节断言**（⛔ 漂移即 FAIL ⇒ fail-closed）。
+
 ---
 
 ## 4. ★ Seal lifecycle（**先定义 lifecycle，再 Freeze**）
@@ -213,6 +226,23 @@ S3  EVIDENCE_FREEZE_SEALED            ★ 制品落盘：三对象 SHA 逐项绑
 | `production_effects` | 生产侧零效应自证（见 §8） |
 | `change_rule` | 变更规则（见 §7） |
 
+### 6.4 ★ 载体身份字段（owner §二「按既有 Seal 先例补齐」，⛔ 不得删除）
+
+| # | 键 | 取值来源（⛔ 一律脚本实读，禁止手填） | 实测值 |
+|---|---|---|---|
+| 1 | `evidence_contract_path` | 载体路径 | `docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md` |
+| 2 | `evidence_contract_carrier_commit` = 别名 `carrier_commit` | `git rev-parse` 实测 | `ccb0f4b8cf402a16b16d468cbff1c02109d72476` |
+| 3 | `evidence_contract_parent_commit` | carrier 提交的 parent 实测 | `7d2f39bddd681cce9d714558d518b06631451d01` |
+| 4 | `evidence_contract_git_blob_sha1` = 别名 `carrier_blob_sha1` | `git rev-parse <carrier>:<path>` | `294259338ba3fa60f689ed9139072a35b2368b0e` |
+| 5 | `evidence_contract_sha256` | 载体**内容** sha256（工作区 + blob 双侧对拍） | `7e3e5d87…272e` |
+| 6 | `evidence_contract_bytes` / `_lines` / `_eol` | 实测 | 97203 B / 1413 行 / LF |
+| 7 | `capture_tool_bytes` / `_lines` / `_eol`；`redproof_tool_bytes` / `_lines` / `_eol` | 实测 | 31143 B / 629 行；14904 B / 311 行 |
+| 8 | `capture_tool_prev_sha256_v5` / `redproof_tool_prev_sha256_v5`（+ `_bytes_v5` / `_lines_v5`） | v5.0 前值（迁移留痕） | 见制品 |
+
+**字面对齐别名**：`carrier_commit` / `carrier_blob_sha1` = 上表 #2 / #4 的**同值别名**，
+其一致性由 `v6_seal_binding_selfcheck.py` **S-17** 逐字节断言（⛔ 漂移即 FAIL）。
+**规范键名**仍为带 `evidence_contract_` 前缀者（namespace 纪律，见 §3 / §3.1）。
+
 ---
 
 ## 7. authority / scope / change rule
@@ -286,6 +316,23 @@ python -c "import json;d=json.load(open('docs/gen1/artifacts/GEN1_EVIDENCE_FREEZ
 print('contract_version' in d, 'evidence_contract_version' in d, d['evidence_contract_version'])"
 #   → False True v6.0
 ```
+
+---
+
+## 10. ★ owner §三 八项必备陈述 —— 逐条定位（⛔ 不得遗漏自证）
+
+| # | owner §三 要求的陈述 | 本文档位置 |
+|---|---|---|
+| 1 | V6 Evidence Freeze Seal 是**新的独立 Evidence 层治理对象** | §0 行 D · §2 归属映射 · §5 制品形态 |
+| 2 | **Key 2 保持 immutable** | §0 行 B · §2 约束方向 · §8 第 1–3 项 |
+| 3 | `charter_version` 与 `evidence_contract_version` 属**两个不同 namespace** | §3 · **§3.1 三套命名互指** |
+| 4 | 本 Seal 绑定 **V6.0 Evidence Contract**，而**不是** Charter | §2 下行映射 · §6.1 #1/#2 |
+| 5 | Capture / Red-proof 两工具属本 V6 **evidence-generation toolchain** | §2 · §6.1 #6/#7 · §6.3 `tool_alignment` · §6.4 #7 |
+| 6 | 后续 Evidence Seal（≥30 独立事件）与本 Freeze Seal 是**两个不同生命周期对象** | §0 行 C · §6.3 `evidence_seal_key3` · §4 lifecycle |
+| 7 | 本 Seal **不赋予 GE-04 权限**，也**不等于** GE-04 | §8 第 8 项 · §6.3 `production_effects.ge_04` |
+| 8 | **不代表**生产部署 / Canary / Decision Chain 生效 | §8 第 9 项 · §6.3 `production_effects` |
+
+> ⛔ 上表为**定位索引**，⛔ 不改变任何条款的实质；⛔ 不得据本表外推任何授权。
 
 ---
 
