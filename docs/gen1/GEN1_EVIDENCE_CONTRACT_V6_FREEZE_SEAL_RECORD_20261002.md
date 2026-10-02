@@ -172,7 +172,7 @@ python scripts/gen1/evidence-capture/c1_gate_redproof.py
 **迁移设计留痕 + 施加后校验**（`c1_capture_v6_migration_test.py`）：
 
 ```text
-34 PASS / 0 FAIL
+33 PASS / 0 FAIL（默认只读调用；--emit-diff 变体 = 34 PASS，多 1 项「diff 文件已落盘」）
 [1] 设计结构（6 项）· [2] 设计产出 ast.parse · [3] ★ 反向证明 v5.0 在 W2（08:45）判 False
 [4] 施加后校验（磁盘已是 v6.0；旧单窗口表达式**零命中**）
 [5a] 6 函数 + 关键字面量 设计 ⇄ 实文件**逐字节相同**（9 项）
@@ -311,9 +311,11 @@ O-3 = REJECTED  ⇒  ⛔ 未扩 Key 2 schema
 | 5 | `r3_contract_consumption_test.py` | ✅ 12 PASS / 0 FAIL |
 | 6 | `checkpoint_python_js_parity.py` | ✅ 6 PASS / 0 FAIL |
 | 7 | `c1_gate_redproof.py`（**迁移后**门打红） | ✅ **57 项 ALL PASS** |
-| 8 | `c1_capture_v6_migration_test.py`（设计留痕 + 施加后校验） | ✅ 34 PASS / 0 FAIL |
+| 8 | `c1_capture_v6_migration_test.py`（设计留痕 + 施加后校验） | ✅ 33 PASS / 0 FAIL（默认只读）/ 34（`--emit-diff`）|
 | 9 | `v6_contract_tool_alignment.py`（L1–L5） | ✅ 29 PASS / 0 FAIL |
 | 10 | `v6_contract_tool_alignment.py --reverse-proofs`（RP-A/B/C） | ✅ 3/3 符合期望 |
+
+> ⚠️ **计数口径勘误（第 8 行，2026-10-02 复核）**：初记 `34 PASS` 对应 **`--emit-diff`** 调用（比默认多 1 项「diff 文件已落盘」，且会重写 tracked 的 `c1_capture.py.v6.diff`）；**默认只读调用 = 33 PASS / 0 FAIL**。两者均 0 FAIL，结论不变。
 
 **基线零漂移复核**：
 
@@ -348,7 +350,7 @@ python scripts/gen1/evidence-capture/v6_frozen_carrier_assertions.py     # → 2
 python scripts/gen1/evidence-capture/v6_contract_tool_alignment.py       # → 29 PASS / 0 FAIL
 python scripts/gen1/evidence-capture/v6_contract_tool_alignment.py --reverse-proofs
 #   → RP-A FAIL(期望) / RP-B FAIL(期望) / RP-C PASS
-python scripts/gen1/evidence-capture/c1_capture_v6_migration_test.py     # → 34 PASS / 0 FAIL
+python scripts/gen1/evidence-capture/c1_capture_v6_migration_test.py     # → 33 PASS / 0 FAIL（默认只读）
 python scripts/gen1/evidence-capture/c1_gate_redproof.py                 # → 57 项 ALL PASS
 
 # ④ Seal 制品 namespace 验收（⛔ 不得出现裸 contract_version）
@@ -412,7 +414,7 @@ print('contract_version' in d, d['evidence_contract_version'], d['seal_status'])
 | `docs/gen1/GEN1_EVIDENCE_CONTRACT_V6_TOOL_ALIGNMENT_REPORT_20261002.md` | L1–L5 + RP-A/B/C |
 | `docs/gen1/GEN1_EVIDENCE_CONTRACT_V6_FREEZE_EVIDENCE_BUNDLE_20261002.md` | 四级指纹链 |
 | `scripts/gen1/evidence-capture/c1_capture.py.v6.diff` | APPLIED 迁移 diff（15312 B） |
-| `scripts/gen1/evidence-capture/c1_capture_v6_migration_test.py` | 迁移设计留痕 + 施加后校验（34 PASS） |
+| `scripts/gen1/evidence-capture/c1_capture_v6_migration_test.py` | 迁移设计留痕 + 施加后校验（33 PASS 默认只读 / 34 `--emit-diff`） |
 | `scripts/gen1/evidence-capture/v6_frozen_carrier_assertions.py` | 冻结轮规范性不变性证明（25 PASS） |
 | `scripts/gen1/evidence-capture/v6_contract_tool_alignment.py` | 契约 ↔ 工具对齐校验器（29 PASS + RP-A/B/C） |
 | `scripts/gen1/evidence-capture/checkpoint_python_js_parity.py` | Python ↔ JS 奇偶（6 PASS） |

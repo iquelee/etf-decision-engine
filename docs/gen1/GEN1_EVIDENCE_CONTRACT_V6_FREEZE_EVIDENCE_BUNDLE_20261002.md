@@ -172,11 +172,13 @@ C1 = src/common/utils/gen1-*.js（17 文件）
 | 5 | `r3_contract_consumption_test.py` | ✅ 12 PASS / 0 FAIL |
 | 6 | `checkpoint_python_js_parity.py` | ✅ 6 PASS / 0 FAIL |
 | 7 | `c1_gate_redproof.py` | ✅ **57 项 ALL PASS** |
-| 8 | `c1_capture_v6_migration_test.py` | ✅ 34 PASS / 0 FAIL |
+| 8 | `c1_capture_v6_migration_test.py` | ✅ 33 PASS / 0 FAIL（默认只读）/ 34（`--emit-diff`）|
 | 9 | `v6_contract_tool_alignment.py` | ✅ 29 PASS / 0 FAIL |
 | 10 | `v6_contract_tool_alignment.py --reverse-proofs` | ✅ RP-A / RP-B / RP-C 3/3 |
 
 **五通道分工（⛔ 不得据其一推断其余）**：门级打红（⑦）· 契约级打红（④）· 对齐级反向证明（⑩）· 冻结不变性（①）· Python↔JS 奇偶（⑥）。
+
+> ⚠️ **计数口径勘误（第 8 行，2026-10-02 复核）**：初记 `34 PASS` 对应 **`--emit-diff`** 调用（比默认多 1 项「diff 文件已落盘」，且会重写 tracked 的 `c1_capture.py.v6.diff`）；**默认只读调用 = 33 PASS / 0 FAIL**。两者均 0 FAIL，结论不变。复跑另证：`--emit-diff` 重写后的 `c1_capture.py.v6.diff` 与 tracked 版本逐字节一致（sha256 `4ed1bd3e5ac055b1476138cf3b392f4b4d37777e39c92f9a45ab4cde3d64a1e7`）。
 
 ---
 
@@ -203,7 +205,8 @@ git -C "$R" cat-file -p ccb0f4b8                                        # parent
 python v6_frozen_carrier_assertions.py          # 25 PASS
 python v6_contract_tool_alignment.py            # 29 PASS
 python v6_contract_tool_alignment.py --reverse-proofs   # RP-A/B FAIL(期望) / RP-C PASS
-python c1_capture_v6_migration_test.py          # 34 PASS
+python c1_capture_v6_migration_test.py          # 33 PASS（默认只读）
+# 变体（会重写 tracked diff）：python c1_capture_v6_migration_test.py --emit-diff   # 34 PASS
 python c1_gate_redproof.py                      # 57 项 ALL PASS
 python checkpoint_python_js_parity.py           # 6 PASS
 python v6_content_assertions.py                 # 39 PASS
