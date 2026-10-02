@@ -391,6 +391,20 @@ python scripts/gen1/evidence-capture/v6_key2_immutability_check.py  # → 13 PAS
 python scripts/gen1/evidence-capture/v6_negative_scan.py            # → 13 PASS / 0 FAIL
 ```
 
+**★ 指纹口径与耐久性（⛔ 两种口径不得混用）**：
+
+| 对象 | 口径 | 实测换行 | 与 `sha256lf`（CRLF→LF 归一，2026-09-22 裁定 §2 算法） |
+|---|---|---|---|
+| 证据契约 + 两工具（**本 Seal 三绑定对象**） | 工作区文件 sha256 | **纯 LF（CRLF = 0）** | ✅ **同值**（归一为无操作） |
+| Key 2 制品 `GEN1_GUARDED_EFFECTIVE_FREEZE.json` | 工作区文件 sha256 | **CRLF（16 对 / 881 B）** | ⚠️ **不同值**（CRLF 口径） |
+
+⚠️ **耐久性提示（⛔ 未执行，须 owner 裁定）**：本仓 `core.autocrlf=true` 且本树**无** `.gitattributes`。
+本次提交时 `git` 对三对象逐条输出 *“LF will be replaced by CRLF the next time Git touches it”*
+⇒ 若三对象被**重新 checkout**，其**工作区** sha256 将变为 CRLF 口径 ⇒ 自证 S-4 / S-9 / S-10 与
+对齐校验 L3 会 FAIL（⛔ 那是**口径漂移**，不是内容漂移）。
+**当前**工作区为纯 LF、全部自证 PASS。可选处置（⛔ 本批次均未执行，等 owner 裁定）：
+① 为三路径加 `.gitattributes`（`text eol=lf`）；② 或把绑定口径**正式定为 `sha256lf`**。
+
 ---
 
 ## 11. ⛔ 本记录**不**授权的事（逐项显式）
