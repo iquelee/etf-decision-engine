@@ -20,6 +20,7 @@ GEN1 — HEALTH / PRODUCTION ATTESTATION BLOCKER DIAGNOSTIC 只读自检（execu
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -114,6 +115,203 @@ def probe(name: str):
 
 def doc_or_empty(path: str) -> str:
     return read(path) if os.path.exists(path) else ""
+
+
+# ======================================================================
+# H-24 违规扫描器（★ AST 结构化；⛔ **不扫描自由字符串常量**）
+# ----------------------------------------------------------------------
+# 设计契约（owner 2026-10-02 裁定「H-24 新规则」）：
+#
+#   * 只分析 **AST 中的可执行结构**：Import / ImportFrom / Call / Assign /
+#     AnnAssign / AugAssign / Expr / FunctionDef / AsyncFunctionDef / ClassDef /
+#     If / For / While / Try / With / AsyncWith / Raise / Return。
+#     → 本扫描器的命中源**只有** `ast.Call` 与 `ast.Assign`/`ast.AnnAssign`。
+#
+#   * ⛔ **不得**扫描：字符串常量 / 注释 / docstring / 测试说明文本 /
+#     错误提示文本 / 本检查器自身用于检测违规模式的 pattern literal。
+#     → 字符串**只有**在「作为某个 Call 节点的实参」时才被读取 —— 那时它已是
+#        **可执行表达式的一部分**（例如 shell 命令向量），而非「自由字面量」。
+#
+#   * ⛔ **不得**采用 `if file == checker_file: skip` 之类的绕过 ——
+#     本扫描器对自身源码与对外部源码走**完全相同**的代码路径（无分支）。
+#
+#   自指悖论（SELF-REFERENCE PARADOX）说明：旧版用「源码子串」判定，检查器
+#   自身的说明文字会命中自己；改用**子串哨兵**后仍在 `ast.Constant` 层自撞。
+#   根因 = 「被检查的载体」与「检查器的描述」共用同一个字符空间。正解 =
+#   **只信可执行结构，不信文本**。
+# ======================================================================
+
+# 1) shell / 子进程入口（静态可解析的 dotted name）
+_SHELL_ENTRY = {
+    ("os", "system"), ("os", "popen"),
+    ("os", "execv"), ("os", "execve"), ("os", "execvp"), ("os", "execvpe"),
+    ("os", "spawnv"), ("os", "spawnve"), ("os", "spawnl"), ("os", "spawnlp"),
+    ("subprocess", "run"), ("subprocess", "call"), ("subprocess", "check_call"),
+    ("subprocess", "check_output"), ("subprocess", "Popen"),
+}
+
+# shell 命令向量中出现的**写语义子命令**（deploy / rollback / merge / tag …）
+_WRITE_SUBCOMMANDS = {
+    "deploy", "rollback", "merge", "tag", "push", "release",
+    "publish", "freeze", "unfreeze",
+}
+
+# 2) 文件系统写语义方法名（⛔ 不含 str/bytes 的 .replace()：那是纯字符串运算）
+_FS_WRITE_METHODS = {
+    "writeFile", "writeFileSync", "appendFile", "appendFileSync",
+    "unlink", "unlinkSync", "rmdir", "rmdirSync", "rmSync", "rmtree",
+    "rename", "renameSync", "mkdir", "mkdirSync", "makedirs",
+    "truncate", "chmod", "chown",
+}
+
+# 3) DB 写语义（**须**调用链内含 DB 标记，避免误伤 dict/ set 的 set/update/add）
+_DB_MARKERS = {"collection", "doc", "table", "database", "where", "records", "query"}
+_DB_WRITE_VERBS = {
+    "set", "update", "add", "remove", "delete", "upsert",
+    "insert", "drop", "save", "create", "setData",
+}
+
+# 4) 授权绕过：把授权/复核标志直接置 true
+_AUTH_TARGETS = {
+    "manualReviewConfirmed", "manual_review_confirmed",
+    "force_authorize", "bypass_authorization", "skip_authorization",
+}
+
+# 5) open() 写模式字符
+_OPEN_WRITE_CHARS = "wax+"
+
+
+def _dotted(node) -> str | None:
+    """把 Attribute/Name 链拼成 'a.b.c'；含非静态节点（Call/Subscript）⇒ None。"""
+    parts = []
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        parts.append(cur.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def _subtree_attrs(node) -> set:
+    """Call 子树内全部属性名（用于 DB 标记判定）。"""
+    return {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
+
+
+def _literal_words(node) -> set:
+    """仅从 **Call 实参**（可执行表达式）提取字面量词；⛔ 不触碰自由常量。"""
+    words = set()
+
+    def eat(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str):
+            for w in re.split(r"[^0-9A-Za-z_-]+", n.value.lower()):
+                if w:
+                    words.add(w)
+        elif isinstance(n, (ast.List, ast.Tuple, ast.Set)):
+            for e in n.elts:
+                eat(e)
+
+    for a in getattr(node, "args", []):
+        eat(a)
+    return words
+
+
+def _is_shell_write(call) -> bool:
+    """shell 调用是否具写语义：shell=True 或命令向量含写子命令。"""
+    for kw in call.keywords:
+        if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+            return True
+    return bool(_literal_words(call) & _WRITE_SUBCOMMANDS)
+
+
+def scan_violations(tree) -> list:
+    """由 AST 提取违规；**只**命中可执行结构，⛔ 永不命中自由字符串常量。
+
+    ⛔ 本函数**不得**读取 `ast.Constant` 作为独立命中源 —— 常量仅在
+       `_literal_words()` 里、作为某个 Call 的实参被读取。
+    """
+    found = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = _dotted(f)
+
+            # 1) shell / 子进程写调用
+            if name is not None and tuple(name.split(".")) in _SHELL_ENTRY and _is_shell_write(node):
+                found.append("SHELL_WRITE:" + name)
+
+            # 2) 文件系统写语义方法
+            if isinstance(f, ast.Attribute) and f.attr in _FS_WRITE_METHODS:
+                found.append("FS_WRITE:" + f.attr)
+
+            # 3) DB 写语义（须链内含 DB 标记）
+            if isinstance(f, ast.Attribute) and f.attr in _DB_WRITE_VERBS \
+                    and (_subtree_attrs(node) & _DB_MARKERS):
+                found.append("DB_WRITE:" + f.attr)
+
+            # 4) open() 写模式
+            if isinstance(f, ast.Name) and f.id == "open":
+                modes = [a.value for a in node.args[1:]
+                         if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+                modes += [kw.value.value for kw in node.keywords
+                          if kw.arg == "mode" and isinstance(kw.value, ast.Constant)]
+                if any(any(c in m for c in _OPEN_WRITE_CHARS) for m in modes):
+                    found.append("OPEN_WRITE_MODE:" + repr(modes))
+
+            # 5) 授权绕过（关键字实参）
+            for kw in node.keywords:
+                if kw.arg in _AUTH_TARGETS and isinstance(kw.value, ast.Constant) \
+                        and kw.value.value is True:
+                    found.append("AUTH_BYPASS_KWARG:" + str(kw.arg))
+
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            val = node.value
+            for t in targets:
+                if isinstance(t, ast.Name) and t.id in _AUTH_TARGETS \
+                        and isinstance(val, ast.Constant) and val.value is True:
+                    found.append("AUTH_BYPASS_ASSIGN:" + t.id)
+
+    return found
+
+
+# ----------------------------------------------------------------------
+# ★ 自指红证语料（**故意**让本文件含有违规关键字字符串字面量）
+#    ⛔ 这些常量**不是**注释/说明，而是被断言显式引用的测试输入；
+#       它们的存在正是「自由字面量不得被判违规」的证明载体。
+#    ⛔ 不得新增任何**可执行**的违规调用来这里 —— 只准放字符串。
+# ----------------------------------------------------------------------
+_SELF_REF_CORPUS = (
+    "违禁子命令字样：deploy / rollback / merge / tag / push",
+    "gh pr merge 999 --admin",
+    "git tag v9.9.9-freeze",
+    "os.system('git push --force origin master')",
+    "db.collection('gen1_health_state').doc('gen1-health-state').remove()",
+    "manualReviewConfirmed = true",
+    "open('x.txt', 'w').write('y')",
+    "shutil.rmtree('/tmp/nope')",
+)
+
+# ★ 真实执行路径变异语料（这些**会被解析为真正的 Call**，必须被抓住）
+_MUTATION_CASES = (
+    ("subprocess.run(['tcb', 'fn', 'deploy', '--force'])", "SHELL_WRITE:"),
+    ("os.system('git tag v9.9.9')", "SHELL_WRITE:"),
+    ("db.collection('c').doc('d').set({'a': 1})", "DB_WRITE:"),
+    ("shutil.rmtree('/tmp/nope')", "FS_WRITE:"),
+    ("open('x.txt', 'w').write('y')", "OPEN_WRITE_MODE:"),
+    ("do_it(manualReviewConfirmed=True)", "AUTH_BYPASS_KWARG:"),
+    ("manualReviewConfirmed = True", "AUTH_BYPASS_ASSIGN:"),
+)
+
+# ★ 负例（良性可执行结构，⛔ 必须**不**被抓住；防「宁可误杀」式放宽）
+_MUTATION_NEGATIVE = (
+    "subprocess.run(['git', '-C', '/repo', 'rev-parse', 'HEAD'], capture_output=True)",
+    "imports.update(x for x in y)",
+    "sorted(set(items))",
+    "data.get('key', None)",
+)
 
 
 CHECKS = []
@@ -320,17 +518,51 @@ def main() -> int:
         "STATISTICAL_MISSING",
         "CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY = V3.6.5",
         "HISTORICAL / SUPERSEDED",
+        # ---- §11 本轮正式收口裁定（owner 2026-10-02）----
+        "V3.6.5_CONTROLLED_DEPLOYMENT",
+        "DEPLOYMENT_IDENTITY_MATCH",
+        "2026-09-30T05:37:19Z",
+        "e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4",
+        "CURRENT_EFFECTIVE_ENGINE_RESOLUTION",
+        "V3.6.5_DEPLOYMENT",
+        "V3.6.5_RUNTIME_EVIDENCE",
+        "ENGINE_VERSION_STATE",
+        "MIXED / REQUIRES EXPLICIT RECONCILIATION",
+        "no run_history record",
+        "HEALTH_ROOT_CAUSE = 515880",
+        "HEALTH_REASON",
+        "AUTO_REOPEN",
+        "MANUAL_REVIEW_REQUIRED",
+        "PRODUCTION_WRITE_REQUIRED",
+        "RECOVERY_AUTHORIZATION",
+        "EFFECTIVE_ENGINE_SWITCH_REQUIRES_SEPARATE_AUTHORIZATION",
+        "SELF-REFERENCE PARADOX",
+        "SELF_REFERENCE_RED_PROOF",
+        "REAL_EXECUTABLE_VIOLATION_RED_PROOF",
+        "FAIL_CLOSED_RED_PROOF",
+        "GEN1_PRE_LAUNCH_INVENTORY_20261002.md",
     ]
     miss = [s for s in must_doc if s not in doc]
-    chk("H-19 本件在场性（X-1…X-7 标题 · 29/29 · HEALTH_READY 式 · AUTHORIZATION GATE · ERRATA-1 · STATISTICAL_MISSING · 台账身份 · V5 标记）",
+    chk("H-19 本件在场性（X-1…X-7 标题 · 29/29 · HEALTH_READY 式 · AUTHORIZATION GATE · ERRATA-1 · STATISTICAL_MISSING · 台账身份 · V5 标记 · §11 裁定 · 三条红证 · INVENTORY 指向）",
         not miss, "缺失=%s" % miss)
 
-    # ---------- H-20 准备件已就地勘误 ----------
-    chk("H-20 准备件 §2 第 9 行已带 ERRATA-1 就地标记（原文字保留）",
-        "ERRATA-1" in prep
-        and "V3.6.5 / V3.6.6 候选均未部署" in prep
-        and "GEN1_HEALTH_ATTESTATION_BLOCKER_DIAGNOSTIC_20261002.md" in prep,
-        "prep §2 第 9 行")
+    # ---------- H-20 准备件已就地勘误（含 owner 指定 ERRATA-1 全文） ----------
+    must_prep = [
+        "ERRATA-1",
+        "V3.6.5 / V3.6.6 候选均未部署",                     # ⛔ 历史原文必须保留
+        "GEN1_HEALTH_ATTESTATION_BLOCKER_DIAGNOSTIC_20261002.md",
+        # owner 2026-10-02 逐字指定的 ERRATA-1 五点
+        "CURRENT_EFFECTIVE_ENGINE_RESOLUTION",
+        "CONTROLLED_DEPLOYMENT_IDENTITY",
+        "混为同一概念",
+        "EXACT_MATCH",
+        "v3_6_1_enabled=true",
+        "双轴状态",
+        "不修改历史证据，仅纠正语义解释",
+    ]
+    miss_prep = [s for s in must_prep if s not in prep]
+    chk("H-20 准备件 §2 第 9 行已带 ERRATA-1 就地标记（历史原文保留 + owner 指定全文五点）",
+        not miss_prep, "缺失=%s" % miss_prep)
 
     # ---------- H-21 ⛔ 零命中：无放行式 ----------
     bad = ["Deploy = YES", "Deploy = YES", "Canary = ON", "GE-04 = AUTHORIZED",
@@ -352,46 +584,115 @@ def main() -> int:
         ok_lf and sha_raw(OBJ_SEAL) == RAW_SEAL and sha_raw(OBJ_KEY2) == RAW_KEY2,
         "lf_ok=%s seal=%s key2=%s" % (ok_lf, sha_raw(OBJ_SEAL)[:12], sha_raw(OBJ_KEY2)[:12]))
 
-    # ---------- H-24 ⛔ 本脚本自身零写操作（★ 用 AST，避免自指悖论） ----------
-    # 说明：不得用「源码子串」判定 —— 检查代码自身的字符串字面量会命中自己（自指悖论）。
-    #       故改为 AST 结构化扫描：只看真正被调用的名字/属性 + import 集合。
-    import ast  # noqa: PLC0415
-
-    self_src = read(os.path.abspath(__file__))
-    tree = ast.parse(self_src)
-    bad_calls = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        f = node.func
-        if isinstance(f, ast.Name) and f.id == "open":
-            modes = []
-            for a in node.args[1:]:
-                if isinstance(a, ast.Constant) and isinstance(a.value, str):
-                    modes.append(a.value)
-            for kw in node.keywords:
-                if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
-                    modes.append(str(kw.value.value))
-            if any(any(c in m for c in "wax+") for m in modes):
-                bad_calls.append("open(mode=%r)" % modes)
-        # 仅列**文件系统/DB 写语义**方法名；⛔ 不含 str/bytes 的 .replace()（那是纯字符串运算）
-        if isinstance(f, ast.Attribute) and f.attr in (
-                "remove", "unlink", "rmtree", "rename", "mkdir", "makedirs",
-                "upsert", "insert", "delete", "drop", "writeFile", "writeFileSync"):
-            bad_calls.append("call .%s()" % f.attr)
-    imports = set()
-    for n in ast.walk(tree):
+    # ---------- H-24 ⛔ 本脚本自身零写操作（★ AST 结构化，⛔ 不扫字符串常量） ----------
+    self_path = os.path.abspath(__file__)
+    self_src = read(self_path)
+    self_tree = ast.parse(self_src)
+    self_violations = scan_violations(self_tree)
+    module_imports = set()
+    for n in ast.walk(self_tree):
         if isinstance(n, ast.Import):
-            imports.update(a.name.split(".")[0] for a in n.names)
+            module_imports.update(a.name.split(".")[0] for a in n.names)
         elif isinstance(n, ast.ImportFrom) and n.module:
-            imports.add(n.module.split(".")[0])
-    str_consts = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-    # ⛔ 拆字构造：任何「检查代码自身」的哨兵都必须避开自指 ——
-    #    若把哨兵写成字面量，该字面量本身就会命中（本项目已两次实撞）。
-    _CLI_SENTINEL = "t" + "cb"
-    chk("H-24 ⛔ 本脚本零写操作（AST 扫描：无 open 写模式 · 无写/删方法调用 · 无 shutil 导入 · 无 CLI 工具字样常量）",
-        not bad_calls and "shutil" not in imports and _CLI_SENTINEL not in str_consts,
-        "bad_calls=%s imports_has_shutil=%s" % (bad_calls, "shutil" in imports))
+            module_imports.add(n.module.split(".")[0])
+    h24_ok = (not self_violations) and ("shutil" not in module_imports)
+    chk("H-24 ⛔ 本脚本零写操作（AST 结构化：shell 写命令 / FS 写 / DB 写 / 授权绕过 / open 写模式；⛔ 不扫字符串常量）",
+        h24_ok,
+        "自源违规=%s imports_has_shutil=%s" % (self_violations, "shutil" in module_imports))
+
+    # ---------- H-25 ★ SELF_REFERENCE_RED_PROOF ----------
+    # 前提：本文件**确实**含违规关键字字符串字面量（见 _SELF_REF_CORPUS）。
+    # 断言：这些自由字面量**不得**被判违规 ⇒ scan(本文件 AST) 必须为 0 命中。
+    # ⛔ 若改成「跳过 check 自身」即属绕过，本红证将失去意义。
+    corpus_all_present = all(s in self_src for s in _SELF_REF_CORPUS)
+    keywords_all_present = all(
+        any(k in s for s in _SELF_REF_CORPUS)
+        for k in ("deploy", "merge", "tag", "push", "rmtree",
+                  "manualReviewConfirmed", "collection", "remove", "open")
+    )
+    h25_ok = corpus_all_present and keywords_all_present and (not self_violations)
+    chk("H-25 ★ SELF_REFERENCE_RED_PROOF（本文件含违规关键字 literal ⇒ AST 扫描仍必须 0 命中）",
+        h25_ok,
+        "语料条数=%d/%d 关键字齐=%s 自源违规=%s"
+        % (sum(1 for s in _SELF_REF_CORPUS if s in self_src), len(_SELF_REF_CORPUS),
+           keywords_all_present, self_violations))
+
+    # ---------- H-26 ★ REAL_EXECUTABLE_VIOLATION_RED_PROOF ----------
+    # 正例：注入**真实可执行 Call** ⇒ 必须被抓住（否则 H-24 是空门）。
+    # 负例：良性可执行结构 ⇒ 必须**不**被抓住（否则是「宁可误杀」式放宽）。
+    mut_detail, mut_ok = [], True
+    for mut_src, expect in _MUTATION_CASES:
+        got = scan_violations(ast.parse(mut_src))
+        hit = any(g.startswith(expect) for g in got)
+        mut_ok = mut_ok and hit
+        mut_detail.append("%s@%s→%s" % (mut_src.split("(")[0][:22], expect.rstrip(":"),
+                                        ",".join(got) if got else "∅"))
+    neg_detail, neg_ok = [], True
+    for neg_src in _MUTATION_NEGATIVE:
+        got = scan_violations(ast.parse(neg_src))
+        neg_ok = neg_ok and (not got)
+        neg_detail.append("%s→%s" % (neg_src.split("(")[0][:22], ",".join(got) if got else "∅"))
+    h26_ok = mut_ok and neg_ok
+    chk("H-26 ★ REAL_EXECUTABLE_VIOLATION_RED_PROOF（真实违规 Call ⇒ 必命中；良性可执行结构 ⇒ 必不命中）",
+        h26_ok,
+        "正例=%s | 负例=%s" % ("; ".join(mut_detail), "; ".join(neg_detail)))
+
+    # ---------- H-27 ★ FAIL_CLOSED_RED_PROOF ----------
+    # 证据缺失（探针目录不存在）⇒ 子进程必须 exit 2 且**不**输出 ALL PASS。
+    # ⛔ 只允许 FAIL；⛔ 不得 WARN / SKIP。
+    h27_ok, h27_detail = False, "未执行"
+    try:
+        env_bad = dict(os.environ)
+        env_bad["GEN1_PROBE_DIR"] = os.path.join(WT, "__no_such_probe_dir__")
+        sub = subprocess.run([sys.executable, self_path], capture_output=True,
+                             text=True, env=env_bad, timeout=180)
+        combined = (sub.stdout or "") + (sub.stderr or "")
+        has_fc = "FAIL-CLOSED" in combined
+        has_pass = "ALL PASS" in combined
+        h27_ok = (sub.returncode == 2) and has_fc and (not has_pass)
+        h27_detail = "rc=%s 含FAIL-CLOSED=%s 含ALL PASS=%s" % (sub.returncode, has_fc, has_pass)
+    except Exception as exc:  # noqa: BLE001 —— 红证自身异常只允许判 FAIL
+        h27_detail = "红证执行异常（判 FAIL）：%s: %s" % (type(exc).__name__, exc)
+    chk("H-27 ★ FAIL_CLOSED_RED_PROOF（证据缺失 ⇒ exit 2 · 零 PASS 输出；⛔ 不得 WARN/SKIP）",
+        h27_ok, h27_detail)
+
+    # ---------- H-28 ★ GEN1_PRE_LAUNCH_INVENTORY 在场性 + A–E 结构 ----------
+    inv_path = os.path.join(WT, "docs", "gen1", "GEN1_PRE_LAUNCH_INVENTORY_20261002.md")
+    inv = doc_or_empty(inv_path)
+    must_inv = [
+        "GEN1_PRE_LAUNCH_INVENTORY / FUNCTIONAL COMPLETENESS INVENTORY",
+        "signal productionization 链",
+        "A 类 —— 功能缺口",
+        "B 类 —— 生产集成缺口",
+        "C 类 —— Health / 安全状态缺口",
+        "D 类 —— Evidence 缺口",
+        "E 类 —— Authorization 缺口",
+        # owner 指定六问
+        "production read path 是否仍读取",
+        "candidate / pointer 是否真正进入线上消费者",
+        "Gen-1 promoted result 是否真正成为 production decision input",
+        "selector cutover 条件是什么",
+        "ml_effective` 条件是什么",
+        "auto_execution` 与 GE-04 的边界是什么",
+        # 关键实测锚点
+        "S-PROMOTED",
+        "REGISTERED",
+        "NOT RE-READ",
+        "STALE",
+    ]
+    miss_inv = [s for s in must_inv if s not in inv]
+    chk("H-28 ★ INVENTORY 件在场性（A–E 五类 · owner 六问逐项 · S-PROMOTED · REGISTERED 语义 · NOT RE-READ / STALE 分级）",
+        not miss_inv, "缺失=%s" % miss_inv)
+
+    # ---------- H-29 ⛔ 零放行式（本件 + INVENTORY 件 + 准备件 三件同扫） ----------
+    bad2 = ["Deploy = YES", "Canary = ON", "GE-04 = AUTHORIZED",
+            "V3.6.6 FREEZE = AUTHORIZED", "HEALTH_READY = TRUE", "HEALTH_READY = READY",
+            "PRODUCTION_ATTESTATION = PASS", "EVIDENCE_EXECUTION = AUTHORIZED"]
+    hit2 = [("doc", b) for b in set(bad2) if b in doc]
+    hit2 += [("inventory", b) for b in set(bad2) if b in inv]
+    hit2 += [("prep", b) for b in set(bad2) if b in prep]
+    chk("H-29 ⛔ 三件同扫零放行式（Deploy=YES / Canary=ON / GE-04=AUTHORIZED / FREEZE=AUTHORIZED / HEALTH_READY=READY / ATTESTATION=PASS）",
+        not hit2, "命中=%s" % hit2)
 
     # ---------- 汇总 ----------
     fails = [c for c in CHECKS if not c[1]]
@@ -403,6 +704,11 @@ def main() -> int:
         print("  [%s] %s" % ("PASS" if ok else "FAIL", name))
         if detail:
             print("         · %s" % detail)
+    print("-" * 78)
+    print("RED-PROOF 状态（owner 2026-10-02 指定）:")
+    print("  SELF_REFERENCE_RED_PROOF            = %s" % ("PASS" if h25_ok else "FAIL"))
+    print("  REAL_EXECUTABLE_VIOLATION_RED_PROOF = %s" % ("PASS" if h26_ok else "FAIL"))
+    print("  FAIL_CLOSED_RED_PROOF               = %s" % ("PASS" if h27_ok else "FAIL"))
     print("-" * 78)
     print("结论：%s（%d PASS / %d FAIL）" % ("✅ ALL PASS" if not fails else "❌ FAILED",
                                             len(CHECKS) - len(fails), len(fails)))

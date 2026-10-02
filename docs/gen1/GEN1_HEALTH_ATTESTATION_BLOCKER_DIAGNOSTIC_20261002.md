@@ -425,3 +425,263 @@ production_write          false          auto_execution    false        broker_w
 ml_effective              false          selector_source   BASELINE     production_engine  v3.6.1（轴 B）
 envId                     tradingview-etf-d0fa42yy57cbc11b
 ```
+
+---
+
+## 11. ★ 本轮正式收口裁定（owner 2026-10-02 指定；⛔ 不覆盖历史，仅追加）
+
+> **本节性质（⛔ 首要）**：**状态裁定 + 命名纠正 + 授权边界登记**。
+> ⛔ 不是 V3.6.6 Freeze、⛔ 不是 Production Attestation、⛔ 不构成任何放行；⛔ 零生产写入。
+> 本节所有断言均可用 §8 命令复核；数据源时间戳沿用头部的三个实读时刻。
+
+### 11.1 裁定 A —— V3.6.5 部署状态（**正式**）
+
+```text
+V3.6.5_CONTROLLED_DEPLOYMENT  = COMPLETE
+DEPLOYMENT_IDENTITY           = VERIFIED
+DEPLOYMENT_IDENTITY_MATCH     = EXACT_MATCH
+```
+
+证据链（全部只读；主来源 = `docs/V365_PRODUCTION_READINESS_LEDGER.md` L157–L170）：
+
+| # | 证据项 | 实读值 |
+|---|---|---|
+| 1 | V3.6.5 production candidate / frozen implementation identity | `d669298` |
+| 2 | V3.6.5 controlled deployment 窗口 | `2026-09-30T05:37:19Z` → `2026-09-30T05:38:13Z`（`tcb fn deploy runDecisionEngine` **单次**成功） |
+| 3 | bundle | `e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4` |
+| 4 | 线上逐字节 parity | `EXACT_MATCH`（91 文件 · `MISSING 0` · `UNEXPECTED 0` · `CONTENT_DIFF 0`） |
+| 5 | `DEPLOYMENT_IDENTITY_VERIFIED` | `true`（★ 部署**后**由 post-deploy gate 置位；部署前必为 `false`） |
+| 6 | 台账裁断 | `CONTROLLED_DEPLOYMENT = COMPLETE` · `CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY = V3.6.5` |
+
+⇒ ⛔ **不得再使用「V3.6.5 从未部署 / V3.6.5 只是 candidate」作为当前状态描述。**
+
+### 11.2 裁定 B —— 两个概念**严格拆开**（轴 A / 轴 B，⛔ 不得合并）
+
+实时只读复核 `T0 = 2026-10-02T12:01:49Z`：`v3_6_1_enabled = true` ⇒ `resolveShadowEngineVersion(...) = v3.6.1`。
+
+```text
+DEPLOYMENT_IDENTITY                  = V3.6.5      （轴 A：部署身份）
+CURRENT_EFFECTIVE_ENGINE_RESOLUTION  = v3.6.1      （轴 B：冻结参数推导的风味标签）
+```
+
+⛔ 不得把二者合并成单一「production version」。决定性运行证据（同为只读实读）：
+
+```text
+runtime_status.v365_run_integrity.engine_version = v3.6.5
+runtime_status.v365_run_integrity.input_health   = DEGRADED
+run_history: 2026-09-30 → engine_version = v3.6.5
+run_history: 2026-10-01 → engine_version = v3.6.5
+2026-10-02          = no run_history record      （⚠️ 见 §7 OBS-2，单独立项）
+```
+
+最终状态表述（**正式口径**）：
+
+```text
+V3.6.5_DEPLOYMENT                    = VERIFIED
+V3.6.5_RUNTIME_EVIDENCE              = VERIFIED
+CURRENT_EFFECTIVE_ENGINE_RESOLUTION  = v3.6.1
+ENGINE_VERSION_STATE                 = MIXED / REQUIRES EXPLICIT RECONCILIATION
+```
+
+⛔ **禁止**把这个状态解释成「V3.6.5 没有上线」。
+
+### 11.3 裁定 C —— Health 阻断定性（**正式**）
+
+驱动链**已闭合**（代码级 + 实读级双重确认）：
+
+```text
+runtime_data_health = DEGRADED
+        ↓
+Main5 evaluateDataHealth
+        ↓
+至少一只 ETF = DATA_DEGRADED
+        ↓
+515880 = DATA_DEGRADED
+        ↓
+reason_code = STATISTICAL_MISSING
+其余 4 只（513310 / 159582 / 518880 / 159570）= DATA_OK
+```
+
+```text
+HEALTH_ROOT_CAUSE = 515880
+HEALTH_STATE      = DEGRADED
+HEALTH_REASON     = STATISTICAL_MISSING
+HEALTH_REVIEWED   = NO
+```
+
+⛔ **不要把 `read_reason_code = null` 解释成「没有原因」。** 二者是不同轴：
+
+```text
+read_reason_code = null
+   ≠
+没有 degradation reason
+```
+
+`read_reason_code` 是**闩锁读状态**字段（`read_status` 侧的细因，仅在读失败时置值）；
+真正的原因已由 Main5 `evaluateDataHealth` 的**重算闭环**确认（`STATISTICAL_MISSING`）。
+实读值：`degraded_at = 2026-09-21T14:20:27.241Z` · `reviewed_at = null` · `reviewed_by = null` ·
+`recovery_allowed = false` · `manual_review_required = true`。
+
+### 11.4 裁定 D —— 恢复机制 = **显式授权边界**（⛔ 本轮不动）
+
+已确认（只读）：
+
+- `manualReviewConfirmed` 在生产代码闭环中 **CALLER COUNT = 0**；唯一命中来自**测试**
+  （`tests/gen1-persistent-health.test.js`，`gen1-health-state.js` / `gen1-circuit-breaker.js` 为定义点）。
+- `adminGateway` 当前**只有** `GET /api/admin/gen1/health`；**没有**生产恢复 endpoint。
+
+```text
+AUTO_REOPEN                  = FORBIDDEN
+MANUAL_REVIEW_REQUIRED       = YES
+PRODUCTION_WRITE_REQUIRED    = YES
+RECOVERY_AUTHORIZATION       = NOT GRANTED
+```
+
+⛔ 本轮**绝对不要**调用 `manualReviewConfirmed`、⛔ 不要直接写 `gen1_health_state`、
+⛔ 不要增加恢复 endpoint、⛔ 不要修改 circuit breaker。
+这属于**新的生产写 / 恢复授权 Gate**，不属于本次只读诊断。
+（对应 §5 的 AG-1 / AG-2 / AG-3，仍全部未授权。）
+
+### 11.5 裁定 E —— `v3_6_1_enabled` 的**独立授权**要求
+
+`v3_6_1_enabled` 已确认是 `resolveShadowEngineVersion()` 返回 `v3.6.1` 的**直接输入**；
+但本轮**只能记录**为：
+
+```text
+EFFECTIVE_ENGINE_SWITCH_REQUIRES_SEPARATE_AUTHORIZATION
+```
+
+⛔ 不得修改该参数；⛔ 不得据此重解释 §11.2 的 `CURRENT_EFFECTIVE_ENGINE_RESOLUTION`。
+
+### 11.6 裁定 F —— H-24 修复：消除 `SELF-REFERENCE PARADOX`
+
+**旧版缺陷（本项目两次实撞）**：H-24 曾以「源码子串」判定违规 ⇒ **检查器自身的说明文字命中自己**；
+改用「拆字构造哨兵」（`"t" + "cb"`）后仍在 `ast.Constant` 层自撞。根因 = 被检查载体与检查器描述
+**共用同一字符空间**。⛔ 且不得以 `if file == checker_file: skip` 规避 —— 那是绕过，不是修复。
+
+**修复（v2，本轮）**：
+
+1. 只分析 AST 的**可执行结构**；命中源**只有** `ast.Call` 与 `ast.Assign` / `ast.AnnAssign`。
+2. ⛔ **不对自由 `ast.Constant(str)` 做违规关键字命中** —— 注释 / docstring / 说明文本 /
+   错误提示 / 本检查器自身的 pattern literal 均**不再是命中源**。
+   字符串**仅**在「作为某个 `Call` 节点的实参」时被读取（那是可执行表达式的一部分）。
+3. 覆盖五类：`SHELL_WRITE`（shell 写子命令 / `shell=True`）· `FS_WRITE` · `DB_WRITE` ·
+   `AUTH_BYPASS` · `OPEN_WRITE_MODE`。
+4. 新增三条可执行红证：**H-25 `SELF_REFERENCE_RED_PROOF`**（本文件含违规关键字 literal ⇒ 仍 0 命中）、
+   **H-26 `REAL_EXECUTABLE_VIOLATION_RED_PROOF`**（注入真实违规 Call ⇒ 必命中；良性结构 ⇒ 必不命中）、
+   **H-27 `FAIL_CLOSED_RED_PROOF`**（证据缺失 ⇒ exit 2 且零 PASS 输出）。
+5. 全程 **FAIL-CLOSED**：任何脚本异常 / AST parse error / 路径解析失败 / 证据缺失 ⇒ 只能 `FAIL`，
+   ⛔ 不存在 `PASS` / `WARN` / `SKIP` 分支。
+
+⚠️ **已知边界（如实声明，⛔ 不得当作已覆盖）**：静态扫描**无法**判定**动态拼接**的命令向量
+（如 `subprocess.run([bin, *dyn_args])`）⇒ H-24 的「零违规」结论**仅对静态可见的调用成立**。
+
+### 11.7 本轮 executable check 结果（**正式**）
+
+| 套件 | 结果 |
+|---|---|
+| `v6_health_blocker_diagnostic_check.py`（本件） | ✅ **29 PASS / 0 FAIL**（rc=0） |
+| `v6_seal_binding_selfcheck.py` | ✅ 20 / 0 |
+| `v6_key2_immutability_check.py` | ✅ 13 / 0 |
+| `v6_fingerprint_canonicalization_check.py` | ✅ 16 / 0 |
+| `v6_negative_scan.py` | ✅ 13 / 0 |
+| `v6_frozen_carrier_assertions.py` | ✅ 25 / 0 |
+| `v6_content_assertions.py` | ✅ 39 / 0 |
+| `v6_contract_compatibility.py` | ✅ 46 / 0 |
+| `v6_redproof.py` | ✅ 20 / 0 |
+| `r3_contract_consumption_test.py` | ✅ 12 / 0 |
+| `checkpoint_python_js_parity.py` | ✅ 6 / 0 |
+| `c1_capture_v6_migration_test.py` | ✅ 33 / 0 |
+| `v6_contract_tool_alignment.py` | ✅ 29 / 0 |
+| **合计** | ✅ **301 PASS / 0 FAIL**（13 套件 + 本件） |
+
+★ **owner 指定三项红证状态**：
+
+```text
+SELF_REFERENCE_RED_PROOF            = PASS
+REAL_EXECUTABLE_VIOLATION_RED_PROOF = PASS
+FAIL_CLOSED_RED_PROOF               = PASS
+```
+
+### 11.8 ★ 打红自证（本批新门，逐门变异 ⇒ 必 FAIL）
+
+⚠️ **全部变异只在系统临时目录的工作区副本上进行**；⛔ 原件从未被写（跑完后原件复核 = `29 PASS / 0 FAIL`）。
+
+| 变异 | 目标门 | 期望 | 实测 |
+|---|---|---|---|
+| **RP-0** 对照（未变异） | — | PASS | ✅ `29 / 0` |
+| **RP-1** 注入真实违规 `Call`（`def` 内，**不执行**） | H-24 + H-25 | FAIL | ✅ `27 / 2`（H-24、H-25 双 FAIL） |
+| **RP-2** 删除 INVENTORY 的「B 类」小节 | H-28 | FAIL | ✅ `28 / 1` |
+| **RP-3** 向本件追加放行式 | H-21 + H-29 | FAIL | ✅ `27 / 2` |
+| **RP-4** 抽走自指语料中的 `tag` 关键字 | H-25 | FAIL | ✅ `28 / 1` |
+| **RP-5** 模拟扫描器**退回字符串扫描**（`ast.dump(tree)` 命中） | H-24 + H-25 | FAIL | ✅ `27 / 2` |
+
+⚠️ **RP-5 两次失败再修正（记录在案，⛔ 不得只报成功）**：
+1. 首版把变异代码**追加到文件末尾** ⇒ 位于 `if __name__` 块**之后**，`main()` 早已执行完 ⇒ 变异**是死的**（仍 29/0）。
+2. 二版用 `repr(tree)` 判字符串 ⇒ `ast.Module` 的 `repr` **只给对象地址**、不含源码文本 ⇒ 变异**仍是死的**。
+3. 三版改用 `ast.dump(tree)`（序列化含字面量）⇒ 才真正打红。
+⇒ **纪律增量**：红证变异必须验证「变异**真的生效**」；`ALL PASS` 不能直接当「门无问题」的证据，也可能意味着**变异没生效**。
+
+### 11.9 ★ 跨门假阳性：`v6_negative_scan.py` N-9a 与自指语料的碰撞（**如实登记**）
+
+**现象**：本轮首次落盘后，既有套件 `v6_negative_scan.py` 的 **N-9a 打红**
+（`12 PASS / 1 FAIL`）。N-9a 以**文本**扫描「批次内 18 个可执行产物」是否含部署命令特征，
+其枚举域含一个**三段式部署短语**（`tcb` 空格 `fn` 空格 `deploy`），
+而本件 `_SELF_REF_CORPUS` 的自指语料里**恰好**写了该短语 ⇒ 命中。
+⇒ 这是 **SELF-REFERENCE PARADOX 的跨门复发**（N-9a 与旧版 H-24 同属文本扫描范式）。
+
+**处置（⛔ 严守纪律）**：
+
+1. ⛔ **未修改 N-9a** —— 「为了让自己的门通过而放宽他人的断言」被明确禁止。
+2. ✅ 改为调整**己方自指语料**：把该三段式短语替换为**等价的违禁子命令字样串**
+   （仍含 `deploy` 等违规关键字，满足 H-25 的非空过要求；⛔ 但不再冒充一条完整可执行部署命令）。
+3. ✅ 复核：`v6_negative_scan` 回到 `13 PASS / 0 FAIL`（rc=0）；本件仍 `29 PASS / 0 FAIL`。
+4. ⚠️ **登记为待办（⛔ 本轮不处置）**：N-9a 的正解与 H-24 同源 ——
+   「对 Python 制品改用 **AST 结构化**判定（只认**真实 Call 实参**中的部署命令行），
+   而非全文本子串」。该修法属**另一门**的语义变更，须独立授权。
+
+---
+
+## 12. 最终 Gate 状态（**正式**）
+
+```text
+HEALTH / PRODUCTION ATTESTATION BLOCKER DIAGNOSTIC
+
+DEPLOYMENT_IDENTITY                   = V3.6.5 VERIFIED
+V3.6.5_RUNTIME_EVIDENCE               = VERIFIED
+CURRENT_EFFECTIVE_ENGINE_RESOLUTION   = v3.6.1
+ENGINE_VERSION_STATE                  = MIXED / EXPLICIT RECONCILIATION REQUIRED
+
+HEALTH                                = DEGRADED
+HEALTH_ROOT_CAUSE                     = 515880 / STATISTICAL_MISSING
+MANUAL_REVIEW                         = REQUIRED
+AUTO_REOPEN                           = FORBIDDEN
+PRODUCTION_WRITE_REQUIRED_FOR_RECOVERY= YES
+RECOVERY_AUTHORIZATION                = NOT GRANTED
+
+HEALTH_READY                          = NOT READY
+PRODUCTION_ATTESTATION                = BLOCKED
+V3.6.6_FREEZE                         = NOT AUTHORIZED
+EVIDENCE_EXECUTION                    = NOT STARTED
+EVIDENCE_SEAL                         = NOT STARTED
+GE-04                                 = NOT AUTHORIZED
+```
+
+---
+
+## 13. 下一 Gate（⛔ **不是** Freeze）
+
+本件不直接进入 Freeze。下一 Gate = **`GEN1_PRE_LAUNCH_INVENTORY` / FUNCTIONAL COMPLETENESS INVENTORY**
+（**只读分析**），交付物 = `docs/gen1/GEN1_PRE_LAUNCH_INVENTORY_20261002.md`（初稿）。
+
+分类口径（A–E）：
+
+| 类 | 含义 |
+|---|---|
+| **A** | 功能缺口（代码级能力缺失） |
+| **B** | 生产集成缺口（写了但无人消费 / 读路未迁移） |
+| **C** | Health / 安全状态缺口 |
+| **D** | Evidence 缺口（契约可冻结 vs 可执行） |
+| **E** | Authorization 缺口（缺 owner 授权） |
+
+⛔ 该 Inventory 为**只读分析**，⛔ 不执行任何功能集成、不 deploy、不写生产。
