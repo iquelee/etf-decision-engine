@@ -267,7 +267,7 @@ SELECTOR: S-PROMOTED
 | 5 | `S-PROMOTED` 与 reader-migration **目标读源同构**（`authority_selector = active_run_pointer.run_id`） | `v365-active-read.js` 的 `readAuthoritativeDataset` 语义 |
 | 6 | `S-PROMOTED` 是**事件驱动**（下一次成功提升即产出），非结构性永久 FAIL | 指针当前 `revision=1`，自 09-30 22:01 未再前进 |
 
-#### 3.0.3 **promotion 证明（四键 AND，缺一即 fail-closed）**
+#### 3.0.3 **promotion 证明（五条 AND，缺一即 fail-closed）**
 
 ```text
 PROMOTION_PROOF(R) :=
@@ -993,6 +993,7 @@ PRE-V5 DIAGNOSTIC / NON-SCORING / NON-GATE
 | **v2.0 FROZEN** | 2026-09-21 | 冻结（**仅**状态头 / §12 / 变更日志） | **否** |
 | **v3.0** | 2026-09-21 | 补 §3.4：钉死 `event_cluster_id` / `independent_event` 计算规则（C-B） | **是** —— 作废 v2.0 全部样本（实测 = **0 行**） |
 | v4.0（DRAFT，**从未冻结**） | 2026-09-23 | ① `regime` 改绑 `decision_market_regime`（修 `CD-02`）；② 定来源层级；③ 明确不要求 `effective` == 主来源；④ 新增 §3.5 宿主内部量排除声明 | **否**（从未冻结、从未采样） |
+| v5.0-draft rev.1 | 2026-10-02 | **闭合冻结前置**（与 G-2 同批次）：修正 §3.0.3 标题的键数标注「四键」→「五条」，使其与 §5.4 规则 3「`PROMOTION_PROOF(R)` 五条 AND 全真」及该节实际列出的五条件（`active_run_pointer.run_id == R` / `run_history.promoted` / `run_history.read_after_write_consistent` / `run_manifest.validation_passed` / `run_manifest.revision == active_run_pointer.revision`）一致；⛔ 不改变任何规则语义，⛔ 不改变字段名 / 字段定义 / 纳入排除规则 / 判定阈值 / selector / checkpoint | **否**（草案修订） |
 | **v5.0**（**GENERATED / PR REVIEW**，⛔ NOT FROZEN） | 2026-10-02 | ① **读源整体改绑 run 轴**（`decision_result`→`run_candidate_decision`；`portfolio_snapshot`→`run_candidate_portfolio`）；② **新增 `run_manifest` / `active_run_pointer` / `run_history` 三源**（§5.3 五源 → **八源**）；③ **新增 §3.0 `SAMPLE IDENTITY` 与 `SELECTOR = S-PROMOTED`**；④ 行键由 `(date, code)` 改为 **`(run_id, code)`**（修 `CD-02` 落点 + 键碰撞）；⑤ **§3.1 双组重定义**：组 A 改 run 内自洽、组 B 左端改 candidate，新增 B3/B4；⑥ **§3.5 重写**（拆同名两义，修 `CD-03`）；⑦ **§5.4 gate 重写**（规则 1/2 改按 pointer revision）；⑧ **§5.5 加单调采纳**；⑨ **§5.6 CHAIN PROOF 重锚到 22:00 入口管线**（修 `CD-05` 与 100% 误杀）；⑩ **§5.8 checkpoint 由 09:00 改为 22:30 窗口**；⑪ **新增 §5.9 `EVIDENCE OBJECT BOUNDARY`**；⑫ 新增 §3.6 `portfolio_snapshot` 分界（E-2/UNV-23 闭合）；⑬ 登记 `CD-03` / `CD-04` / `CD-05` | **是（拟）** —— 作废 v1–v4 全部样本（实测 = **0 行**） |
 
 **v5.0 修改动机（合并陈述）**：
