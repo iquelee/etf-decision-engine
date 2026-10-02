@@ -1,15 +1,17 @@
 # Gen-1 Evidence Contract v5.0（证据契约 · 正式载体）
 
 **文档编号**：`WP-G1-EVIDENCE-CH-5.0`
-**版本**：v5.0（**GENERATED / PR REVIEW**）
-**状态**：✅ **REVIEWABLE** ｜ ⛔ **NOT FROZEN** ｜ ⛔ **NOT SEALED** ｜ ⛔ **NOT AUTHORIZED FOR EXECUTION**
-**取代关系（拟）**：**v5.0 拟取代 v4.0**；v4.0 / v3.0 / v2.0 / v1.0 既有样本**显式作废**
+**版本**：v5.0（🔒 **FROZEN**，2026-10-02）
+**状态**：🔒 **FROZEN（2026-10-02）** ｜ 📌 **载体封存记录已随同批次落盘** ｜ ⛔ **NOT AUTHORIZED FOR EXECUTION**
+**⛔ 同名辨析（必须遵守）**：本文件出现的「FROZEN / SEAL」**只针对本契约载体**（文档层）；⛔ **不是** `GEN1_GUARDED_EFFECTIVE_CHARTER` §3.1 的 **Key 2 Freeze Seal**（`GUARDED_EFFECTIVE_FREEZE` 制品），⛔ **也不是** **Key 3 Evidence Seal**（= `GEN1_EVIDENCE_CONTRACT` §4.2 的 `EVIDENCE_POSITIVE`，须 ≥30 独立事件）。三者**互不替代**，⛔ 不得互相推断。
+**取代关系**：**v5.0 取代 v4.0**；v4.0 / v3.0 / v2.0 / v1.0 既有样本**显式作废**
 （实测既有样本 = **0 行** ⇒ 作废成本为零，但**声明必须保留**）。
-⛔ 取代仅在 **FREEZE 授权后**生效。
+✅ 取代自本文件冻结（2026-10-02）起生效；⛔ 但**执行**仍受 §12 约束（未授权）。
 **as-of**：2026-10-02（北京时间）
 **授权依据**：owner 2026-10-02 裁定 —— **OWNER-AUTHORIZED AUTONOMOUS GOVERNANCE**
-（治理裁定与 **CONTRACT GENERATION** 授权下放；**FREEZE / SEAL 仍为独立高风险闸门**）。
-⛔ 「生成」与「冻结」是两个分开的授权步骤，**不得合并**。
+（治理裁定与 **CONTRACT GENERATION** 授权下放；**FREEZE / SEAL 为独立高风险闸门**）。
+**冻结与封存授权**：owner 2026-10-02 单独裁定 **G-2（FREEZE + SEAL）** —— 见同批次封存记录。
+⛔ 「生成」「冻结」「并入 master」「正式执行」是**四个分开**的授权步骤，**不得合并推断**。
 **生成自**：v4.0 DRAFT（工作树 `_v4-contract-20260923` @ `8d1f1cd`）
 - 工作副本 sha256（CRLF 落盘）= `80da4d99f9fdb5c9f54856210b5dc0fc06edcc8d8b2371a699f0bd5c5fa8f7c5`（38137 B / 709 行）
 - git 内 blob（LF）= sha1 `ca6f049270675e468f6a984cb433b89411daa85e` / sha256 `74319398d8040ab5d409cacf9204e67891216c724868e6a3ba9d68fa1f2da07e`（37428 B）
@@ -20,20 +22,22 @@
 
 ```text
 V5.0 CONTRACT GENERATION      ✅ DONE（2026-10-02，自主裁定）
-V5.0 REPOSITORY CARRIER       ✅ GENERATED / PR REVIEW（本文件；⛔ 未合并 master）
-V5.0 CONTRACT FREEZE          ⛔ NOT FROZEN（独立高风险闸门 G-2）
-V5.0 EVIDENCE SEAL            ⛔ NOT SEALED（独立高风险闸门 G-2）
-EVIDENCE EXECUTION            ⛔ NOT AUTHORIZED
+V5.0 REPOSITORY CARRIER       ✅ IN REPO（本文件；⚠️ 主分支可达性 PENDING）
+V5.0 CONTRACT FREEZE          🔒 FROZEN（2026-10-02，G-2 授权）
+V5.0 CARRIER SEAL RECORD      📌 SEALED（同批次独立工件；⛔ 非生产 Seal）
+EVIDENCE EXECUTION            ⛔ NOT AUTHORIZED（§12 第 5 项未闭合）
 HISTORICAL BACKFILL           ⛔ PROHIBITED
 GE-04                         ⛔ NOT AUTHORIZED
 ```
 
-> ⛔ **本文件为 GENERATED / PR REVIEW；⛔ 尚未冻结，不得被当作执行契约使用。**
-> ⛔ 不得据此启动样本累计、不得据此改 Seal、不得据此改 Authority、不得据此改 `c1_capture.py`。
-> 冻结指纹将记于**载体 PR body 与独立 attestation 工件**，⛔ **不写入本文件**（避免自指矛盾）。
+> 🔒 **本文件已于 2026-10-02 冻结（G-2）；自本日起为本契约的正式执行语义（但执行本身仍未授权）。**
+> ⛔ 不得据此改 Authority / 改生产 Seal / 改 `FROZEN_PARAM_KEYS` / 改生产读链。
+> ⛔ 样本累计须待 §12 第 5 项闭合（手工 / 半自动跑通 ≥3 个交易日）—— **冻结 ≠ 开始采样**。
+> 冻结指纹（git blob id + content sha256 + carrier commit）记于**载体 PR body 与同批次封存记录**，
+> ⛔ **不写入本文件**（避免自指矛盾）。
 > ⚠️ **落点声明**：本文件为**仓库载体**，落于 `docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`；
-> 载体分支自 `origin/master` 开出（**G-1**，2026-10-02 授权）。⛔ 未合并 master、⛔ 未冻结。
-> ⛔ **G-1 ≠ G-2**：「生成并入库」与「冻结」是两个分开的授权步骤。
+> 载体分支自 `origin/master` 开出（**G-1**）。⚠️ **主分支可达性 = PENDING**（⛔ 未合并 master）。
+> ⛔ **G-1 ≠ G-2 ≠ 合并 ≠ 执行**：四者是分开的授权步骤。
 
 ---
 
@@ -60,7 +64,7 @@ GE-04                         ⛔ NOT AUTHORIZED
 |---|---|
 | `GEN1_EVIDENCE_CONTRACT.md`（v1.0） | **暂停作为正式采样执行契约**；⛔ **不删除、不修改、不否定其历史价值** |
 | v1.0 / v2.0 / v3.0 / v4.0 既有样本 | **显式作废**。实测样本数 = **0** ⇒ 作废成本为零，但**声明必须保留** |
-| **本文件 v5.0（拟）** | 自**冻结后首个被采纳（promoted）的自然 run**起取代 v4.0 作为正式执行契约 |
+| **本文件 v5.0** | 🔒 已于 2026-10-02 冻结；自**冻结后首个被采纳（promoted）的自然 run**起取代 v4.0 作为正式执行契约 |
 
 ### 1.2 `CD-01` —— v1.0 的实质性缺陷（**已 CLOSED，历史事实**）
 
@@ -994,7 +998,8 @@ PRE-V5 DIAGNOSTIC / NON-SCORING / NON-GATE
 | **v3.0** | 2026-09-21 | 补 §3.4：钉死 `event_cluster_id` / `independent_event` 计算规则（C-B） | **是** —— 作废 v2.0 全部样本（实测 = **0 行**） |
 | v4.0（DRAFT，**从未冻结**） | 2026-09-23 | ① `regime` 改绑 `decision_market_regime`（修 `CD-02`）；② 定来源层级；③ 明确不要求 `effective` == 主来源；④ 新增 §3.5 宿主内部量排除声明 | **否**（从未冻结、从未采样） |
 | v5.0-draft rev.1 | 2026-10-02 | **闭合冻结前置**（与 G-2 同批次）：修正 §3.0.3 标题的键数标注「四键」→「五条」，使其与 §5.4 规则 3「`PROMOTION_PROOF(R)` 五条 AND 全真」及该节实际列出的五条件（`active_run_pointer.run_id == R` / `run_history.promoted` / `run_history.read_after_write_consistent` / `run_manifest.validation_passed` / `run_manifest.revision == active_run_pointer.revision`）一致；⛔ 不改变任何规则语义，⛔ 不改变字段名 / 字段定义 / 纳入排除规则 / 判定阈值 / selector / checkpoint | **否**（草案修订） |
-| **v5.0**（**GENERATED / PR REVIEW**，⛔ NOT FROZEN） | 2026-10-02 | ① **读源整体改绑 run 轴**（`decision_result`→`run_candidate_decision`；`portfolio_snapshot`→`run_candidate_portfolio`）；② **新增 `run_manifest` / `active_run_pointer` / `run_history` 三源**（§5.3 五源 → **八源**）；③ **新增 §3.0 `SAMPLE IDENTITY` 与 `SELECTOR = S-PROMOTED`**；④ 行键由 `(date, code)` 改为 **`(run_id, code)`**（修 `CD-02` 落点 + 键碰撞）；⑤ **§3.1 双组重定义**：组 A 改 run 内自洽、组 B 左端改 candidate，新增 B3/B4；⑥ **§3.5 重写**（拆同名两义，修 `CD-03`）；⑦ **§5.4 gate 重写**（规则 1/2 改按 pointer revision）；⑧ **§5.5 加单调采纳**；⑨ **§5.6 CHAIN PROOF 重锚到 22:00 入口管线**（修 `CD-05` 与 100% 误杀）；⑩ **§5.8 checkpoint 由 09:00 改为 22:30 窗口**；⑪ **新增 §5.9 `EVIDENCE OBJECT BOUNDARY`**；⑫ 新增 §3.6 `portfolio_snapshot` 分界（E-2/UNV-23 闭合）；⑬ 登记 `CD-03` / `CD-04` / `CD-05` | **是（拟）** —— 作废 v1–v4 全部样本（实测 = **0 行**） |
+| **v5.0**（生成轮） | 2026-10-02 | ① **读源整体改绑 run 轴**（`decision_result`→`run_candidate_decision`；`portfolio_snapshot`→`run_candidate_portfolio`）；② **新增 `run_manifest` / `active_run_pointer` / `run_history` 三源**（§5.3 五源 → **八源**）；③ **新增 §3.0 `SAMPLE IDENTITY` 与 `SELECTOR = S-PROMOTED`**；④ 行键由 `(date, code)` 改为 **`(run_id, code)`**（修 `CD-02` 落点 + 键碰撞）；⑤ **§3.1 双组重定义**：组 A 改 run 内自洽、组 B 左端改 candidate，新增 B3/B4；⑥ **§3.5 重写**（拆同名两义，修 `CD-03`）；⑦ **§5.4 gate 重写**（规则 1/2 改按 pointer revision）；⑧ **§5.5 加单调采纳**；⑨ **§5.6 CHAIN PROOF 重锚到 22:00 入口管线**（修 `CD-05` 与 100% 误杀）；⑩ **§5.8 checkpoint 由 09:00 改为 22:30 窗口**；⑪ **新增 §5.9 `EVIDENCE OBJECT BOUNDARY`**；⑫ 新增 §3.6 `portfolio_snapshot` 分界（E-2/UNV-23 闭合）；⑬ 登记 `CD-03` / `CD-04` / `CD-05` | **是** —— 作废 v1–v4 全部样本（实测 = **0 行**） |
+| **v5.0 FROZEN** | 2026-10-02 | 冻结（**仅**状态头 / §1.1 / §12 第 1·9·12 项 / §13 / 变更日志）；同批次迁移 `c1_capture.py` 至 v5.0 语义（§11 规则 5） | **是** —— 作废 v1–v4 全部样本（实测 = **0 行**） |
 
 **v5.0 修改动机（合并陈述）**：
 `CD-02` 的 remedy 落点在 ENFORCE 下**已失效**（引擎不再写 `portfolio_snapshot`）；
@@ -1007,7 +1012,7 @@ promotion 链（`run_candidate_*` / `run_manifest` / `active_run_pointer` / `run
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | **本文件（v5.0）冻结授权** | ⛔ **NOT YET** —— 独立高风险闸门 **G-2** |
+| 1 | **本文件（v5.0）冻结授权** | ✅ **已执行**（**G-2**，2026-10-02）：状态头 / §1.1 / §12 / §13 / 变更日志已翻为 FROZEN；冻结指纹见同批次封存记录 |
 | 2 | **契约载体（新分支 / 新 PR）的仓库写入授权** | ✅ **已执行**（**G-1**，2026-10-02）：载体 = 本文件 @ `docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`，分支自 `origin/master` 开出；⛔ 未合并 master |
 | 3 | `CANONICAL_CAPTURE_CHECKPOINT` 具体时点 | ✅ **已裁定 = 工作日 [22:30, 23:30)（北京）** —— 依据见 §5.8 |
 | 4 | C-1 归档的**具体落点与命名** | ✅ **已裁定**：仓库外 `_evidence-capture-YYYYMMDD/`；`<decision_date>__bundle.json` + `<decision_date>__bundle.sha256`；同名已存在 ⇒ **拒绝写入**（append-only）。⚠️ **bundle 现须含 `run_id` / `pointer_revision`**（v5.0 新增） |
@@ -1015,10 +1020,10 @@ promotion 链（`run_candidate_*` / `run_manifest` / `active_run_pointer` / `run
 | 6 | `CD-01` 关闭条件 | ✅ **已 CLOSED** —— 条件「v2.0 真正冻结」已于 2026-09-21 满足 |
 | 7 | 同一 `decision_date` 出现多个 capture 的冲突处置 | ✅ **已裁定**：**先到先得** + **单调**（§5.5 ③④） |
 | 8 | 冻结是否伴随 git commit | ✅ **已裁定：是** —— 载体自 `origin/master` 开出（⚠️ 第 2 项已由 G-1 执行；冻结仍属 G-2） |
-| 9 | 本文件 activation-ready 状态 | ❌ **NOT YET** —— 第 1/2 项未闭合 |
+| 9 | 本文件 activation-ready 状态 | ✅ **CONTRACT READY** —— 第 1/2 项已闭合；⚠️ 但 **EVIDENCE EXECUTION 仍为 NOT AUTHORIZED**（§12 第 5 项） |
 | 10 | `CD-04`（生产 `validateCandidateSet` 字段误用）修复归属 | ⛔ **V3.6.6 需求项**（闸门 **G-4**）；⛔ 本契约不修 |
 | 11 | `gen1_counterfactual_canary_active = false` / `gen1_health_status = DEGRADED` | ⛔ **PHASE 2 健康语义**（闸门 **G-5**）；⛔ 与读源正交，**E-1b 不解决此层** |
-| 12 | `c1_capture.py` 语义迁移 | ⛔ **与冻结同批次**（§11 规则 5）；⛔ 冻结前不得改绑 |
+| 12 | `c1_capture.py` 语义迁移 | ✅ **已执行**（与冻结同批次，§11 规则 5）：落点 `scripts/gen1/evidence-capture/c1_capture.py`，已改绑 v5.0 语义（八源 run 轴 / `S-PROMOTED` / `pointer_revision` provenance / checkpoint 22:30 窗口 / `run_id` 入 bundle） |
 
 ---
 
@@ -1030,9 +1035,18 @@ promotion 链（`run_candidate_*` / `run_manifest` / `active_run_pointer` / `run
 §5.8 checkpoint 重锚 → 新增 §5.9 对象边界 → 登记 `CD-02`(重绑) / `CD-03` / `CD-04` / `CD-05`。
 
 ⛔ 未改任何**其他**字段/阈值/纳入规则；⛔ 未启动样本累计；⛔ 未改 Seal / Authority；
-✅ 已入库（`docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`，**GENERATED / PR REVIEW**）；
-⛔ 未冻结、⛔ 未合并 master、⛔ 未部署；⛔ 未修改 PR #60 的代码 / commit / review / merge 状态；
-⛔ 未修改 `c1_capture.py`；⛔ 未触碰生产代码 / 配置 / DB。
+✅ 生成轮已入库（`docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`，**GENERATED / PR REVIEW**）；
+⛔ 生成轮未冻结、⛔ 未合并 master、⛔ 未部署；⛔ 未修改 PR #60 的代码 / commit / review / merge 状态；
+⛔ 生成轮未触碰生产代码 / 配置 / DB。
+
+**冻结轮（2026-10-02，G-2 / 自主）仅做**：
+① 状态头 / §1.1 / §12 第 1·9·12 项 / §13 / 变更日志翻为 **FROZEN**；
+② 同批次迁移 `c1_capture.py` 至 **v5.0 语义**（§11 规则 5）⇒ 落点 `scripts/gen1/evidence-capture/`；
+③ 产出同批次**封存记录**（冻结对象 / carrier commit / git blob id / content sha256 / provenance / 边界）。
+⛔ 冻结轮未改字段定义 / 纳入排除规则 / 判定阈值 / selector / checkpoint；
+⛔ 冻结轮未改 Authority / 生产 Seal / `FROZEN_PARAM_KEYS` / lock / `immutable_set` / 生产读链；
+⚠️ **主分支可达性 = PENDING**：本文件仍在**载体分支**上，⛔ 未合并 master
+（合并属独立闸门，**不在 G-2 授权内**，须 owner 单独授权）。
 
 
 ### 13.1 随行治理证据（同批入库）
@@ -1054,5 +1068,5 @@ promotion 链（`run_candidate_*` / `run_manifest` / `active_run_pointer` / `run
 ---
 
 *本契约由 `WP-G1-EVIDENCE` 工作包 v5.0 生成（OWNER-AUTHORIZED AUTONOMOUS GOVERNANCE）。任何修改须遵循 §11 元规则。*
-*落点：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`（**GENERATED / PR REVIEW — ⛔ NOT FROZEN — ⛔ NOT SEALED**）*
+*落点：`docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md`（**🔒 FROZEN 2026-10-02 — 封存记录见同批次工件 — ⚠️ 主分支可达性 PENDING**）*
 *随行治理证据（同批入库）：见 §13.1。*
