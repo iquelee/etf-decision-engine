@@ -43,6 +43,7 @@ jobs:
       - name: Run full test gates (npm test)
         env:
           TCB_PYTHON: python
+          PYTHONDONTWRITEBYTECODE: "1"
         run: node scripts/test-all.js
 
       # Gate 6（显式，与 Stage C 同源）：Immutable 真 SHA 锁，任一 frozen 对象被改 → FAIL
