@@ -52,3 +52,12 @@ jobs:
       # WP-G1 显式命名门禁：G1-A ~ G1-H（Frozen / Pipeline / Golden Parity / Permission / Domain / Circuit / Execution / No-op）
       - name: Gate G1-A~H — Gen-1 Production Gates
         run: node scripts/gen1-production-gates.js
+
+      # Gate V364（R7-IMPL-6 / GOV-V364-08）：V3.6.4 Immutable Lock 三元校验
+      #   expected（lock path + LF-sha256 + generation）→ actual → mismatch → FAIL
+      #   验证对象：code artifact 17 项 + lock artifact 字节 + ROOT_ANCHOR_V364
+      #   刻意保留 stale（OPTION-1）：code↔lock 若偏离 → 本 step 硬红，不自动修复
+      #   位置必须在既有 Gate G1-A~H 之后：本 job 未使用任何条件跳过开关，
+      #   若前置会让既有门被略过，故 hard-fail step 只能追加在末尾。
+      - name: Gate V364 — Immutable Lock (code + lock + root anchor)
+        run: node scripts/verify-v364-immutable.js
