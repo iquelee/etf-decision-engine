@@ -22,7 +22,18 @@
       "tests/v364-lock-anchor-registry-consistency.test.js",
       "tests/v364-checker-anchor-guard.test.js",
       "docs/gen1/GEN1_V364_ENFORCEMENT_GAPS_20261003.md"
-    ]
+    ],
+    "refreeze_authorization": {
+      "authorization_ref": "R7-IMPL-11",
+      "authorization_decision": "R7-IMPL-11",
+      "authorized_by": "OWNER",
+      "authorized_at": "2026-10-03",
+      "orchestration_scope": "R13 Phase C —— V364 size_bytes canonical LF 语义修复（两对象 refreeze：checker identity guard + 本 registry）",
+      "changed_files": [
+        "tests/v364-checker-anchor-guard.test.js",
+        "ml/manifests/V364_LOCK_ANCHOR_REGISTRY.json"
+      ]
+    }
   },
   "surface_baseline": [
     "cloudfunctions/runDecisionEngine/package.json",
@@ -284,7 +295,7 @@
       "stage": "B1",
       "role": "权威载体（authoritative source）：消费 lock 的 declared files/sha256 + 自钉身份锚 ROOT_ANCHOR_V364",
       "sha256_lf": "9a5ccdf8149ce39850d25327add914a9c65d5ded3fdf220f68c7b68e9c68f4ee",
-      "size_bytes": 31015,
+      "size_bytes": 30342,
       "authorization_ref": "R7-IMPL-1",
       "in_scope_because": "R7-IMPL-1 = AUTHORIZED：独立 verifier（禁并入 verify-immutable.js，后者被 23/23 回归门逐字钉住）",
       "anchored_by": [
@@ -298,16 +309,16 @@
       "stage": "B1.5",
       "role": "证据副本一致性检查器；同时是权威载体身份的第二载体",
       "sha256_lf": "36506bfbe0d87ee2d9a52ac1a80dce8e16b1d44696675c9ef0ee973e1b8e172d",
-      "size_bytes": 31919,
+      "size_bytes": 31306,
       "authorization_ref": "R7-IMPL-3",
       "in_scope_because": "R7-IMPL-3 = AUTHORIZED（第二载体 = 测试副本，不建 registry 作载体）；B3 批准项 #3 显式授权把 REGISTRY_LANDING_REQUIRED 由 false 置 true",
       "anchored_by": [
         "tests/v364-checker-anchor-guard.test.js（GUARD_ANCHOR.checker 双载体）"
       ],
-      "changes_in_b3": "REGISTRY_LANDING_REQUIRED: false -> true（单行，31920 -> 31919 B）",
+      "changes_in_b3": "REGISTRY_LANDING_REQUIRED: false -> true（单行，canonical LF 31307 -> 31306 B）",
       "refreeze_from": {
         "sha256_lf": "c63277d04f3bcaeb4afad45f9e128feef65f7f6ea9483ccd328ab21d6be6cef3",
-        "size_bytes": 31920,
+        "size_bytes": 31307,
         "reason": "B3 批准项 #3：landing 落地后，删除副本必须进入 MISSING/FAIL 而非静默披露态"
       }
     },
@@ -315,16 +326,22 @@
       "path": "tests/v364-checker-anchor-guard.test.js",
       "stage": "B2",
       "role": "检查器身份锚守卫（双字面量：GUARD_ANCHOR + GUARD_ANCHOR_MIRROR）",
-      "sha256_lf": "94d457802a78846ad287a6c880ef2ddd7fe60a45885cb9ac10d1d1ae55e91aed",
-      "size_bytes": 26275,
+      "sha256_lf": "e8b7ff800abae35474abf1e2d2995c3e85544015868ef9b2937962af3340c3fe",
+      "size_bytes": 26342,
       "authorization_ref": "R7-IMPL-3",
       "in_scope_because": "R7-IMPL-3 = AUTHORIZED（第二载体）；B3 级联：checker 字节变更 ⇒ 其 checker 锚两处字面量必须同步更新，否则 Stage A 转红",
       "anchored_by": [],
-      "changes_in_b3": "GUARD_ANCHOR.checker.sha256_lf + size_bytes + GUARD_ANCHOR_MIRROR.checker_sha256_lf（verifier 锚未动）",
+      "changes_in_b3": "GUARD_ANCHOR.checker.sha256_lf + GUARD_ANCHOR_MIRROR.checker_sha256_lf（等长 64-hex 替换 ⇒ size_bytes 数值实际未变；verifier 锚未动）",
+      "changes_in_r13_c": "size_bytes 口径 raw-checkout-bytes -> canonical LF UTF-8 byte length（Owner 裁定）；GUARD_ANCHOR.checker.size_bytes 31919 -> 31306；GUARD_ANCHOR.verifier.size_bytes 31015 -> 30342；新增 canonicalSizeLf() 并接入 2 处 identity 比较 + 2 处自检断言 + case8 等长前提",
       "refreeze_from": {
+        "sha256_lf": "94d457802a78846ad287a6c880ef2ddd7fe60a45885cb9ac10d1d1ae55e91aed",
+        "size_bytes": 25754,
+        "reason": "R13-C canonical LF size 语义修复：本字段语义 = 本次 refreeze 的起始态 = B3 落地态（⛔ 非 B3 之前那一态，后者见 refreeze_from_b3）"
+      },
+      "refreeze_from_b3": {
         "sha256_lf": "3d5a16975e5ada001559b55d4371c5e356f1cbd29b24942cb5e4ce50547446bd",
-        "size_bytes": 26275,
-        "reason": "B3 级联：跟随 checker 的 B3 变更同步其 checker 锚（guard 限界行为：一致同步修改可通过 ⇒ 由本 changed_files 带外记录承担）"
+        "size_bytes": 25754,
+        "reason": "B3 原始 refreeze_from（保留，避免丢失 B3 前后态；⛔ 亦可仅依赖 b3307c3 的 git 历史）"
       }
     },
     {

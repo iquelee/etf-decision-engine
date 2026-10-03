@@ -85,12 +85,12 @@ const GUARD_ANCHOR = {
   checker: {
     path: CHECKER_REL,
     sha256_lf: '36506bfbe0d87ee2d9a52ac1a80dce8e16b1d44696675c9ef0ee973e1b8e172d',
-    size_bytes: 31919,
+    size_bytes: 31306,
   },
   verifier: {
     path: VERIFIER_REL,
     sha256_lf: '9a5ccdf8149ce39850d25327add914a9c65d5ded3fdf220f68c7b68e9c68f4ee',
-    size_bytes: 31015,
+    size_bytes: 30342,
   },
 };
 
@@ -121,12 +121,20 @@ const SHA64_RE = /^[0-9a-f]{64}$/;
 function abs(rel) {
   return path.join(REPO, rel.split('/').join(path.sep));
 }
-/** 行尾口径与 V364 链一致：CRLF→LF 归一化后再 sha256。 */
+/** 行尾口径与 V364 链一致：CRLF→LF 归一化后再 sha256 / 再计长（canonical LF）。 */
 function lfNormalize(buf) {
   return buf.toString('utf8').replace(/\r\n/g, '\n');
 }
 function sha256LfBuffer(buf) {
   return crypto.createHash('sha256').update(lfNormalize(buf), 'utf8').digest('hex');
+}
+/**
+ * 规范字节长度（canonical LF UTF-8）：先 CRLF→LF 归一化，再取 UTF-8 字节数。
+ * ⚠️ 口径必须与 sha256LfBuffer 同源：两者描述**同一份** canonical LF 内容。
+ * ⛔ 不得改用 buf.length（原始 checkout 字节数：Windows=CRLF / Linux=LF ⇒ 必然分裂）。
+ */
+function canonicalSizeLf(buf) {
+  return Buffer.byteLength(lfNormalize(buf), 'utf8');
 }
 function isSha64(v) {
   return typeof v === 'string' && SHA64_RE.test(v);
@@ -241,12 +249,13 @@ function checkAnchors(opts) {
   }
   const checkerBuf = readBytes(checkerAbs);
   const checkerSha = sha256LfBuffer(checkerBuf);
+  const checkerSize = canonicalSizeLf(checkerBuf);
   result.observed.checker = {
-    path: checkerAbs, size_bytes: checkerBuf.length, sha256_lf: checkerSha,
+    path: checkerAbs, size_bytes: checkerSize, sha256_lf: checkerSha,
   };
-  if (checkerSha !== primary.checker.sha256_lf || checkerBuf.length !== Number(primary.checker.size_bytes)) {
+  if (checkerSha !== primary.checker.sha256_lf || checkerSize !== Number(primary.checker.size_bytes)) {
     err('V364_CHECKER_IDENTITY_MISMATCH',
-      '检查器字节 ≠ 锚：actual=' + shortSha(checkerSha) + '/size=' + checkerBuf.length
+      '检查器字节 ≠ 锚：actual=' + shortSha(checkerSha) + '/size=' + checkerSize
       + ' anchor=' + shortSha(primary.checker.sha256_lf) + '/size=' + primary.checker.size_bytes);
     return finish('CHECKER_IDENTITY_MISMATCH');
   }
@@ -258,12 +267,13 @@ function checkAnchors(opts) {
   }
   const verifierBuf = readBytes(verifierAbs);
   const verifierSha = sha256LfBuffer(verifierBuf);
+  const verifierSize = canonicalSizeLf(verifierBuf);
   result.observed.verifier = {
-    path: verifierAbs, size_bytes: verifierBuf.length, sha256_lf: verifierSha,
+    path: verifierAbs, size_bytes: verifierSize, sha256_lf: verifierSha,
   };
-  if (verifierSha !== primary.verifier.sha256_lf || verifierBuf.length !== Number(primary.verifier.size_bytes)) {
+  if (verifierSha !== primary.verifier.sha256_lf || verifierSize !== Number(primary.verifier.size_bytes)) {
     err('V364_VERIFIER_IDENTITY_MISMATCH',
-      '权威载体字节 ≠ 锚：actual=' + shortSha(verifierSha) + '/size=' + verifierBuf.length
+      '权威载体字节 ≠ 锚：actual=' + shortSha(verifierSha) + '/size=' + verifierSize
       + ' anchor=' + shortSha(primary.verifier.sha256_lf) + '/size=' + primary.verifier.size_bytes);
     return finish('VERIFIER_IDENTITY_MISMATCH');
   }
@@ -362,11 +372,11 @@ function selfTest() {
     });
     ok('4. 检查器磁盘字节 == 锚（LF-sha256 + size 双钉）', () => {
       assert.strictEqual(beforeChecker, GUARD_ANCHOR.checker.sha256_lf);
-      assert.strictEqual(realCheckerBytes.length, GUARD_ANCHOR.checker.size_bytes);
+      assert.strictEqual(canonicalSizeLf(realCheckerBytes), GUARD_ANCHOR.checker.size_bytes);
     });
     ok('5. 权威载体磁盘字节 == 锚（LF-sha256 + size 双钉）', () => {
       assert.strictEqual(beforeVerifier, GUARD_ANCHOR.verifier.sha256_lf);
-      assert.strictEqual(realVerifierBytes.length, GUARD_ANCHOR.verifier.size_bytes);
+      assert.strictEqual(canonicalSizeLf(realVerifierBytes), GUARD_ANCHOR.verifier.size_bytes);
     });
     ok('6. 越界自扫描：本守卫源码对 lock / 副本载体名零命中', () => {
       const selfText = lfNormalize(readBytes(__filename));
@@ -388,8 +398,8 @@ function selfTest() {
       const i = t.indexOf(needle);
       assert.ok(i >= 0, '锚点 ' + needle + ' 缺失');
       const mutated = t.slice(0, i) + 'PLACEHOLDER_TOKENX' + t.slice(i + needle.length);
-      assert.strictEqual(Buffer.byteLength(mutated, 'utf8'), realCheckerBytes.length,
-        '等长前提不成立（本用例要求 size 不变，以证明拦截来自 hash 而非 size）');
+      assert.strictEqual(canonicalSizeLf(Buffer.from(mutated, 'utf8')), canonicalSizeLf(realCheckerBytes),
+        '等长前提不成立（本用例要求 canonical size 不变，以证明拦截来自 hash 而非 size）');
       const r = checkAnchors({ checkerAbs: put('checker_mutated.js', Buffer.from(mutated, 'utf8')) });
       assert.strictEqual(r.codes.join(','), 'V364_CHECKER_IDENTITY_MISMATCH');
     });
@@ -518,4 +528,5 @@ module.exports = {
   VERIFIER_REL: VERIFIER_REL,
   GUARD_REL: GUARD_REL,
   sha256LfBuffer: sha256LfBuffer,
+  canonicalSizeLf: canonicalSizeLf,
 };
