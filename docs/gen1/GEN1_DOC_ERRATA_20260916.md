@@ -923,3 +923,23 @@ Gen-1 文档体系**法理链完整、金额与权限口径自洽**，但存在 
 ---
 
 *本报告为只读取证产物（除编辑本文件自身外，未对被跟踪文件、代码、配置、Authority、锁或线上数据产生任何写入），本身不构成任何权限或部署授权。逐条批准后再按第 5 节分批落地。*
+
+---
+
+### E30 —【P1】B3 时点的「B4 = `NOT_AUTHORIZED`」与 B4 随后独立授权 / 实施完成之间的**时点差异**（第十二轮新增）
+
+| 项 | 内容 |
+|---|---|
+| severity | **P1** |
+| type | `STALE CAPABILITY CONCLUSION`（**时点记录被读成当前状态声明**） |
+| runtime risk | **NONE**（只涉及文档 / 治理留痕；不触及运行时代码、Authority、锁、FROZEN_PARAM_KEYS、immutable_set 或线上字段） |
+| scope | docs / governance evidence |
+| status | **`RECORDED`**（追加登记即生效；⛔ 不改写被勘误主件） |
+| 位置 | ① `ml/manifests/V364_LOCK_ANCHOR_REGISTRY.json` → `not_yet_implemented[0]`（`id = "B4_CI_STEP"`，`status = "NOT_AUTHORIZED"`）<br>② `docs/gen1/GEN1_V364_ENFORCEMENT_GAPS_20261003.md` → §2 表格 `B4` 行（`NOT_AUTHORIZED`），以及 `:85` / `:86` / `:100` / `:111` / `:125` 的「执行通道（B4）尚未建立 / ⛔ 不得写成『已配置』」类表述 |
+| 时点事实（按序） | ① **B3 形成上述 registry / GOV 文档时，B4 确实处于 `NOT_AUTHORIZED`** —— 该表述在 B3 时点为**真**。<br>② **B3 完成后，B4 获得独立授权**（Owner 单独授权，与 B3 授权相分离）。<br>③ **B4 已按该授权实施**。<br>④ **B4 已完成 B4 验证**（B4 轮全部必验行为组已执行并通过）。<br>⑤ **`.github/workflows/test.yml` 已追加 `Gate V364`** 步骤（`name: Gate V364 — Immutable Lock (code + lock + root anchor)` / `run: node scripts/verify-v364-immutable.js`），位于既有 Gate G1-A~H **之后**，且为该 job 的**末 step**。 |
+| 因此如何解读 | 上述 `NOT_AUTHORIZED` / 「尚未建立」字样，**应解释为 B3 时点的状态记录，而不是当前状态声明**。<br>⛔ 不得据此认为 V364 至今仍没有强制执行通道；<br>⛔ 亦不得反向认为这些 B3 记录「写错了」——它们在**其自身的时点上**是准确的。 |
+| ✅ 修正方式 | ⛔ **不回写** registry / GOV 主件任何字节（两者均为 B3 已交付对象；registry 更已纳入本期待提交批次）。仅在本勘误表**末尾追加本 E30**，作为**时点差指针**。 |
+| 边界声明 | ① E30 **不是**新的 authority；② **不是**新的 lock；③ **不是**新的 freeze artifact；④ **不是**新的 authorization source；⑤ **不新增任何 `authorization_sha`**（BL-2 明令禁用的形态）；⑥ E30 只陈述历史时点与指针，**不产生任何新的放行，也不构成部署授权**。 |
+| ⛔ 不得据此宣称 | **不得**声称 `GOV-V364-01..08` 因本 E30 而关闭。E30 **只**说明「B4 已实施」这一件事；其余 governance gap 一律**维持其现有登记状态**（`GOV-V364-01..08` 各按现状处理）。 |
+| 与既有条目关系 | 与 **E27** / **E29** 同类（`STALE CAPABILITY CONCLUSION`），手法一致：⛔ **不改写历史事实**，只**加时间边界 + 补后续正证据**。 |
+| ⚠️ 遗留 | 本指针只对**读到它的人**生效；其证据强度来自**含本行的提交历史**，⛔ **不来自任何树内锚** —— E30 **不引入新锚**，也不成为任何锁 / baseline / authority 的输入。 |
