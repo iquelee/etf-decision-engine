@@ -21,11 +21,11 @@ const { hashPassword, verifyPassword } = require('./common/utils/admin-auth');
 const { requestId, safeErrorResponse } = require('./common/utils/gateway-errors');
 const { triggerIntelRefresh } = require('./common/utils/intel-refresh');
 const { isDateStr, clampInt, isRiskEventTypeKey, normalizeRiskFlag, parseFiniteNumber } = require('./common/utils/request-validate');
-// PR-UI-01：Health 四真值 / Canary 账本 / 每标的 Gen-1 契约 + legacy 声明 + runtime 三态真值
+// C-2：受控人工恢复 —— 复用 canonical 健康 latch / 熔断实现（⛔ 不新建第三份 Gen-1 health-state 实现）
+const { HEALTH, computeHealthStatus } = require('./common/utils/gen1-circuit-breaker');
 const {
-  buildHealthTruth, buildCanaryLedger, buildEtfGen1, buildLegacyNotice,
-  counterfactualInactiveReason, runtimeBool, safetyInvariant
-} = require('./common/utils/gen1-ui-view-model');
+  READ_STATUS, DOWN_STATES, readHealthState, writeHealthState, computeLatchedState, healthStateToGate
+} = require('./common/utils/gen1-health-state');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -34,56 +34,30 @@ function fail(message, code = 1) { return { code, data: null, message }; }
 
 function beijingDateStr() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
 
-/**
- * 后台 Gen-1 Canary 健康摘要（PR-UI-01 重写）：只读，不影响 Gen-1 / V3.6.1 的任何开关和计算。
- *
- * 数据源（四处真值）：
- *   runtime_status     authority / health 四真值 / canary 通路 / 账本（唯一运行时真相）
- *   gen1_health_state  持久化熔断 latch（交叉核对 current/latched/economic）
- *   ml_shadow_signal   每标的最新信号（概率 / 数据健康 / 域 / 日期）
- *   decision_result    每标的最新决策（Safety 许可 / 模型候选 / 反事实账本字段）
- *
- * 返回：Health 四字段（status/gate/source/safety_source，禁止合并）+ Canary Ledger 五字段
- * + authority + canary 权限链三真值（authorized / health_allowed / active，P1-1）
- * + 每标的信号表行（三种 stage 分列：stage_signal / stage_baseline / stage_effective）。
- * legacy 顶层字段（advisory_enabled / fast_path_enabled）保留一轮兼容，同时下发
- * 机器可读的 legacy.deprecated / legacy.do_not_use_for_authority（P1-2），
- * 权限真相只看 authority 与 canary.authorized / canary.health_allowed。
- */
+/** 后台模型健康摘要：只读，不影响 Gen-1 / V3.6.1 的任何开关和计算。 */
 async function getGen1Health() {
-  const [{ params }, etfs, runtimeRows, healthRows] = await Promise.all([
+  const [{ params }, etfs] = await Promise.all([
     db.getParamConfig().catch(() => ({ params: {} })),
-    db.getEtfList().catch(() => []),
-    db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 }).catch(() => []),
-    db.query(COLLECTIONS.GEN1_HEALTH_STATE, { key: 'gen1-health-state' }, { limit: 1 }).catch(() => [])
+    db.getEtfList().catch(() => [])
   ]);
   const p = params || {};
-  const runtime = runtimeRows && runtimeRows[0] ? runtimeRows[0] : null;
-  const healthState = healthRows && healthRows[0] ? healthRows[0] : null;
   const today = beijingDateStr();
-
   const rows = await Promise.all((etfs || []).map(async (etf) => {
-    const [signals, dailyRows, decisions] = await Promise.all([
+    const [signals, dailyRows] = await Promise.all([
       db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { code: etf.code }, {
         orderBy: [{ field: 'date', direction: 'desc' }], limit: 1
       }).catch(() => []),
       db.query(COLLECTIONS.ETF_DAILY, { code: etf.code }, {
         orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 10
-      }).catch(() => []),
-      db.query(COLLECTIONS.DECISION_RESULT, { code: etf.code }, {
-        orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 1
       }).catch(() => [])
     ]);
     const signal = signals[0] || null;
-    const decision = decisions[0] || null;
     const signalDate = String((signal && (signal.date || signal.signal_date)) || '').slice(0, 10) || null;
     // 信号应与最新“正式 EOD”对齐，而不是强制等于自然日；盘中/早晨没有
     // 当日收盘数据时，上一交易日信号仍是有效的最新参考。
     const latestEod = (dailyRows || []).find((r) => r.source !== 'realtime' && r.trade_date && Number.isFinite(Number(r.close)));
     const latestEodDate = latestEod ? String(latestEod.trade_date).slice(0, 10) : null;
     const fresh = !!signalDate && (!latestEodDate || signalDate >= latestEodDate);
-    // PR-UI-01：新契约行（信号 / 数据健康 / 域 / Safety / 反事实，全部来自决策+信号真值）
-    const gen1 = buildEtfGen1({ code: etf.code, sector: etf.sector, decision, signal, runtime });
     return {
       code: etf.code,
       name: etf.name,
@@ -91,98 +65,18 @@ async function getGen1Health() {
       latest_eod_date: latestEodDate,
       status: !signal ? '缺少信号' : (fresh ? '与最新收盘同步' : '等待最新收盘信号'),
       fresh,
-      probability: gen1.signal.probability,
-      permission: gen1.safety.permission,
-      fast_path_candidate: !!(decision && decision.gen1_model_candidate === true),
-      // 新契约字段（Control Center Main5 Signal Table 消费）
-      gen1_status: gen1.status,
-      // PR-UI-01 review-fix（P0）：三种 stage 分开下发，禁止互相冒充。
-      // stage 保留一轮兼容 = stage_signal（模型评估时的 EOD stage），不再等于 effective。
-      stage: gen1.stages.signal,
-      stage_signal: gen1.stages.signal,
-      stage_baseline: gen1.stages.baseline,
-      stage_effective: gen1.stages.effective,
-      threshold: gen1.signal.threshold,
-      model_candidate: gen1.signal.model_candidate,
-      data_health_status: gen1.data.health_status,
-      source_trade_date: gen1.data.source_trade_date,
-      benchmark_latest_date: gen1.data.benchmark_latest_date,
-      domain_status: gen1.applicability.domain_status,
-      domain_permission: gen1.applicability.domain_permission,
-      safety_permission: gen1.safety.permission,
-      // PR-UI-01 review-fix（P0-1）：阶段门四件套 —— EOD 门 / 基线门分开，不再是单一模糊 stage
-      safety_eod_stage: gen1.safety.eod_stage,
-      safety_baseline_stage: gen1.safety.baseline_stage,
-      safety_binding_stage: gen1.safety.binding_stage,
-      safety_binding_stage_source: gen1.safety.binding_stage_source,
-      canary_eligible: !!(decision && decision.gen1_canary_eligible === true),
-      baseline_suggested_pct: decision && decision.suggested_position != null ? decision.suggested_position : null,
-      counterfactual_suggested_pct: gen1.counterfactual.suggested_pct,
-      counterfactual_delta_pct: gen1.counterfactual.delta_pct
+      probability: signal && (signal.calibrated_probability != null ? signal.calibrated_probability : signal.ml_probability),
+      permission: signal && (signal.rule_gate || signal.permission) || null,
+      fast_path_candidate: !!(signal && (signal.fast_path_would_trigger || signal.would_trigger_fast_path))
     };
   }));
-
-  const healthTruth = buildHealthTruth(runtime);
-  const ledger = buildCanaryLedger(runtime);
   return {
-    model_id: (runtime && runtime.ml_model_id) || p.ml_challenger_model_id || 'HVT-A-ET-20260830',
-    frozen: (runtime ? runtime.ml_gen1_frozen !== false : p.ml_gen1_frozen !== false),
-    // legacy 兼容字段（一轮保留；不得再被解读为真实运行权限 —— 权限真相看 authority /
-    // canary.authorized / canary.health_allowed；下方 legacy 块给出机器可读的禁用声明）
+    model_id: p.ml_challenger_model_id || 'HVT-A-ET-20260830',
+    frozen: p.ml_gen1_frozen !== false,
     advisory_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true,
     fast_path_enabled: p.ml_shadow_observe === true && p.ml_advisory_enabled === true && p.ml_fast_path_enabled === true,
-    legacy_params_note: '兼容/历史配置；真实运行权限请看 runtime_status',
     auto_trading: '关闭',
-    // 观测真值可用性（PR-UI-01 final-fix）：false 时 UI 必须显示 UNKNOWN ——
-    // 「读不到 runtime_status」与「确认安全」是两件事，不得显示绿色
-    runtime_status_available: !!runtime,
     today,
-    // 新契约（PR-UI-01）
-    authority: {
-      value: runtime ? (runtime.gen1_authority || null) : null,
-      label: runtime ? (runtime.gen1_authority_label || null) : null
-    },
-    // Health 四真值：逐字段独立，禁止合并为一个“健康正常”
-    gen1_health_status: healthTruth.gen1_health_status,
-    gen1_health_gate_status: healthTruth.gen1_health_gate_status,
-    gen1_health_source: healthTruth.gen1_health_source,
-    gen1_safety_source: healthTruth.gen1_safety_source,
-    health_latch: healthState ? {
-      current_health: healthState.current_health || null,
-      latched_health: healthState.latched_health || null,
-      manual_review_required: healthState.manual_review_required === true,
-      economic_health: healthState.economic_health || null,
-      runtime_data_health: healthState.runtime_data_health || null
-    } : null,
-    canary: (() => {
-      // PR-UI-01 review-fix（P1-1）：权限链三真值独立下发，
-      // active=false 时可回答到底是 Authority 没授权 / Health 不允许 / 其它条件未过。
-      // PR-UI-01 final-fix（P0）：全部改为**三态**（true / false / null=UNKNOWN）——
-      // 读不到 runtime_status 时必须是 null，不得当成「确认 false」伪造安全状态。
-      const authorized = runtimeBool(runtime, 'gen1_counterfactual_canary_authorized');
-      const healthAllowed = runtimeBool(runtime, 'gen1_counterfactual_canary_health_allowed');
-      const active = runtimeBool(runtime, 'gen1_counterfactual_canary_active');
-      const productionWrite = runtimeBool(runtime, 'gen1_production_write');
-      const fastPathEnabled = runtimeBool(runtime, 'gen1_production_fast_path_enabled');
-      const autoExecution = runtimeBool(runtime, 'gen1_auto_execution');
-      return {
-        authorized,
-        health_allowed: healthAllowed,
-        active,
-        inactive_reason: counterfactualInactiveReason(authorized, healthAllowed, active),
-        invocations: runtime && runtime.gen1_counterfactual_canary_invocations != null
-          ? runtime.gen1_counterfactual_canary_invocations : null,
-        production_write: productionWrite,
-        production_fast_path_enabled: fastPathEnabled,
-        auto_execution: autoExecution,
-        // 不变量期望全部为 false；任一 true → false（报警）；任一 UNKNOWN → null（不得显示绿色）
-        safety_invariant_ok: safetyInvariant(productionWrite, fastPathEnabled, autoExecution)
-      };
-    })(),
-    // Canary Ledger（cap 合规证据只看 intended；target_sum 仅 info）
-    ledger,
-    // PR-UI-01 review-fix（P1-2）：legacy 块显式声明 deprecated
-    legacy: buildLegacyNotice(),
     rows
   };
 }
@@ -248,30 +142,6 @@ async function getGen2SelectionShadow(query) {
     defense_state: r.defense_state || null,
   }));
   return { run, rankings: rows, selection };
-}
-
-/** Integrated Shadow 只读观察（WP7 消费端）。
- *  消费者先选「最新 completed 运行」，再按其 run_id 读取 integrated_shadow_result，
- *  禁止按每只 ETF 最新日期拼接。结果含四层（Gen-2 选池 / Gen-1 择时 / V3.6.1 基线 / 集成反事实建议），
- *  production_write 恒 false，final_target 明确不产出（反事实建议用 safety_clamped_target 表达）。 */
-async function getIntegratedShadow(query) {
-  const tradeDate = query.date || query.trade_date || null;
-  let runRows;
-  if (tradeDate) {
-    runRows = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RUN, { status: 'completed', run_date: tradeDate }, {
-      orderBy: [{ field: 'created_at', direction: 'desc' }], limit: 1
-    }).catch(() => []);
-  } else {
-    runRows = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RUN, { status: 'completed' }, {
-      orderBy: [{ field: 'created_at', direction: 'desc' }], limit: 1
-    }).catch(() => []);
-  }
-  const run = runRows[0] || null;
-  if (!run) return { run: null, results: [] };
-  const results = await db.query(COLLECTIONS.INTEGRATED_SHADOW_RESULT, { run_id: run.run_id }, {
-    orderBy: [{ field: 'gen2_rank', direction: 'asc' }]
-  }).catch(() => []);
-  return { run, results: results || [] };
 }
 
 /* ---------- 登录鉴权 ---------- */
@@ -1042,6 +912,206 @@ async function savePortfolioSnapshot(payload) {
   return ok({ snapshot_date: snapshotDate, saved: true, cash_balance: cashBalance, holdings_mv: holdingsMv });
 }
 
+/* ---------- Gen-1 健康受控恢复（C-2：DEGRADED → OK） ---------- */
+
+/**
+ * C-2：DEGRADED → OK 的**受控人工恢复**。全程保持 fail-closed。
+ *
+ * 恢复必须**同时**满足：
+ *   ① 请求显式携带 `manualReviewConfirmed === true`（缺省/非 true 一律拒绝，⛔ 无隐式确认）；
+ *   ② 持久化 latch 当前确为 DEGRADED（ML_OFF 不在本轮授权范围）；
+ *   ③ **重新校验**的当前运行时数据健康为 OK —— 两个独立持久化真值源都要过：
+ *        · `gen1_health_state.runtime_data_health === 'OK'`（由 EOD 健康计算写入）
+ *        · 最新 EOD 信号批次（ml_shadow_signal 同 date）**逐标的** `data_health_status === 'DATA_OK'`
+ *   ④ 合成后的 incoming 健康（含 `economic_health`）非下行 —— 交由 canonical `computeLatchedState` 判定。
+ *
+ * ⛔ 绝不把调用方传入的 health / incomingHealth / runtime_data_health 当作可信健康状态：
+ *    本模块只读持久化真值，请求体只允许 `manualReviewConfirmed` 与 `reviewedBy`。
+ * ⛔ 不改 C3-R2（gen1-data-health.js）｜⛔ 不改 V3.6.4 强制面｜⛔ 不改 EOD 正常 health 写入路径。
+ */
+
+/** 恢复被拒的稳定原因码（机器可读，供审计与测试断言）。 */
+const RECOVERY_REASON = Object.freeze({
+  NOT_CONFIRMED: 'RECOVERY_NOT_CONFIRMED',
+  LATCH_READ_ERROR: 'RECOVERY_LATCH_READ_ERROR',
+  LATCH_NOT_INITIALIZED: 'RECOVERY_LATCH_NOT_INITIALIZED',
+  ML_OFF_OUT_OF_SCOPE: 'RECOVERY_ML_OFF_OUT_OF_SCOPE',
+  ALREADY_UP: 'RECOVERY_ALREADY_UP',
+  RUNTIME_DATA_HEALTH_NOT_OK: 'RECOVERY_RUNTIME_DATA_HEALTH_NOT_OK',
+  HEALTH_BATCH_NOT_OK: 'RECOVERY_HEALTH_BATCH_NOT_OK',
+  HEALTH_BATCH_UNAVAILABLE: 'RECOVERY_HEALTH_BATCH_UNAVAILABLE',
+  GATE_NOT_SATISFIED: 'RECOVERY_GATE_NOT_SATISFIED'
+});
+
+/** 运行时数据健康必须达到的字面值（runGen1ShadowEod 写入的 worstData 口径）。 */
+const REQUIRED_RUNTIME_DATA_HEALTH = 'OK';
+/** 信号批次逐标的健康必须达到的字面值（evaluateDataHealth 的 STATUS 口径）。 */
+const REQUIRED_BATCH_DATA_HEALTH = 'DATA_OK';
+
+function isDownHealth(h) {
+  return DOWN_STATES.indexOf(h) >= 0;
+}
+
+/**
+ * 重新校验**当前**运行时数据健康（⛔ 不读任何调用方传入值）。
+ * 两个独立持久化真值源必须同时为 OK，否则 fail-closed（宁可拒绝，不得放行）。
+ *
+ * @param {object} latch 由 readHealthState 读出的持久化 latch
+ * @returns {Promise<{ok:boolean, reason_code:(string|null), runtime_data_health:(string|null),
+ *   health_batch_date:(string|null), health_batch_codes:string[], health_batch_statuses:string[],
+ *   read_error:(string|null)}>}
+ */
+async function revalidateRuntimeDataHealth(latch) {
+  const runtimeDataHealth = (latch && latch.runtime_data_health != null)
+    ? String(latch.runtime_data_health) : null;
+
+  let batchDate = null;
+  let batchRows = [];
+  let readError = null;
+  try {
+    const newest = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, {}, {
+      orderBy: [{ field: 'date', direction: 'desc' }], limit: 1
+    });
+    batchDate = (newest && newest[0] && newest[0].date) ? String(newest[0].date).slice(0, 10) : null;
+    if (batchDate) {
+      batchRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: batchDate }, {});
+    }
+  } catch (e) {
+    readError = String((e && e.message) || e);
+  }
+
+  const rows = batchRows || [];
+  const codes = rows.map((r) => String((r && r.code) || ''));
+  const statuses = rows.map((r) => String((r && r.data_health_status) || 'MISSING'));
+  const batchAllOk = rows.length > 0 && statuses.every((x) => x === REQUIRED_BATCH_DATA_HEALTH);
+
+  let reason = null;
+  if (readError) reason = RECOVERY_REASON.HEALTH_BATCH_UNAVAILABLE;
+  else if (runtimeDataHealth !== REQUIRED_RUNTIME_DATA_HEALTH) reason = RECOVERY_REASON.RUNTIME_DATA_HEALTH_NOT_OK;
+  else if (!batchAllOk) reason = RECOVERY_REASON.HEALTH_BATCH_NOT_OK;
+
+  return {
+    ok: reason === null,
+    reason_code: reason,
+    runtime_data_health: runtimeDataHealth,
+    health_batch_date: batchDate,
+    health_batch_codes: codes,
+    health_batch_statuses: statuses,
+    read_error: readError
+  };
+}
+
+/** latch 的可审计视图（只取与本动作相关的字段，便于前后对照取证）。 */
+function recoveryLatchView(state) {
+  const s = state || {};
+  return {
+    latched_health: s.latched_health != null ? s.latched_health : null,
+    current_health: s.current_health != null ? s.current_health : null,
+    manual_review_required: s.manual_review_required === true,
+    recovery_allowed: s.recovery_allowed === true,
+    degraded_at: s.degraded_at || null,
+    ml_off_at: s.ml_off_at || null,
+    reviewed_at: s.reviewed_at || null,
+    reviewed_by: s.reviewed_by || null,
+    runtime_data_health: s.runtime_data_health != null ? s.runtime_data_health : null,
+    economic_health: s.economic_health != null ? s.economic_health : null
+  };
+}
+
+/**
+ * POST /api/admin/gen1/health/review —— 受控人工恢复（C-2）。
+ *
+ * @param {object} payload 仅接受 { manualReviewConfirmed:boolean, reviewedBy?:string }
+ */
+async function reviewGen1Health(payload) {
+  const p = payload || {};
+
+  // ① 显式人工确认（fail-closed：缺省 / 非 true 一律拒绝）
+  if (p.manualReviewConfirmed !== true) {
+    return fail('恢复被拒绝：缺少显式人工复核确认（manualReviewConfirmed 必须为 true）'
+      + `［${RECOVERY_REASON.NOT_CONFIRMED}］`, 400);
+  }
+  // reviewed_by 只是**自述标签**，不是认证身份（GOV-GAP-ACTOR：后台单一口令，无自然人身份）
+  const reviewedBy = (typeof p.reviewedBy === 'string' && p.reviewedBy.trim())
+    ? p.reviewedBy.trim().slice(0, 64) : 'admin';
+
+  // ② 重新读取持久化 latch（⛔ 不信任调用方传入的健康值）
+  const latch = await readHealthState(db, COLLECTIONS);
+  if (latch.read_status === READ_STATUS.READ_ERROR) {
+    return fail('恢复被拒绝：健康 latch 读取异常，fail-closed 不写入'
+      + `［${RECOVERY_REASON.LATCH_READ_ERROR}］`, 409);
+  }
+  if (latch.read_status === READ_STATUS.NOT_INITIALIZED) {
+    return fail('恢复被拒绝：健康 latch 尚未初始化'
+      + `［${RECOVERY_REASON.LATCH_NOT_INITIALIZED}］`, 409);
+  }
+
+  // ③ 幂等：当前已非下行 → 不产生任何写入（⛔ 不制造非法状态变化）
+  if (!isDownHealth(latch.latched_health)) {
+    return ok({
+      recovery_applied: false,
+      idempotent: true,
+      reason_code: RECOVERY_REASON.ALREADY_UP,
+      latch_before: recoveryLatchView(latch),
+      latch_after: recoveryLatchView(latch)
+    });
+  }
+  // ML_OFF 不在 C-2 授权范围（本轮只实现 DEGRADED → OK）
+  if (latch.latched_health !== HEALTH.DEGRADED) {
+    return fail(`恢复被拒绝：当前 latch=${latch.latched_health}，不在 C-2 授权范围`
+      + `［${RECOVERY_REASON.ML_OFF_OUT_OF_SCOPE}］`, 409);
+  }
+
+  // ④ 重新校验当前运行时数据健康（两个独立持久化真值源都必须 OK）
+  const reval = await revalidateRuntimeDataHealth(latch);
+  if (!reval.ok) {
+    return fail(`恢复被拒绝：当前运行时数据健康未达 OK（${reval.reason_code}；`
+      + `runtime_data_health=${reval.runtime_data_health}，batch=${reval.health_batch_date}）`, 409);
+  }
+
+  // ⑤ 交给 canonical 计算函数施加恢复（含 economic_health 合成；下行则自动拒绝）
+  const incoming = computeHealthStatus({
+    dataHealth: reval.runtime_data_health,
+    economicHealth: latch.economic_health || 'PENDING'
+  });
+  const latched = computeLatchedState(latch, incoming, {
+    manualReviewConfirmed: true,
+    reviewedBy,
+    now: new Date().toISOString(),
+    runtimeDataHealth: reval.runtime_data_health
+  });
+  if (latched.recovery_applied !== true || isDownHealth(latched.state.latched_health)) {
+    return fail(`恢复被拒绝：恢复条件未满足（${RECOVERY_REASON.GATE_NOT_SATISFIED}；incoming=${incoming}）`, 409);
+  }
+
+  // ⑥ 落库（writeHealthState 对 persist_allowed=false 会跳过写入 —— fail-closed 兜底）
+  const saved = await writeHealthState(db, latched.state, COLLECTIONS);
+  if (saved.persist_allowed === false) {
+    return fail('恢复被拒绝：latch 落库被 fail-closed 跳过'
+      + `［${RECOVERY_REASON.LATCH_READ_ERROR}］`, 409);
+  }
+
+  return ok({
+    recovery_applied: true,
+    idempotent: false,
+    recovered_from: HEALTH.DEGRADED,
+    recovered_to: saved.latched_health,
+    reviewed_by: saved.reviewed_by,
+    reviewed_at: saved.reviewed_at,
+    runtime_data_health: reval.runtime_data_health,
+    health_batch_date: reval.health_batch_date,
+    health_batch_codes: reval.health_batch_codes,
+    latch_before: {
+      latched_health: HEALTH.DEGRADED,
+      manual_review_required: true,
+      recovery_allowed: false,
+      reviewed_at: null
+    },
+    latch_after: recoveryLatchView(saved),
+    gate_after: healthStateToGate(saved)
+  });
+}
+
 /* ---------- 路由 ---------- */
 
 exports.main = async (event = {}, context = {}) => {
@@ -1056,7 +1126,8 @@ exports.main = async (event = {}, context = {}) => {
   const POST_ONLY = new Set([
     '/api/admin/changePassword', '/api/admin/logout',
     '/api/admin/fundamental/data', '/api/admin/risk',
-    '/api/admin/portfolio/snapshot', '/api/admin/fetch', '/api/admin/intel/refresh'
+    '/api/admin/portfolio/snapshot', '/api/admin/fetch', '/api/admin/intel/refresh',
+    '/api/admin/gen1/health/review'
   ]);
   if (POST_ONLY.has(path) && method !== 'POST') {
     return fail(`接口 ${path} 仅支持 POST`, 405);
@@ -1106,10 +1177,10 @@ exports.main = async (event = {}, context = {}) => {
     }
     // GET /api/admin/gen1/health
     if (path === '/api/admin/gen1/health') return ok(await getGen1Health());
+    // POST /api/admin/gen1/health/review（C-2：DEGRADED → OK 受控人工恢复）
+    if (path === '/api/admin/gen1/health/review') return reviewGen1Health(body);
     // GET /api/admin/gen2/shadow（只读 Selection Shadow 观察）
     if (path === '/api/admin/gen2/shadow') return ok(await getGen2SelectionShadow(query));
-    // GET /api/admin/integrated-shadow（只读 Integrated Shadow 反事实观察，WP7）
-    if (path === '/api/admin/integrated-shadow') return ok(await getIntegratedShadow(query));
     // POST /api/admin/portfolio/snapshot
     if (path === '/api/admin/portfolio/snapshot') return savePortfolioSnapshot(body);
     // GET/POST /api/admin/trade
