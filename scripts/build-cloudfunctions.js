@@ -33,6 +33,15 @@ const FUNCTIONS = [
 // 不复制到 dist 的顶层条目（common 由 src/common 统一供给；MANIFEST 是 build 产物）
 const SKIP_TOP = new Set(['common', 'MANIFEST.json', 'node_modules']);
 
+// M1_TRANSIENT_BUILD_DEBT: per-function exclusion of non-C-2 common files.
+// Scope: adminGateway only. Excludes P5-specific gen1-ui-view-model.js from the
+// adminGateway package. Does NOT alter canonical source, does NOT delete P5 source,
+// does NOT affect apiGateway, and does NOT change the parity invariant semantics
+// (parity iterates the union of actually-copied files).
+const EXCLUDE_COMMON = {
+  adminGateway: ['utils/gen1-ui-view-model.js'],
+};
+
 // 额外复制到 dist 的文件（相对 REPO）。Gen-2 Rule V2 bundle 是 Node/Python 共用单一真相源。
 // WP-G1-GE-02：Guarded Effective 两把封印（Freeze / Evidence）必须随 runDecisionEngine
 // 一起部署，否则云函数读不到制品 ⇒ fail-closed 恒 false（语义正确但 GE-04 无法晋升）。
@@ -98,6 +107,11 @@ function main() {
 
     // 2) canonical common（覆盖式，不整目录删除避免安全守卫）
     copyDir(SRC_COMMON, path.join(out, 'common'));
+
+    for (const rel of EXCLUDE_COMMON[fn] || []) {
+      const p = path.join(out, 'common', rel);
+      if (fs.existsSync(p)) { fs.unlinkSync(p); console.log(`[build] ${fn}: excluded common/${rel}`); }
+    }
 
     // 2.5) 额外文件（如 Gen-2 Rule V2 bundle，Node 运行时读取）
     for (const rel of EXTRA_FILES[fn] || []) {

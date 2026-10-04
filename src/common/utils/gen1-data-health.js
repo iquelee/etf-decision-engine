@@ -16,6 +16,13 @@
  *   INSUFFICIENT_HISTORY  历史长度不足（< 模型窗口）
  *   STATISTICAL_MISSING   列存在但个别数值缺失（可由模型 imputer 处理）
  *
+ * ★ 特征必需性两组语义（2026-10-03 C3-R2 口径修正）：
+ *   HARD_REQUIRED_FEATURES          值缺失（列存在）⇒ STATISTICAL_MISSING；
+ *                                   列缺失 ⇒ PIPELINE_MISSING。
+ *   SEMANTICALLY_NULLABLE_FEATURES  **列必须存在**；值为 null 属**语义空值**，
+ *                                   ⛔ 既不判 PIPELINE_MISSING 也不判 STATISTICAL_MISSING。
+ *   ★ 语义可空 ≠ pipeline missing：豁免的只是「值缺失」，不豁免「列缺失」。
+ *
  * @module gen1-data-health
  */
 'use strict';
@@ -31,12 +38,26 @@ const REASON = Object.freeze({
   INSUFFICIENT_HISTORY: 'INSUFFICIENT_HISTORY'
 });
 
-/** 正式 Fast Path 必需特征（与 frozen-manifest features_core 对齐）。 */
-const REQUIRED_FEATURES = Object.freeze([
+/**
+ * 硬必填特征（与 frozen-manifest features_core 对齐）：
+ * 列存在而值为 null/NaN ⇒ STATISTICAL_MISSING（统计缺失）。
+ */
+const HARD_REQUIRED_FEATURES = Object.freeze([
   'ma20_slope', 'px_ma20', 'px_ma60', 'price_position', 'volume_ratio',
-  'sideway_days', 'sideway_range', 'consolidation_score', 'atr20',
+  'sideway_days', 'consolidation_score', 'atr20',
   'change_5d', 'bias_20d', 'breakout', 'ret_5d', 'ret_20d', 'rs_20d'
 ]);
+
+/**
+ * 语义可空特征：**列必须存在**，值为 null 为合法语义空值。
+ * `sideway_range` —— `sideway_days = 0`（当日未被判定为横盘）时，
+ * `calcSidewayRange()`（indicators.js）按构造返回 null，语义为「无横盘区间」，
+ * ⛔ 不是数据缺失，⛔ 不得据此降级（列缺失仍按并集判 PIPELINE_MISSING）。
+ */
+const SEMANTICALLY_NULLABLE_FEATURES = Object.freeze(['sideway_range']);
+
+/** 并集别名（向后兼容：外部据此构造完整特征行 / 取并集基数）。 */
+const REQUIRED_FEATURES = Object.freeze(HARD_REQUIRED_FEATURES.concat(SEMANTICALLY_NULLABLE_FEATURES));
 
 function isNullish(v) {
   return v == null || v === '' || (typeof v === 'number' && Number.isNaN(v));
@@ -45,7 +66,8 @@ function isNullish(v) {
 /**
  * @param {object} input
  * @param {object} input.features             当日特征行（key → 值）
- * @param {string[]} [input.requiredFeatures]
+ * @param {string[]} [input.requiredFeatures]       并集（**列存在性**判定域）
+ * @param {string[]} [input.hardRequiredFeatures]   硬必填（**值缺失**判定域）
  * @param {string} [input.mainLatestDate]     Main5 官方 EOD 最新交易日
  * @param {string} [input.benchmarkLatestDate] 510300 最新交易日
  * @param {number} [input.historyBars]        可用历史 bar 数
@@ -58,13 +80,16 @@ function evaluateDataHealth(input) {
   const src = input || {};
   const features = src.features || {};
   const required = src.requiredFeatures || REQUIRED_FEATURES;
+  const hardRequired = src.hardRequiredFeatures || HARD_REQUIRED_FEATURES;
   const minHistory = src.minHistoryBars != null ? Number(src.minHistoryBars) : 60;
   const historyBars = src.historyBars != null ? Number(src.historyBars) : minHistory;
   const maxStale = src.maxStaleDays != null ? Number(src.maxStaleDays) : 0;
 
   // 列未生成（key 不存在）vs 值缺失（key 存在但 null/NaN）
+  // ★ 判据 2：列缺失按**并集**取域 —— 语义可空字段的「列」缺失仍是管线故障。
   const absent = required.filter((k) => !Object.prototype.hasOwnProperty.call(features, k));
-  const nullish = required.filter((k) => Object.prototype.hasOwnProperty.call(features, k) && isNullish(features[k]));
+  // ★ 判据 1 / 4：值缺失只按**硬必填**取域 —— 语义可空字段的值缺失不降级。
+  const nullish = hardRequired.filter((k) => Object.prototype.hasOwnProperty.call(features, k) && isNullish(features[k]));
   const missing = absent.concat(nullish);
 
   const result = (status, code, reason, extra) => Object.assign({
@@ -120,7 +145,11 @@ function evaluateDataHealth(input) {
   }
 
   return result(STATUS.DATA_OK, null,
-    `全部 ${required.length} 个必需特征可用；基准与 Main5 对齐`, { benchmark_aligned: true });
+    `全部 ${hardRequired.length} 个硬必填特征可用；基准与 Main5 对齐`, { benchmark_aligned: true });
 }
 
-module.exports = { STATUS, REASON, REQUIRED_FEATURES, evaluateDataHealth };
+module.exports = {
+  STATUS, REASON,
+  REQUIRED_FEATURES, HARD_REQUIRED_FEATURES, SEMANTICALLY_NULLABLE_FEATURES,
+  evaluateDataHealth
+};

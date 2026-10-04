@@ -16,7 +16,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const REPO = path.join(__dirname, '..');
+const REPO = path.join(__dirname, '..', '..');
 const {
   buildSystemRuntime,
   buildHealthTruth,
@@ -29,7 +29,7 @@ const {
   runtimeBool,
   safetyInvariant,
   SIGNAL_STATUS
-} = require('../src/common/utils/gen1-ui-view-model');
+} = require('../../src/common/utils/gen1-ui-view-model');
 
 /* ---------- 共用夹具 ---------- */
 
