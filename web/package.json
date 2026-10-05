@@ -2,11 +2,13 @@
   "name": "etf-decision-web",
   "version": "2.0.0",
   "private": true,
-  "description": "ETF 智能仓位决策系统 V2.0 前端（Vue3 + Vite + ECharts）",
+  "type": "module",
+  "description": "ETF 智能仓位决策系统前端（Vue3 + Vite + ECharts）。V365 起含第二入口 rewrite.html（web/src/rewrite/，与旧前端并存）。",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:rewrite": "node tests/run-rewrite-tests.js"
   },
   "dependencies": {
     "vue": "^3.4.27",

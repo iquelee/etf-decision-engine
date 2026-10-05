@@ -1,0 +1,1478 @@
+{
+  "list": [
+    {
+      "code": "513310",
+      "name": "中韩半导体ETF(QDII)",
+      "sector": "storage",
+      "f_state": "F2",
+      "f_score": 20,
+      "updated_at": "2026-09-30",
+      "detail": {
+        "final_signal": 0.73,
+        "total_layer_weight": 80,
+        "positive": 3,
+        "negative": 0,
+        "layer_breakdown": {
+          "hard_data": {
+            "count": 3,
+            "signal": 0.75,
+            "weight": 50
+          },
+          "earnings": {
+            "count": 2,
+            "signal": 0.7,
+            "weight": 30
+          }
+        }
+      },
+      "indicators": [
+        {
+          "indicator": "dram_price",
+          "name": "DRAM价格",
+          "weight": 20,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "USD",
+          "value": 50,
+          "direction": "flat",
+          "data_date": "2026-09-29",
+          "note": "",
+          "citations": [],
+          "source": "chinaflashmarket",
+          "source_label": "闪存现货"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "name": "AI服务器需求",
+          "weight": 20,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "澜起科技：小米发布并开源新一代MiMo大模型，科创AIETF鹏华、科创创业人工智能ETF鹏华均涨超3%；海光信息：AI服务器概念走强 广合科技涨停",
+          "citations": [
+            {
+              "stock_code": "688008",
+              "stock_name": "澜起科技",
+              "title": "小米发布并开源新一代MiMo大模型，科创AIETF鹏华、科创创业人工智能ETF鹏华均涨超3%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "688041",
+              "stock_name": "海光信息",
+              "title": "AI服务器概念走强 广合科技涨停",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "nand_price",
+          "name": "NAND价格",
+          "weight": 15,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "USD",
+          "value": 11,
+          "direction": "flat",
+          "data_date": "2026-09-29",
+          "note": "",
+          "citations": [],
+          "source": "chinaflashmarket",
+          "source_label": "闪存现货"
+        },
+        {
+          "indicator": "hbm_demand",
+          "name": "HBM供需",
+          "weight": 20,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-28",
+          "note": "SK海力士：SK海力士扩大存储半导体倒装芯片封装外包规模；机构：AI服务器增量需求支撑Q4存储器合约价涨势 消费端压力未减；供需缺口持续扩大 HBM涨价预期大幅上调",
+          "citations": [
+            {
+              "stock_code": "000660",
+              "stock_name": "SK海力士",
+              "title": "SK海力士扩大存储半导体倒装芯片封装外包规模",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "机构：AI服务器增量需求支撑Q4存储器合约价涨势 消费端压力未减",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "供需缺口持续扩大 HBM涨价预期大幅上调",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "capex",
+          "name": "龙头CapEx",
+          "weight": 25,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "亿美元",
+          "value": null,
+          "direction": null,
+          "data_date": null,
+          "note": "",
+          "citations": [],
+          "source": "",
+          "source_label": ""
+        }
+      ],
+      "ai_judgments": [
+        {
+          "indicator": "ai_server_demand",
+          "title": "META 2026-06-30",
+          "stock_code": "META",
+          "stock_name": "Meta",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "META:Meta营收高增，CapEx大幅投入AI基础设施，表明AI服务器需求强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "AMZN 2026-06-30",
+          "stock_code": "AMZN",
+          "stock_name": "亚马逊",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "AMZN:亚马逊云和AI资本开支大幅增长，表明AI服务器需求强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "GOOGL 2026-06-30",
+          "stock_code": "GOOGL",
+          "stock_name": "谷歌",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "GOOGL:谷歌大幅增加资本开支，云和AI投入强劲，利好AI服务器需求",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "MSFT 2026-03-31",
+          "stock_code": "MSFT",
+          "stock_name": "微软",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "MSFT:微软云/AI资本开支大幅增长，表明AI服务器需求强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "ORCL 2026-02-28",
+          "stock_code": "ORCL",
+          "stock_name": "甲骨文",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "ORCL:甲骨文营收和净利高增长，CapEx大幅增加，表明云/AI资本开支强劲，带动AI服务器需求。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "AMD 2026-06-27",
+          "stock_code": "AMD",
+          "stock_name": "AMD",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "AMD:AMD营收和净利大幅增长，AI芯片需求强劲，带动AI服务器需求",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "MU 2026-05-28",
+          "stock_code": "MU",
+          "stock_name": "美光科技",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "MU:AI服务器需求带动存储芯片量价齐升，美光业绩超预期",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "hbm_demand",
+          "title": "MU 2026-05-28",
+          "stock_code": "MU",
+          "stock_name": "美光科技",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "MU:美光营收和净利大幅增长，毛利率极高，存储周期上行，HBM需求强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "hbm_demand",
+          "title": "TSM 2024-12-31",
+          "stock_code": "TSM",
+          "stock_name": "台积电",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "TSM:台积电营收和净利大幅增长，CapEx高企，反映先进制程需求强劲，HBM作为AI相关需求有望受益",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "超大规模智算集群互连进展：CPO进入商用阶段",
+          "stock_code": "000660",
+          "stock_name": "SK海力士",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "英伟达宣布CPO进入商用阶段，表明AI服务器相关技术加速落地，利好AI服务器需求。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-24"
+        },
+        {
+          "indicator": "hbm_demand",
+          "title": "SK海力士正在为其下一代HBM方案引入先进封装技术",
+          "stock_code": "000660",
+          "stock_name": "SK海力士",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "SK海力士作为HBM龙头，引入先进封装技术并推进3D封装，表明HBM技术持续升级，需求前景向好",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-24"
+        },
+        {
+          "indicator": "ai_server_demand",
+          "title": "彭博：英伟达AI芯片涨价幅度超过15%！（深度）",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "英伟达AI芯片涨价超15%，反映AI服务器需求强劲，存储成本上升可转嫁，需求刚性。",
+          "week_date": "2026-08-17",
+          "created_at": "2026-08-23"
+        }
+      ]
+    },
+    {
+      "code": "515880",
+      "name": "通信ETF",
+      "sector": "ai_network",
+      "f_state": "F1",
+      "f_score": 25,
+      "updated_at": "2026-09-30",
+      "detail": {
+        "final_signal": 1.25,
+        "total_layer_weight": 100,
+        "positive": 4,
+        "negative": 0,
+        "layer_breakdown": {
+          "earnings": {
+            "count": 2,
+            "signal": 0.7,
+            "weight": 30
+          },
+          "events": {
+            "count": 1,
+            "signal": 0.7,
+            "weight": 20
+          },
+          "hard_data": {
+            "count": 1,
+            "signal": 1.8,
+            "weight": 50
+          }
+        }
+      },
+      "indicators": [
+        {
+          "indicator": "optical_800g",
+          "name": "800G/1.6T需求",
+          "weight": 25,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-28",
+          "note": "中信证券：光模块温控正由“配套环节”升级为“性能决定环节”；美股光通信板块盘初上涨",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "中信证券：光模块温控正由“配套环节”升级为“性能决定环节”",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "美股光通信板块盘初上涨",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "asp",
+          "name": "光模块盈利",
+          "weight": 25,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "新易盛：6300亿光模块龙头新易盛释放利好",
+          "citations": [
+            {
+              "stock_code": "300502",
+              "stock_name": "新易盛",
+              "title": "6300亿光模块龙头新易盛释放利好",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "cpo_progress",
+          "name": "CPO进展",
+          "weight": 15,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "中信证券：NPO有望成为国产AI集群的主流互联形态；英特尔美股盘前涨超5%；英特尔盘初涨10%；A股开盘：三大指数集体高开；Coherent高意推出面向AI基础设施集成光学平台 预计第四季度贡献收入；CPO概念震荡回升 富信科技触及20cm涨停",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "中信证券：NPO有望成为国产AI集群的主流互联形态",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "英特尔美股盘前涨超5%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "英特尔盘初涨10%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "A股开盘：三大指数集体高开",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "Coherent高意推出面向AI基础设施集成光学平台 预计第四季度贡献收入",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "CPO概念震荡回升 富信科技触及20cm涨停",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "cloud_capex",
+          "name": "云厂商CapEx",
+          "weight": 35,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "亿美元",
+          "value": 3087.39,
+          "direction": "up",
+          "data_date": "2026-03-31",
+          "note": "usMSFT+usGOOGL+usAMZN+usMETA+usORCL",
+          "citations": [],
+          "source": "sec_hard",
+          "source_label": "SEC硬数据"
+        }
+      ],
+      "ai_judgments": [
+        {
+          "indicator": "asp",
+          "title": "NVDA 2026-07-26",
+          "stock_code": "NVDA",
+          "stock_name": "英伟达",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "NVDA:AI需求旺盛，光模块产品ASP有望维持或提升",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "NVDA 2026-07-26",
+          "stock_code": "NVDA",
+          "stock_name": "英伟达",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "NVDA:AI数据中心建设加速，CPO技术推进有望受益",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "optical_800g",
+          "title": "NVDA 2026-07-26",
+          "stock_code": "NVDA",
+          "stock_name": "英伟达",
+          "grade": 4,
+          "confidence": 0.75,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "NVDA:AI算力扩张带动高速光模块需求，800G光模块需求预期增长",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "MRVL 2026-05-02",
+          "stock_code": "MRVL",
+          "stock_name": "迈威尔",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "MRVL:迈威尔数据中心DSP营收高增，推动CPO技术进展，利好相关ETF。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "optical_800g",
+          "title": "MRVL 2026-05-02",
+          "stock_code": "MRVL",
+          "stock_name": "迈威尔",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "MRVL:迈威尔数据中心DSP营收高增，反映800G光模块需求强劲，利好光通信产业链。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "optical_800g",
+          "title": "华西证券：光互联持续兑现 估值优势凸显",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "华西证券研报指出光互联持续兑现，算力网络建设推进，利好800G/1.6T需求。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "optical_800g",
+          "title": "AI算力需求快速增长 光模块企业上半年业绩亮眼",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "AI算力需求快速增长，云厂商资本开支高位攀升，高速光模块量价齐升，直接利好800G需求。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "工业富联：CPO全光交换机样机已交货 ASIC AI机柜出货量同比增长3倍",
+          "stock_code": "601138",
+          "stock_name": "工业富联",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "工业富联CPO全光交换机样机已交货，ASIC AI机柜出货量同比增长3倍，显示CPO进展超预期",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "optical_800g",
+          "title": "生益电子业绩会：800G光模块PCB已批量生产",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "生益电子800G光模块PCB已批量生产，反映800G需求旺盛",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "南京大学—华灿光电Micro-LED CPO实验室揭牌 相关成果满足光通信短距传输商用要求",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "南京大学与华灿光电共建Micro-LED CPO实验室，成果满足光通信短距传输商用要求，CPO技术进展积极",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "中石科技业绩平平 中际旭创看中了它什么？",
+          "stock_code": "300308",
+          "stock_name": "中际旭创",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "CPO概念震荡回升，剑桥科技涨停，显示市场对CPO进展关注度提升，但无具体基本面变化，给予中性偏正面评价。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "cpo_progress",
+          "title": "CPO概念震荡回升 剑桥科技涨停",
+          "stock_code": "300308",
+          "stock_name": "中际旭创",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "CPO概念震荡回升，剑桥科技涨停，显示市场对CPO进展关注度提升，但新闻未提供具体基本面数据，仅反映市场情绪，故给予中性偏正面评级。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "code": "159582",
+      "name": "半导体设备ETF",
+      "sector": "semi_equip",
+      "f_state": "F1",
+      "f_score": 25,
+      "updated_at": "2026-09-30",
+      "detail": {
+        "final_signal": 1.25,
+        "total_layer_weight": 100,
+        "positive": 4,
+        "negative": 0,
+        "layer_breakdown": {
+          "earnings": {
+            "count": 2,
+            "signal": 0.7,
+            "weight": 30
+          },
+          "hard_data": {
+            "count": 1,
+            "signal": 1.8,
+            "weight": 50
+          },
+          "events": {
+            "count": 1,
+            "signal": 0.7,
+            "weight": 20
+          }
+        }
+      },
+      "indicators": [
+        {
+          "indicator": "wafer_capex",
+          "name": "晶圆厂CapEx",
+          "weight": 30,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "亿美元",
+          "value": 327.17,
+          "direction": "up",
+          "data_date": "2024-12-31",
+          "note": "usTSM+usASML+usAMAT",
+          "citations": [],
+          "source": "sec_hard",
+          "source_label": "SEC硬数据"
+        },
+        {
+          "indicator": "penetration",
+          "name": "国产替代进度",
+          "weight": 20,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "中信建投：半导体设备零部件国产化斜率最高方向；海光信息：海光信息发布首款面向端侧的算力芯片CPU1000系列；中科飞测：中科飞测：明场缺陷检测等设备进展顺利 全年毛利率有望保持较高水平",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "中信建投：半导体设备零部件国产化斜率最高方向",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "688041",
+              "stock_name": "海光信息",
+              "title": "海光信息发布首款面向端侧的算力芯片CPU1000系列",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "688361",
+              "stock_name": "中科飞测",
+              "title": "中科飞测：明场缺陷检测等设备进展顺利 全年毛利率有望保持较高水平",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "advanced_process",
+          "name": "先进制程投资",
+          "weight": 25,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-28",
+          "note": "总投资120亿元 先导芯光光电芯片基地在光谷通线",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "总投资120亿元 先导芯光光电芯片基地在光谷通线",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "domestic_order",
+          "name": "国产设备订单",
+          "weight": 25,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "中微公司：先锋精科：公司陶瓷加热器已进入量产准备阶段 良率超80%；华峰测控：半导体设备概念震荡拉升 托伦斯涨超10%；中科飞测：中科飞测：明场缺陷检测等设备进展顺利 全年毛利率有望保持较高水平",
+          "citations": [
+            {
+              "stock_code": "688012",
+              "stock_name": "中微公司",
+              "title": "先锋精科：公司陶瓷加热器已进入量产准备阶段 良率超80%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "688200",
+              "stock_name": "华峰测控",
+              "title": "半导体设备概念震荡拉升 托伦斯涨超10%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "688361",
+              "stock_name": "中科飞测",
+              "title": "中科飞测：明场缺陷检测等设备进展顺利 全年毛利率有望保持较高水平",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        }
+      ],
+      "ai_judgments": [
+        {
+          "indicator": "advanced_process",
+          "title": "AMAT 2026-07-26",
+          "stock_code": "AMAT",
+          "stock_name": "应用材料",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "AMAT:营收和净利大幅增长，毛利率高，CapEx投入大，表明半导体设备需求强劲，先进制程推进积极。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "advanced_process",
+          "title": "ASML 2025-12-31",
+          "stock_code": "ASML",
+          "stock_name": "阿斯麦",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "ASML:ASML作为光刻机龙头，营收和净利大幅增长，毛利率高，表明先进制程设备需求强劲，利好半导体先进制程产业链。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "advanced_process",
+          "title": "NVDA 2026-07-26",
+          "stock_code": "NVDA",
+          "stock_name": "英伟达",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "NVDA:英伟达AI芯片需求强劲，先进制程产能需求高，利好相关产业链。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-29"
+        },
+        {
+          "indicator": "penetration",
+          "title": "机构：台积电Q2纯晶圆代工市场份额达73%",
+          "stock_code": "688981",
+          "stock_name": "中芯国际",
+          "grade": 3,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "台积电市场份额数据反映全球代工格局，对国产替代进度无直接影响，但可能间接影响市场情绪。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "penetration",
+          "title": "长川科技：上半年净利润9.64亿元 同比增长125.67%",
+          "stock_code": "300604",
+          "stock_name": "长川科技",
+          "grade": 4,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "长川科技业绩高增反映国产设备在晶圆厂中的渗透率持续提升，国产替代进程加速。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "domestic_order",
+          "title": "长川科技：上半年净利润9.64亿元 同比增长125.67%",
+          "stock_code": "300604",
+          "stock_name": "长川科技",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "长川科技作为国产测试设备龙头，上半年净利润大幅增长125.67%，显示国产设备订单旺盛，需求强劲。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "advanced_process",
+          "title": "英伟达Q2营收暴增106%验证景气度，半导体材料迎涨价、设备迎扩产，半导体设备ETF万家涨近3%，冲击3连阳",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "英伟达营收高增验证AI算力需求，推动先进制程投资扩产。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "penetration",
+          "title": "英伟达Q2营收暴增106%验证景气度，半导体材料迎涨价、设备迎扩产，半导体设备ETF万家涨近3%，冲击3连阳",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "设备扩产和材料涨价可能加速国产替代进程，但新闻未直接提及国产替代进度，故给予较好评级。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "domestic_order",
+          "title": "英伟达Q2营收暴增106%验证景气度，半导体材料迎涨价、设备迎扩产，半导体设备ETF万家涨近3%，冲击3连阳",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "半导体设备扩产带动国产设备订单需求，但新闻未明确国产设备占比，故给予较好评级。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "advanced_process",
+          "title": "英伟达表示AI算力供给短缺至少持续至2028财年末！人工智能ETF天弘标的指数盘中涨超2%，已连续13日净流入超4亿元",
+          "stock_code": "688041",
+          "stock_name": "海光信息",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "英伟达表示AI算力供给短缺持续至2028财年末，验证AI算力需求高景气，利好先进制程投资。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "domestic_order",
+          "title": "中科飞测：深圳中科飞测科技股份有限公司关于2026年半年度计提资产减值准备的公告",
+          "stock_code": "688361",
+          "stock_name": "中科飞测",
+          "grade": 3,
+          "confidence": 0.5,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "计提资产减值准备可能反映资产质量，但具体影响需看减值原因，定性判断为中性。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "domestic_order",
+          "title": "北方华创：2026年半年度报告摘要",
+          "stock_code": "002371",
+          "stock_name": "北方华创",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "半年度报告摘要可能包含业绩和订单信息，但未提供具体数据，定性判断为较好。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "code": "518880",
+      "name": "黄金ETF",
+      "sector": "gold",
+      "f_state": "F3",
+      "f_score": 15,
+      "updated_at": "2026-09-30",
+      "detail": {
+        "final_signal": -0.5,
+        "total_layer_weight": 70,
+        "positive": 0,
+        "negative": 1,
+        "layer_breakdown": {
+          "hard_data": {
+            "count": 3,
+            "signal": -0.69,
+            "weight": 50
+          },
+          "events": {
+            "count": 2,
+            "signal": 0,
+            "weight": 20
+          }
+        }
+      },
+      "indicators": [
+        {
+          "indicator": "fed_policy",
+          "name": "美联储政策",
+          "weight": 15,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 2,
+          "direction": "na",
+          "data_date": "2026-09-28",
+          "note": "中信建投：美债收益率上行，挤压金价上方空间",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "中信建投：美债收益率上行，挤压金价上方空间",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "real_rate",
+          "name": "美国实际利率",
+          "weight": 30,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "%",
+          "value": 2.85,
+          "direction": "up",
+          "data_date": "2026-09-24",
+          "note": "DFII10 美国10年期实际利率",
+          "citations": [],
+          "source": "fred",
+          "source_label": "FRED"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "name": "全球央行购金",
+          "weight": 20,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-28",
+          "note": "韩媒：韩国央行将于12月购入1吨黄金；韩国央行将于12月重启实物黄金购买 为13年来首次；欧洲央行管委艾斯克里瓦：西班牙并未考虑转移黄金储备",
+          "citations": [
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "韩媒：韩国央行将于12月购入1吨黄金",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "韩国央行将于12月重启实物黄金购买 为13年来首次",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "",
+              "stock_name": "",
+              "title": "欧洲央行管委艾斯克里瓦：西班牙并未考虑转移黄金储备",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "dollar_index",
+          "name": "美元指数",
+          "weight": 20,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "",
+          "value": 99.64,
+          "direction": "flat",
+          "data_date": "2026-08-10",
+          "note": "",
+          "citations": [],
+          "source": "tencent",
+          "source_label": "腾讯"
+        },
+        {
+          "indicator": "etf_flow",
+          "name": "黄金ETF资金",
+          "weight": 15,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "吨",
+          "value": 1054.55,
+          "direction": "flat",
+          "data_date": "2026-09-25",
+          "note": "",
+          "citations": [],
+          "source": "t-goldream",
+          "source_label": "黄金持仓"
+        }
+      ],
+      "ai_judgments": [
+        {
+          "indicator": "fed_policy",
+          "title": "国内金饰克价一夜大跌近40元",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 3,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "美联储主席沃什讲话引发金价大跌，但未明确政策方向，影响中性。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-29"
+        },
+        {
+          "indicator": "fed_policy",
+          "title": "现货黄金日内跌幅快速扩大至1%",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 2,
+          "confidence": 0.7,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "美联储主席讲话导致金价下跌，可能暗示鹰派政策",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "MSCI全球金矿股指数本月迄今已上涨43%",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.5,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "金价上涨可能受央行购金支撑，但新闻未明确提及央行购金",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "fed_policy",
+          "title": "MSCI全球金矿股指数本月迄今已上涨43%",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 5,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "金矿股指数大涨反映市场对金价乐观预期，可能受美联储政策宽松预期推动",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "fed_policy",
+          "title": "泰国央行行长：或进一步收紧黄金交易限制",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "泰国央行收紧黄金交易限制，可能影响黄金需求，但非美联储政策直接相关，谨慎评分",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "泰国央行行长：随着当局加强对黄金市场的审查 相关限制措施可能进一步收紧",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "泰国央行收紧黄金市场审查，可能影响黄金交易，但央行购金行为未明确，中性偏正面",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-28"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "机构：全球信用重构或将抬升黄金价格中枢",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "全球信用重构背景下，央行购金需求可能增加，但新闻未明确提及央行购金行为",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "fed_policy",
+          "title": "机构：全球信用重构或将抬升黄金价格中枢",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "机构分析全球信用重构或抬升金价中枢，反映对美元信用体系的担忧，可能影响美联储政策预期，但未直接提及具体政策变化",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "多家黄金上市公司上半年营收净利双增长",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 3,
+          "confidence": 0.5,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "黄金上市公司业绩增长，但未直接提及央行购金",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "fed_policy",
+          "title": "法国外贸银行上调对黄金年底价格的预期",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 4,
+          "confidence": 0.6,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "机构上调金价预期，反映市场对美联储政策宽松的预期增强，利好黄金需求。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "黄金概念震荡拉升 深中华A5连板",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 3,
+          "confidence": 0.5,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "新闻为黄金概念股上涨，未提及央行购金，影响中性。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "cb_gold_buy",
+          "title": "有色龙头公司中报业绩全面验证！江西铜业10cm涨停",
+          "stock_code": "",
+          "stock_name": "",
+          "grade": 3,
+          "confidence": 0.5,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "新闻为有色龙头中报业绩，未涉及央行购金，影响中性。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "code": "159570",
+      "name": "港股通创新药ETF",
+      "sector": "biotech",
+      "f_state": "F3",
+      "f_score": 15,
+      "updated_at": "2026-09-30",
+      "detail": {
+        "final_signal": 0.35,
+        "total_layer_weight": 100,
+        "positive": 3,
+        "negative": 0,
+        "layer_breakdown": {
+          "earnings": {
+            "count": 1,
+            "signal": 0.7,
+            "weight": 30
+          },
+          "events": {
+            "count": 2,
+            "signal": 0.7,
+            "weight": 20
+          },
+          "hard_data": {
+            "count": 1,
+            "signal": 0,
+            "weight": 50
+          }
+        }
+      },
+      "indicators": [
+        {
+          "indicator": "core_sales",
+          "name": "核心产品销售",
+          "weight": 25,
+          "layer": "earnings",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "康方生物：康方生物III期研究OS结果显著阳性，CRO、创新药等板块领涨，港股创新药ETF广发（513120）跟踪指数盘中涨超3.5%；翰森制药：翰森制药：HS-10374治疗中重度斑块状银屑病III期临床研究达共同主要终点；石药集团：石药集团：贝柯妥塔单抗联合奥希替尼治疗非小细胞肺癌三期临床取得阳性结果",
+          "citations": [
+            {
+              "stock_code": "09926",
+              "stock_name": "康方生物",
+              "title": "康方生物III期研究OS结果显著阳性，CRO、创新药等板块领涨，港股创新药ETF广发（513120）跟踪指数盘中涨超3.5%",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "03692",
+              "stock_name": "翰森制药",
+              "title": "翰森制药：HS-10374治疗中重度斑块状银屑病III期临床研究达共同主要终点",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "01093",
+              "stock_name": "石药集团",
+              "title": "石药集团：贝柯妥塔单抗联合奥希替尼治疗非小细胞肺癌三期临床取得阳性结果",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "bd_licensing",
+          "name": "BD授权",
+          "weight": 25,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "荣昌生物：据报美国拟放宽中国创新药授权，创新药ETF天弘标的指数飙涨超4.6%，自6月低点以来累计上涨近40%",
+          "citations": [
+            {
+              "stock_code": "09995",
+              "stock_name": "荣昌生物",
+              "title": "据报美国拟放宽中国创新药授权，创新药ETF天弘标的指数飙涨超4.6%，自6月低点以来累计上涨近40%",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        },
+        {
+          "indicator": "leading_revenue",
+          "name": "龙头收入",
+          "weight": 25,
+          "layer": "hard_data",
+          "metric_type": "quantitative",
+          "unit": "%",
+          "value": 39.18,
+          "direction": "flat",
+          "data_date": "2026-09-30",
+          "note": "2026-06-30 信达生物+百济神州+石药集团+康方生物+中国生物制药+翰森制药+三生制药+科伦博泰生物+再鼎医药+荣昌生物",
+          "citations": [],
+          "source": "hk_income",
+          "source_label": "港股财报"
+        },
+        {
+          "indicator": "approval_export",
+          "name": "审批与出海",
+          "weight": 25,
+          "layer": "events",
+          "metric_type": "qualitative",
+          "unit": "级",
+          "value": 4,
+          "direction": "na",
+          "data_date": "2026-09-21",
+          "note": "翰森制药：翰森制药：HS-10374治疗中重度斑块状银屑病III期临床研究达共同主要终点；石药集团：石药集团：SYH2069注射液II期临床试验正式启动",
+          "citations": [
+            {
+              "stock_code": "03692",
+              "stock_name": "翰森制药",
+              "title": "翰森制药：HS-10374治疗中重度斑块状银屑病III期临床研究达共同主要终点",
+              "source": "deepseek"
+            },
+            {
+              "stock_code": "01093",
+              "stock_name": "石药集团",
+              "title": "石药集团：SYH2069注射液II期临床试验正式启动",
+              "source": "deepseek"
+            }
+          ],
+          "source": "llm_week",
+          "source_label": "AI周评"
+        }
+      ],
+      "ai_judgments": [
+        {
+          "indicator": "core_sales",
+          "title": "ZLAB 2026-06-30",
+          "stock_code": "ZLAB",
+          "stock_name": "再鼎医药",
+          "grade": 2,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "ZLAB:营收同比下滑，净利亏损扩大，核心销售表现疲弱",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "approval_export",
+          "title": "BGNE 2026-06-30",
+          "stock_code": "BGNE",
+          "stock_name": "百济神州",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "BGNE:双上市和海外销售可能带来出口和审批进展",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "BGNE 2026-06-30",
+          "stock_code": "BGNE",
+          "stock_name": "百济神州",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "BGNE:营收和净利大幅增长，毛利率高，创新药销售强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "09995 2026-06-30",
+          "stock_code": "09995",
+          "stock_name": "荣昌生物",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "09995:营收同比大增435.74%，显示核心销售强劲增长",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "06160 2026-06-30",
+          "stock_code": "06160",
+          "stock_name": "百济神州",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "06160:营收同比大幅增长32.31%，显示核心销售强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "01801 2026-06-30",
+          "stock_code": "01801",
+          "stock_name": "信达生物",
+          "grade": 5,
+          "confidence": 0.8,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "01801:营收同比大幅增长44.76%，显示核心销售强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "01177 2026-06-30",
+          "stock_code": "01177",
+          "stock_name": "中国生物制药",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "01177:营收同比增长10.64%，显示核心业务稳健增长",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "approval_export",
+          "title": "ZLAB 2026-06-30",
+          "stock_code": "ZLAB",
+          "stock_name": "再鼎医药",
+          "grade": 3,
+          "confidence": 0.6,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "ZLAB:创新药双上市有利于海外审批和出口，但财报未提供具体信息",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "bd_licensing",
+          "title": "ZLAB 2026-06-30",
+          "stock_code": "ZLAB",
+          "stock_name": "再鼎医药",
+          "grade": 3,
+          "confidence": 0.65,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "ZLAB:创新药双上市模式可能带来BD合作机会，但当前财报未显示明确进展",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-30"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "09926 2025-12-31",
+          "stock_code": "09926",
+          "stock_name": "康方生物",
+          "grade": 4,
+          "confidence": 0.7,
+          "source": "sec",
+          "source_label": "财报传导",
+          "reason": "09926:营收同比增长43.9%，显示核心销售强劲",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-27"
+        },
+        {
+          "indicator": "core_sales",
+          "title": "自願公告 - 依沃西聯合化療對比度伐利尤聯合化療的AK112 &ndash; 309 &#x2f;HARMONi-GI1 III期臨床達到OS顯著陽性結果，具有統計學顯著和重大臨床獲益",
+          "stock_code": "09926",
+          "stock_name": "康方生物",
+          "grade": 5,
+          "confidence": 0.9,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "依沃西III期OS显著阳性，核心产品竞争力增强。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        },
+        {
+          "indicator": "approval_export",
+          "title": "中国生物制药减重“贴片”新药在美国获批临床；益方生物重启港股上市申请｜医药早参",
+          "stock_code": "01177",
+          "stock_name": "中国生物制药",
+          "grade": 4,
+          "confidence": 0.8,
+          "source": "deepseek",
+          "source_label": "AI",
+          "reason": "中国生物制药GLP-1减重贴片在美国获批临床，体现海外审批进展。",
+          "week_date": "2026-08-24",
+          "created_at": "2026-08-26"
+        }
+      ]
+    }
+  ]
+}

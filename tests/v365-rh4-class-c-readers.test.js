@@ -131,11 +131,18 @@ const ok = (n, d) => { pass++; console.log(`[PASS] ${n}${d ? ' — ' + d : ''}`)
       + ` ⇒ 必须**零改动**（连注释都不行）；实测有改动`);
   }
   // Gen-1 冻结文件的锁校验必须通过（证明回退彻底）
+  // ⚠️ F-22（2026-10-05 · OWNER DECISION: A — ACCEPT）原判据硬编码固定计数「10/10 项通过」；
+  //    C3-R2（b2af60e）已批准地把 Feature Pipeline Lock 由 4 roles 扩为 5 roles，
+  //    故 verifier 自洽输出为 11/11；本守卫的本意是「锁自洽」（分子 == 分母），
+  //    与历史条目数无关 ⇒ 改为计数无关的自洽校验。
+  //    ⛔ 未放宽为「存在数字」；⛔ 未绕过 verifier；⛔ 未改 verifier 输出；⛔ 未改 production semantics。
   const g = spawnSync('node', ['scripts/verify-gen1-pipeline.js'], { cwd: REPO, encoding: 'utf8' });
-  assert.ok(/10\/10 项通过/.test(String(g.stdout)),
-    '⛔ 冲突：Gen-1 Feature Pipeline Lock 必须 10/10（回退后应恢复）');
+  const mPip = /(\d+)\/(\d+) 项通过/.exec(String(g.stdout));
+  assert.ok(mPip !== null && mPip[1] === mPip[2],
+    '⛔ 冲突：Gen-1 Feature Pipeline Lock 必须 N/N 全通过（verifier 输出须自洽）'
+    + ` ⇒ 实测 ${mPip ? mPip[1] + '/' + mPip[2] : '无 N/N 项通过 输出'}`);
   ok('H-03b 不可改文件零改动（cooldown + runGen1ShadowEod）',
-    outOfBand.map((p) => p.file).join(', ') + ' · Gen-1 Lock 10/10');
+    outOfBand.map((p) => p.file).join(', ') + ` · Gen-1 Lock ${mPip[1]}/${mPip[2]}`);
 }
 
 /* ================= H-04 runGen1ShadowEod 不得被误标为 history-deferred ================= */

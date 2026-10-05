@@ -43,6 +43,7 @@ jobs:
       - name: Run full test gates (npm test)
         env:
           TCB_PYTHON: python
+          PYTHONDONTWRITEBYTECODE: "1"
         run: node scripts/test-all.js
 
       # Gate 6（显式，与 Stage C 同源）：Immutable 真 SHA 锁，任一 frozen 对象被改 → FAIL
@@ -70,3 +71,11 @@ jobs:
       #      以免后续又悄悄退回 latest document fallback。
       - name: Gate V365-RM — Authoritative Reader Migration
         run: node scripts/v365-reader-migration-gate.js
+      # Gate V364（R7-IMPL-6 / GOV-V364-08）：V3.6.4 Immutable Lock 三元校验
+      #   expected（lock path + LF-sha256 + generation）→ actual → mismatch → FAIL
+      #   验证对象：code artifact 17 项 + lock artifact 字节 + ROOT_ANCHOR_V364
+      #   刻意保留 stale（OPTION-1）：code↔lock 若偏离 → 本 step 硬红，不自动修复
+      #   位置必须在既有 Gate G1-A~H 之后：本 job 未使用任何条件跳过开关，
+      #   若前置会让既有门被略过，故 hard-fail step 只能追加在末尾。
+      - name: Gate V364 (legacy) — Attested Divergence Acknowledgement
+        run: node scripts/v364-legacy-ack-gate.js

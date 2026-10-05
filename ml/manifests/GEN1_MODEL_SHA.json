@@ -1,0 +1,6 @@
+{
+  "model_sha256": "d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712",
+  "hash_basis": "LF-normalized content (CRLF->LF before sha256) so Windows worktree == Linux CI",
+  "source": "cloudfunctions/runGen1ShadowEod/frozen-model.json",
+  "generated_at": "2026-10-05T06:58:07Z"
+}

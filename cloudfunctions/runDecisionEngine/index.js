@@ -9,6 +9,8 @@
 'use strict';
 
 const cloudbase = require('@cloudbase/node-sdk');
+const fs = require('fs');
+const path = require('path');
 const db = require('./common/utils/db');
 const decision = require('./common/utils/decision');
 const decisionV3 = require('./common/utils/decision-v3.js')();
@@ -51,8 +53,49 @@ const {
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
 // WP-G1-GE-02：守卫封印（Key 2/3）+ baseline-authoritative 选择器（休眠）
 const {
-  readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION
+  readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION, ARTIFACT_PATHS
 } = require('./common/utils/gen1-guarded-seal');
+
+// ---- D2-G1 / D2-G2：Guarded Effective 封印绑定的**运行期可观测源** ----
+// ⛔ 只提供「确实观测到」的绑定值；缺项一律**不注入** ⇒ evaluateGuardedSeal 判为 UNVERIFIABLE（fail-closed）。
+/**
+ * `source_sha256` = C1（`src/common/utils/gen1-*.js`，17 文件）聚合值。
+ * 算法 = `scripts/gen-gen1-source-sha.js`（POSIX 路径升序；逐条 update(rel)+0x00+update(hex(sha256lf))+\n 后整体取 sha256）。
+ * ⭐ 可独立复现本常量：`node scripts/gen-gen1-source-sha.js`。
+ */
+const GUARDED_SOURCE_SHA256 = '06356740e80f2808288807cc35e08d9830800e42cb67cf95b5b9b1850bb619e3';
+
+/** sidecar 候选路径（与 gen1-guarded-seal::candidatesFor 同序：env → 随包副本 → 仓库根；基准为 rde 自身 __dirname）。 */
+function modelObservationCandidates() {
+  const out = [];
+  const envPath = process.env.GEN1_MODEL_SHA_PATH;
+  if (envPath) out.push(envPath);
+  out.push(path.join(__dirname, path.basename(ARTIFACT_PATHS.modelObservation)));
+  out.push(path.join(__dirname, '..', '..', ARTIFACT_PATHS.modelObservation));
+  return out;
+}
+
+/** 运行期实读 sidecar 的 `model_sha256`；任何异常/缺失 ⇒ null（⛔ 绝不回退为猜测值）。 */
+function readModelObservationSha256() {
+  for (const p of modelObservationCandidates()) {
+    try {
+      if (!p || !fs.existsSync(p)) continue;
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const v = parsed && parsed.model_sha256 != null ? String(parsed.model_sha256).trim() : '';
+      if (v) return v;
+    } catch (e) { /* 解析/读取失败不视为「已找到」：继续尝试，最终 fail-closed */ }
+  }
+  return null;
+}
+
+/** 组装运行期绑定：只含**已观测到**的项（缺项保持缺省）。 */
+function observedGuardedBindings() {
+  const bindings = {};
+  const modelSha = readModelObservationSha256();
+  if (modelSha) bindings.model_sha256 = modelSha;
+  if (GUARDED_SOURCE_SHA256) bindings.source_sha256 = GUARDED_SOURCE_SHA256;
+  return bindings;
+}
 const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
 // WP-G1-GE-03（设计 Gate §0.3）：P3-only guardedShadowEligible 派生（唯一输入 = permission 信封）
 const { deriveGuardedShadowEligibility, claimGuardedShadowResult } = require('./common/utils/gen1-shadow-eligibility');
@@ -719,17 +762,18 @@ exports.main = async (event = {}, context = {}) => {
     // 权限一律 fail-closed：未知/非法取值不得获得高于 ADVISORY 的权限；
     // production_write / auto_execution 恒 false（见 gen1-authority）。
     const gen1Authority = resolveAuthority(merged);
-    // ---- WP-G1-GE-02：Guarded Effective 封印读取（Key 2 Freeze Seal + Key 3 Evidence Seal）----
-    // fail-closed：读不到 / 解析失败 / 状态非 APPROVED(PASS) / 绑定缺失或不一致 ⇒ 一律 false。
-    // 生产制品当前为 PENDING（见 ml/manifests/GEN1_GUARDED_EFFECTIVE_*.json），
-    // 且运行期尚无可观测的 source/model SHA ⇒ freeze 绑定为 UNVERIFIABLE。
-    // ⇒ 即使有人误把 param_config.gen1_authority 改成 GUARDED_EFFECTIVE，本值仍为 false。
-    const guardedSeal = readProductionSeals({
+    // ---- WP-G1-GE-02 + D2-G1/D2-G2：Guarded Effective 封印读取（Key 2 Freeze Seal + Key 3 Evidence Seal）----
+    // fail-closed：读不到 / 解析失败 / 状态非 APPROVED(PASS) / 绑定缺失或不一致 → 一律 false。
+    // 生产制品当前为 PENDING（见 ml/manifests/GEN1_GUARDED_EFFECTIVE_*.json）→ 本值恒 false；
+    // 但 binding 的 source_sha256 / model_sha256 已由 D2-G1 / D2-G2 补上**可观测源**：
+    //   · source_sha256 = C1 聚合（`scripts/gen-gen1-source-sha.js` 的可复现输出，见模块顶部常量）
+    //   · model_sha256  = 随包 sidecar GEN1_MODEL_SHA.json 运行期实读（缺失 → 不注入）
+    // ⛔ 观测不到者一律**不注入**（保持缺省 → UNVERIFIABLE），绝不「假设通过」。
+    // ⛔ 不引入运行时网络 / DB / 子进程调用。
+    const guardedSeal = readProductionSeals(Object.assign({
       contract_version: GUARDED_CONTRACT_VERSION,
       threshold_version: GUARDED_THRESHOLD_VERSION
-      // source_sha256 / model_sha256：运行期无权威观测源（GE-04 晋升时须先提供），
-      // 因此保持缺省 ⇒ FREEZE_SEAL_BINDING_UNVERIFIABLE，绝不「假设通过」。
-    });
+    }, observedGuardedBindings()));
     // WP-G1-GE-02 复审 P1：本计数器语义 = **真实采纳次数**（selector 采用 guarded 结果），
     // **不是**「资格成立次数」（effective_guarded === true）。两者是**不同**的事：
     // 封印全部满足但 selector 仍处 BASELINE 时，「有资格」成立而「被采纳」为 0。

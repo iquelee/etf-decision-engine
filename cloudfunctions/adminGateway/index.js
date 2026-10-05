@@ -49,6 +49,11 @@ const {
   buildHealthTruth, buildCanaryLedger, buildEtfGen1, buildLegacyNotice,
   counterfactualInactiveReason, runtimeBool, safetyInvariant
 } = require('./common/utils/gen1-ui-view-model');
+// C-2：受控人工恢复 —— 复用 canonical 健康 latch / 熔断实现（⛔ 不新建第三份 Gen-1 health-state 实现）
+const { HEALTH, computeHealthStatus } = require('./common/utils/gen1-circuit-breaker');
+const {
+  READ_STATUS, DOWN_STATES, readHealthState, writeHealthState, computeLatchedState, healthStateToGate
+} = require('./common/utils/gen1-health-state');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -1072,6 +1077,206 @@ async function savePortfolioSnapshot(payload) {
   return ok({ snapshot_date: snapshotDate, saved: true, cash_balance: cashBalance, holdings_mv: holdingsMv });
 }
 
+/* ---------- Gen-1 健康受控恢复（C-2：DEGRADED → OK） ---------- */
+
+/**
+ * C-2：DEGRADED → OK 的**受控人工恢复**。全程保持 fail-closed。
+ *
+ * 恢复必须**同时**满足：
+ *   ① 请求显式携带 `manualReviewConfirmed === true`（缺省/非 true 一律拒绝，⛔ 无隐式确认）；
+ *   ② 持久化 latch 当前确为 DEGRADED（ML_OFF 不在本轮授权范围）；
+ *   ③ **重新校验**的当前运行时数据健康为 OK —— 两个独立持久化真值源都要过：
+ *        · `gen1_health_state.runtime_data_health === 'OK'`（由 EOD 健康计算写入）
+ *        · 最新 EOD 信号批次（ml_shadow_signal 同 date）**逐标的** `data_health_status === 'DATA_OK'`
+ *   ④ 合成后的 incoming 健康（含 `economic_health`）非下行 —— 交由 canonical `computeLatchedState` 判定。
+ *
+ * ⛔ 绝不把调用方传入的 health / incomingHealth / runtime_data_health 当作可信健康状态：
+ *    本模块只读持久化真值，请求体只允许 `manualReviewConfirmed` 与 `reviewedBy`。
+ * ⛔ 不改 C3-R2（gen1-data-health.js）｜⛔ 不改 V3.6.4 强制面｜⛔ 不改 EOD 正常 health 写入路径。
+ */
+
+/** 恢复被拒的稳定原因码（机器可读，供审计与测试断言）。 */
+const RECOVERY_REASON = Object.freeze({
+  NOT_CONFIRMED: 'RECOVERY_NOT_CONFIRMED',
+  LATCH_READ_ERROR: 'RECOVERY_LATCH_READ_ERROR',
+  LATCH_NOT_INITIALIZED: 'RECOVERY_LATCH_NOT_INITIALIZED',
+  ML_OFF_OUT_OF_SCOPE: 'RECOVERY_ML_OFF_OUT_OF_SCOPE',
+  ALREADY_UP: 'RECOVERY_ALREADY_UP',
+  RUNTIME_DATA_HEALTH_NOT_OK: 'RECOVERY_RUNTIME_DATA_HEALTH_NOT_OK',
+  HEALTH_BATCH_NOT_OK: 'RECOVERY_HEALTH_BATCH_NOT_OK',
+  HEALTH_BATCH_UNAVAILABLE: 'RECOVERY_HEALTH_BATCH_UNAVAILABLE',
+  GATE_NOT_SATISFIED: 'RECOVERY_GATE_NOT_SATISFIED'
+});
+
+/** 运行时数据健康必须达到的字面值（runGen1ShadowEod 写入的 worstData 口径）。 */
+const REQUIRED_RUNTIME_DATA_HEALTH = 'OK';
+/** 信号批次逐标的健康必须达到的字面值（evaluateDataHealth 的 STATUS 口径）。 */
+const REQUIRED_BATCH_DATA_HEALTH = 'DATA_OK';
+
+function isDownHealth(h) {
+  return DOWN_STATES.indexOf(h) >= 0;
+}
+
+/**
+ * 重新校验**当前**运行时数据健康（⛔ 不读任何调用方传入值）。
+ * 两个独立持久化真值源必须同时为 OK，否则 fail-closed（宁可拒绝，不得放行）。
+ *
+ * @param {object} latch 由 readHealthState 读出的持久化 latch
+ * @returns {Promise<{ok:boolean, reason_code:(string|null), runtime_data_health:(string|null),
+ *   health_batch_date:(string|null), health_batch_codes:string[], health_batch_statuses:string[],
+ *   read_error:(string|null)}>}
+ */
+async function revalidateRuntimeDataHealth(latch) {
+  const runtimeDataHealth = (latch && latch.runtime_data_health != null)
+    ? String(latch.runtime_data_health) : null;
+
+  let batchDate = null;
+  let batchRows = [];
+  let readError = null;
+  try {
+    const newest = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, {}, {
+      orderBy: [{ field: 'date', direction: 'desc' }], limit: 1
+    });
+    batchDate = (newest && newest[0] && newest[0].date) ? String(newest[0].date).slice(0, 10) : null;
+    if (batchDate) {
+      batchRows = await db.query(COLLECTIONS.ML_SHADOW_SIGNAL, { date: batchDate }, {});
+    }
+  } catch (e) {
+    readError = String((e && e.message) || e);
+  }
+
+  const rows = batchRows || [];
+  const codes = rows.map((r) => String((r && r.code) || ''));
+  const statuses = rows.map((r) => String((r && r.data_health_status) || 'MISSING'));
+  const batchAllOk = rows.length > 0 && statuses.every((x) => x === REQUIRED_BATCH_DATA_HEALTH);
+
+  let reason = null;
+  if (readError) reason = RECOVERY_REASON.HEALTH_BATCH_UNAVAILABLE;
+  else if (runtimeDataHealth !== REQUIRED_RUNTIME_DATA_HEALTH) reason = RECOVERY_REASON.RUNTIME_DATA_HEALTH_NOT_OK;
+  else if (!batchAllOk) reason = RECOVERY_REASON.HEALTH_BATCH_NOT_OK;
+
+  return {
+    ok: reason === null,
+    reason_code: reason,
+    runtime_data_health: runtimeDataHealth,
+    health_batch_date: batchDate,
+    health_batch_codes: codes,
+    health_batch_statuses: statuses,
+    read_error: readError
+  };
+}
+
+/** latch 的可审计视图（只取与本动作相关的字段，便于前后对照取证）。 */
+function recoveryLatchView(state) {
+  const s = state || {};
+  return {
+    latched_health: s.latched_health != null ? s.latched_health : null,
+    current_health: s.current_health != null ? s.current_health : null,
+    manual_review_required: s.manual_review_required === true,
+    recovery_allowed: s.recovery_allowed === true,
+    degraded_at: s.degraded_at || null,
+    ml_off_at: s.ml_off_at || null,
+    reviewed_at: s.reviewed_at || null,
+    reviewed_by: s.reviewed_by || null,
+    runtime_data_health: s.runtime_data_health != null ? s.runtime_data_health : null,
+    economic_health: s.economic_health != null ? s.economic_health : null
+  };
+}
+
+/**
+ * POST /api/admin/gen1/health/review —— 受控人工恢复（C-2）。
+ *
+ * @param {object} payload 仅接受 { manualReviewConfirmed:boolean, reviewedBy?:string }
+ */
+async function reviewGen1Health(payload) {
+  const p = payload || {};
+
+  // ① 显式人工确认（fail-closed：缺省 / 非 true 一律拒绝）
+  if (p.manualReviewConfirmed !== true) {
+    return fail('恢复被拒绝：缺少显式人工复核确认（manualReviewConfirmed 必须为 true）'
+      + `［${RECOVERY_REASON.NOT_CONFIRMED}］`, 400);
+  }
+  // reviewed_by 只是**自述标签**，不是认证身份（GOV-GAP-ACTOR：后台单一口令，无自然人身份）
+  const reviewedBy = (typeof p.reviewedBy === 'string' && p.reviewedBy.trim())
+    ? p.reviewedBy.trim().slice(0, 64) : 'admin';
+
+  // ② 重新读取持久化 latch（⛔ 不信任调用方传入的健康值）
+  const latch = await readHealthState(db, COLLECTIONS);
+  if (latch.read_status === READ_STATUS.READ_ERROR) {
+    return fail('恢复被拒绝：健康 latch 读取异常，fail-closed 不写入'
+      + `［${RECOVERY_REASON.LATCH_READ_ERROR}］`, 409);
+  }
+  if (latch.read_status === READ_STATUS.NOT_INITIALIZED) {
+    return fail('恢复被拒绝：健康 latch 尚未初始化'
+      + `［${RECOVERY_REASON.LATCH_NOT_INITIALIZED}］`, 409);
+  }
+
+  // ③ 幂等：当前已非下行 → 不产生任何写入（⛔ 不制造非法状态变化）
+  if (!isDownHealth(latch.latched_health)) {
+    return ok({
+      recovery_applied: false,
+      idempotent: true,
+      reason_code: RECOVERY_REASON.ALREADY_UP,
+      latch_before: recoveryLatchView(latch),
+      latch_after: recoveryLatchView(latch)
+    });
+  }
+  // ML_OFF 不在 C-2 授权范围（本轮只实现 DEGRADED → OK）
+  if (latch.latched_health !== HEALTH.DEGRADED) {
+    return fail(`恢复被拒绝：当前 latch=${latch.latched_health}，不在 C-2 授权范围`
+      + `［${RECOVERY_REASON.ML_OFF_OUT_OF_SCOPE}］`, 409);
+  }
+
+  // ④ 重新校验当前运行时数据健康（两个独立持久化真值源都必须 OK）
+  const reval = await revalidateRuntimeDataHealth(latch);
+  if (!reval.ok) {
+    return fail(`恢复被拒绝：当前运行时数据健康未达 OK（${reval.reason_code}；`
+      + `runtime_data_health=${reval.runtime_data_health}，batch=${reval.health_batch_date}）`, 409);
+  }
+
+  // ⑤ 交给 canonical 计算函数施加恢复（含 economic_health 合成；下行则自动拒绝）
+  const incoming = computeHealthStatus({
+    dataHealth: reval.runtime_data_health,
+    economicHealth: latch.economic_health || 'PENDING'
+  });
+  const latched = computeLatchedState(latch, incoming, {
+    manualReviewConfirmed: true,
+    reviewedBy,
+    now: new Date().toISOString(),
+    runtimeDataHealth: reval.runtime_data_health
+  });
+  if (latched.recovery_applied !== true || isDownHealth(latched.state.latched_health)) {
+    return fail(`恢复被拒绝：恢复条件未满足（${RECOVERY_REASON.GATE_NOT_SATISFIED}；incoming=${incoming}）`, 409);
+  }
+
+  // ⑥ 落库（writeHealthState 对 persist_allowed=false 会跳过写入 —— fail-closed 兜底）
+  const saved = await writeHealthState(db, latched.state, COLLECTIONS);
+  if (saved.persist_allowed === false) {
+    return fail('恢复被拒绝：latch 落库被 fail-closed 跳过'
+      + `［${RECOVERY_REASON.LATCH_READ_ERROR}］`, 409);
+  }
+
+  return ok({
+    recovery_applied: true,
+    idempotent: false,
+    recovered_from: HEALTH.DEGRADED,
+    recovered_to: saved.latched_health,
+    reviewed_by: saved.reviewed_by,
+    reviewed_at: saved.reviewed_at,
+    runtime_data_health: reval.runtime_data_health,
+    health_batch_date: reval.health_batch_date,
+    health_batch_codes: reval.health_batch_codes,
+    latch_before: {
+      latched_health: HEALTH.DEGRADED,
+      manual_review_required: true,
+      recovery_allowed: false,
+      reviewed_at: null
+    },
+    latch_after: recoveryLatchView(saved),
+    gate_after: healthStateToGate(saved)
+  });
+}
+
 /* ---------- 路由 ---------- */
 
 exports.main = async (event = {}, context = {}) => {
@@ -1086,7 +1291,8 @@ exports.main = async (event = {}, context = {}) => {
   const POST_ONLY = new Set([
     '/api/admin/changePassword', '/api/admin/logout',
     '/api/admin/fundamental/data', '/api/admin/risk',
-    '/api/admin/portfolio/snapshot', '/api/admin/fetch', '/api/admin/intel/refresh'
+    '/api/admin/portfolio/snapshot', '/api/admin/fetch', '/api/admin/intel/refresh',
+    '/api/admin/gen1/health/review'
   ]);
   if (POST_ONLY.has(path) && method !== 'POST') {
     return fail(`接口 ${path} 仅支持 POST`, 405);
@@ -1136,6 +1342,8 @@ exports.main = async (event = {}, context = {}) => {
     }
     // GET /api/admin/gen1/health
     if (path === '/api/admin/gen1/health') return ok(await getGen1Health());
+    // POST /api/admin/gen1/health/review（C-2：DEGRADED → OK 受控人工恢复）
+    if (path === '/api/admin/gen1/health/review') return reviewGen1Health(body);
     // GET /api/admin/gen2/shadow（只读 Selection Shadow 观察）
     if (path === '/api/admin/gen2/shadow') return ok(await getGen2SelectionShadow(query));
     // GET /api/admin/integrated-shadow（只读 Integrated Shadow 反事实观察，WP7）

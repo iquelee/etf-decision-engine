@@ -1,0 +1,420 @@
+{
+  "_doc": "W1/W2 checkpoint 判别器夹具（v6.0 FREEZE PREPARATION）。依据 owner 2026-10-02 裁定 B2 = APPROVED。⛔ 本夹具为 DRAFT 级构件（与契约同批次冻结）。",
+  "approved_binding": {
+    "B1": "APPROVED —— 版本 = v6.0 ；V5.0 = SUPERSEDED / INVALID FOR NEW EVIDENCE",
+    "B2": "APPROVED —— checkpoint = W1 ∪ W2 ；rule = first-window-wins",
+    "B3": "NOT YET AUTHORIZED —— c1_capture.py 迁移未施加",
+    "frozen_baseline": {
+      "carrier": "docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md",
+      "carrier_commit": "05da0efa73e948921bc7b9b60c0d500cc98e3e9b",
+      "blob_sha1": "7f86d12aaed99a877c170c25c5a481f21a661256",
+      "content_sha256": "4fb9463f4a437e310cb52b04498a1d4cc0f23fbc64eb3c1d846d90a460a9f55b"
+    },
+    "candidate": {
+      "path": "docs/gen1/GEN1_EVIDENCE_CONTRACT_V6_FREEZE_CANDIDATE_20261002.md",
+      "content_sha256": "e93420a38a4b92c7c5eb577c4cf5af81e6d913dc22df361a1e981978efbef4b1",
+      "bytes": 92306,
+      "lines": 1377,
+      "eol": "LF-only",
+      "generator": "_g4-tools/gen_v6_contract.py（仓库外工具；sha256 = d650795938908b96290998203fb60affd906a440c771b9562d52a0d317216669）",
+      "binding_check": "checkpoint_discriminator.js --binding（CK-BIND-1）逐字节校验本指纹 == 磁盘实际文件",
+      "note": "★ 2026-10-02 收口轮两次重新生成：① 修掉 4 处非意图差异（§9.4 尾注空行 / §11 前 `---` 被吞 / §11 规则 1 空白噪音 / `### 变更日志` 标题重复）；② §5.8 补入「可执行校验」绑定（补 §5.6.4 的结构性不对称）。⛔ 旧候选指纹 14fae7585fd32564256b4d025a6880bd3de667e65f4d0e39175460edc0850874 与 3118b6c07980282c54c090eb781da6ec81eecefd07bbdab94248ea85b14a36db **均已作废，不得引用**"
+    }
+  },
+  "rule": "first-window-wins",
+  "weekday_convention": "0=周一 … 4=周五 ；5=周六 ；6=周日",
+  "windows": [
+    {
+      "id": "W1",
+      "day_offset": 0,
+      "start": "22:30",
+      "end": "23:30",
+      "chain_id": "W1-2200",
+      "entry_trigger": "dailyFetch-2200",
+      "entry_point": "fetchDailyData",
+      "definition": "工作日 [22:30:00, 23:30:00)（北京）—— decision_date D 的当日夜间"
+    },
+    {
+      "id": "W2",
+      "day_offset": 1,
+      "start": "08:30",
+      "end": "09:30",
+      "chain_id": "W2-0800",
+      "entry_trigger": "dailyPipeline-0800",
+      "entry_point": "materializeIndicators",
+      "definition": "次日工作日 [08:30:00, 09:30:00)（北京）—— decision_date D 的次日晨间"
+    }
+  ],
+  "capture_cases": [
+    {
+      "id": "CK-W1-2245",
+      "kind": "W1_HIT",
+      "title": "22:00 链（W1-2200）当夜捕获：2026-10-01（周四）22:45，D=2026-10-01",
+      "capture_local": "2026-10-01T22:45:00",
+      "weekday": 3,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": true, "window_id": "W1", "reason": "IN_WINDOW_AND_DATE_MATCH" },
+      "derivation": "W1 = [22:30,23:30) 含 22:45 ⇒ 且 pinned R 的 decision_date == D ⇒ W1 胜出"
+    },
+    {
+      "id": "CK-W2-0845",
+      "kind": "W2_HIT",
+      "title": "08:00 链（W2-0800）次日晨捕获：D=2026-10-01 的次一工作日 2026-10-02 08:45",
+      "capture_local": "2026-10-02T08:45:00",
+      "weekday": 4,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": true, "window_id": "W2", "reason": "IN_WINDOW_AND_DATE_MATCH" },
+      "derivation": "W2 = [08:30,09:30) 含 08:45 ⇒ 且 pinned R 的 decision_date == D ⇒ W2 胜出（W1 已错过）"
+    },
+    {
+      "id": "CK-W1-START-INCLUSIVE",
+      "kind": "BOUNDARY",
+      "title": "W1 起点含端点：22:30 计入",
+      "capture_local": "2026-10-01T22:30:00",
+      "weekday": 3,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": true, "window_id": "W1", "reason": "IN_WINDOW_AND_DATE_MATCH" },
+      "derivation": "左闭区间 ⇒ 22:30 命中 W1"
+    },
+    {
+      "id": "CK-W1-END-EXCLUSIVE",
+      "kind": "BOUNDARY",
+      "title": "W1 终点不含端点：23:30 不计入",
+      "capture_local": "2026-10-01T23:30:00",
+      "weekday": 3,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "OFF_CHECKPOINT" },
+      "derivation": "右开区间 ⇒ 23:30 落出 W1，且不在 W2 ⇒ OFF_CHECKPOINT"
+    },
+    {
+      "id": "CK-W2-START-INCLUSIVE",
+      "kind": "BOUNDARY",
+      "title": "W2 起点含端点：08:30 计入",
+      "capture_local": "2026-10-02T08:30:00",
+      "weekday": 4,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": true, "window_id": "W2", "reason": "IN_WINDOW_AND_DATE_MATCH" },
+      "derivation": "左闭区间 ⇒ 08:30 命中 W2"
+    },
+    {
+      "id": "CK-W2-END-EXCLUSIVE",
+      "kind": "BOUNDARY",
+      "title": "W2 终点不含端点：09:30 不计入",
+      "capture_local": "2026-10-02T09:30:00",
+      "weekday": 4,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "OFF_CHECKPOINT" },
+      "derivation": "右开区间 ⇒ 09:30 落出 W2 ⇒ OFF_CHECKPOINT"
+    },
+    {
+      "id": "CK-BEFORE-W1",
+      "kind": "OFF_WINDOW",
+      "title": "22:00（管线运行中，⛔ 非捕获时点）",
+      "capture_local": "2026-10-01T22:00:00",
+      "weekday": 3,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "OFF_CHECKPOINT" },
+      "derivation": "W1 起点 22:30 > 22:00 ⇒ OFF_CHECKPOINT（⛔ 不得在管线运行中捕获）"
+    },
+    {
+      "id": "CK-MIDDAY",
+      "kind": "OFF_WINDOW",
+      "title": "午间 14:00 不在任一窗口",
+      "capture_local": "2026-10-01T14:00:00",
+      "weekday": 3,
+      "pinned_decision_date": "2026-10-01",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "OFF_CHECKPOINT" },
+      "derivation": "14:00 ∉ W1 ∪ W2 ⇒ OFF_CHECKPOINT"
+    },
+    {
+      "id": "CK-WEEKEND-W1",
+      "kind": "WEEKEND",
+      "title": "周六 22:45（周末不捕获）",
+      "capture_local": "2026-10-03T22:45:00",
+      "weekday": 5,
+      "pinned_decision_date": "2026-10-02",
+      "target_decision_date": "2026-10-02",
+      "expect": { "ok": false, "window_id": null, "reason": "WEEKEND" },
+      "derivation": "weekday=5 ⇒ 非工作日 ⇒ WEEKEND（即使时刻落在 W1 区间内）"
+    },
+    {
+      "id": "CK-WEEKEND-W2",
+      "kind": "WEEKEND",
+      "title": "周日 08:45（周末不捕获）",
+      "capture_local": "2026-10-04T08:45:00",
+      "weekday": 6,
+      "pinned_decision_date": "2026-10-02",
+      "target_decision_date": "2026-10-02",
+      "expect": { "ok": false, "window_id": null, "reason": "WEEKEND" },
+      "derivation": "weekday=6 ⇒ 非工作日 ⇒ WEEKEND"
+    },
+    {
+      "id": "CK-DATE-MISMATCH-W1",
+      "kind": "DATE_MISMATCH",
+      "title": "落在 W1 但 pinned R 的 decision_date ≠ D ⇒ 本窗口不产出",
+      "capture_local": "2026-10-02T22:45:00",
+      "weekday": 4,
+      "pinned_decision_date": "2026-10-02",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "DECISION_DATE_MISMATCH" },
+      "derivation": "§5.8 规则 3：窗口内 pinned R 的 decision_date ≠ D ⇒ 不产出，继续下一窗口"
+    },
+    {
+      "id": "CK-DATE-MISMATCH-W2",
+      "kind": "DATE_MISMATCH",
+      "title": "落在 W2 但 pinned R 的 decision_date ≠ D ⇒ 本窗口不产出",
+      "capture_local": "2026-10-02T08:45:00",
+      "weekday": 4,
+      "pinned_decision_date": "2026-09-30",
+      "target_decision_date": "2026-10-01",
+      "expect": { "ok": false, "window_id": null, "reason": "DECISION_DATE_MISMATCH" },
+      "derivation": "§5.8 规则 3（W2 侧同样适用）"
+    }
+  ],
+  "first_window_wins_cases": [
+    {
+      "id": "FWW-W1-WINS",
+      "title": "W1 已对 D 产出 ⇒ W2 不得再产出（first-window-wins）",
+      "target_decision_date": "2026-09-30",
+      "sessions": [
+        { "capture_local": "2026-09-30T22:45:00", "weekday": 2, "pinned_decision_date": "2026-09-30", "target_decision_date": "2026-09-30" },
+        { "capture_local": "2026-10-01T08:45:00", "weekday": 3, "pinned_decision_date": "2026-09-30", "target_decision_date": "2026-09-30" }
+      ],
+      "expect": { "winner": "2026-09-30T22:45:00", "window_id": "W1", "bundles_produced": 1 },
+      "derivation": "第一个满足者 = W1 ⇒ 该 D 捕获终止；第二个 session（W2）虽也满足 ⇒ ⛔ 不得产出第二个 bundle"
+    },
+    {
+      "id": "FWW-W1-MISS-W2-WINS",
+      "title": "W1 未对 D 产出 ⇒ 由 W2 兜底（且仅一个 bundle）",
+      "target_decision_date": "2026-09-30",
+      "sessions": [
+        { "capture_local": "2026-09-30T22:45:00", "weekday": 2, "pinned_decision_date": "2026-09-29", "target_decision_date": "2026-09-30" },
+        { "capture_local": "2026-10-01T08:45:00", "weekday": 3, "pinned_decision_date": "2026-09-30", "target_decision_date": "2026-09-30" }
+      ],
+      "expect": { "winner": "2026-10-01T08:45:00", "window_id": "W2", "bundles_produced": 1 },
+      "derivation": "W1 的 pinned decision_date ≠ D ⇒ 不产出（继续下一窗口）⇒ W2 胜出"
+    },
+    {
+      "id": "FWW-ALL-MISS",
+      "title": "全窗口均不满足 ⇒ FAIL-CLOSED（§5.2），⛔ 不倒填",
+      "target_decision_date": "2026-09-30",
+      "sessions": [
+        { "capture_local": "2026-09-30T22:45:00", "weekday": 2, "pinned_decision_date": "2026-09-29", "target_decision_date": "2026-09-30" },
+        { "capture_local": "2026-10-01T08:45:00", "weekday": 3, "pinned_decision_date": "2026-09-29", "target_decision_date": "2026-09-30" }
+      ],
+      "expect": { "winner": null, "window_id": null, "bundles_produced": 0 },
+      "derivation": "全部窗口均不满足 ⇒ PROVENANCE_MISSING → FAIL-CLOSED → NON-SCORING；⛔ 无倒填"
+    }
+  ],
+  "cross_cases": [
+    {
+      "id": "X-W1W2-SAME-BUNDLE",
+      "title": "★ owner 点名：22:00 run（W1）+ 08:00 次工作日 run（W2），同 decision_date / 同 provenance / 不同 trigger ⇒ ⛔ 不得增加独立事件",
+      "expect": { "verdict": "NOT_INDEPENDENT", "reasons": ["SAME_DECISION_DATE_BUNDLE_KEY_COLLISION"], "events_delta": 0, "legacy_verdict": "INDEPENDENT" },
+      "A": {
+        "run_id": "engine:2026-09-30:b1790776862980",
+        "decision_date": "2026-09-30",
+        "trigger": "dailyFetch-2200",
+        "window_id": "W1",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-09-30": "37153810c178bec317ed506e9fa0093ff892fc468566f076ad65ba7a004d8455",
+          "runtime_status@capture": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233"
+        },
+        "candidate_hashes_by_code": null,
+        "rows": [
+          { "code": "159570", "delta_position": 3, "date": "2026-09-30" },
+          { "code": "159582", "delta_position": -2, "date": "2026-09-30" },
+          { "code": "513310", "delta_position": 1, "date": "2026-09-30" },
+          { "code": "515880", "delta_position": 0, "date": "2026-09-30" },
+          { "code": "518880", "delta_position": 0, "date": "2026-09-30" }
+        ]
+      },
+      "B": {
+        "run_id": "engine:2026-10-01:b1790812813101",
+        "decision_date": "2026-09-30",
+        "trigger": "dailyPipeline-0800",
+        "window_id": "W2",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-09-30": "37153810c178bec317ed506e9fa0093ff892fc468566f076ad65ba7a004d8455",
+          "runtime_status@capture": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233"
+        },
+        "candidate_hashes_by_code": {
+          "159570": "0310688dc207109855b5716ff95b407a68838c355ebb59670b795498435d7c4b",
+          "159582": "3da0157e540f8b91a8953507c6f4a636adf769ec0c49535b0294609da6901df9",
+          "513310": "eeadc0ed28d98615b8c23c0cca8445188a8cbcd8dbd48ade282598ea3b135e8a",
+          "515880": "dc8572f93cd2be36410f82627812f6233b453af87e8903f0c63b31c8a259fc67",
+          "518880": "dac28d13cf6213d86fdbafc63910a4c075aaca76878c942a42f2227279e1f9e5"
+        },
+        "rows": [
+          { "code": "159570", "delta_position": 3, "date": "2026-09-30" },
+          { "code": "159582", "delta_position": -2, "date": "2026-09-30" },
+          { "code": "513310", "delta_position": 1, "date": "2026-09-30" },
+          { "code": "515880", "delta_position": 0, "date": "2026-09-30" },
+          { "code": "518880", "delta_position": 0, "date": "2026-09-30" }
+        ]
+      }
+    },
+    {
+      "id": "X-W2-CAPTURED-COUNTS",
+      "title": "★ W2 捕获的 run 是**一等**独立事件（两个 W2 run，跨簇 + 异 provenance + 异 candidate ⇒ INDEPENDENT）",
+      "expect": { "verdict": "INDEPENDENT", "reasons": ["CROSS_CLUSTER_AND_BOTH_INFORMATIVE"], "events_delta": 2 },
+      "A": {
+        "run_id": "engine:2026-09-30:b1790776862980",
+        "decision_date": "2026-09-30",
+        "trigger": "dailyPipeline-0800",
+        "window_id": "W2",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-09-30": "37153810c178bec317ed506e9fa0093ff892fc468566f076ad65ba7a004d8455",
+          "runtime_status@capture": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233"
+        },
+        "candidate_hashes_by_code": {
+          "159570": "0310688dc207109855b5716ff95b407a68838c355ebb59670b795498435d7c4b",
+          "159582": "3da0157e540f8b91a8953507c6f4a636adf769ec0c49535b0294609da6901df9",
+          "513310": "eeadc0ed28d98615b8c23c0cca8445188a8cbcd8dbd48ade282598ea3b135e8a",
+          "515880": "dc8572f93cd2be36410f82627812f6233b453af87e8903f0c63b31c8a259fc67",
+          "518880": "dac28d13cf6213d86fdbafc63910a4c075aaca76878c942a42f2227279e1f9e5"
+        },
+        "rows": [
+          { "code": "159570", "delta_position": -4, "date": "2026-09-30" },
+          { "code": "159582", "delta_position": 2, "date": "2026-09-30" },
+          { "code": "513310", "delta_position": 1, "date": "2026-09-30" },
+          { "code": "515880", "delta_position": 0, "date": "2026-09-30" },
+          { "code": "518880", "delta_position": 0, "date": "2026-09-30" }
+        ]
+      },
+      "B": {
+        "run_id": "engine:2026-10-13:b1790aaabbcc",
+        "decision_date": "2026-10-13",
+        "trigger": "dailyPipeline-0800",
+        "window_id": "W2",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-10-13": "99ee88dd77cc66bb55aa4433221100ffeeddccbbaa9988776655443322110099",
+          "runtime_status@capture": "11223344556677889900aabbccddeeff00112233445566778899aabbccddeeff"
+        },
+        "candidate_hashes_by_code": {
+          "159570": "C-0310688dc207109855b5716ff95b407a68838c355ebb59670b795498435d7c4b",
+          "159582": "C-3da0157e540f8b91a8953507c6f4a636adf769ec0c49535b0294609da6901df9",
+          "513310": "C-eeadc0ed28d98615b8c23c0cca8445188a8cbcd8dbd48ade282598ea3b135e8a",
+          "515880": "C-dc8572f93cd2be36410f82627812f6233b453af87e8903f0c63b31c8a259fc67",
+          "518880": "C-dac28d13cf6213d86fdbafc63910a4c075aaca76878c942a42f2227279e1f9e5"
+        },
+        "rows": [
+          { "code": "159570", "delta_position": 5, "date": "2026-10-13" },
+          { "code": "159582", "delta_position": -1, "date": "2026-10-13" },
+          { "code": "513310", "delta_position": 0, "date": "2026-10-13" },
+          { "code": "515880", "delta_position": 2, "date": "2026-10-13" },
+          { "code": "518880", "delta_position": 0, "date": "2026-10-13" }
+        ]
+      }
+    },
+    {
+      "id": "X-W1W2-DIFFERENT-WINDOWS-CAN-BOTH-COUNT",
+      "title": "★ 两个**不同窗口**的两 run（W1 一处 / W2 另一处），异 provenance + 异 candidate + 各自 proof ⇒ INDEPENDENT",
+      "expect": { "verdict": "INDEPENDENT", "reasons": ["CROSS_CLUSTER_AND_BOTH_INFORMATIVE"], "events_delta": 2 },
+      "A": {
+        "run_id": "engine:2026-09-30:b1790776862980",
+        "decision_date": "2026-09-30",
+        "trigger": "dailyFetch-2200",
+        "window_id": "W1",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-09-30": "37153810c178bec317ed506e9fa0093ff892fc468566f076ad65ba7a004d8455",
+          "runtime_status@capture": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233"
+        },
+        "candidate_hashes_by_code": {
+          "159570": "D-0310688dc207109855b5716ff95b407a68838c355ebb59670b795498435d7c4b",
+          "159582": "D-3da0157e540f8b91a8953507c6f4a636adf769ec0c49535b0294609da6901df9",
+          "513310": "D-eeadc0ed28d98615b8c23c0cca8445188a8cbcd8dbd48ade282598ea3b135e8a",
+          "515880": "D-dc8572f93cd2be36410f82627812f6233b453af87e8903f0c63b31c8a259fc67",
+          "518880": "D-dac28d13cf6213d86fdbafc63910a4c075aaca76878c942a42f2227279e1f9e5"
+        },
+        "rows": [
+          { "code": "159570", "delta_position": 3, "date": "2026-09-30" },
+          { "code": "159582", "delta_position": -2, "date": "2026-09-30" },
+          { "code": "513310", "delta_position": 1, "date": "2026-09-30" },
+          { "code": "515880", "delta_position": 0, "date": "2026-09-30" },
+          { "code": "518880", "delta_position": 0, "date": "2026-09-30" }
+        ]
+      },
+      "B": {
+        "run_id": "engine:2026-10-14:b1790cccddee",
+        "decision_date": "2026-10-13",
+        "trigger": "dailyPipeline-0800",
+        "window_id": "W2",
+        "expected_codes": ["159570", "159582", "513310", "515880", "518880"],
+        "promotion_proof": {
+          "active_run_pointer_run_id_eq_R": true,
+          "run_history_promoted": true,
+          "run_history_read_after_write_consistent": true,
+          "run_manifest_validation_passed": true,
+          "run_manifest_revision_eq_pointer_revision": true
+        },
+        "source_raw_sha256": {
+          "ml_shadow_signal@2026-10-13": "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aa",
+          "runtime_status@capture": "556677889900112233445566778899aabbccddeeff00112233445566778899aabb"
+        },
+        "candidate_hashes_by_code": {
+          "159570": "E-0310688dc207109855b5716ff95b407a68838c355ebb59670b795498435d7c4b",
+          "159582": "E-3da0157e540f8b91a8953507c6f4a636adf769ec0c49535b0294609da6901df9",
+          "513310": "E-eeadc0ed28d98615b8c23c0cca8445188a8cbcd8dbd48ade282598ea3b135e8a",
+          "515880": "E-dc8572f93cd2be36410f82627812f6233b453af87e8903f0c63b31c8a259fc67",
+          "518880": "E-dac28d13cf6213d86fdbafc63910a4c075aaca76878c942a42f2227279e1f9e5"
+        },
+        "rows": [
+          { "code": "159570", "delta_position": -3, "date": "2026-10-13" },
+          { "code": "159582", "delta_position": 4, "date": "2026-10-13" },
+          { "code": "513310", "delta_position": 0, "date": "2026-10-13" },
+          { "code": "515880", "delta_position": 1, "date": "2026-10-13" },
+          { "code": "518880", "delta_position": 0, "date": "2026-10-13" }
+        ]
+      }
+    }
+  ]
+}

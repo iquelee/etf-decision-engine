@@ -61,7 +61,8 @@ const MIN_INDEPENDENT_EVENTS = 30;
 /** 制品相对仓库路径（也是 build-cloudfunctions.js EXTRA_FILES 的来源）。 */
 const ARTIFACT_PATHS = Object.freeze({
   freeze: 'ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json',
-  evidence: 'ml/manifests/GEN1_GUARDED_EFFECTIVE_EVIDENCE.json'
+  evidence: 'ml/manifests/GEN1_GUARDED_EFFECTIVE_EVIDENCE.json',
+  modelObservation: 'ml/manifests/GEN1_MODEL_SHA.json'
 });
 
 /** 拒绝原因码词表（稳定，供审计/测试引用）。 */

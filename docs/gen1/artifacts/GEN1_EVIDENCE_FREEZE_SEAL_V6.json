@@ -1,0 +1,225 @@
+{
+  "seal_id": "EVIDENCE_FREEZE_SEAL_V6",
+  "seal_kind": "EVIDENCE_FREEZE_SEAL",
+  "seal_layer": "DOCUMENT_LAYER",
+  "version_namespace": "gen1-evidence-contract",
+  "binding_decision": "docs/gen1/GEN1_EVIDENCE_V6_FREEZE_SEAL_BINDING_DECISION.md",
+  "authority": "owner 2026-10-02 RULING O-1 = APPROVED（新立独立治理对象；⛔ 不改 Key 2 / ⛔ 不动生产 Seal 制品）",
+  "as_of": "2026-10-02",
+  "seal_status": "EVIDENCE_FREEZE_SEALED",
+
+  "evidence_contract_version": "v6.0",
+  "evidence_contract_doc_number": "WP-G1-EVIDENCE-CH-6.0",
+  "evidence_contract_path": "docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md",
+  "evidence_contract_sha256": "7e3e5d876522b512e0ba46de248c92b8e1cb17bde0180003f7041559e2ad272e",
+  "evidence_contract_carrier_commit": "ccb0f4b8cf402a16b16d468cbff1c02109d72476",
+  "evidence_contract_parent_commit": "7d2f39bddd681cce9d714558d518b06631451d01",
+  "evidence_contract_git_blob_sha1": "294259338ba3fa60f689ed9139072a35b2368b0e",
+  "evidence_contract_bytes": 97203,
+  "evidence_contract_lines": 1413,
+  "evidence_contract_eol": "LF",
+
+  "carrier_commit": "ccb0f4b8cf402a16b16d468cbff1c02109d72476",
+  "carrier_blob_sha1": "294259338ba3fa60f689ed9139072a35b2368b0e",
+  "carrier_identity_alias_policy": "⛔ 该二键仅为 owner §二 所列术语（carrier_commit / carrier_blob_sha1）的**字面对齐别名**；**规范键名** = `evidence_contract_carrier_commit` / `evidence_contract_git_blob_sha1`（namespace 纪律，见 Binding Decision §3 / §6.4）。单一来源 = 载体提交实测；别名 ↔ 规范键的同值性由 `v6_seal_binding_selfcheck.py` **S-17 逐字节断言**（漂移即 FAIL ⇒ fail-closed）。",
+
+  "source_sha256": "4fadfe1a6b93c0896c8f50984f0b13b2f14c8798ba0bc9a6fda7f9f026119e82",
+  "model_sha256": "d5e667c66a5f888bb5489b8adcad9e6a141bfbcf0006a955d6ad40e269a7e712",
+  "threshold_version": "shadow-threshold-v1",
+
+  "capture_tool_path": "scripts/gen1/evidence-capture/c1_capture.py",
+  "capture_tool_sha256": "d0acc9e427f6ce52de903abd40ef41c76e87f7e5ba3441dea92f6a3d013a4337",
+  "capture_tool_bytes": 31143,
+  "capture_tool_lines": 629,
+  "capture_tool_eol": "LF",
+  "capture_tool_bundle_revision": "v6.0",
+  "capture_tool_prev_sha256_v5": "dd2ea8b0090853e36a28e8590fbf62519b2e7461ab7a5160c0e475a9841c8c42",
+  "capture_tool_prev_bytes_v5": 26369,
+  "capture_tool_prev_lines_v5": 546,
+
+  "redproof_tool_path": "scripts/gen1/evidence-capture/c1_gate_redproof.py",
+  "redproof_tool_sha256": "e795c93445802249e8c33a29e9b01120833079fd7b38d9a660ea22ed590caba0",
+  "redproof_tool_bytes": 14904,
+  "redproof_tool_lines": 311,
+  "redproof_tool_eol": "LF",
+  "redproof_tool_prev_sha256_v5": "0cca693ce6728b627190b04fcd78fb92ebc5153e8318dbc4f6ef39dcec06bc20",
+  "redproof_tool_prev_bytes_v5": 9362,
+  "redproof_tool_prev_lines_v5": 204,
+
+  "binding_routes": {
+    "evidence_contract_version": {
+      "route": "DIRECT",
+      "owned_by": "EVIDENCE_FREEZE_SEAL_V6",
+      "independent_claim": true
+    },
+    "evidence_contract_sha256": {
+      "route": "DIRECT",
+      "owned_by": "EVIDENCE_FREEZE_SEAL_V6",
+      "independent_claim": true
+    },
+    "capture_tool_sha256": {
+      "route": "DIRECT",
+      "owned_by": "EVIDENCE_FREEZE_SEAL_V6",
+      "independent_claim": true
+    },
+    "redproof_tool_sha256": {
+      "route": "DIRECT",
+      "owned_by": "EVIDENCE_FREEZE_SEAL_V6",
+      "independent_claim": true
+    },
+    "source_sha256": {
+      "route": "REFERENCE_TO_KEY2_SEAL",
+      "owned_by": "KEY2_GUARDED_EFFECTIVE_FREEZE",
+      "independent_claim": false,
+      "resolved_value_source": "docs/gen1/GEN1_FREEZE_SEAL_BINDING_DECISION.md §2（2026-09-22 裁定值，对象 = C1 / src/common/utils/gen1-*.js / 17 文件）",
+      "key2_artifact_value": null,
+      "recomputed_2026_10_02": "4fadfe1a6b93c0896c8f50984f0b13b2f14c8798ba0bc9a6fda7f9f026119e82",
+      "recomputed_matches_ruling": true,
+      "note": "⚠️ 本键为**引用读数**，⛔ 非本 Seal 的独立主张；Key 2 制品内实值仍为 null（bindings_status = INCOMPLETE）。"
+    },
+    "model_sha256": {
+      "route": "REFERENCE_TO_KEY2_SEAL",
+      "owned_by": "KEY2_GUARDED_EFFECTIVE_FREEZE",
+      "independent_claim": false,
+      "resolved_value_source": "ml/manifests/GEN1_RUNTIME_BUNDLE.json:4（bundle_id = gen1-runtime-hvta-20260830 / sealed_at = 2026-09-10）",
+      "key2_artifact_value": null,
+      "note": "⚠️ 本键为**引用读数**，⛔ 非本 Seal 的独立主张。"
+    },
+    "threshold_version": {
+      "route": "REFERENCE_TO_KEY2_SEAL",
+      "owned_by": "KEY2_GUARDED_EFFECTIVE_FREEZE",
+      "independent_claim": false,
+      "resolved_value_source": "ml/manifests/GEN1_RUNTIME_BUNDLE.json:11 + src/common/utils/gen1-guarded-seal.js:57（GUARDED_THRESHOLD_VERSION）",
+      "key2_artifact_value": null,
+      "note": "⚠️ 本键为**引用读数**，⛔ 非本 Seal 的独立主张。"
+    }
+  },
+
+  "reference_to_key2_seal": {
+    "reference_only": true,
+    "independent_claim": false,
+    "reason": "source_sha256 / model_sha256 / threshold_version 属 Key 2 安全语义（重算权在 GE-04 晋升；值由 Key 2 制品独占承载与版本化）⇒ 只引用、不复制为主张，⛔ 不制造第二权威。",
+    "key2_seal_id": "GUARDED_EFFECTIVE_FREEZE",
+    "key2_artifact_path": "ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json",
+    "key2_artifact_sha256": "35040e5e9e809d6c278453a3bc130ec2ac6e49421ea26953fc5e17704d8809e5",
+    "key2_artifact_bytes": 881,
+    "key2_charter_path": "docs/gen1/GEN1_GUARDED_EFFECTIVE_CHARTER.md",
+    "key2_binding_decision_path": "docs/gen1/GEN1_FREEZE_SEAL_BINDING_DECISION.md",
+    "key2_contract_version": "WP-G1-GE-CH-1.0",
+    "key2_version_namespace": "gen1-guarded-effective-charter",
+    "key2_status": "PENDING",
+    "key2_bindings_status": "INCOMPLETE",
+    "key2_binding_keys": [
+      "contract_version",
+      "source_sha256",
+      "model_sha256",
+      "threshold_version"
+    ],
+    "key2_unchanged_by_this_batch": true,
+    "relation": "PARALLEL_AND_DISJOINT",
+    "relation_note": "Key 2 与本 Seal 并列、正交：绑定不同对象集；⛔ 任一变更不导致另一方失效；⛔ 不存在覆盖关系。"
+  },
+
+  "seal_lifecycle": {
+    "order": [
+      "V6.0_EVIDENCE_FREEZE_CANDIDATE",
+      "TOOL_ALIGNMENT_PASS",
+      "EVIDENCE_FREEZE_SEAL_READY",
+      "EVIDENCE_FREEZE_SEALED"
+    ],
+    "monotonic": true,
+    "no_skip": true,
+    "achieved_state": "EVIDENCE_FREEZE_SEALED",
+    "steps": {
+      "V6.0_EVIDENCE_FREEZE_CANDIDATE": {
+        "done": true,
+        "evidence": "候选件 e93420a38a4b92c7c5eb577c4cf5af81e6d913dc22df361a1e981978efbef4b1（92306 B / 1377 行）；内容断言 39 PASS / 0 FAIL、兼容性 46 PASS、打红自证 20 PASS"
+      },
+      "TOOL_ALIGNMENT_PASS": {
+        "done": true,
+        "evidence": "v6_contract_tool_alignment.py = 29 PASS / 0 FAIL（L1–L5）"
+      },
+      "EVIDENCE_FREEZE_SEAL_READY": {
+        "done": true,
+        "evidence": "契约已 FROZEN（7e3e5d87…272e / carrier ccb0f4b8…）；两工具 SHA 已定稿（d0acc9e4… / e795c934…）；版本错配反向证明 RP-A/RP-B 必 FAIL、RP-C 必 PASS"
+      },
+      "EVIDENCE_FREEZE_SEALED": {
+        "done": true,
+        "evidence": "本制品落盘（三对象 SHA 逐项绑定 + lifecycle + change_rule）"
+      }
+    },
+    "re_seal_rule": "三对象任一字节变化 ⇒ 本 Seal 立即 MISMATCH（fail-closed）⇒ 必须重新执行 TOOL_ALIGNMENT_PASS → EVIDENCE_FREEZE_SEAL_READY → EVIDENCE_FREEZE_SEALED"
+  },
+
+  "tool_alignment": {
+    "verdict": "PASS",
+    "pass": 29,
+    "fail": 0,
+    "checker": "scripts/gen1/evidence-capture/v6_contract_tool_alignment.py",
+    "layers": {
+      "L1": "Contract §5.6 ↔ trigger_registry.js / fixtures（6 项）",
+      "L2": "Contract §5.8 ↔ checkpoint_discriminator.js（4 项）",
+      "L3": "Contract §5.8 ↔ c1_capture.py（10 项）",
+      "L4": "c1_capture.py ↔ c1_gate_redproof.py（6 项）",
+      "L5": "Contract §5.8 ↔ c1_gate_redproof.py 期望一致性（3 项）"
+    },
+    "version_mismatch_reverse_proofs": {
+      "RP_A": {
+        "composition": "V6 Contract + V5 capture + V6 redproof",
+        "expected": "ALIGNMENT = FAIL",
+        "observed": "FAIL",
+        "verdict": "OK"
+      },
+      "RP_B": {
+        "composition": "V6 Contract + V6 capture + V5 redproof",
+        "expected": "ALIGNMENT = FAIL",
+        "observed": "FAIL",
+        "verdict": "OK"
+      },
+      "RP_C": {
+        "composition": "V6 Contract + V6 capture + V6 redproof",
+        "expected": "ALIGNMENT = PASS",
+        "observed": "PASS",
+        "verdict": "OK"
+      }
+    },
+    "reverse_proof_conclusion": "三对象具**约束力**（⛔ 非「记录用字段」）：任一版本错配即被 ALIGNMENT 判 FAIL。"
+  },
+
+  "redproof_tool_selfcheck": {
+    "script": "scripts/gen1/evidence-capture/c1_gate_redproof.py",
+    "result": "ALL PASS",
+    "total_items": 57,
+    "note": "v5.0 为 31 项；v6.0 新增 §[6b] first-window-wins / §[6c] same-bundle 非独立 / §[6d] 旧单窗口规则恢复 ⇒ 必 FAIL 的反向证明"
+  },
+
+  "independent_events": 0,
+  "independent_events_threshold": 30,
+  "evidence_seal_key3": "NOT_AUTHORIZED",
+  "evidence_seal_key3_note": "Key 3 = EVIDENCE_POSITIVE（契约 §4.2）；⛔ 本 Seal 的 SEALED 与之**无蕴含关系**；⛔ 不得提前创建或伪造 Evidence Seal。",
+
+  "production_effects": {
+    "production_code_changed": false,
+    "production_db_writes": 0,
+    "deploy": false,
+    "merge": false,
+    "master_integration": false,
+    "canary": "OFF",
+    "auto_execution": "OFF",
+    "ge_04": "NOT AUTHORIZED",
+    "v366_freeze": "NOT AUTHORIZED",
+    "v366_production_attestation": "NOT AUTHORIZED",
+    "evidence_execution": "NOT AUTHORIZED",
+    "authority_touched": false,
+    "prod_seal_artifacts_touched": false,
+    "frozen_param_keys_touched": false,
+    "lock_touched": false,
+    "immutable_set_touched": false,
+    "prod_read_chain_touched": false,
+    "git_tag_created": false
+  },
+
+  "change_rule": "三对象（证据契约 / c1_capture.py / c1_gate_redproof.py）任一字节变化 ⇒ 本 Seal 立即 MISMATCH（fail-closed）。升版 / 回退 / 改 schema 必须走**新裁定**（新 Binding Decision）并重新执行 lifecycle S1→S2→S3。⛔ 不得运行时改写；⛔ 不得由本 Seal 反向修改 Key 2 任何字节。",
+  "self_hash_policy": "⛔ 本制品**不写入自身 sha256**（自指悖论）——其指纹于交付清单外单列。",
+  "note": "本制品是**文档层 / 工具链层** Seal，⛔ 不是生产制品、⛔ 不构成任何生产授权。Key 2（生产激活安全）与 Key 3（统计证据资格）均**独立于**本制品。"
+}

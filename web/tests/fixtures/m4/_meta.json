@@ -1,0 +1,160 @@
+{
+  "generated_by": "web/tests/tools/gen-m4-fixtures.cjs（✅ 入库，可复现；--check 可校验）",
+  "supersedes": "_v365-fe-audit-20260930/tools/gen-m4-fixtures.cjs（M4-P0 现场副本，⛔ 不入库）",
+  "generated_at": "2026-09-30",
+  "base_sha": "8c6f78e",
+  "note": "fixture 均为**响应 data**（不含 {code,data,message} 信封），与 M2 约定一致",
+  "files": {
+    "etf-normal.json": {
+      "scenario": "normal",
+      "origin": "live-legacy/etf-513310.json（线上 /api/etf/513310 实测，逐字节复制）",
+      "expect": "全部块可读；Gen-1 走 decision.gen1_* + ml_shadow（legacy 通道）"
+    },
+    "etf-canonical.json": {
+      "scenario": "canonical",
+      "origin": "canonical/etf-513310.json（由 src/common/utils/gen1-ui-view-model.js 实跑产出）",
+      "expect": "production / gen1 / system_runtime / legacy 四块在场 → Gen-1 走 canonical 通道"
+    },
+    "etf-canonical-null.json": {
+      "scenario": "null-in-contract",
+      "origin": "etf-canonical.json 的定点突变",
+      "mutated": [
+        "production.final_target_pct=null",
+        "production.risk_flag=null",
+        "gen1.signal.probability=null",
+        "gen1.stages.effective=null",
+        "system_runtime.gen2.production_write=null"
+      ],
+      "expect": "一律 MISSING / NULL_IN_CONTRACT，⛔ 不得 fallback 掩盖、⛔ 不得当 0"
+    },
+    "etf-decision-missing.json": {
+      "scenario": "decision-missing",
+      "origin": "etf-normal.json 删除 decision",
+      "expect": "decision.available=false；仓位/动作/评分/决策链全部显式「数据未提供」"
+    },
+    "etf-gen1-missing.json": {
+      "scenario": "gen1-missing",
+      "origin": "etf-normal.json 删除 decision.gen1_* + ml_shadow",
+      "expect": "Gen-1 层**三级全空** ⇒ 显示「数据未提供」，⛔ 不得显示「正常 / 无信号 / 关闭」"
+    },
+    "etf-stale.json": {
+      "scenario": "stale",
+      "origin": "etf-normal.json 定点突变日期",
+      "mutated": [
+        "snapshot.calc_date=2020-01-01",
+        "decision.decision_date=2020-01-01"
+      ],
+      "expect": "★ 决策 freshness=STALE；但 **K 线 freshness 独立判定**（两者⛔ 不得合并为一个「数据日期」）"
+    },
+    "etf-malformed.json": {
+      "scenario": "malformed",
+      "origin": "手写（最小文档）",
+      "expect": "⛔ 不抛异常；逐字段降级为显式缺失或原值透传；页面不得出现 undefined / NaN / [object Object]"
+    },
+    "etf-target-0.json": {
+      "scenario": "target=0",
+      "origin": "最小文档",
+      "expect": "`0` 是**合法值** ⇒ 渲染 `0.0%` 且 missing=false（⛔ 不得当缺失、⛔ 不得显示「—」）"
+    },
+    "etf-target-0p5.json": {
+      "scenario": "target=0.5",
+      "origin": "最小文档（与线上 513310 同值）",
+      "expect": "`0.5` ⇒ `0.5%`（⛔ 绝不是 50%）；同时校验 `market_factor=0.25` 是**系数**不得显示成 25%"
+    },
+    "etf-target-28p5.json": {
+      "scenario": "target=28.5",
+      "origin": "最小文档（历史实测出现过的最大值）",
+      "expect": "`28.5` ⇒ `28.5%`（与 0.5 同一 formatter，⛔ 不得出现任何量级分支）"
+    },
+    "etf-risk-normal.json": {
+      "scenario": "risk=normal",
+      "origin": "最小文档",
+      "expect": "风控绿；无风险条"
+    },
+    "etf-risk-yellow.json": {
+      "scenario": "risk=yellow",
+      "origin": "最小文档 + 1 条 ACTIVE 事件",
+      "expect": "风控黄；显示事件原因"
+    },
+    "etf-risk-red.json": {
+      "scenario": "risk=red+override",
+      "origin": "最小文档 + 1 条 ACTIVE 事件",
+      "expect": "风控红；覆盖标记可见"
+    },
+    "etf-risk-cn.json": {
+      "scenario": "risk=中文值",
+      "origin": "最小文档（risk_flag=\"正常\"，与 /api/dashboard 线上实测同形态）",
+      "expect": "归一后仍为风控绿（⛔ 不得因中文而掉成 muted）"
+    },
+    "kline-empty.json": {
+      "scenario": "kline-empty",
+      "origin": "空数组",
+      "expect": "合法值（0 根）⇒ 显示「无行情数据」，⛔ 不得当缺失/错误"
+    },
+    "kline-error.json": {
+      "scenario": "kline-error",
+      "origin": "对象而非数组",
+      "expect": "显式 MISSING，不抛异常"
+    },
+    "kline-live60.json": {
+      "scenario": "kline-live",
+      "origin": "live-legacy/kline-513310.json（线上实测尾部 60 根）",
+      "expect": "★ 线上 K 线末端为 2024-08-27（见 KLINE-DATA-001）⇒ 渲染时必须显著标注 K 线自身时点；⛔ 不得与 decision freshness 合并，⛔ 不得因 stale 而隐藏历史数据"
+    },
+    "etf-opportunity-missing.json": {
+      "scenario": "opportunity-missing",
+      "origin": "etf-normal.json 删除 decision 的机会/加仓族",
+      "expect": "机会雷达全部「数据未提供」，⛔ 不得显示 0 分 / ⛔ 不得据此推导「建议加仓」"
+    },
+    "etf-defense-inactive.json": {
+      "scenario": "defense-inactive",
+      "origin": "线上实测形态（2026-08-25 及更早的 decision 记录）",
+      "mutated": [
+        "defense_state={level:0,reason:\"无防守信号\"}",
+        "删除 defense_score",
+        "删除 defense_penalty"
+      ],
+      "expect": "防守「未激活」；score/factor 必须显式缺失，⛔ 不得补 0、⛔ 不得显示 1.00"
+    },
+    "etf-defense-missing.json": {
+      "scenario": "defense-missing",
+      "origin": "etf-normal.json 删除 decision 的防守族",
+      "expect": "防守雷达整区「数据未提供」；⛔ 前端**不得**自行按 W 态重算防守等级"
+    },
+    "etf-risk-events-present.json": {
+      "scenario": "risk-events-present",
+      "origin": "etf-normal.json + 1 条 ACTIVE 事件",
+      "expect": "渲染事件原因与时间"
+    },
+    "etf-fundamental-minimal.json": {
+      "scenario": "fundamental-minimal",
+      "origin": "etf-normal.json 删除 fundamental.detail",
+      "expect": "分层证据显式「数据未提供」；f_state / f_score 仍可读"
+    },
+    "decisions-normal.json": {
+      "scenario": "history-normal",
+      "origin": "live-legacy/decisions-513310.json（6 条真实历史，逐字节复制）",
+      "expect": "渲染 6 条真实历史 + 变化标记（target: 0.5→0.5→0.5→0→1.5→7.5）"
+    },
+    "decisions-changes.json": {
+      "scenario": "history-changes",
+      "origin": "decisions-normal.json 的**定点突变**（⛔ 非真实历史，仅测变化标记）",
+      "mutated": [
+        "[5]/[4] final_action=HOLD",
+        "[3] final_action=TACTICAL_REDUCE",
+        "[2] risk_flag=YELLOW"
+      ],
+      "expect": "相邻对比标出 action 变化与 risk 变化"
+    },
+    "decisions-empty.json": {
+      "scenario": "history-empty",
+      "origin": "空数组",
+      "expect": "★ 合法「无历史记录」—— 与「接口未提供」必须文案不同，⛔ 不得用当前字段拼一条假历史"
+    },
+    "decisions-error.json": {
+      "scenario": "history-error",
+      "origin": "对象而非数组",
+      "expect": "显式缺失，不抛异常"
+    }
+  }
+}

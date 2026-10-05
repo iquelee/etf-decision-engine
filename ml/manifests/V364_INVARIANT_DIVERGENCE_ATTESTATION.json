@@ -1,0 +1,73 @@
+{
+  "attestation_type": "v364_invariant_divergence_attestation",
+  "schema_version": "1.0",
+  "authority": "I-5-D + V365-Q（INTEGRATION_BATCH_REGENERATION）",
+  "hash_basis": "LF-normalized sha256 (CRLF->LF before sha256) so Windows worktree == Linux CI",
+  "placement_check": {
+    "in_v364_managed_roots": false,
+    "managed_roots": [
+      "src/common",
+      "src/common/utils",
+      "cloudfunctions/runDecisionEngine",
+      "scripts"
+    ],
+    "in_v365_surface_globs": false,
+    "counted_in_v364_61_ack_set": false,
+    "note": "本文件落在 ml/manifests/（不属于 V364 受管根，也不命中 V365 SURFACE_GLOBS）⇒ 不进入任何残差计数。"
+  },
+  "attestations": [
+    {
+      "id": "V364_INVARIANT_DIVERGENCE",
+      "subject": "ml/manifests/GEN1_FEATURE_PIPELINE_LOCK.json",
+      "metric": "sha256lf",
+      "OLD": "8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad",
+      "CURRENT": "291ec03cd1d33af9ecd470a44911d68d1b9455af5368166d22007547a5b0867f",
+      "WHY": "C3-R2（b2af60e，2026-10-03）合法加入 data_health role（src/common/utils/gen1-data-health.js）⇒ 锁内容变 ⇒ 哈希必然变。这是登记的显式变更，不是漂移。",
+      "ACKNOWLEDGED": true,
+      "NOT_regenerated": true,
+      "NOT_silently_repaired": true,
+      "V364_LOCK_REWRITTEN": false,
+      "governance_semantics": {
+        "kind": "acknowledged_divergence",
+        "excluded_from": [
+          "ml/manifests/V364_IMMUTABLE_LOCK.json",
+          "V364 61 项 acknowledged divergence 集合"
+        ],
+        "reason": "承认机制必须落在 lock 之外（I-5-D）；改写 lock 等于用写操作掩盖分歧。",
+        "roles_after": [
+          "indicator_implementation",
+          "trend_stage_implementation",
+          "feature_builder_and_params",
+          "feature_schema_and_thresholds",
+          "data_health"
+        ],
+        "forbidden_repairs": [
+          "改回 4 roles",
+          "重锚 ROOT_ANCHOR_PIPELINE_LOCK 到旧值",
+          "静默重生成以消除差异"
+        ]
+      }
+    },
+    {
+      "id": "V365_CANDIDATE_IDENTITY_SUPERSEDED",
+      "subject": "ml/manifests/V365_CANDIDATE_MANIFEST.json",
+      "metric": "candidate_content_sha",
+      "OLD": "2f4b05193ff09d27bc990254e91e545dcad0d2926cf26835119b846c7cd2cade",
+      "NEW": "2027e5ccab37290f76d1feadd1710bca145a77255524ac01d03c5a4991e5e6fa",
+      "changed_files": [
+        "cloudfunctions/adminGateway/index.js",
+        "cloudfunctions/runDecisionEngine/index.js"
+      ],
+      "qualified_file_count": 20,
+      "qualification_status": "CANDIDATE",
+      "carrier": {
+        "git_object": "d669298",
+        "tag": "v3.6.5-frozen",
+        "note": "B 谱系载体（生产已部署）；V3.6.5 身份由该 git 对象 + tag 钉定，⛔ 不因集成而改写。"
+      },
+      "ACKNOWLEDGED": true,
+      "NOT_silently_repaired": true,
+      "regenerated_by": "S-16 / scripts/gen-v365-candidate-manifest.js（显式、可复算；--check 复核确定性）"
+    }
+  ]
+}
