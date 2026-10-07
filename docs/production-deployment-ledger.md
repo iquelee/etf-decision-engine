@@ -657,6 +657,92 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 
 ---
 
+### D-012 · 2026-10-06 · **D-D CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `runDecisionEngine` + `adminGateway`）
+
+> **本行为真实生产部署**（owner 于 2026-10-06 下发 `D-D = AUTHORIZED`）。
+> 授权范围 = **`DEPLOY_SET = {runDecisionEngine, adminGateway}`**；`runGen1ShadowEod` = **NO DEPLOY**（线上已 `ALREADY_DEPLOYED_MATCHES_RC`）。
+> `supersedes`：无。**性质**：**补登**（部署事实发生于 2026-10-06，本行为事后追加登记；本补登**不产生**任何新授权）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`D-D = AUTHORIZED`**（owner，2026-10-06；⛔ 不得解释为任何后续 Gate 的授权） |
+| `authorization_evidence` | `_g1-dd-deploy-20261006/DD_EXECUTION_RECORD.md`（执行证据件，落于载体树 / RC 树外） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine` + `adminGateway`（**仅此两个**；⛔ 未 `--all`、⛔ 未 `--runtime`；`runGen1ShadowEod` 明确排除） |
+| `deploy_input_method` | RC 树外干净工作区 `_g1-dd-deploy-20261006/ws`（`inputs_verified = 131/131` tracked 文件 LF 归一后 ≡ RC HEAD blob；`node scripts/build-cloudfunctions.js` sanctioned） |
+| `payload_restore_source` | `node_modules/**`(各 1703 文件) + `config.json` 从**当前线上包**恢复（rde: `_v365-audit-20260930/online/runDecisionEngine.zip`；ag: `_g1-rollback-artifacts-20261005/.../adminGateway.C2_0390a32.3d1e234a.zip`） |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy <fn> --dir <…_g1-dd-deploy-20261006/ws/dist-functions/<fn>> --config-file <…ws/cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` / cwd | `3.8.5` / 仓库根 |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ … Cloud function deployed successfully!`**（两函数各 exit 0 · count=1） |
+| `deployment_count` | **2**（`runDecisionEngine` 1 次 + `adminGateway` 1 次；⛔ 无第二次） |
+| `deployment_started/finished` | rde `2026-10-06T01:01:02+08 → 01:03:23+08`；ag `2026-10-06T01:05:18+08 → 01:05:39+08` |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `FunctionId` | `lam-eiye285p`（未变） | `lam-09ya1rgt`（未变） |
+| `Runtime` / `Handler` | `Nodejs16.13` / `index.main`（未变） | 同（未变） |
+| `Timeout` / `MemorySize` | `120` / `256`（未变） | `60` / `256`（未变） |
+| `ModTime`（前 → 后） | `2026-09-30 13:38:07` → **`2026-10-06 01:01:17`** | `2026-10-04 20:19:37` → **`2026-10-06 01:05:34`** |
+| `CodeSize`（前 → 后） | `4465434` → **`4468203`** | `4366244` → **`4451179`** |
+| `Status` | `Active` / `Available` | `Active` / `Available` |
+
+#### 4. 代码身份与全域对拍
+
+| 口径 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `index.js` RAW sha256 | `9cebff3b…`（103258 B · 1781 CRLF · 0 lone-LF） | `692893fa…`（66218 B · 1372 CRLF · 0 lone-LF） |
+| `index.js` **LF** sha256 | **`32168b2c1213157cfa756295725c6226c6f7fd11df5a3b87ec898c2e7043e95f`** | **`121e6f0de67913de168b1fbb3a12a9eba41629da1068322d9ac48b949c53999a`** |
+| 部署包指纹 `ALL_RAW` | `fd68ca0f0aed7dc4…` | `b095394a85da390a…` |
+| 包文件数（code / nm） | `1796`（93 / 1703） | `1793`（90 / 1703） |
+| `source_parity`（部署制品 vs 线上 `$LATEST`） | **`EXACT_MATCH 1796/1796`**（ONLY_ARTIFACT 0 / ONLY_ONLINE 0 / REAL_DIFF 0） | **`EXACT_MATCH 1793/1793`**（同上全 0） |
+| `source_repo_sha`（推定 = RC HEAD @ D-D） | `dd610cb5dd0a782459d3789b94de3e1a3170c539` | 同 |
+
+#### 5. 语义变化（D-D 代码变化面）
+
+- `runDecisionEngine`：`index.js` + `common/utils/gen1-guarded-seal.js`(`d51b406b`) + `common/utils/gen1-data-health.js`(`3f2ff5e4`) + **新增** `GEN1_MODEL_SHA.json`。
+- `adminGateway`：`index.js` + `common/schema.js` + `common/utils/datasource.js` + `common/utils/gen1-guarded-seal.js` + `common/utils/v361-run-context.js` + **新增 16 个 common 文件**（`ONLY_RC = 16`）。
+- `runGen1ShadowEod`：**零变化**。
+
+#### 6. 其他 8 函数 = UNCHANGED
+
+同时刻 10 函数列表逐行 `diff`：**恰 2 行变化** = `DEPLOY_SET`。
+`runGen1ShadowEod`(10-04 19:05:36 · 线上 LF `485244e4…`) 仍 `ALREADY_DEPLOYED_MATCHES_RC` 未变。
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | rde 部署前线上包 LF `7e339fb2…d84c`（V3.6.5 · 载荷 `runDecisionEngine.V365.e996e88ae808.tar`）；ag 部署前线上包 LF `3a7696e9…3f1c`（C-2 · 载荷 `adminGateway.C2_0390a32.3d1e234a.zip`） |
+| `rollback_used` | **NO**（部署后身份 / 整包对拍 / runtime / config / triggers 全部 PASS） |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未开 production write / auto execution / broker wiring / guarded-effective ·
+⛔ 未改 Authority · ⛔ 未改 `FROZEN_PARAM_KEYS` · ⛔ 未改 production configuration ·
+⛔ 未执行任何 trading / broker 动作 · ⛔ 未修复/绕过 health gate（`gen1_health_status = DEGRADED` 保持原样） ·
+⛔ 未 commit / push / tag / merge · 除 `DEPLOY_SET` 两函数部署外**无任何额外 production write**。
+
+> **γ 口径（Owner 2026-10-07 裁定 = γ）**：`authority state` 与 `Gen-1 effective state`
+> **不是本台账的一等字段** ⇒ 本行**不新增** `authority_state` / `gen1_effective_state` 字段；
+> 二者继续作为 **deployment boundary / production reconciliation 的独立证据**
+> （D-D 已载：`gen1_authority = CANARY` · 全 effective 旗标 `false` · `updated_at = 2026-10-01T00:00:22.690Z`
+> 部署前后一致 ⇒ 无 Authority 写入）。`configuration state` 同样不扩展 schema，按既有字段（`config.json` / `Triggers` / `Environment`）填写。
+
+> 证据件：`_g1-dd-deploy-20261006/DD_EXECUTION_RECORD.md` · `deploy_package_fingerprint.json` ·
+> `postdeploy_parity_{runDecisionEngine,adminGateway}.json` · `logs/dd1_deploy_runDecisionEngine.log` · `logs/dd2_deploy_adminGateway.log`
+
+---
+
 ## 5. 补登后状态（as-of 2026-10-05）
 
 | 项 | 值 |
