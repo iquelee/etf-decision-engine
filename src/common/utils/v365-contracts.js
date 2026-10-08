@@ -17,7 +17,7 @@
 /* ------------------------------------------------------------------ *
  * 引擎身份
  * ------------------------------------------------------------------ */
-const ENGINE_VERSION = 'v3.6.5';
+const ENGINE_VERSION = 'v3.6.7';
 const RELEASE_KIND = 'PRODUCTION_INTEGRITY';   // ⛔ 不是 Alpha、不是策略版本
 const PARENT_PRODUCTION_VERSION = 'v3.6.4';
 

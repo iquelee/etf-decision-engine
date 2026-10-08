@@ -18,6 +18,12 @@
  *
  * 纯函数模块：无网络、无数据库、无环境变量依赖（除显式传入的 calendar）。
  * 唯一 I/O 是 `loadRepoCalendar()` 读取仓库内 artifact（可被测试替换）。
+ *
+ * O-2 变更（2026-10-06，DA-Health 根因修复）：
+ *   - `isTradingDay()` 增加 coverage 合取（fail-closed，消除越界 fail-open）；
+ *   - 新增 `evaluateTradingDay()` 结构化判定（additive；与 isTradingDay 共用同一条判定链）；
+ *   - 导出 `inCoverage()`（供唯一语义入口复用，不复制判定逻辑）；
+ *   - `calendarArtifactSha256()` 目标改为 v1 artifact、口径改为 LF 归一。
  */
 'use strict';
 
@@ -221,9 +227,72 @@ function isTradingDay(dateStr, calendar) {
   if (!isDate(dateStr)) return false;
   const cal = calendar && calendar[LOADED] ? calendar : loadCalendar(calendar);
   if (!cal.valid) return false;
+  // O-2 修复（2026-10-06）：coverage 合取 —— 未播种 / 越界一律 false（fail-closed）。
+  // 本函数在修复前**不校验 coverage**：coverage 之外的任意工作日都会退化为
+  // 「weekday-only」而返回 true（已复现 2027-01-04 / 2027-01-01 / 2025-12-31），
+  // 是静默 fail-open；调用方据此写库即产生非交易日污染行。
+  if (!inCoverage(dateStr, cal)) return false;
   if (cal.specialSet.has(dateStr)) return true;
   if (cal.holidaySet.has(dateStr)) return false;
   return !isWeekend(dateStr);
+}
+
+/**
+ * O-2 修复（2026-10-06）：结构化交易日判定 —— 显式合取
+ *   calendar 有效  ∧  coverage 已播种  ∧  coverage 成员关系  ∧  日期语义
+ * 任一不满足 ⇒ `trading_day = false`（fail-closed），并给出可判定理由码。
+ *
+ * 与 `isTradingDay()` 的关系：后者是本判定在「只需布尔值」场景的薄包装，
+ * **共用同一条判定链**（本函数在 coverage 项上先判、再委托 isTradingDay），
+ * ⛔ 不存在第二条独立语义路径。
+ *
+ * ⛔ 不得 fail-open：日期非法 / calendar 无效 / coverage 缺失 / 越界 一律 false。
+ *
+ * @param {string} dateStr YYYY-MM-DD
+ * @param {object} [calendar] calendar artifact（或已 load 的对象）
+ * @returns {{trading_day:boolean, reason:string|null, fail_closed_code:string|null,
+ *            coverage:{start:string|null,end:string|null,seeded:boolean}|null,
+ *            calendar_version:string|null}}
+ */
+function evaluateTradingDay(dateStr, calendar) {
+  const cal = calendar && calendar[LOADED] ? calendar : loadCalendar(calendar);
+  const base = {
+    trading_day: false,
+    reason: null,
+    fail_closed_code: null,
+    coverage: cal && cal.coverage
+      ? { start: cal.coverage.start, end: cal.coverage.end, seeded: cal.coverage.seeded }
+      : null,
+    calendar_version: (cal && cal.calendar_version) || null
+  };
+  if (!isDate(dateStr)) {
+    return Object.assign({}, base, {
+      reason: REASON.INVALID_NOW, fail_closed_code: 'CALENDAR_INVALID_DATE'
+    });
+  }
+  if (!cal || !cal.valid) {
+    return Object.assign({}, base, {
+      reason: REASON.INVALID_CALENDAR, fail_closed_code: FAIL_CLOSED_CODE[REASON.INVALID_CALENDAR]
+    });
+  }
+  if (!cal.coverage.seeded || !cal.coverage.start || !cal.coverage.end) {
+    return Object.assign({}, base, {
+      reason: REASON.CALENDAR_COVERAGE_MISSING,
+      fail_closed_code: FAIL_CLOSED_CODE[REASON.CALENDAR_COVERAGE_MISSING]
+    });
+  }
+  if (dateStr < cal.coverage.start || dateStr > cal.coverage.end) {
+    return Object.assign({}, base, {
+      reason: REASON.CALENDAR_COVERAGE_OUT_OF_RANGE,
+      fail_closed_code: FAIL_CLOSED_CODE[REASON.CALENDAR_COVERAGE_OUT_OF_RANGE]
+    });
+  }
+  const trading = isTradingDay(dateStr, cal);
+  return Object.assign({}, base, {
+    trading_day: trading,
+    reason: trading ? 'TRADING_DAY' : REASON.NON_TRADING_DAY,
+    fail_closed_code: trading ? null : 'NON_TRADING_DAY'
+  });
 }
 
 /** 严格早于 dateStr 的最近交易日；超出 coverage / 扫描上限返回 null */
@@ -437,11 +506,24 @@ function calendarExpiryStatus(now, calendar) {
   };
 }
 
-/** 计算 artifact 的规范 sha256（用于 manifest 记录；⛔ 不写回 artifact 本身，避免自指） */
+/**
+ * 计算 artifact 的**规范** sha256（用于 manifest 记录；⛔ 不写回 artifact 本身，避免自指）。
+ *
+ * O-2 修复（2026-10-06）：本函数此前有两处错位，导致「看起来能通过、实际验证了错误文件」：
+ *   ① 默认目标 = `CALENDAR_PATH`（旧骨架 cn-trading-calendar.json），
+ *      而 loader 实际**优先**加载 `cn-trading-calendar.v1.json` ⇒ 默认值与被验证对象不是同一个文件；
+ *   ② 口径 = raw 字节，而 manifest 声明 `artifact_sha256_basis` 为 **LF 归一**（UTF-8，稳定键序）
+ *      ⇒ 在 CRLF 工作区恒不相等。
+ * 现统一为：target = v1 artifact（与 loader 首选项一致）· basis = LF 归一。
+ *
+ * @param {string} [filePath] 显式路径；缺省用 `V1_CALENDAR_PATH`
+ * @returns {string} 64 位十六进制 sha256
+ */
 function calendarArtifactSha256(filePath) {
-  const p = filePath || CALENDAR_PATH;
+  const p = filePath || V1_CALENDAR_PATH;
   const buf = fs.readFileSync(p);
-  return crypto.createHash('sha256').update(buf).digest('hex');
+  const lf = buf.toString('utf8').replace(/\r\n/g, '\n');
+  return crypto.createHash('sha256').update(Buffer.from(lf, 'utf8')).digest('hex');
 }
 
 module.exports = {
@@ -464,7 +546,9 @@ module.exports = {
   dateDiffDays,
   loadCalendar,
   loadRepoCalendar,
+  inCoverage,
   isTradingDay,
+  evaluateTradingDay,
   prevTradingDay,
   nextTradingDay,
   countTradeDays,

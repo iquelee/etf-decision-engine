@@ -13,6 +13,8 @@ const indicators = require('./common/utils/indicators');
 const { COLLECTIONS, DEFAULT_PARAMS } = require('./common/constants');
 // V3.6.5 (B1 / P-4)：pipeline correlation 契约（**纯函数**；不改控制流、不加 retry、不改 timeout）
 const pipelineCorrelation = require('./common/utils/pipeline-correlation.js');
+// O-2 修复（2026-10-06）：交易日权威判定（canonical calendar，纯函数模块）
+const cnTradingCalendar = require('./common/utils/cn-trading-calendar.js');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -81,6 +83,38 @@ async function materializeWeekly(code, dailyBars, params) {
 
 exports.main = async (event = {}, context = {}) => {
   const startedAt = Date.now();
+
+  // ---- O-2 修复（2026-10-06）：trading-day / valid-calendar 前置闸门 ----
+  // 边界（Owner §三.3）：必须在 indicator_snapshot 写入 / etf_weekly 写入 /
+  // 链式 runDecisionEngine 调用**之前**生效；
+  // INVALID / OUT_OF_COVERAGE / NON_TRADING_DAY ⇒ HARD STOP（不物化、不写周线、不链式）。
+  // ⛔ 不得 fail-open：calendar 无效 / coverage 缺失 / 越界 / 非交易日 一律逐出。
+  // 跳过语义：返回值**不得**被误读为成功物化（ok:true + skipped 显式给出理由）。
+  // 逃生门：event.force === true（与 fetchDailyData / fetchRealtimeData 同形；
+  // 上游链式 payload 为 { from: 'fetchDailyData' }，**不传递 force**）。
+  const isForce = (event && event.force) === true;
+  if (!isForce) {
+    let gateDate = null;
+    try {
+      const bj = cnTradingCalendar.beijingParts(new Date());
+      gateDate = bj ? bj.date : null;
+    } catch (e) { gateDate = null; }
+    const gate = cnTradingCalendar.evaluateTradingDay(
+      gateDate, cnTradingCalendar.loadRepoCalendar()
+    );
+    if (gate.trading_day !== true) {
+      return {
+        ok: true,
+        skipped: 'non_trading_day',
+        date: gateDate,
+        reason: gate.reason,
+        fail_closed_code: gate.fail_closed_code,
+        calendar_version: gate.calendar_version,
+        duration_ms: Date.now() - startedAt
+      };
+    }
+  }
+
   try {
     // 1. 参数（含版本号）
     const { params, version } = await db.getParamConfig();
