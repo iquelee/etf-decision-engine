@@ -743,6 +743,93 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 
 ---
 
+### D-013 · 2026-10-08 · **DG-8 CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `runDecisionEngine` + `adminGateway`）
+
+> **本行为真实生产部署**（owner 于 2026-10-08 下发 `DG-8 DEPLOYMENT = AUTHORIZED`）。
+> 授权范围 = **`DEPLOYMENT_SCOPE = {runDecisionEngine, adminGateway}`**；`runGen1ShadowEod` = **NO DEPLOY**（线上仍 `485244e4…`）。
+> `supersedes`：无。**性质**：**当期登记**（部署事实发生于 2026-10-08，同日登记）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`DG-8 DEPLOYMENT = AUTHORIZED`**（owner，2026-10-08；⛔ 不得解释为任何后续 Gate 的授权） |
+| `authorization_evidence` | `_g1-da-v367-dg8-final-deployment-preflight-readonly-20261008/DG8_FINAL_DEPLOYMENT_PREFLIGHT_REPORT.md`（预检 PASS）· `_g1-da-v367-dg8-deployment-20261008/DG8_DEPLOYMENT_REPORT.md`（执行 + C1–C7） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine` + `adminGateway`（**仅此两个**；⛔ 未 `--all`、⛔ 未 `--runtime`） |
+| `deploy_input_method` | 载体树外 clean export `git archive 5aa1ad10`（927 文件）→ `node scripts/build-cloudfunctions.js`（sanctioned，11 包 parity PASS） |
+| `payload_restore_source` | `node_modules/**`（各 1703 文件）+ `config.json` 从**当前线上包**恢复（`tcb fn code download` 只读 `$LATEST`） |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy <fn> --dir <…_g1-da-v367-dg8-clean-build-20261008/source/dist-functions/<fn>> --config-file <…cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` / cwd | `3.8.5` / 仓库根（凭证按 cwd 分档；与 D-010 / D-011 / D-D 同口径） |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ … Cloud function deployed successfully!`**（两函数各 exit 0） |
+| `deployment_count` | **2**（`runDecisionEngine` 1 次 + `adminGateway` 1 次；⛔ 无第二次） |
+| `deployment_started/finished` | rde `2026-10-08T11:39:25+08 → 11:39:50+08`；ag `2026-10-08T11:40:29+08 → 11:40:52+08` |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `ModTime`（前 → 后） | `2026-10-06 01:01:17` → **`2026-10-08 11:39:46`** | `2026-10-06 01:05:34` → **`2026-10-08 11:40:48`** |
+| `CodeSize`（前 → 后） | `4468203` → **`4470485`** | `4451179` → **`4453461`** |
+| `Status` | `Active` | `Active` |
+
+#### 4. 代码身份与全域对拍
+
+| 口径 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `index.js` RAW sha256 | `9cebff3b…`（103258 B）**未变** | `692893fa…`（66218 B）**未变** |
+| `index.js` **LF** sha256 | `32168b2c1213157cfa756295725c6226c6f7fd11df5a3b87ec898c2e7043e95f` **未变** | `121e6f0de67913de168b1fbb3a12a9eba41629da1068322d9ac48b949c53999a` **未变** |
+| 包文件数（code / nm） | `1796`（93 / 1703） | `1793`（90 / 1703） |
+| `source_parity`（`fn code download` 全量 vs 构建包） | **`EXACT_MATCH 1796/1796`** | **`EXACT_MATCH 1793/1793`** |
+| 部署包 `sha256`（zip） | `dc63c095…99fffd` | `b94f586a…11c509` |
+| `source_repo_sha` | `5aa1ad100443f45ec2b690ff6bba73b85a19e04b`（**已确证**：`git ls-remote origin refs/heads/gen1-da-rc-impl-20261006` = 该 sha） | 同 |
+
+> ★ **本轮为「common-only」变更**：两函数 `index.js` 与部署前**逐字节未变**（改动全在 `common/`）⇒ `CodeInfo` / `index sha` **不变属预期**；
+> 部署事实由 `ModTime` / `CodeSize` 变化 **及** `fn code download` 全量对拍（§4 `EXACT_MATCH`）双重证明（⛔ 不可只比 index sha）。
+
+#### 5. 语义变化（DG-8 代码变化面）
+
+- 两包与**部署前线上包**逐文件对拍：**唯一差异 = 3 个 shared common 文件** = `common/utils/cn-trading-calendar.js` · `common/utils/datasource.js` · `common/utils/v365-contracts.js`（`ENGINE_VERSION` `v3.6.5` → **`v3.6.7`**）。
+- ⚠️ 该 3 件属 **O-2 CALC / DA-Health 修复轴**的 change surface，**本轮不作为部署目标**；其中 `cn-trading-calendar.js` 经 rde 运行时 require 链（`index.js:116 → common/utils/v365-run-integrity.js:28 → cn-trading-calendar.js`）作为 **dependency** 进入目标包。
+- `materializeIndicators` / `fetchRealtimeData` = **change surface 内，但 NOT DEPLOYED**。
+
+#### 6. 其他 8 函数 = UNCHANGED
+
+同时刻 10 函数列表逐行 `diff`：**恰 2 行变化** = `DEPLOYMENT_SCOPE`。
+`runGen1ShadowEod`（`2026-10-04 19:05:36` · 线上 LF `485244e4…33d7`）未变。
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | rde `25b8327b05be9523180b323755e40e71e2e97bbe355b99a1360491fc6c8fe690`（tar · ustar · 92 files）；ag `00ca008c828b5adaf0c5f96af9cba0469cafd8433997b89d09ca5228971c7f4a`（zip · 2128 entries） |
+| `rollback_binding` | rde `8a08de7c…2c23` / ag `b347a237…1c4d`（`_g1-rollback-remediation-20261007/`） |
+| `rollback_binding_target_state` | **PRE_DEPLOY 线上身份**（rde LF `32168b2c…43e95f` / ag LF `121e6f0d…c53999a`）—— ⚠️ **不含**本轮 DG-8 变更；绑定**不随部署前移** |
+| `rollback_used` | **NO** |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未开 production write / auto execution / broker wiring / guarded-effective ·
+⛔ 未改 Authority · ⛔ 未改 `active_run_pointer` · ⛔ 未改 `FROZEN_PARAM_KEYS` · ⛔ 未改 production configuration ·
+⛔ 未执行任何 trading / broker 动作 · ⛔ 未 commit / push / tag / merge / refreeze ·
+除 `DEPLOYMENT_SCOPE` 两函数部署外**无任何额外 production write**。
+
+> **γ 口径（Owner 2026-10-07 裁定 = γ）**：`authority state` / `Gen-1 effective state` **不是本台账一等字段** ⇒ 本行**不新增**对应字段；
+> 二者作为 **deployment boundary 证据**记录如下（部署前后**逐字一致** ⇒ 无 Authority 写入）：
+> `gen1_authority = CANARY` · 全 effective 旗标 `false` · `independent_events = 0` · `updated_at = 2026-10-01T00:00:22.690Z`；
+> `active_run_pointer`：`engine:2026-09-30:b1790776862980` / `revision 1` / `updated_at = 2026-09-30T14:01:11.797Z`（**未变**）。
+
+> 证据件：`_g1-da-v367-dg8-deployment-20261008/{DG8_DEPLOYMENT_REPORT.md, evidence/DG8_DEPLOYMENT_EVIDENCE.json, evidence/postdeploy_verify.json}` ·
+> 日志：`logs/dg8a1_deploy_runDecisionEngine.log` · `logs/dg8a2_deploy_adminGateway.log`
+
+---
+
 ## 5. 补登后状态（as-of 2026-10-05）
 
 | 项 | 值 |
