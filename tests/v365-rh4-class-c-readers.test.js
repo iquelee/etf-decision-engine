@@ -80,16 +80,13 @@ const ok = (n, d) => { pass++; console.log(`[PASS] ${n}${d ? ' — ' + d : ''}`)
 
   // (a) 需要文件内标记的读点 ⇒ 必须真的能找到标记
   const gw = read(API_GW);
-  const gwLines = gw.split(/\r?\n/);
-  const gwTargets = [
-    { line: 667, what: 'getDecisions' },
-    { line: 776, what: 'getReview.decisions' },
-    { line: 784, what: 'getReview.snapshots' }
-  ];
-  for (const t of gwTargets) {
-    const ln = gwLines[t.line - 1] || '';
-    if (!ALLOW_RE.test(ln)) problems.push(`${API_GW}:${t.line}(${t.what}) 缺轴标记`);
-  }
+  // Route-level reads now delegate to the tested historical resolver. Do not
+  // bind these assertions to old line numbers or require a deferred legacy read.
+  const historical = read('src/common/utils/production-history.js');
+  assert.ok(/async function getDecisions[\s\S]*?readProductionHistory\(db/.test(gw));
+  assert.ok(/async function getReview[\s\S]*?readProductionHistory\(db/.test(gw));
+  assert.ok(/v365-reader-allow:history-deferred/.test(historical), 'archive segment must remain explicitly declared');
+  assert.ok(/v365-reader-allow:mutable-axis \(actual holding evidence/.test(gw), 'actual holdings must remain on their own axis');
   const others = [
     { file: SHADOW_INT, re: /v365-reader-allow:history-deferred/, what: 'runIntegratedShadowEod' }
   ];

@@ -39,9 +39,9 @@ test('A.2 engine_version / parent 正确，且**不冒充** V364', () => {
   //   ⛔ 只做 REBIND 会退化为同义反复：「常量被改成错值」时两边一起错、静默通过。
   assert.strictEqual(m.engine_version, CONTRACTS.ENGINE_VERSION,
     'manifest.engine_version 必须等于 CONTRACTS.ENGINE_VERSION（唯一来源）');
-  assert.strictEqual(CONTRACTS.ENGINE_VERSION, 'v3.6.7',
-    '意图锚：本候选的目标版本号必须为 v3.6.7（升版时须显式改此锚，勿只改常量）');
-  assert.strictEqual(m.parent_production_version, 'v3.6.4');
+  assert.strictEqual(CONTRACTS.ENGINE_VERSION, 'v3.6.8',
+    '意图锚：本候选目标为 v3.6.8（不是当前线上已部署版本）');
+  assert.strictEqual(m.parent_production_version, 'v3.6.7');
   assert.strictEqual(m.release_kind, 'PRODUCTION_INTEGRITY');
   assert.strictEqual(m.frozen_predecessor_locks_rewritten_by_v365, false,
     'V365 不得回写 V364/V361 lock');
@@ -290,10 +290,12 @@ test('A.12 ★ V3.6.5 升版前身份件留存且可独立复核（升版未丢�
   assert.strictEqual(V365_PRE_UPGRADE.qualification_status, 'CANDIDATE');
 
   // (III) 升版确实发生：当前 manifest 的版本轴与指纹均已前进
-  const cur = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  // DG-1's upgrade proof belongs to the retained V3.6.7 identity. Later
+  // candidates have separate manifests and must not rewrite this history.
+  const cur = JSON.parse(fs.readFileSync(path.join(REPO,'ml/manifests/V365_CANDIDATE_MANIFEST.json'), 'utf8'));
   assert.notStrictEqual(cur.engine_version, V365_PRE_UPGRADE.engine_version,
     '当前 manifest engine_version 必须已升版（仍为 v3.6.5 说明未重出）');
-  assert.strictEqual(cur.engine_version, CONTRACTS.ENGINE_VERSION);
+  assert.strictEqual(cur.engine_version, 'v3.6.7');
   assert.notStrictEqual(cur.candidate_content_sha, V365_PRE_UPGRADE.candidate_content_sha,
     '升版后 candidate_content_sha 必须改变（否则说明合格面没变 / manifest 未重出）');
 

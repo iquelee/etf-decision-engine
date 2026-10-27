@@ -1390,12 +1390,20 @@ exports.main = async (event = {}, context = {}) => {
       const v365PointerBefore = await v365Store.getPointer(v365Scope).catch(() => null);
       const v365Revision = (v365PointerBefore && Number.isFinite(Number(v365PointerBefore.revision))
         ? Number(v365PointerBefore.revision) : 0) + 1;
+      let v365BuildSource = null;
+      try { v365BuildSource = JSON.parse(fs.readFileSync(path.join(__dirname,'RELEASE_SOURCE.json'),'utf8')); }
+      catch (e) { /* source-only packages report unknown commit, never a guessed one */ }
       const v365Manifest = {
         run_id: v365EngineRunIdBase,
         revision: v365Revision,
         expected_trade_date: snapshotDate,
         expected_codes: v365CandidateCodes.slice(),
         input_hash: 'engine:' + v365EngineRunIdBase,
+        input_hash_basis: 'LEGACY_RUN_IDENTITY',
+        input_context_sha256: v365Envelope.input_hash,
+        engine_version: runIntegrity.ENGINE_VERSION,
+        strategy_version: trendStageEnabled ? resolveShadowEngineVersion(merged) : 'v3.8',
+        source_commit: v365BuildSource && !v365BuildSource.source_dirty && /^[a-f0-9]{40}$/.test(v365BuildSource.source_commit || '') ? v365BuildSource.source_commit : null,
         status: 'CALCULATING',
         created_at: new Date().toISOString()
       };
@@ -1430,6 +1438,8 @@ exports.main = async (event = {}, context = {}) => {
           && v365PublishResult.finality.status) || v365Finality.status,
         engine_version: runIntegrity.ENGINE_VERSION,
         input_hash: v365Manifest.input_hash,
+        input_context_sha256: v365Manifest.input_context_sha256,
+        source_commit: v365Manifest.source_commit,
         expected_codes: v365Manifest.expected_codes,
         decision_count: v365CandidateDocs.length,
         portfolio_present: v365SnapshotDoc != null,

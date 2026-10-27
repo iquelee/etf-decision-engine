@@ -209,4 +209,20 @@ t.ok('adaptIntelligence 可独立调用且不抛异常', () => {
   assert.equal(adaptIntelligence(null, null).available, false);
 });
 
+t.ok('promoted-run envelope preserves coverage and original rows', () => {
+  const rows=M4('decisions-normal.json');
+  const h=adaptDecisionHistory({rows,history:{status:'OK',segments:[{axis:'RUN_AXIS'}]}});
+  assert.equal(h.count,rows.length);
+  assert.equal(h.coverage.status,'OK');
+});
+t.ok('missing index is ERROR, not successful empty history', () => {
+  const h=adaptDecisionHistory({rows:[],history:{status:'UNAVAILABLE',gaps:[{reason:'HISTORY_INDEX_UNAVAILABLE'}]}});
+  assert.equal(h.state,FIELD_STATE.ERROR);assert.equal(h.available,false);
+});
+t.ok('partial/truncated history has an explicit coverage notice', () => {
+  for(const status of ['PARTIAL','TRUNCATED']) {
+    const h=adaptDecisionHistory({rows:M4('decisions-normal.json'),history:{status}});
+    assert.ok(h.coverageNote);assert.ok(h.available);
+  }
+});
 t.done();

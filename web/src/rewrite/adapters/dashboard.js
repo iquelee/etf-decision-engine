@@ -115,7 +115,7 @@ export function adaptDashboard(data, runtimeStatus = null, meta = {}) {
     boundaryFields: adaptBoundaryFields(runtimeStatus),
 
     /* ---- 系统运行状态（折叠区）---- */
-    systemStatus: adaptSystemStatus(empty ? null : data.ml_shadow),
+    systemStatus: adaptSystemStatus(empty ? null : data.ml_shadow, empty ? null : data.version_identity),
 
     /* ---- 数据质量 ---- */
     asOf: adaptAsOf(overview, runtimeStatus, retrievedAt, cards),
@@ -686,7 +686,7 @@ function adaptBoundaryFields(runtimeStatus) {
 /* ==================== 系统运行状态（折叠区） ==================== */
 
 /** 系统运行状态（旧前端读的 `capability.*` 线上不存在 ⇒ 显式缺失） */
-function adaptSystemStatus(ml) {
+function adaptSystemStatus(ml, identity) {
   const P0 = P('ml_shadow');
   if (!ml || typeof ml !== 'object') {
     return Object.freeze({ available: false, items: Object.freeze([]) });
@@ -697,11 +697,14 @@ function adaptSystemStatus(ml) {
     { key: 'observe', label: '观察模式', d: dispTri(readField(ml, 'observe', P0)) },
     { key: 'fastPathEnabled', label: '快速通道', d: dispTri(readField(ml, 'fast_path_enabled', P0)) },
     { key: 'modelId', label: '模型', d: disp(readField(ml, 'model_id', P0), null) },
-    { key: 'engineVersion', label: '引擎版本', d: disp(readField(ml, 'engine_version', P0), null) },
+    { key: 'engineVersion', label: identity ? '策略族版本' : '引擎版本', d: disp(readField(ml, 'engine_version', P0), null) },
     { key: 'uiPhase', label: '阶段', d: disp(readField(ml, 'ui_phase', P0), null) },
     { key: 'productionPermission', label: '生产许可', d: disp(readField(ml, 'production_permission', P0), null) },
     { key: 'note', label: '说明', d: disp(readField(ml, 'note', P0), null) }
   ];
+  if(identity && typeof identity === 'object') {
+    items.push({key:'releaseVersion',label:'生产发布版本',d:disp(readField(identity,'release_version',P('version_identity')),null)});
+  }
   return Object.freeze({
     available: true,
     items: Object.freeze(items),

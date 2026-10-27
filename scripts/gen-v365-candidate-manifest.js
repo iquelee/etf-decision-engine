@@ -24,7 +24,7 @@ const crypto = require('crypto');
 const REPO = path.join(__dirname, '..');
 const CONTRACTS = require(path.join(REPO, 'src', 'common', 'utils', 'v365-contracts.js'));
 
-const OUT = path.join(REPO, 'ml', 'manifests', 'V365_CANDIDATE_MANIFEST.json');
+const OUT = path.join(REPO, CONTRACTS.CANDIDATE_MANIFEST_PATH);
 
 /**
  * V3.6.5 **合格文件面**（qualified_files）。
@@ -32,6 +32,15 @@ const OUT = path.join(REPO, 'ml', 'manifests', 'V365_CANDIDATE_MANIFEST.json');
  * ⛔ 该清单必须在源码**显式列出**（不得用 glob）—— 否则"意外新增文件"将无法被检出。
  */
 const QUALIFIED_FILES = [
+  'scripts/test-all.js',
+  'scripts/build-cloudfunctions.js',
+  'scripts/prepare-deploy.py',
+  'scripts/release-preflight.js',
+  'scripts/tools/reader-source-audit.js',
+  'release/verify-legacy-divergence.js',
+  'release/production-baseline.json',
+  '.github/workflows/test.yml',
+  'src/common/schema.js',
   // —— B0：身份与契约 ——
   'src/common/utils/v365-contracts.js',
 
@@ -61,6 +70,8 @@ const QUALIFIED_FILES = [
   'src/common/utils/v365-run-integrity.js',
   'src/common/utils/v365-publish-store.js',
   'src/common/utils/v365-active-read.js',
+  'src/common/utils/production-history.js',
+  'src/common/utils/release-identity.js',
 
   // —— B1：云函数接线 ——
   'cloudfunctions/materializeIndicators/index.js',

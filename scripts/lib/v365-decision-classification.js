@@ -159,6 +159,8 @@ const DECISION_ORCHESTRATION = Object.freeze([
   { file: 'src/common/utils/pnl.js', note: '成交还原 / 未实现盈亏（会计）' },
   { file: 'src/common/utils/review-position.js', note: '复盘时间轴（展示）' },
   { file: 'src/common/utils/review-stats.js', note: '复盘统计（展示）' },
+  { file: 'src/common/utils/production-history.js', note: '只读历史发布选择、分段与覆盖诊断；不参与生产动作计算' },
+  { file: 'src/common/utils/release-identity.js', note: '策略/发布/网关身份与元数据指纹展示；不参与生产动作计算' },
   { file: 'src/common/utils/shadow-v3-log.js', note: 'V3 Shadow 日对照条目（遥测）' },
   { file: 'src/common/utils/stage-residency-diagnostics.js', note: 'Stage Residency 诊断输出' },
   { file: 'src/common/utils/ml-shadow.js', note: 'Gen-1 统一元数据（展示）' },
@@ -278,7 +280,7 @@ const CLASSIFICATION_AUDIT = Object.freeze([
   //       `decision_relevance` 即 `classify()` 的返回值（CALC / ORCH / EXCEPTION）。
   //       机械事实（production_reachable / rde_reachable / replay_dependency）
   //       可用 `docs/V365_DECISION_DEPENDENCY_CLASSIFICATION.md` 记录的探针复现。
-  Object.freeze({ scope: 'src/common/utils/**', audited: 80, total: 80, unknown_decision_relevance: 0 })
+  Object.freeze({ scope: 'src/common/utils/**', audited: 82, total: 82, unknown_decision_relevance: 0 })
 ]);
 
 /* ------------------------------------------------------------------ *

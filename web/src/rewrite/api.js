@@ -154,7 +154,7 @@ export const api = {
   etfList: () => call(API_BASE, '/api/etf/list'),
   etfDetail: (code) => call(API_BASE, '/api/etf/' + encodeURIComponent(code)),
   kline: (code, period = 'daily') => call(API_BASE, '/api/etf/' + encodeURIComponent(code) + '/kline' + q({ period })),
-  decisions: (code, from, to) => call(API_BASE, '/api/etf/' + encodeURIComponent(code) + '/decisions' + q({ from, to })),
+  decisions: (code, from, to) => call(API_BASE, '/api/etf/' + encodeURIComponent(code) + '/decisions' + q({ from, to, include_provenance: '1' })),
   /** ⚠️ 需鉴权（SPEC §8.1） */
   review: (from, to, code, action) => call(API_BASE, '/api/review' + q({ from, to, code, action }), { auth: true }),
   fundamentals: () => call(API_BASE, '/api/fundamentals'),

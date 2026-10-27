@@ -28,11 +28,12 @@ const path = require('path');
 const crypto = require('crypto');
 
 const REPO = path.join(__dirname, '..');
-const MANIFEST = path.join(REPO, 'ml', 'manifests', 'V365_CANDIDATE_MANIFEST.json');
+const MANIFEST = path.join(REPO, require('../src/common/utils/v365-contracts').CANDIDATE_MANIFEST_PATH);
 
 /** 磁盘上**属于** V365 合格面、但因任何原因未被 manifest 声明的文件模式 */
 const SURFACE_GLOBS = [
   { dir: 'src/common/utils', test: (n) => /^v365-.*\.js$/.test(n) },
+  { dir: 'src/common/utils', test: (n) => ['production-history.js','release-identity.js'].includes(n) },
   { dir: 'src/common/utils', test: (n) => n === 'pipeline-correlation.js' },
   { dir: 'src/common/utils', test: (n) => /^cn-trading-calendar\.js$/.test(n) },
   { dir: 'src/common/utils', test: (n) => /-provenance\.js$/.test(n) },

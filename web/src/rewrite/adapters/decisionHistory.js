@@ -46,7 +46,12 @@ export const HISTORY_DEFAULT_LIMIT = 60;
  * @param {{retrievedAt?:string}} [meta]
  */
 export function adaptDecisionHistory(raw, meta = {}) {
+  const coverage = raw && !Array.isArray(raw) && Array.isArray(raw.rows) ? raw.history : null;
+  if (coverage) raw = raw.rows;
   const base = {
+    coverage: coverage || null,
+    coverageNote: coverage && coverage.status !== 'OK'
+      ? (coverage.status === 'TRUNCATED' ? '当前仅展示最近一段历史。' : '历史记录存在缺口，以下内容仅覆盖可验证的记录。') : '',
     source: SRC,
     sourceNote: HISTORY_SOURCE_NOTE,
     changeNote: HISTORY_CHANGE_NOTE,
@@ -59,6 +64,12 @@ export function adaptDecisionHistory(raw, meta = {}) {
     recent: Object.freeze([]),
     truncateNote: ''
   };
+
+  if (coverage && coverage.status === 'UNAVAILABLE') {
+    return Object.freeze({...base,state:FIELD_STATE.ERROR,available:false,
+      reason:MISSING_REASON.RUNTIME_STATUS_UNAVAILABLE,count:0,items:Object.freeze([]),changes:Object.freeze([]),changedCount:0,
+      text:'历史决策读取不可用。',note:base.coverageNote,freshness:null});
+  }
 
   /* ---- ① 未请求 ⇒ UNAVAILABLE（可自愈：一旦请求即恢复） ---- */
   if (raw === undefined) {

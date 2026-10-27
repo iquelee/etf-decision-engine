@@ -17,9 +17,11 @@
 /* ------------------------------------------------------------------ *
  * 引擎身份
  * ------------------------------------------------------------------ */
-const ENGINE_VERSION = 'v3.6.7';
+const ENGINE_VERSION = 'v3.6.8';
 const RELEASE_KIND = 'PRODUCTION_INTEGRITY';   // ⛔ 不是 Alpha、不是策略版本
-const PARENT_PRODUCTION_VERSION = 'v3.6.4';
+const PARENT_PRODUCTION_VERSION = 'v3.6.7';
+// New candidate identity; retain the V365 manifest as historical evidence.
+const CANDIDATE_MANIFEST_PATH = 'ml/manifests/V368_CANDIDATE_MANIFEST.json';
 
 /* ------------------------------------------------------------------ *
  * 数据契约
@@ -116,6 +118,7 @@ function publishPromotionAllowed() {
 
 module.exports = {
   ENGINE_VERSION,
+  CANDIDATE_MANIFEST_PATH,
   RELEASE_KIND,
   PARENT_PRODUCTION_VERSION,
   INPUT_CONTRACT_VERSION,

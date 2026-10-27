@@ -21,7 +21,15 @@ const REPO = path.join(__dirname, '..');
 
 // Python 解释器：优先 TCB_PYTHON，其次本地 venv（含 numpy/pandas），CI 上回退 python3
 const _WIN_PY = 'C:/Users/iquel/.workbuddy/binaries/python/envs/default/Scripts/python.exe';
-const PYTHON = process.env.TCB_PYTHON || (fs.existsSync(_WIN_PY) ? _WIN_PY : 'python3');
+const _WIN_PY_WORKS = fs.existsSync(_WIN_PY) && spawnSync(_WIN_PY,['-c','import sys'],{encoding:'utf8',timeout:10000}).status === 0;
+const PYTHON = process.env.TCB_PYTHON || (_WIN_PY_WORKS ? _WIN_PY : (process.platform === 'win32' ? 'python' : 'python3'));
+// Keep Python subprocesses consistent on Windows and bounded on shared runners.
+process.env.TCB_PYTHON = PYTHON;
+process.env.PYTHONIOENCODING = 'utf-8';
+process.env.PYTHONDONTWRITEBYTECODE = '1';
+for (const key of ['OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS']) {
+  if (!process.env[key]) process.env[key] = '1';
+}
 const NODE = process.execPath;
 
 const results = [];

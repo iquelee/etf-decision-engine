@@ -26,6 +26,25 @@ const {
 //   ⛔ 不得用 orderBy(...desc).limit(1) 猜"当前权威结果"（见 v365-active-read 的 FORBIDDEN_READ_PATTERNS）
 const publishStore = require('./common/utils/v365-publish-store');
 const activeRead = require('./common/utils/v365-active-read');
+const { readProductionHistory } = require('./common/utils/production-history');
+const { buildReleaseIdentity } = require('./common/utils/release-identity');
+const { V365_COLLECTIONS: RUN_COLLECTIONS } = require('./common/utils/v365-contracts');
+let apiBuildSource = null;
+try { apiBuildSource = require('./RELEASE_SOURCE.json'); } catch (e) { /* older/source-only packages have no build identity */ }
+
+async function withReleaseIdentity(dataset, runtime) {
+  const manifest = dataset.run_status;
+  let history = null;
+  if (manifest && manifest.run_id) {
+    try {
+      const rows=await db.query(RUN_COLLECTIONS.RUN_HISTORY, {run_id:manifest.run_id},{limit:1});
+      history=rows[0] || null;
+    } catch (e) { /* expose missing identity as null; never infer it from another run */ }
+  }
+  const identity=buildReleaseIdentity({runtime,manifest,history,decision:dataset.decisions && dataset.decisions[0],apiSource:apiBuildSource});
+  return {...dataset,version_identity:identity,
+    run_status:manifest ? {...manifest,engine_version:identity.release_version} : null};
+}
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -61,7 +80,7 @@ async function resolveAuthoritative(codes) {
       getManifest: async () => null
     }, { expected_codes: codes });
   }
-  return activeRead.readAuthoritativeDataset(store, { expected_codes: codes });
+  return withReleaseIdentity(await activeRead.readAuthoritativeDataset(store, { expected_codes: codes }));
 }
 
 /** 读一个 code 的 authoritative decision（薄封装，内部仍只读一次 pointer） */
@@ -126,7 +145,7 @@ async function mutableStateProvenance(positions) {
  * 轻量 pointer provenance（供只读单文档的端点用，例如 `getConstants`）。
  * 只读 pointer，不读 run 数据 ⇒ 开销最小；⛔ 仍走同一 selector，不得用 latest 猜。
  */
-async function resolvePointerProvenance() {
+async function resolvePointerProvenance(runtime) {
   const store = authoritativeStore();
   if (!store) {
     return activeRead.buildAuthoritativeProvenance({
@@ -142,11 +161,14 @@ async function resolvePointerProvenance() {
         available: false, reason: activeRead.AUTH_READ_REASON.NO_ACTIVE_POINTER
       });
     }
-    return activeRead.buildAuthoritativeProvenance({
+    const manifests=await db.query(RUN_COLLECTIONS.RUN_MANIFEST,{run_id:ptr.run_id},{limit:1});
+    const ds=await withReleaseIdentity({run_status:manifests[0] || null,decisions:[]},runtime);
+    const authority=activeRead.buildAuthoritativeProvenance({
       status: activeRead.AUTH_READ_STATUS.OK, available: true, reason: null,
       active_run_id: ptr.run_id, active_revision: ptr.revision,
-      expected_trade_date: ptr.expected_trade_date, run_status: null
+      expected_trade_date: ptr.expected_trade_date, run_status: ds.run_status
     });
+    return {...authority,version_identity:ds.version_identity};
   } catch (e) {
     return activeRead.buildAuthoritativeProvenance({
       status: activeRead.AUTH_READ_STATUS.AUTHORITATIVE_READ_UNAVAILABLE,
@@ -476,6 +498,7 @@ async function getDashboard() {
     // ================= V3.6.5 Reader Migration：双轴 provenance（additive）=================
     // ⛔ 不改变任何既有业务字段语义；两轴分别标注，不得合成一句。
     authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
     mutable_axis: await mutableStateProvenance(positions)
   };
 }
@@ -535,6 +558,7 @@ async function getEtfList() {
     list,
     // V3.6.5 Reader Migration：additive 双轴 provenance
     authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
     mutable_axis: await mutableStateProvenance(positions)
   };
 }
@@ -653,21 +677,12 @@ async function getKline(code, period) {
 }
 
 /** 历史信号（与 getReview 同一套日期命令，避免只 from 或只 to 时内存过滤漏网） */
-async function getDecisions(code, from, to) {
-  const _ = db.getCommand();
-  const where = { code };
-  if (from && to) {
-    where.decision_date = _.and(_.gte(from), _.lte(to));
-  } else if (from) {
-    where.decision_date = _.gte(from);
-  } else if (to) {
-    where.decision_date = _.lte(to);
-  }
-  const rows = await db.query(COLLECTIONS.DECISION_RESULT, where, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }], // v365-reader-allow:history-deferred (CLASS C apiGateway.getDecisions：历史区间；run 轴索引 RUN_HISTORY_INDEX=PENDING ⇒ 当前 legacy 段，⛔ 不得静默双源拼接)
-    limit: (from || to) ? 500 : 60
-  });
-  return (rows || []).map(withChineseActionLabel);
+async function getDecisions(code, from, to, includeProvenance) {
+  const result = await readProductionHistory(db,{code,from,to,limit:(from || to) ? 500 : 60});
+  const rows = result.decisions.map(withChineseActionLabel);
+  // Keep the legacy array contract. New clients request coverage metadata,
+  // including failures and empty ranges; every returned row also carries its axis.
+  return includeProvenance ? {rows,history:result.history} : rows;
 }
 
 /** 组合仓位 */
@@ -752,6 +767,7 @@ async function getPortfolio() {
     tech_sector_max: techSectorMax,
     // V3.6.5 Reader Migration：additive 双轴 provenance
     authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
     mutable_axis: await mutableStateProvenance(positions)
   };
 }
@@ -760,28 +776,23 @@ async function getPortfolio() {
 async function getReview(from, to) {
   // S-001 修复（2026-08-22）：加 where 范围过滤 + limit，防公网全表扫描刷慢整库（GLM 深审）
   const _ = db.getCommand();
-  const decisionWhere = {};
   const tradeWhere = {};
   if (from && to) {
-    decisionWhere.decision_date = _.and(_.gte(from), _.lte(to));
     tradeWhere.trade_date = _.and(_.gte(from), _.lte(to));
   } else if (from) {
-    decisionWhere.decision_date = _.gte(from);
     tradeWhere.trade_date = _.gte(from);
   } else if (to) {
-    decisionWhere.decision_date = _.lte(to);
     tradeWhere.trade_date = _.lte(to);
   }
-  const decisions = await db.query(COLLECTIONS.DECISION_RESULT, decisionWhere, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 500 // v365-reader-allow:history-deferred (CLASS C apiGateway.getReview.decisions：复盘区间；run 轴索引 PENDING)
-  });
+  const historical = await readProductionHistory(db,{from,to,limit:500});
+  const decisions = historical.decisions;
   const trades = await db.query(COLLECTIONS.TRADE_LOG, tradeWhere, {
     orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 500
   });
   // 持仓要能看到筛选日前的快照/成交，不能跟复盘日期带绑死
   const [snapshots, heldTrades] = await Promise.all([
     db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
-      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200 // v365-reader-allow:history-deferred (CLASS C apiGateway.getReview.snapshots：复盘区间；run 轴索引 PENDING)
+      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200 // v365-reader-allow:mutable-axis (actual holding evidence; run portfolio targets must never substitute for actual holdings)
     }),
     (from || to)
       ? db.query(COLLECTIONS.TRADE_LOG, {}, {
@@ -814,6 +825,8 @@ async function getReview(from, to) {
       suggested_position: d.suggested_position,
       current_position: held,
       engine: eng.engine,
+      run_id: d.run_id || null,
+      history_provenance: d.history_provenance,
       // 生产（该条决策真实的产生者）唯一决策口径
       production: {
         engine: eng.engine,
@@ -843,8 +856,10 @@ async function getReview(from, to) {
 
   return {
     decisions: decisionsSafe,
+    history: historical.history,
     deviations: review.deviations,
-    stats: review.stats,
+    stats: historical.history.status === 'OK' ? review.stats : null,
+    stats_status: historical.history.status === 'OK' ? 'AVAILABLE' : 'INCOMPLETE_HISTORY',
     trades: tradesSafe
   };
 }
@@ -1116,6 +1131,7 @@ async function getConstants() {
     const rows = await db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 });
     runtime = rows[0] || null;
   } catch (e) { /* runtime_status 未建时兜底 */ }
+  const authority=await resolvePointerProvenance(runtime);
   return {
     w_state_labels: W_STATE_LABELS,
     d_state_labels: D_STATE_LABELS,
@@ -1132,7 +1148,8 @@ async function getConstants() {
     // V3.6.5 Reader Migration：additive provenance。
     // ⚠️ `runtime_status` 是按 key 取的单文档 ⇒ **不可能**读到 candidate/partial；
     //    此处只是把「当前 authoritative run 是谁」显式回显，供前端/审计对齐。
-    authority: await resolvePointerProvenance()
+    authority,
+    version_identity: authority.version_identity || null
   };
 }
 
@@ -1158,7 +1175,7 @@ exports.main = async (event = {}, context = {}) => {
 
     // GET /api/etf/:code/decisions
     const decMatch = path.match(/^\/api\/etf\/([^/]+)\/decisions$/);
-    if (decMatch) return ok(await getDecisions(decMatch[1], query.from, query.to));
+    if (decMatch) return ok(await getDecisions(decMatch[1], query.from, query.to, query.include_provenance === '1'));
 
     // GET /api/etf/:code
     const detailMatch = path.match(/^\/api\/etf\/([^/]+)$/);

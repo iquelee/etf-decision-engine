@@ -749,6 +749,11 @@ const SCHEMAS = [
   {
     name: V365_COLLECTIONS.RUN_MANIFEST,
     fields: {
+      engine_version: { type: 'string', required: false, desc: '工程发布身份（与策略族分列）' },
+      strategy_version: { type: 'string', required: false, desc: '策略族身份' },
+      source_commit: { type: 'string', required: false, desc: '干净构建来源提交；无法观测时 null' },
+      input_context_sha256: { type: 'string', required: false, desc: 'run context 元数据 SHA256；非全量行情内容指纹' },
+      input_hash_basis: { type: 'string', required: false, desc: 'legacy input_hash 的语义：LEGACY_RUN_IDENTITY' },
       run_id: { type: 'string', required: true, desc: 'engine_run_id（candidate 身份；与 pipeline_run_id 语义不同）' },
       expected_trade_date: { type: 'string', required: false, desc: 'YYYY-MM-DD（该 run 声明的交易日）' },
       revision: { type: 'number', required: false, desc: '单调修订号（NON_MONOTONIC_REVISION 拒因依据）' },
@@ -819,6 +824,8 @@ const SCHEMAS = [
   {
     name: V365_COLLECTIONS.RUN_HISTORY,
     fields: {
+      source_commit: { type: 'string', required: false, desc: '该 run 的干净构建来源提交' },
+      input_context_sha256: { type: 'string', required: false, desc: '该 run context 元数据指纹' },
       run_id: { type: 'string', required: true, desc: 'engine_run_id（一行一 run）' },
       scope: { type: 'string', required: false, desc: '作用域（与 pointer 同语义）' },
       expected_trade_date: { type: 'string', required: false, desc: '★ 时间轴检索键 YYYY-MM-DD' },

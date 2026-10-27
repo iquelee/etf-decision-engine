@@ -1111,12 +1111,18 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
     'P-36：scope 与 manifest 的 required 集合必须 SET_EQUAL');
   assert.deepStrictEqual(sv.drift, [], 'P-36：drift 明细必须为空');
 
-  // ★ 逐文件独立重算：current sha == manifest expected sha（⛔ 不信 artifact 自述）
+  // C-021 is a historical deployment artifact. Verify its sealed archive bytes,
+  // not a later release's working tree. Current-source gates remain separate.
   const manifest = candidateManifest;
+  const tar = require('../scripts/lib/v365-deterministic-tar');
+  const bundleBytes = fs.readFileSync(deploymentArtifact.bundle_path);
+  assert.strictEqual(tar.sha256(bundleBytes), deploymentArtifact.bundle_sha256,
+    'P-36：历史归档 SHA 必须匹配封存声明');
+  const archived = new Map(tar.parseDeterministicTar(bundleBytes).map(e => [e.name, e.buf]));
   for (const e of manifest.deployment_required_files) {
-    const full = path.join(REPO, e.path);
-    assert.ok(fs.existsSync(full), `P-36：required 文件必须存在：${e.path}`);
-    const h = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+    const bytes = archived.get(tar.repoToBundle(e.path));
+    assert.ok(bytes, `P-36：归档 required 文件必须存在：${e.path}`);
+    const h = crypto.createHash('sha256').update(bytes).digest('hex');
     assert.strictEqual(h, e.sha256,
       `P-36：⛔ 逐文件 sha 必须匹配 manifest（${e.path}）`);
   }
@@ -1520,10 +1526,13 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
   const gli = st.gate_log_integrity;
   assert.ok(gli, 'P-44：prospective-state 必须含 gate_log_integrity（§9 加固已接线）');
 
-  // ① 独立真值：tests/*.test.js 实际文件数
-  const truth = fs.readdirSync(path.join(REPO, 'tests')).filter((f) => f.endsWith('.test.js')).length;
+  // A historical receipt must reconcile with its own log, not the growing
+  // current test directory. Fresh-current counts are enforced by preflight
+  // and the release runner, which enumerates every current test file.
+  const truth = gli.stage_a_log.parsed_count.total;
+  assert.ok(Number.isInteger(truth) && truth > 0, 'P-44：历史日志计数必须为正整数');
   assert.strictEqual(gli.test_file_count, truth,
-    'P-44：test_file_count 必须等于 tests/*.test.js 实际文件数（独立真值）');
+    'P-44：历史记录的 test_file_count 必须等于其日志解析计数');
 
   // ② 解析器必须真实工作：Stage A 计数必须来自真实日志（而非硬编码）
   //    ⛔ 只断言 `total`（= 文件数，**与测试是否全过无关** ⇒ 非循环）。
