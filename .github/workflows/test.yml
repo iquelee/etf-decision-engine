@@ -13,8 +13,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # P0-C：Node 16 对齐 CloudBase 生产 runtime（Nodejs16.13），Node 22 面向未来兼容
-        node-version: ['16', '22']
+        # Node 16 covers the observed production runtime; 22 remains a
+        # compatibility check; 24 qualifies the next CloudBase runtime target.
+        # Passing CI does not assert a cloud deployment or SDK network proof.
+        node-version: ['16', '22', '24']
         python-version: ['3.11', '3.12']
     steps:
       - uses: actions/checkout@v4

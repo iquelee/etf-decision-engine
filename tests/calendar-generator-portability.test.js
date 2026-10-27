@@ -1,0 +1,41 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const repo = path.join(__dirname, '..');
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'calendar-portability-'));
+try {
+  const source = path.join(dir, 'source.json');
+  const artifact = path.join(dir, 'calendar.json');
+  const manifest = path.join(dir, 'manifest.json');
+  const original = fs.readFileSync(path.join(repo, 'src/common/data/sources/cn-trading-calendar.source.v1.json'), 'utf8').replace(/\r\n/g, '\n');
+  fs.writeFileSync(source, original);
+  const args = [path.join(repo, 'scripts/gen-cn-trading-calendar.js'), '--source-file', source, '--out', artifact, '--manifest', manifest];
+  const run = check => spawnSync(process.execPath, args.concat(check ? ['--check'] : []), { cwd: repo, encoding: 'utf8' });
+  assert.strictEqual(run(false).status, 0);
+  const canonicalArtifact = fs.readFileSync(artifact, 'utf8');
+  const canonicalManifest = fs.readFileSync(manifest, 'utf8');
+  assert.strictEqual(run(true).status, 0);
+  for (const file of [source, artifact, manifest]) fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\n/g, '\r\n'));
+  const before = [source, artifact, manifest].map(file => fs.readFileSync(file));
+  const check = run(true);
+  assert.strictEqual(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /LF-BYTE-EQUIVALENT/);
+  [source, artifact, manifest].forEach((file, i) => assert.deepStrictEqual(fs.readFileSync(file), before[i], '--check must not write'));
+  assert.strictEqual(run(false).status, 0);
+  assert.strictEqual(fs.readFileSync(artifact, 'utf8'), canonicalArtifact);
+  assert.strictEqual(fs.readFileSync(manifest, 'utf8'), canonicalManifest);
+  fs.writeFileSync(artifact, canonicalArtifact.replace('cn-a-share-2026.1', 'tampered'));
+  assert.notStrictEqual(run(true).status, 0, 'artifact content tampering must fail');
+  fs.writeFileSync(artifact, canonicalArtifact);
+  fs.writeFileSync(manifest, canonicalManifest.replace('cn-a-share-2026.1', 'tampered'));
+  assert.notStrictEqual(run(true).status, 0, 'manifest content tampering must fail');
+  fs.writeFileSync(manifest, canonicalManifest);
+  fs.writeFileSync(source, original.replace('cn-a-share-2026.1', 'cn-a-share-2026.changed'));
+  assert.notStrictEqual(run(true).status, 0, 'source content changes must fail');
+  console.log('Calendar LF/CRLF regeneration, read-only check and content tamper rejection passed');
+} finally {
+  fs.rmSync(dir, { recursive: true, force: true });
+}

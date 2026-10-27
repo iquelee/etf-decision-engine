@@ -25,7 +25,7 @@
  *   # 未播种骨架
  *   node scripts/gen-cn-trading-calendar.js --allow-unseeded --calendar-version <ver>
  *
- *   --check   只校验「现有 artifact 是否与由来源重算的结果逐字节一致」，不写文件
+ *   --check   校验现有 artifact 与来源重算结果的 LF 归一字节，不写文件
  */
 'use strict';
 
@@ -42,6 +42,12 @@ const V1_MANIFEST = path.join(DATA_DIR, 'cn-trading-calendar.v1.manifest.json');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_EXPIRY_WARNING_DAYS = 30;
+
+// Git worktrees may use CRLF. Preserve the canonical artifact/source hashes
+// recorded from LF files, without rewriting historical calendar artifacts.
+function readLf(file) {
+  return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+}
 
 function parseArgs(argv) {
   const a = {};
@@ -239,7 +245,7 @@ function buildArtifact(opts) {
         || 'expand_official_closure_ranges -> derive_weekday_closures -> cross_check_exchanges',
       source_file: opts.sourceFile ? path.relative(REPO, opts.sourceFile).split(path.sep).join('/') : null,
       source_file_sha256: opts.sourceFile
-        ? crypto.createHash('sha256').update(fs.readFileSync(opts.sourceFile)).digest('hex')
+        ? crypto.createHash('sha256').update(readLf(opts.sourceFile), 'utf8').digest('hex')
         : null
     };
     base.notes = [
@@ -256,7 +262,7 @@ function buildArtifact(opts) {
       method: 'gen-cn-trading-calendar.js:parse_source_file',
       source_file: opts.sourceFile ? path.basename(opts.sourceFile) : null,
       source_file_sha256: opts.sourceFile
-        ? crypto.createHash('sha256').update(fs.readFileSync(opts.sourceFile)).digest('hex')
+        ? crypto.createHash('sha256').update(readLf(opts.sourceFile), 'utf8').digest('hex')
         : null
     };
     base.notes = [
@@ -367,15 +373,15 @@ function main() {
   if (a.check) {
     let existing = null;
     let existingManifest = null;
-    try { existing = fs.readFileSync(outPath, 'utf8'); } catch (e) { /* ignore */ }
-    try { existingManifest = fs.readFileSync(manifestPath, 'utf8'); } catch (e) { /* ignore */ }
+    try { existing = readLf(outPath); } catch (e) { /* ignore */ }
+    try { existingManifest = readLf(manifestPath); } catch (e) { /* ignore */ }
     console.log(`[check] artifact=${path.relative(REPO, outPath)}`);
     console.log(`[check] 期望 artifact sha256 = ${sha}`);
     const sameArtifact = existing != null && Buffer.from(existing, 'utf8').equals(Buffer.from(body, 'utf8'));
     const sameManifest = existingManifest != null
       && Buffer.from(existingManifest, 'utf8').equals(Buffer.from(manifestBody, 'utf8'));
-    console.log(`[check] artifact ${sameArtifact ? 'BYTE-IDENTICAL' : 'DIFFERS'}`);
-    console.log(`[check] manifest ${sameManifest ? 'BYTE-IDENTICAL' : 'DIFFERS'}`);
+    console.log(`[check] artifact ${sameArtifact ? 'LF-BYTE-EQUIVALENT' : 'DIFFERS'}`);
+    console.log(`[check] manifest ${sameManifest ? 'LF-BYTE-EQUIVALENT' : 'DIFFERS'}`);
     if (sameArtifact && sameManifest) {
       console.log('[check] PASS —— DETERMINISTIC_REGEN / ARTIFACT_SHA_STABLE');
       return;
