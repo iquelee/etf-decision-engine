@@ -11,6 +11,10 @@ r=evaluate([error],{'scripts/test-all.js':sha},()=>Buffer.from('tampered'));
 assert.strictEqual(r.violations.length,1);
 r=evaluate([{code:'V364_LOCK_ANCHOR_MISMATCH',detail:'scripts/test-all.js'}],{'scripts/test-all.js':sha},()=>bytes);
 assert.strictEqual(r.violations.length,1);
+for (const code of require('../scripts/v364-legacy-ack-gate').NEVER_ALLOWLISTABLE_7) {
+  r=evaluate([{code,detail:'scripts/test-all.js'}],{'scripts/test-all.js':sha},()=>bytes);
+  assert.strictEqual(r.violations.length,1,code+' must remain forbidden');
+}
 r=evaluate([{code:'V364_UNEXPECTED_SURFACE_FILE',detail:'src/common/utils/unknown.js'}],{},()=>bytes);
 assert.strictEqual(r.violations.length,1);
 console.log('v368 legacy extension: exact scope, candidate hash, permanent forbidden errors and unknown-file rejection PASS');

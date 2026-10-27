@@ -38,6 +38,8 @@
 
 新身份清单：`ml/manifests/V368_CANDIDATE_MANIFEST.json`，状态 **CANDIDATE**，独立声明当前合格文件。
 
+第二轮远端检查（Actions #183）测试矩阵及 reader/候选门禁已通过，但旧 `v364-legacy-ack-gate --selftest` 的还原前提是仅有原 61 项差异，无法把当前 66 项树当成该旧前提。旧脚本及 61 项清单不改；CI 改调新候选 wrapper 的 `--selftest`：先核验真实候选和恰好 5 项扩展，再分别验证空白名单、未知 hash/新增文件、全部七类永久禁止错误、候选字节篡改必须拒绝，恢复后必须通过。它不声称旧原始自测在新树上通过。
+
 旧 `V365_CANDIDATE_MANIFEST.json`、V361/V364 锁、Gen-1 模型/阈值/管线锁保持原样。原 V364 verifier 与 61 项承认清单也保持原样。
 
 V3.6.8 增加的五项 legacy 残差由 `release/verify-legacy-divergence.js` 单独逐项处理：`scripts/test-all.js`、`scripts/release-preflight.js`、`scripts/tools/reader-source-audit.js`、`production-history.js`、`release-identity.js`。每项要求命中精确错误类别/路径，并与新 candidate 的文件 hash 一致；永久禁止的七类结构错误、未知新增文件和字节篡改仍失败。这是显式新候选差异检查，不是把 V364 不变量重写为通过。
