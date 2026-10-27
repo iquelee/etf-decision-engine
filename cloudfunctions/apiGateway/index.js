@@ -657,19 +657,22 @@ async function getEtfDetail(code) {
 
 /** K 线 */
 async function getKline(code, period) {
+  // Select the latest bounded window in storage, then restore chart order.
+  // Ascending LIMIT selects the oldest bars once history exceeds the limit.
   if (period === 'weekly') {
     const rows = await db.query(COLLECTIONS.ETF_WEEKLY, { code }, {
-      orderBy: [{ field: 'week_end_date', direction: 'asc' }], limit: 260
+      orderBy: [{ field: 'week_end_date', direction: 'desc' }], limit: 260
     });
-    return rows.map((r) => ({
+    return rows.reverse().map((r) => ({
       date: r.week_end_date, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume
     }));
   }
   const rows = await db.query(COLLECTIONS.ETF_DAILY, { code }, {
-    orderBy: [{ field: 'trade_date', direction: 'asc' }], limit: 320
+    orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 320
   });
   return rows
     .filter((r) => r.close != null)
+    .reverse()
     .map((r) => ({
       date: r.trade_date, open: r.open, high: r.high, low: r.low, close: r.close,
       volume: r.volume, amount: r.amount, premium_rate: r.premium_rate
