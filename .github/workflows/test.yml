@@ -40,11 +40,14 @@ jobs:
       #   Stage E  Secret scan
       #   Stage F  Build Common Parity（src/common → 11 云函数 + SHA 校验）
       #   Stage G  Gen-1 Production Gates G1-A~H（Frozen/Pipeline/Parity/Permission/Domain/Circuit/Execution/No-op）
-      - name: Run full test gates (npm test)
+      # Private historical archives are intentionally absent in GitHub. The
+      # default local/release gate remains full; portable mode reports NOT_RUN
+      # historical receipts and never claims historical replay qualification.
+      - name: Run portable test gates (historical evidence checked at release)
         env:
           TCB_PYTHON: python
           PYTHONDONTWRITEBYTECODE: "1"
-        run: node scripts/test-all.js
+        run: node scripts/test-all.js --portable
 
       # Gate 6（显式，与 Stage C 同源）：Immutable 真 SHA 锁，任一 frozen 对象被改 → FAIL
       - name: Gate 6 — Immutable SHA (Gen-1 / V3.6.1 / GEN2 bundle)

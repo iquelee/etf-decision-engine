@@ -20,6 +20,12 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO = path.join(__dirname, '..');
+const portable = process.env.ETF_TEST_EVIDENCE_MODE === 'portable';
+const historicalCases = [];
+function historical(id) {
+  if (portable) historicalCases.push(id);
+  return !portable;
+}
 const G = require(path.join(REPO, 'scripts/lib/v365-prospective-gate.js'));
 const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-contracts.js'));
 
@@ -477,7 +483,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-16 ⛔ Δ 命名拆分（历史 vs P12） ---------------- */
-{
+if (historical('P-16')) {
   const doc = fs.readFileSync(
     path.join(REPO, 'docs/V365_PROSPECTIVE_PRODUCTION_QUALIFICATION.md'), 'utf8');
   assert.ok(/RPG_F3_HISTORICAL_UNEXPECTED_DECISION_DELTA\s*=\s*6/.test(doc),
@@ -493,7 +499,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-17 ⛔ 状态件必须声明零生产副作用 ---------------- */
-{
+if (historical('P-17')) {
   const state = JSON.parse(fs.readFileSync(
     path.join(REPO, 'deliverables/v365-production-history/prospective/prospective-state.json'), 'utf8'));
   assert.strictEqual(state.production_write_performed, false);
@@ -544,7 +550,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-19 §1 审计证据件必须存在且结论一致 ---------------- */
-{
+if (historical('P-19')) {
   const audit = JSON.parse(fs.readFileSync(path.join(REPO,
     'deliverables/v365-production-history/prospective/actual-book-authority-audit.json'), 'utf8'));
   assert.strictEqual(audit.answer, 'NOT_PROVEN', 'P-19：审计结论必须为 NOT_PROVEN');
@@ -714,7 +720,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-28 ★ §8/§14 OD-P-3 = NOT_YET_GRANTED + 部署身份 fail-closed ---------------- */
-{
+if (historical('P-28')) {
   const state = JSON.parse(fs.readFileSync(path.join(REPO,
     'deliverables/v365-production-history/prospective/prospective-state.json'), 'utf8'));
   assert.strictEqual(state.final_state.PRODUCTION_ACTIVATION_AUTHORIZATION, 'NOT_GRANTED');
@@ -816,7 +822,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-29 ★ §1/§2 状态件含修正后的 authority 与两层 anchor ---------------- */
-{
+if (historical('P-29')) {
   const state = JSON.parse(fs.readFileSync(path.join(REPO,
     'deliverables/v365-production-history/prospective/prospective-state.json'), 'utf8'));
   const ab = state.prospective.actual_book_authority;
@@ -837,7 +843,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-30 ★ §3 恢复协议已登记在状态件 ---------------- */
-{
+if (historical('P-30')) {
   const state = JSON.parse(fs.readFileSync(path.join(REPO,
     'deliverables/v365-production-history/prospective/prospective-state.json'), 'utf8'));
   const rp = state.prospective.recovery_protocol;
@@ -867,7 +873,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
  * ================================================================ */
 
 /* ---------------- P-32 ★ §2 生产部署基线审计证据件必须存在且零漂移 ---------------- */
-{
+if (historical('P-32')) {
   const audit = JSON.parse(fs.readFileSync(path.join(REPO,
     'deliverables/v365-production-history/c021/deployment-identity-audit.json'), 'utf8'));
 
@@ -897,7 +903,7 @@ const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-cont
 }
 
 /* ---------------- P-33 ★ §3/§4/§6 部署范围闭包 / 候选冻结 / 回滚件 三件一致 ---------------- */
-{
+if (historical('P-33')) {
   const c021 = (f) => JSON.parse(fs.readFileSync(
     path.join(REPO, 'deliverables/v365-production-history/c021', f), 'utf8'));
   const scope = c021('deployment-scope.json');
@@ -1047,7 +1053,7 @@ const candidateManifest = readC021('deployment-candidate-manifest.json');
 const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 
 /* ---------------- P-35 ★ §2 deployment artifact identity ---------------- */
-{
+if (historical('P-35')) {
   assert.ok(deploymentArtifact, 'P-35：deployment-artifact.json 必须存在');
   const a = deploymentArtifact;
 
@@ -1101,7 +1107,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-36 ★ §1 source verification（⛔ 不得漂移） ---------------- */
-{
+if (historical('P-36')) {
   const sv = deploymentArtifact.source_verification;
   assert.ok(sv, 'P-36：source_verification 必须存在');
   assert.strictEqual(sv.drift_count, 0, 'P-36：⛔ 源码不得漂移（否则 STOP = CANDIDATE_SOURCE_DRIFT）');
@@ -1129,7 +1135,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-37 ★ §3 bundle 独立复核（BUNDLE_SOURCE_PARITY） ---------------- */
-{
+if (historical('P-37')) {
   const iv = deploymentArtifact.independent_verification;
   assert.ok(iv, 'P-37：independent_verification 必须存在');
   assert.strictEqual(iv.reused_build_memory, false,
@@ -1162,7 +1168,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-38 ★ §4 pre-deploy package diff ---------------- */
-{
+if (historical('P-38')) {
   assert.ok(preDeployDiff, 'P-38：pre-deploy-package-diff.json 必须存在');
   const d = preDeployDiff;
   assert.strictEqual(d.read_only, true, 'P-38：diff 必须只读');
@@ -1221,7 +1227,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-39 ★ §5 deployment rollback binding ---------------- */
-{
+if (historical('P-39')) {
   assert.ok(rollbackBinding, 'P-39：deployment-rollback-binding.json 必须存在');
   const b = rollbackBinding;
   assert.strictEqual(b.read_only, true, 'P-39：binding 必须只读');
@@ -1356,8 +1362,8 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 
   const expected = {
     base_head_sha: 'c6bd006fd76ffc5358cddd07347df8ed23d9e61d',
-    candidate_manifest_sha: candidateManifest.candidate_manifest_sha,
-    deployment_bundle_sha: deploymentArtifact.bundle_sha256,
+    candidate_manifest_sha: portable ? '1'.repeat(64) : candidateManifest.candidate_manifest_sha,
+    deployment_bundle_sha: portable ? '2'.repeat(64) : deploymentArtifact.bundle_sha256,
     production_env: 'tradingview-etf-d0fa42yy57cbc11b',
     function_name: 'runDecisionEngine'
   };
@@ -1448,7 +1454,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-43 ★ §10 本轮不得 deploy（preflight 最终状态） ---------------- */
-{
+if (historical('P-43')) {
   const statePath = path.join(REPO,
     'deliverables/v365-production-history/prospective/prospective-state.json');
   assert.ok(fs.existsSync(statePath), 'P-43：prospective-state.json 必须存在');
@@ -1514,7 +1520,7 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
 }
 
 /* ---------------- P-44 ★ C-021.1 §9 门禁日志完整性（机制 + 独立真值） ---------------- */
-{
+if (historical('P-44')) {
   // ★★ 关键设计：本测试**只**断言「守卫机制存在 + 独立真值一致」。
   //    ⛔ **不**断言 `logs_fresh === true` 或日志 `failed === 0` —— 那会构成**自指**：
   //       测试套件产出日志 → preflight 读日志 → state json → 本测试断言 state json。
@@ -1578,4 +1584,5 @@ const BUNDLE_SHA_RE = /^[0-9a-f]{64}$/;
     'P-44：⛔ stage_a_to_g_pass 必须依赖新鲜度（不得退回纯形态匹配）');
 }
 
-console.log('[PASS] v365-prospective-qualification.test.js（P-01~P-44）');
+if (portable) console.log('[NOT_RUN] historical prospective receipts: ' + historicalCases.join(', '));
+console.log('[PASS] prospective ' + (portable ? 'portable mechanism checks (historical receipts NOT_RUN)' : 'P-01~P-44 with historical receipts'));

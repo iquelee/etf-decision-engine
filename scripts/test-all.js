@@ -31,6 +31,11 @@ for (const key of ['OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS']) 
   if (!process.env[key]) process.env[key] = '1';
 }
 const NODE = process.execPath;
+const portable = process.argv.includes('--portable');
+// Explicit CI mode; the default and release-preflight still require all real
+// historical evidence. Missing private archives never become a passing replay.
+process.env.ETF_TEST_EVIDENCE_MODE = portable ? 'portable' : 'full';
+const historicalOnly = new Set(['v365-rpg-f2a.test.js', 'v365-rpg-f2b.test.js']);
 
 const results = [];
 function report(stage, name, ok, detail) {
@@ -63,7 +68,12 @@ function outText(r) {
 function stageA() {
   console.log('\n== Stage A: Node 单元测试 ==');
   const dir = path.join(REPO, 'tests');
-  const tests = fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort();
+  const allTests = fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort();
+  const tests = allTests.filter(f => !portable || !historicalOnly.has(f));
+  if (portable) {
+    for (const name of historicalOnly) console.log(`  [NOT_RUN] ${name}: requires private governed history; full release gate remains mandatory`);
+    console.log('  [SCOPE] prospective mechanism checks run; archived historical receipts NOT_RUN');
+  }
   let failed = 0;
   for (const t of tests) {
     const r = spawnSync(NODE, [path.join(dir, t)], { cwd: REPO, encoding: 'utf8' });
@@ -86,7 +96,7 @@ function stageA() {
           picked = [raw[idx].trim()];
           if (raw[idx + 1] && raw[idx + 1].trim()) picked.push(raw[idx + 1].trim());
         } else {
-          picked = raw.filter((l) => /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
+        picked = raw.filter((l) => !/\[PASS\]/.test(l) && /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
         }
         if (!picked.length) picked = raw.filter(Boolean).slice(-2).map((l) => l.trim());
       }

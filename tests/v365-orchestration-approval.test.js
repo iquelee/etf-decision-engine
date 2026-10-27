@@ -189,7 +189,7 @@ const run = (changed, manifest, headSha) => A.validate(manifest, { changed, head
 {
   const p = path.join(os.tmpdir(), 'hd12-2-b16-changed.txt');
   fs.writeFileSync(p, RDE + '\n', 'utf8');
-  const r = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'v365-p12-decision-parity.js'), '--changed-file', p],
+  const r = spawnSync(process.execPath, ['--require', path.join(__dirname, 'helpers/replay-synthetic-preload.js'), path.join(REPO, 'scripts', 'v365-p12-decision-parity.js'), '--changed-file', p],
     { cwd: REPO, encoding: 'utf8' });
   fs.unlinkSync(p);
   assert.ok(r.error == null, 'parity 子进程必须可运行');
@@ -202,7 +202,7 @@ const run = (changed, manifest, headSha) => A.validate(manifest, { changed, head
 {
   const p = path.join(os.tmpdir(), 'hd12-2-b17-changed.txt');
   fs.writeFileSync(p, 'docs/ONLY.md\n', 'utf8');
-  const r = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'v365-p12-decision-parity.js'), '--changed-file', p],
+  const r = spawnSync(process.execPath, ['--require', path.join(__dirname, 'helpers/replay-synthetic-preload.js'), path.join(REPO, 'scripts', 'v365-p12-decision-parity.js'), '--changed-file', p],
     { cwd: REPO, encoding: 'utf8' });
   fs.unlinkSync(p);
   assert.strictEqual(r.status, 0, '仅域外改动 ⇒ 门禁必须 PASS');

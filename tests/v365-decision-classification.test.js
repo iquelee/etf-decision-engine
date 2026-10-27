@@ -36,7 +36,7 @@ function listJsFiles(dir, acc) {
   return out;
 }
 function runParity(changedListPath) {
-  const args = [PARITY];
+  const args = ['--require', path.join(__dirname, 'helpers/replay-synthetic-preload.js'), PARITY];
   if (changedListPath) args.push('--changed-file', changedListPath);
   return spawnSync(process.execPath, args, { cwd: REPO, encoding: 'utf8' });
 }
@@ -181,19 +181,19 @@ for (const [id, file, expect] of CASES) {
     `const A = path.resolve(REPO);`,
     `const inside = (p) => { const q = path.resolve(p); return q === A || q.startsWith(A + path.sep); };`,
     `const keys = Object.keys(require.cache);`,
-    `const raw = new Set(keys.map(rel).filter((p) => p && !p.startsWith('..'))).size;`,
+    `const raw = new Set(keys).size;`,
     `const repo = new Set(keys.filter(inside).map(rel).filter((p) => p && !p.startsWith('..'))).size;`,
     `console.log(JSON.stringify({ raw, repo, outOfRepo: raw - repo }));`
   ].join('\n');
   const probePath = writeTmp('hd12-c11-probe.js', probeSrc.split('\n'));
-  const pr = spawnSync(process.execPath, [probePath], { cwd: REPO, encoding: 'utf8' });
+  const pr = spawnSync(process.execPath, ['--require', path.join(__dirname, 'helpers/replay-synthetic-preload.js'), probePath], { cwd: REPO, encoding: 'utf8' });
   fs.unlinkSync(probePath);
   assert.ok(pr.error == null && pr.status === 0,
     `复算子进程必须成功（status=${pr.status}）: ${pr.stderr}`);
   const { raw, repo, outOfRepo } = JSON.parse(String(pr.stdout).trim().split('\n').pop());
 
   // ① 确实存在仓外条目（否则本判据无意义）
-  assert.ok(outOfRepo > 0, `本机应能观察到仓外条目（raw=${raw} repo=${repo}）`);
+  assert.ok(outOfRepo > 0, `临时 probe 脚本应提供仓外条目（raw=${raw} repo=${repo}）`);
   // ② 门禁的计数 == 只计仓内的计数
   assert.strictEqual(reported, repo,
     `门禁计数必须等于「只计仓内」计数：门禁=${reported} 复算=${repo}（未过滤时=${raw}）`);

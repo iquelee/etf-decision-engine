@@ -46,6 +46,10 @@ V3.6.8 增加的五项 legacy 残差由 `release/verify-legacy-divergence.js` �
 
 ## 验证与证明范围
 
+远端首次验证（PR #68 / Actions #182）发现五项测试依赖本机环境，尚未部署。修复后的 CI 显式使用 `node scripts/test-all.js --portable`：79 个 Node 文件运行，两个依赖受治理私有历史的 RPG 回放文件标记 `NOT_RUN`；prospective 的机制负向检查照常运行，15 个历史证据段单列 `NOT_RUN`。这不是完整历史回放资格。默认 `npm test` 和 `release-preflight --apply` 不接受 portable 模式，仍执行 81 个文件及全部历史证据；runner 会覆盖继承的测试环境变量，防止发布意外使用 portable 模式。
+
+授权/分类测试的子进程采用测试专用、内存中的确定性合成 OHLCV，实际执行原 replay 和决策代码；不复制私有行情或成交至 GitHub，不修改生产 replay harness。仓外依赖过滤测试使用自己的临时 probe 脚本验证，不再要求宿主注入 shim。本机修复后 81/81，独立干净 checkout（无 deliverables）portable 79/79。历史文件缺失时完整模式必须失败，不能以 portable 绿色代替发布门禁。修复改变提交及构建身份，原 `3eae94a` 授权不会自动转移到新提交。
+
 - Node 22 的 **81/81 个 Node 测试文件**通过，包含新增部署/历史/身份/sidecar/残差反向测试。
 - Python 全量 `unittest discover ml/gen2/tests` 已通过。首次默认多线程运行过慢，被停止；单线程重跑完成，不把中断运行计为通过。
 - 跨语言 360 行 parity、Gen-1 冻结/管线检查、11 个函数构建 common parity、Gen-2 构建冻结件及 Gen-1 32 项生产门禁均有独立日志。
