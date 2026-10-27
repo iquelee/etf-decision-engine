@@ -26,7 +26,7 @@ const RUNTIME_BUNDLE = 'ml/manifests/GEN1_RUNTIME_BUNDLE.json';
  * 合法变更管线锁时必须同步更新此值（PR diff 将非常醒目）。
  * 由 `node scripts/gen-gen1-pipeline-lock.js` 生成后填入。
  */
-const ROOT_ANCHOR_PIPELINE_LOCK = '8efdda6fadb7da409c4d6215851495cf63dec4904a371d3bf5fff82008a2b7ad';
+const ROOT_ANCHOR_PIPELINE_LOCK = '291ec03cd1d33af9ecd470a44911d68d1b9455af5368166d22007547a5b0867f';
 
 function sha256lf(rel) {
   const raw = fs.readFileSync(path.join(REPO, rel)).toString('utf8').replace(/\r\n/g, '\n');

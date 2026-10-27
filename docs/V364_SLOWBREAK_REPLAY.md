@@ -1,6 +1,6 @@
 # V3.6.4 Gate A —— SlowBreak Historical Replay
 
-- 生成时间：2026-09-22T05:18:56.580Z
+- 生成时间：2026-09-29T06:05:42.603Z
 - 区间：**2024-04-16 ~ 2026-09-04**（582 个五票共同交易日）
 - universe：518880, 159570, 513310, 515880, 159582
 - 数据：真实历史 OHLCV（`deliverables/etf_daily_ml_pool/*.csv`）+ 线上 `etf_basic` / `param_config` 只读核实值

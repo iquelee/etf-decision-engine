@@ -41,6 +41,7 @@ const EXTRA_FILES = {
   runDecisionEngine: [
     'ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json',
     'ml/manifests/GEN1_GUARDED_EFFECTIVE_EVIDENCE.json',
+    'ml/manifests/GEN1_MODEL_SHA.json',
   ],
 };
 

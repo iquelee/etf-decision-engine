@@ -56,11 +56,11 @@ function countBy(list) {
   return m;
 }
 
-function main() {
+async function main() {
   console.log(`[Gate A] 载入真实数据 & 重放 OLD/NEW（${FROM} ~ ${TO || 'latest'}）…`);
   const t0 = Date.now();
-  const oldRun = H.replay({ from: FROM, to: TO, slowBreakMode: 'old', runsPerDay: 1 });
-  const newRun = H.replay({ from: FROM, to: TO, slowBreakMode: 'new', runsPerDay: 1 });
+  const oldRun = await H.replay({ from: FROM, to: TO, slowBreakMode: 'old', runsPerDay: 1 });
+  const newRun = await H.replay({ from: FROM, to: TO, slowBreakMode: 'new', runsPerDay: 1 });
   console.log(`[Gate A] 重放完成：${oldRun.axis.length} 个共同交易日 × 5 票 × 2 变体，用时 ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   const { barsByCode } = H.loadBars();
@@ -459,4 +459,4 @@ function main() {
   console.log(`[Gate A] 报告：${path.relative(REPO, DOC)}`);
 }
 
-main();
+main().catch((e) => { console.error(`[Gate A] [FATAL] ${e && e.stack ? e.stack : e}`); process.exit(1); });

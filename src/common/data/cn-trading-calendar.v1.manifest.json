@@ -1,0 +1,32 @@
+{
+  "artifact": "src/common/data/cn-trading-calendar.v1.json",
+  "artifact_sha256": "5edb6d4a0a9d7361d2794399a64f5882a7970a14ce4581aae05addb3c6eef786",
+  "artifact_sha256_basis": "sha256(artifact 文件的 UTF-8 字节，含末尾换行；稳定键序序列化)",
+  "calendar_version": "cn-a-share-2026.1",
+  "coverage_end": "2026-12-31",
+  "coverage_start": "2026-01-01",
+  "generated_by": "scripts/gen-cn-trading-calendar.js",
+  "generation_method": "expand_official_closure_ranges -> derive_weekday_closures -> cross_check_exchanges",
+  "holiday_count": 19,
+  "manifest_type": "cn_trading_calendar_manifest",
+  "market": "CN_A_SHARE",
+  "schema_version": "1.0",
+  "seeded": true,
+  "source_authorities": [
+    "SSE",
+    "SZSE"
+  ],
+  "source_file": "src/common/data/sources/cn-trading-calendar.source.v1.json",
+  "source_file_sha256": "edd5147283ba22a3d271856ff0a0f1f67b1e63c6119c1193528154eb90ef6f6b",
+  "source_notice_dates": [
+    "2025-12-22",
+    "2025-12-22"
+  ],
+  "source_notice_identifiers": [
+    "上证公告〔2025〕45号",
+    "深证会〔2025〕481号"
+  ],
+  "special_trading_day_count": 0,
+  "synthetic": false,
+  "weekend_closure_count": 20
+}

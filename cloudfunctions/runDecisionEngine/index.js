@@ -9,6 +9,8 @@
 'use strict';
 
 const cloudbase = require('@cloudbase/node-sdk');
+const fs = require('fs');
+const path = require('path');
 const db = require('./common/utils/db');
 const decision = require('./common/utils/decision');
 const decisionV3 = require('./common/utils/decision-v3.js')();
@@ -51,8 +53,49 @@ const {
 const { applyGen1Overlay, verifyProductionNoop } = require('./common/utils/gen1-overlay');
 // WP-G1-GE-02：守卫封印（Key 2/3）+ baseline-authoritative 选择器（休眠）
 const {
-  readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION
+  readProductionSeals, GUARDED_CONTRACT_VERSION, GUARDED_THRESHOLD_VERSION, ARTIFACT_PATHS
 } = require('./common/utils/gen1-guarded-seal');
+
+// ---- D2-G1 / D2-G2：Guarded Effective 封印绑定的**运行期可观测源** ----
+// ⛔ 只提供「确实观测到」的绑定值；缺项一律**不注入** ⇒ evaluateGuardedSeal 判为 UNVERIFIABLE（fail-closed）。
+/**
+ * `source_sha256` = C1（`src/common/utils/gen1-*.js`，17 文件）聚合值。
+ * 算法 = `scripts/gen-gen1-source-sha.js`（POSIX 路径升序；逐条 update(rel)+0x00+update(hex(sha256lf))+\n 后整体取 sha256）。
+ * ⭐ 可独立复现本常量：`node scripts/gen-gen1-source-sha.js`。
+ */
+const GUARDED_SOURCE_SHA256 = '06356740e80f2808288807cc35e08d9830800e42cb67cf95b5b9b1850bb619e3';
+
+/** sidecar 候选路径（与 gen1-guarded-seal::candidatesFor 同序：env → 随包副本 → 仓库根；基准为 rde 自身 __dirname）。 */
+function modelObservationCandidates() {
+  const out = [];
+  const envPath = process.env.GEN1_MODEL_SHA_PATH;
+  if (envPath) out.push(envPath);
+  out.push(path.join(__dirname, path.basename(ARTIFACT_PATHS.modelObservation)));
+  out.push(path.join(__dirname, '..', '..', ARTIFACT_PATHS.modelObservation));
+  return out;
+}
+
+/** 运行期实读 sidecar 的 `model_sha256`；任何异常/缺失 ⇒ null（⛔ 绝不回退为猜测值）。 */
+function readModelObservationSha256() {
+  for (const p of modelObservationCandidates()) {
+    try {
+      if (!p || !fs.existsSync(p)) continue;
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const v = parsed && parsed.model_sha256 != null ? String(parsed.model_sha256).trim() : '';
+      if (v) return v;
+    } catch (e) { /* 解析/读取失败不视为「已找到」：继续尝试，最终 fail-closed */ }
+  }
+  return null;
+}
+
+/** 组装运行期绑定：只含**已观测到**的项（缺项保持缺省）。 */
+function observedGuardedBindings() {
+  const bindings = {};
+  const modelSha = readModelObservationSha256();
+  if (modelSha) bindings.model_sha256 = modelSha;
+  if (GUARDED_SOURCE_SHA256) bindings.source_sha256 = GUARDED_SOURCE_SHA256;
+  return bindings;
+}
 const { selectGuardedResult, buildGuardedAudit, SELECTOR_SOURCE } = require('./common/utils/gen1-guarded-selector');
 // WP-G1-GE-03（设计 Gate §0.3）：P3-only guardedShadowEligible 派生（唯一输入 = permission 信封）
 const { deriveGuardedShadowEligibility, claimGuardedShadowResult } = require('./common/utils/gen1-shadow-eligibility');
@@ -64,6 +107,14 @@ const {
   GRADE_SCORES, METRIC_TYPES, METRIC_LAYERS, LAYER_WEIGHTS,
   CASH_REGIME, COOLDOWN_DAYS, F_TO_CORE_GRADE, CORE_CONFIRM_PERIODS, TRADE_CONFIRM_PERIODS
 } = require('./common/constants');
+
+// ---- V3.6.5 (B1) run 完整性接线 ----
+// 组成：pipeline correlation（P-4）+ RunContext required-input gate（P-1）+ Run Finality（P-3）
+//       + candidate-first 发布（P-3 单指针 CAS）。
+// ⚠️ 启用与否由 `merged.v365_integrity_mode` 决定：缺省 'ENFORCE'（V3.6.5 的语义就是 fail-closed）；
+//    设为 'LEGACY' 可退回 V3.6.4 的旧行为（用于对照回放，不用于生产）。
+const runIntegrity = require('./common/utils/v365-run-integrity.js');
+const publishStore = require('./common/utils/v365-publish-store.js');
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 
@@ -508,6 +559,53 @@ exports.main = async (event = {}, context = {}) => {
     const runV3Path = trendStageEnabled || shadowEnabled;
     const shadowEngineVer = resolveShadowEngineVersion(merged);
 
+    // ================= V3.6.5 (B1) run 完整性接线：初始化 =================
+    // ⚠️ 缺省 ENFORCE —— V3.6.5 的语义本身就是 fail-closed（无法证明可安全发布 ⇒ 不发布）。
+    //    'LEGACY' 仅用于**对照回放**（证明 normal path 决策零变化），不作为生产取值。
+    const v365Mode = merged.v365_integrity_mode === 'LEGACY' ? 'LEGACY' : 'ENFORCE';
+    const v365Inbound = runIntegrity.readInbound(event);
+    const v365Store = v365Mode === 'ENFORCE' ? publishStore.createCloudbaseStore({ db }) : null;
+    // engine_run_id = P-3 的 candidate 身份。
+    // ⛔ 与 pipeline_run_id（整条任务链身份）**语义不同**；生成时显式携带日期 + 单调批次，
+    //    且**不以 wall-clock 作为唯一身份**（used 只用于同日内区分批次）。
+    const v365EngineRunIdBase = (v365Inbound.present ? v365Inbound.pipeline_run_id + '::' : '')
+      + 'engine:' + new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
+      + ':b' + String(startedAt);
+    // >>> v365-orch-zone: lifecycle_writer
+    const v365CandidateCodes = [];
+    /** R2-c：收集 ENFORCE 下已写入的候选**文档**（供 `publishCandidateFirst` 复用 —— 它会做 `calc_date` 归一，
+     *  ⛔ 若只让它回读，读回的文档缺 `calc_date` ⇒ 会被 mixed-date gate 判失败 ⇒ 永不能提升）。 */
+    const v365CandidateDocs = [];
+    /** R2-d：history 写入失败时记录（⛔ 不得静默；由 telemetry 暴露） */
+    let v365HistoryWriteError = null;
+
+    /**
+     * decision_result 写入路由。
+     * ENFORCE ⇒ 写 candidate 集合（**尚不构成 authoritative**，需经 finality + CAS 提升）；
+     * LEGACY  ⇒ 保持 V3.6.4 原行为（直写 decision_result）。
+     */
+    async function v365WriteDecision(doc, code) {
+      if (v365Mode !== 'ENFORCE') {
+        return db.upsert(COLLECTIONS.DECISION_RESULT, doc, { code, decision_date: doc.decision_date });
+      }
+      v365CandidateDocs.push(doc);   // R2-c：留档（供 publishCandidateFirst 写入 + calc_date 归一）
+      await v365Store.putCandidate(
+        runIntegrity.V365_COLLECTIONS.CANDIDATE_DECISION, v365EngineRunIdBase, String(code), doc);
+      v365CandidateCodes.push(String(code));
+      return { created: true, deferred: true };
+    }
+
+    /** 组合快照写入路由（同 decision_result 的语义）。 */
+    async function v365WritePortfolio(doc, snapDate) {
+      if (v365Mode !== 'ENFORCE') {
+        return db.upsert(COLLECTIONS.PORTFOLIO_SNAPSHOT, doc, { snapshot_date: snapDate });
+      }
+      await v365Store.putCandidate(
+        runIntegrity.V365_COLLECTIONS.CANDIDATE_PORTFOLIO, v365EngineRunIdBase, 'portfolio', doc);
+      return { created: true, deferred: true };
+    }
+    // <<< v365-orch-zone: lifecycle_writer
+
     const results = [];
     const shadowItems = [];
     let latestDate = '';
@@ -545,6 +643,77 @@ exports.main = async (event = {}, context = {}) => {
       } catch (e) {
         prepared.push({ etf, error: String(e.message || e) });
       }
+    }
+
+    // ================= V3.6.5 (B1)：RunContext required-input gate =================
+    // 语义（任务书 §5/§6）：
+    //   required ETF snapshot 必须 5/5 且 `calc_date == expected_trade_date`；
+    //   「5 只全体一致落后一天」必须 BLOCK（CASE_C）—— 旧 `max(calc_date)` 方案在此**结构性假绿**
+    //   （cross-sectional 不齐项 = 0，健康度仍 OK）。
+    // ⛔ BLOCK 时：不得产生新的 authoritative portfolio；
+    // ⛔ 不得回退用 `observed_latest_date` 顶替 `expected_trade_date` 重算一套"看起来完整"的结果。
+    const v365Codes = etfs.map((e) => String(e.code));
+    const v365Snapshots = {};
+    prepared.forEach((p) => {
+      if (p && p.etf && p.etf.code != null) {
+        v365Snapshots[String(p.etf.code)] = p.snapshot ? { calc_date: p.snapshot.calc_date } : null;
+      }
+    });
+    // expected_trade_date 权威源 = repo-versioned 官方交易日历 artifact（SSE + SZSE 公告封版）
+    const v365Calendar = runIntegrity.loadRepoCalendar();
+    const v365ExpectedAuthority = runIntegrity.resolveExpectedTradeDate(new Date(), v365Calendar);
+    const v365Envelope = runIntegrity.buildRunContext({
+      run_id: v365EngineRunIdBase,
+      expected_codes: v365Codes,
+      snapshots: v365Snapshots,
+      expected_trade_date: v365ExpectedAuthority.expected_trade_date,
+      expected_trade_date_authority: {
+        status: v365ExpectedAuthority.status,
+        calendar_version: v365ExpectedAuthority.calendar_version,
+        calendar_coverage: v365ExpectedAuthority.calendar_coverage,
+        resolution_reason: v365ExpectedAuthority.resolution_reason
+      },
+      market_env_date: null,
+      // ⚠️ P-2 结论：`global_signals` 的 legacy `trade_date`/`data_date` 是**抓取日**，不是市场日
+      //    ⇒ 这里只认新增的 `source_market_date`（provider 原始时间戳派生）；取不到即 null（optional 退化）。
+      global_signals: (globalSignals || []).map((g) => ({
+        symbol: g.symbol,
+        as_of_date: g.source_market_date || null,
+        date_origin: g.source_market_date ? 'provider_timestamp' : 'UNKNOWN'
+      })),
+      fundamentals: {},
+      config_version: merged.config_version || null
+    });
+    const v365Gate = runIntegrity.decideRunGate(v365Envelope);
+    if (v365Mode === 'ENFORCE' && v365Gate.status === runIntegrity.RUN_GATE.BLOCKED) {
+      // fail-closed：本次 run **不写任何** authoritative 数据（decision_result / portfolio_snapshot /
+      // portfolio_position 全部不写），上一笔 ACTIVE 保持不变。
+      console.error(`[V365][BLOCKED] ${v365Gate.reason}`
+        + ` expected=${v365Envelope.expected_trade_date} observed=${v365Envelope.observed_latest_date}`
+        + ` case=${v365Gate.date_alignment_case}`);
+      return {
+        ok: false,
+        version,
+        decision_date: v365Envelope.observed_latest_date || null,
+        duration_ms: Date.now() - startedAt,
+        production_engine: resolveShadowEngineVersion(merged),
+        blocked_reason: v365Gate.reason,
+        active_run_id_unchanged: true,
+        publishable: false,
+        v365: runIntegrity.buildRunTelemetry({
+          envelope: v365Envelope,
+          gate: v365Gate,
+          finality: null,
+          engine_run_id: v365EngineRunIdBase,
+          pipeline: {
+            pipeline_run_id: v365Inbound.pipeline_run_id,
+            attempt: v365Inbound.attempt,
+            origin: v365Inbound.origin,
+            transport_status: runIntegrity.TRANSPORT_STATUS.CALL_RETURNED,
+            business_status: runIntegrity.BUSINESS_STATUS.FAILED
+          }
+        })
+      };
     }
 
     let v3MarketEnv = null;
@@ -593,17 +762,18 @@ exports.main = async (event = {}, context = {}) => {
     // 权限一律 fail-closed：未知/非法取值不得获得高于 ADVISORY 的权限；
     // production_write / auto_execution 恒 false（见 gen1-authority）。
     const gen1Authority = resolveAuthority(merged);
-    // ---- WP-G1-GE-02：Guarded Effective 封印读取（Key 2 Freeze Seal + Key 3 Evidence Seal）----
-    // fail-closed：读不到 / 解析失败 / 状态非 APPROVED(PASS) / 绑定缺失或不一致 ⇒ 一律 false。
-    // 生产制品当前为 PENDING（见 ml/manifests/GEN1_GUARDED_EFFECTIVE_*.json），
-    // 且运行期尚无可观测的 source/model SHA ⇒ freeze 绑定为 UNVERIFIABLE。
-    // ⇒ 即使有人误把 param_config.gen1_authority 改成 GUARDED_EFFECTIVE，本值仍为 false。
-    const guardedSeal = readProductionSeals({
+    // ---- WP-G1-GE-02 + D2-G1/D2-G2：Guarded Effective 封印读取（Key 2 Freeze Seal + Key 3 Evidence Seal）----
+    // fail-closed：读不到 / 解析失败 / 状态非 APPROVED(PASS) / 绑定缺失或不一致 → 一律 false。
+    // 生产制品当前为 PENDING（见 ml/manifests/GEN1_GUARDED_EFFECTIVE_*.json）→ 本值恒 false；
+    // 但 binding 的 source_sha256 / model_sha256 已由 D2-G1 / D2-G2 补上**可观测源**：
+    //   · source_sha256 = C1 聚合（`scripts/gen-gen1-source-sha.js` 的可复现输出，见模块顶部常量）
+    //   · model_sha256  = 随包 sidecar GEN1_MODEL_SHA.json 运行期实读（缺失 → 不注入）
+    // ⛔ 观测不到者一律**不注入**（保持缺省 → UNVERIFIABLE），绝不「假设通过」。
+    // ⛔ 不引入运行时网络 / DB / 子进程调用。
+    const guardedSeal = readProductionSeals(Object.assign({
       contract_version: GUARDED_CONTRACT_VERSION,
       threshold_version: GUARDED_THRESHOLD_VERSION
-      // source_sha256 / model_sha256：运行期无权威观测源（GE-04 晋升时须先提供），
-      // 因此保持缺省 ⇒ FREEZE_SEAL_BINDING_UNVERIFIABLE，绝不「假设通过」。
-    });
+    }, observedGuardedBindings()));
     // WP-G1-GE-02 复审 P1：本计数器语义 = **真实采纳次数**（selector 采用 guarded 结果），
     // **不是**「资格成立次数」（effective_guarded === true）。两者是**不同**的事：
     // 封印全部满足但 selector 仍处 BASELINE 时，「有资格」成立而「被采纳」为 0。
@@ -683,7 +853,8 @@ exports.main = async (event = {}, context = {}) => {
         // 数据完整性强制 WAIT：快照数据不完整（如抓取半包/上游缺失）时不出决策，避免用旧/残缺数据误导
         if (p.snapshot.data_complete === false) {
           const waitResult = decision.buildWaitResult(etf, p.snapshot, '数据不完整（data_complete=false），待数据补齐后重算');
-          await db.upsert(COLLECTIONS.DECISION_RESULT, waitResult, { code: etf.code, decision_date: waitResult.decision_date });
+          // V3.6.5 (B1)：经发布路由器写（ENFORCE ⇒ candidate；LEGACY ⇒ 旧行为）
+          await v365WriteDecision(waitResult, etf.code);
           results.push({
             code: etf.code, ok: true, action: 'WAIT',
             opportunity_score: waitResult.opportunity_score,
@@ -948,7 +1119,8 @@ exports.main = async (event = {}, context = {}) => {
           throw new Error(`Gen-1 overlay violated production No-op: ${noopCheck.diffs.join(', ')}`);
         }
 
-        await db.upsert(COLLECTIONS.DECISION_RESULT, result, { code: etf.code, decision_date: result.decision_date });
+        // V3.6.5 (B1)：经发布路由器写（ENFORCE ⇒ candidate；LEGACY ⇒ 旧行为）
+        await v365WriteDecision(result, etf.code);
 
         // 回写 fundamental_state（每次重算都 upsert，保证后台基本面录入即时生效）
         await db.upsert(COLLECTIONS.FUNDAMENTAL_STATE, {
@@ -1004,6 +1176,19 @@ exports.main = async (event = {}, context = {}) => {
         results.push({ code: p.etf.code, ok: false, error: String(e.message || e) });
       }
     }
+
+    // ================= V3.6.5 (B1)：Run Finality 分类 =================
+    // 语义（任务书 §7）：COMPLETE / PARTIAL / FAILED + expected/success/failed/missing/publishable。
+    // ⛔ 任何 PARTIAL / FAILED 均**不得**成为新的 authoritative run。
+    // ⚠️ 关键：这里用**声明的 expected_codes**（5 只）而不是"实际写成功的条数"，
+    //    否则"没跑到就退出"会被误判为 COMPLETE（这正是旧实现把 PARTIAL 当成功的机制）。
+    const v365Finality = runIntegrity.computeFinality({
+      expected_codes: v365Codes,
+      results: results.reduce((acc, r) => {
+        if (r && r.code != null) acc[String(r.code)] = { ok: r.ok === true };
+        return acc;
+      }, {})
+    });
 
     // ---- WP-G1.3 G1.3-06/11：反事实组合账本终局断言 ----
     // 两个并行账本：productionSectorUsed（生产）vs canarySectorUsed（完整组合反事实）。
@@ -1121,7 +1306,7 @@ exports.main = async (event = {}, context = {}) => {
       };
     })();
 
-    await db.upsert(COLLECTIONS.PORTFOLIO_SNAPSHOT, {
+    const v365SnapshotDoc = {
       snapshot_date: snapshotDate,
       total_asset: resolvedAsset,
       cash_balance: cashYuan != null ? cashYuan : (seedSnap && seedSnap.cash_balance != null ? seedSnap.cash_balance : null),
@@ -1175,8 +1360,114 @@ exports.main = async (event = {}, context = {}) => {
           trade: p.trade_position != null ? p.trade_position : null
         };
       })
-    }, { snapshot_date: snapshotDate });
+    };
 
+    // >>> v365-orch-zone: lifecycle_writer
+    // ================= V3.6.5 (B1)：fail-closed 发布门 =================
+    // 语义（任务书 §8/§9）：candidate 先写；只有 **COMPLETE 且校验通过**才允许成为 authoritative。
+    // ⛔ 不得出现「前三票写成功、后两票失败，最终前台看到半个 portfolio」。
+    // ⚠️ ENFORCE：先写 candidate；authoritative 切换需经**单指针 CAS 提升**。
+    //    ✅ 平台级 CAS 并发证据**已取得**（`docs/V365_PLATFORM_CAS_EVIDENCE.md`；
+    //       `CAS_EVIDENCE.platform_single_document_cas_verified === true`）⇒ `promotionAllowed() === true`。
+    //    ⚠️ 但 RDE 侧**尚未接线**提升调用（OD-3 属 WP-RH2/R2-c）⇒ 当前实际仍是 "candidate 已写、指针未切"。
+    const v365PortfolioPublish = (v365Finality.status === runIntegrity.RUN_STATUS.COMPLETE)
+      ? await v365WritePortfolio(v365SnapshotDoc, snapshotDate)
+      : {
+        created: false, skipped: true,
+        reason: 'run_not_complete:' + v365Finality.status
+      };
+
+    // ================= R2-c（OD-3 A）：接线 publishCandidateFirst =================
+    // 复用**已被测试覆盖**的编排函数（⛔ 不复制协议）：
+    //   candidate → manifest → 回读 → 分类 → 校验 → **CAS 提升**
+    // ⚠️ 必须传**决策文档本体**（`decisions`）：函数写入时做 `calc_date` 归一；
+    //    ⛔ 若只让它回读，读回的文档缺 `calc_date` ⇒ 被 mixed-date gate 判失败 ⇒ 永不能提升。
+    let v365PublishResult = null;
+    let v365HistoryRow = null;
+    if (v365Mode === 'ENFORCE') {
+      const v365Scope = publishStore.POINTER_SCOPE_PRODUCTION;
+      // revision = **逻辑单调时钟**（promotion **前** pointer.revision + 1）⇒ 过 NON_MONOTONIC_REVISION 门
+      const v365PointerBefore = await v365Store.getPointer(v365Scope).catch(() => null);
+      const v365Revision = (v365PointerBefore && Number.isFinite(Number(v365PointerBefore.revision))
+        ? Number(v365PointerBefore.revision) : 0) + 1;
+      const v365Manifest = {
+        run_id: v365EngineRunIdBase,
+        revision: v365Revision,
+        expected_trade_date: snapshotDate,
+        expected_codes: v365CandidateCodes.slice(),
+        input_hash: 'engine:' + v365EngineRunIdBase,
+        status: 'CALCULATING',
+        created_at: new Date().toISOString()
+      };
+      try {
+        v365PublishResult = await runIntegrity.publishCandidateFirst({
+          store: v365Store,
+          scope: v365Scope,
+          manifest: v365Manifest,
+          expected_codes: v365CandidateCodes.slice(),
+          decisions: v365CandidateDocs,
+          portfolio: v365SnapshotDoc
+        });
+      } catch (e) {
+        v365PublishResult = { promoted: false, cas_reason: null, publish_error: String(e.message || e) };
+      }
+
+      // ================= R2-d（OD-2 时序）：run_history **单次写入** =================
+      // ⛔ 时序硬约束（WP-RH2 §8 条不变量）：
+      //    candidate → manifest/finality → **CAS promotion attempt** → **本次写入**；
+      //    ⛔ 严格禁止 `run_history append → CAS promotion`（否则 CAS 失败会留下"从未成为 active"的伪历史）。
+      // ✅ CAS **rejected 也留痕**（`promoted:false` + `cas_reason`）—— OD-2 Reason ③ 明确要求。
+      // ✅ `promoted_at` **仅**在真实 promotion 成功时写入。
+      // ⛔ 严格 append-only：同 run_id 已存在 ⇒ **不更新**（retry 幂等；`uk_run_id` 兜底 fail-closed）。
+      const v365Plan = (v365PublishResult && v365PublishResult.plan) || {};
+      const v365Now = new Date().toISOString();
+      v365HistoryRow = {
+        run_id: v365Manifest.run_id,
+        scope: v365Scope,
+        expected_trade_date: v365Manifest.expected_trade_date,
+        revision: v365Manifest.revision,
+        status: (v365PublishResult && v365PublishResult.finality
+          && v365PublishResult.finality.status) || v365Finality.status,
+        engine_version: runIntegrity.ENGINE_VERSION,
+        input_hash: v365Manifest.input_hash,
+        expected_codes: v365Manifest.expected_codes,
+        decision_count: v365CandidateDocs.length,
+        portfolio_present: v365SnapshotDoc != null,
+        // ✅ 来自 promotion **前**的实际 active pointer（由 planPointerPromotion 依 current 计算）
+        supersedes_run_id: v365Plan.supersedes_run_id != null ? v365Plan.supersedes_run_id : null,
+        // ✅ RH3：**同一交易日** supersede 标记（R4「必须显式可追溯」）—— 取自 promotion 前的 plan，
+        //    ⛔ 非事后推断；与 `supersedes_run_id` **同源** ⇒ 二者不可互相矛盾。
+        same_trade_date_supersede: v365Plan.same_trade_date_supersede === true,
+        // ✅ RH3：由 pointer 提升**前**的 active run（`next_pointer.promoted_from_run_id` 同源）
+        promoted_from_pointer_run_id: (v365Plan.next_pointer
+          && v365Plan.next_pointer.promoted_from_run_id != null)
+          ? v365Plan.next_pointer.promoted_from_run_id : null,
+        promoted: v365PublishResult ? v365PublishResult.promoted === true : false,
+        promoted_at: (v365PublishResult && v365PublishResult.promoted === true) ? v365Now : null,
+        promoted_from_run_id: v365PublishResult && v365PublishResult.previous_run_id != null
+          ? v365PublishResult.previous_run_id : null,
+        // ✅ RH3：CAS 写后独立回读一致性（CAS-7）。⛔ 仅提升成功时有意义，否则 null。
+        read_after_write_consistent: (v365PublishResult && v365PublishResult.promoted === true)
+          ? (v365PublishResult.read_after_write_consistent === true) : null,
+        cas_reason: v365PublishResult && v365PublishResult.cas_reason != null
+          ? v365PublishResult.cas_reason : null,
+        created_at: v365Now
+      };
+      try {
+        const v365HistoryColl = runIntegrity.V365_COLLECTIONS.RUN_HISTORY;
+        const v365Dup = await db.query(v365HistoryColl, { run_id: v365HistoryRow.run_id }, { limit: 1 })
+          .catch(() => []);
+        if (!v365Dup || !v365Dup.length) {
+          await db.getCollection(v365HistoryColl).add(v365HistoryRow);
+        }
+      } catch (e) {
+        // fail-open：history 写失败**不得**影响已完成的 promotion（指针已切，回滚反而会让读者 fail-closed）
+        // ⚠️ 该失败必须可见 ⇒ 记入 runtimeStatus 的 v365_history_write_error（telemetry zone）
+        v365HistoryWriteError = String(e.message || e);
+      }
+    }
+
+    // <<< v365-orch-zone: lifecycle_writer
     let shadowLog = null;
     if (shadowEnabled && shadowItems.length) {
       shadowLog = buildShadowDailyEntry({
@@ -1272,6 +1563,26 @@ exports.main = async (event = {}, context = {}) => {
     };
 
     // 运行状态单一真相：前后端 / shadow log 统一读这个对象，禁止再凭 VERSION.txt / 硬编码各说一套。
+    // >>> v365-orch-zone: telemetry
+    // ---- OD-6 批2：派生字段（⛔ 不改旧字段值；旧字段另标 DEPRECATED）----
+    // `promotion_allowed` 由 `CAS_EVIDENCE` 派生（平台 CAS 已 CLOSED ⇒ true）；
+    // `promotion_skipped_reason` 改为**派生**：无跳过时 `null` ⇒ 与 `promotion_allowed` 不再自相矛盾。
+    const v365PromotionAllowed = runIntegrity.promotionAllowed();
+    const v365PromotionSkippedReason = v365PromotionAllowed
+      ? null
+      : 'ATOMIC_PROMOTION_BLOCKED:platform_cas_unverified';
+    // `authoritative_publish_status`：**反映真相**（发布与否取决于指针是否提升，⛔ 不由 mode 推断）。
+    // ✅ R2-c（OD-3 接线）已落地 ⇒ 读取**真实提升结果**：
+    //    `null`            = 非 ENFORCE（LEGACY 直写路径，无 candidate/promotion 语义）
+    //    'PROMOTED'        = CAS 提升成功（含 ALREADY_ACTIVE 幂等）⇒ 该 run 即 authoritative
+    //    'NOT_PROMOTED'    = 已尝试/未尝试，但指针未切 ⇒ 仍 **非** authoritative
+    //    'PROMOTION_FAILED'= 提升过程抛错（指针状态不确定，⛔ 不得当作已发布）
+    const v365AuthoritativePublishStatus = v365Mode !== 'ENFORCE'
+      ? null
+      : (v365PublishResult == null ? 'NOT_PROMOTED'
+        : (v365PublishResult.publish_error != null ? 'PROMOTION_FAILED'
+          : (v365PublishResult.promoted === true ? 'PROMOTED' : 'NOT_PROMOTED')));
+
     const runtimeStatus = {
       key: 'runtime-status',
       production_engine: productionEngine,
@@ -1345,11 +1656,48 @@ exports.main = async (event = {}, context = {}) => {
       v3_6_1_shadow: merged.v3_6_1_shadow === true,
       v3_shadow_enabled: shadowEnabled,
       config_version: merged.config_version || null,
+      // ---- V3.6.5 (B1) run 完整性 telemetry（**只读字段**，不参与任何决策计算）----
+      v365_mode: v365Mode,
+      v365_run_integrity: runIntegrity.buildRunTelemetry({
+        envelope: v365Envelope,
+        gate: v365Gate,
+        finality: v365Finality,
+        engine_run_id: v365EngineRunIdBase,
+        pipeline: {
+          pipeline_run_id: v365Inbound.pipeline_run_id,
+          attempt: v365Inbound.attempt,
+          origin: v365Inbound.origin,
+          transport_status: runIntegrity.TRANSPORT_STATUS.CALL_RETURNED,
+          business_status: v365Finality.status === runIntegrity.RUN_STATUS.COMPLETE
+            ? runIntegrity.BUSINESS_STATUS.COMPLETE
+            : runIntegrity.BUSINESS_STATUS.PARTIAL
+        }
+      }),
+      v365_finality_status: v365Finality.status,
+      // ⚠️ DEPRECATED（OD-6 批2）：按 `mode !== 'ENFORCE'` 推断"已发布" —— **推理链错误**
+      //    （发布与否取决于**指针是否提升**）。⛔ 值**未改**（保历史兼容）；请改用下行派生字段。
+      v365_authoritative_published: v365Mode !== 'ENFORCE',
+      /** 派生：反映真相（null=LEGACY / PROMOTED / NOT_PROMOTED / PROMOTION_FAILED） */
+      v365_authoritative_publish_status: v365AuthoritativePublishStatus,
+      /** R2-c：CAS 提升是否**被尝试**（区分"未尝试"与"尝试被拒"） */
+      v365_promotion_attempted: v365Mode === 'ENFORCE' && v365PublishResult != null
+        ? v365PublishResult.promotion_attempted === true : null,
+      /** R2-c：结构化 CAS 拒因（STALE_EXPECTED_POINTER / NON_MONOTONIC_REVISION / …）；无拒因 ⇒ null */
+      v365_cas_reason: v365Mode === 'ENFORCE' && v365PublishResult != null
+        && v365PublishResult.cas_reason != null ? String(v365PublishResult.cas_reason) : null,
+      /** R2-d：**唯一** history row 的写入结果（'ok' / 'failed' / null=非 ENFORCE） */
+      v365_history_status: v365Mode !== 'ENFORCE' ? null
+        : (v365HistoryRow == null ? 'not_written'
+          : (v365HistoryWriteError == null ? 'ok' : 'failed')),
+      /** R2-d：history 写失败原因（⛔ 不得静默 —— 失败必须可见；成功 ⇒ null） */
+      v365_history_write_error: v365HistoryWriteError,
       decision_date: snapshotDate,
       updated_at: new Date().toISOString()
     };
     await db.upsert(COLLECTIONS.RUNTIME_STATUS, runtimeStatus, { key: 'runtime-status' });
+    // <<< v365-orch-zone: telemetry
 
+    // >>> v365-orch-zone: telemetry
     return {
       ok: true,
       version,
@@ -1357,6 +1705,61 @@ exports.main = async (event = {}, context = {}) => {
       duration_ms: Date.now() - startedAt,
       production_engine: productionEngine,
       shadow_engine: shadowEngine,
+      // ---- V3.6.5 (B1)：run 完整性对外声明（新增；既有字段语义未变）----
+      // ⚠️ 诚实边界：ENFORCE 下 candidate 已写，authoritative 是否发布取决于**指针是否提升**。
+      //    ✅ 平台 CAS 证据已 CLOSED ⇒ `promotionAllowed() === true`（不再被平台条件阻塞）。
+      //    ⚠️ RDE 侧提升调用**尚未接线**（OD-3 / WP-RH2 R2-c）⇒ 当前为 "CANDIDATE_ONLY_NOT_PROMOTED"。
+      //    ⚠️ 下方 `v365_authoritative_published` / `authoritative_published` 为 **DEPRECATED**：
+      //       它们按 `mode !== 'ENFORCE'` 推断"已发布"，**推理链错误**（发布与否取决于指针）；
+      //       ⛔ 值**未改**（保历史兼容）；请改用 `authoritative_publish_status`（派生）。
+      v365: {
+        mode: v365Mode,
+        engine_version: runIntegrity.ENGINE_VERSION,
+        input_contract_version: runIntegrity.INPUT_CONTRACT_VERSION,
+        run_integrity: runIntegrity.buildRunTelemetry({
+          envelope: v365Envelope,
+          gate: v365Gate,
+          finality: v365Finality,
+          engine_run_id: v365EngineRunIdBase,
+          pipeline: {
+            pipeline_run_id: v365Inbound.pipeline_run_id,
+            attempt: v365Inbound.attempt,
+            origin: v365Inbound.origin,
+            transport_status: runIntegrity.TRANSPORT_STATUS.CALL_RETURNED,
+            business_status: v365Finality.status === runIntegrity.RUN_STATUS.COMPLETE
+              ? runIntegrity.BUSINESS_STATUS.COMPLETE
+              : runIntegrity.BUSINESS_STATUS.PARTIAL
+          }
+        }),
+        expected_count: v365Finality.expected_count,
+        success_count: v365Finality.success_count,
+        failed_count: v365Finality.failed_count,
+        failed_codes: v365Finality.failed_codes,
+        missing_codes: v365Finality.missing_codes,
+        publishable: v365Finality.publishable && v365Gate.publishable,
+        // ⚠️ DEPRECATED（OD-6 批2）：同上，按 mode 推断发布状态 —— 推理链错误。⛔ 值**未改**。
+        authoritative_published: v365Mode !== 'ENFORCE',
+        /** 派生：反映真相 */
+        authoritative_publish_status: v365AuthoritativePublishStatus,
+        candidate_codes: v365CandidateCodes.slice(),
+        portfolio_publish: v365PortfolioPublish,
+        promotion_allowed: v365PromotionAllowed,
+        // ✅ OD-6 批2：改为**派生**（无跳过时 null）⇒ 与 promotion_allowed 不再自相矛盾
+        promotion_skipped_reason: v365PromotionSkippedReason,
+        // R2-c/R2-d：提升结果 + history 写入可见性（⛔ 不得静默）
+        promotion_attempted: v365PublishResult ? v365PublishResult.promotion_attempted === true : false,
+        promoted: v365PublishResult ? v365PublishResult.promoted === true : false,
+        cas_reason: v365PublishResult && v365PublishResult.cas_reason != null
+          ? v365PublishResult.cas_reason : null,
+        run_history: v365HistoryRow ? {
+          run_id: v365HistoryRow.run_id,
+          revision: v365HistoryRow.revision,
+          supersedes_run_id: v365HistoryRow.supersedes_run_id,
+          promoted: v365HistoryRow.promoted,
+          promoted_at: v365HistoryRow.promoted_at
+        } : null,
+        history_write_error: v365HistoryWriteError
+      },
       config_version: merged.config_version || null,
       v3_6_1_enabled: merged.v3_6_1_enabled === true,
       v3_6_1_shadow: merged.v3_6_1_shadow === true,
@@ -1371,6 +1774,7 @@ exports.main = async (event = {}, context = {}) => {
         summary: summarizeEntry(shadowLog)
       } : null
     };
+    // <<< v365-orch-zone: telemetry
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }

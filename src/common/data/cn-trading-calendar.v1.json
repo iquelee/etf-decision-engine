@@ -1,0 +1,98 @@
+{
+  "artifact_type": "cn_trading_calendar",
+  "calendar_expiry_warning_days": 30,
+  "calendar_version": "cn-a-share-2026.1",
+  "coverage": {
+    "end": "2026-12-31",
+    "seeded": true,
+    "start": "2026-01-01"
+  },
+  "exchange": [
+    "SSE",
+    "SZSE"
+  ],
+  "holidays": [
+    "2026-01-01",
+    "2026-01-02",
+    "2026-02-16",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-02-19",
+    "2026-02-20",
+    "2026-02-23",
+    "2026-04-06",
+    "2026-05-01",
+    "2026-05-04",
+    "2026-05-05",
+    "2026-06-19",
+    "2026-09-25",
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07"
+  ],
+  "market": "CN_A_SHARE",
+  "notes": [
+    "Authority: SSE / SZSE 正式年度休市公告。CN trading day = Monday-Friday AND NOT official exchange closure。",
+    "SSE 与 SZSE 安排已交叉校验一致；不一致时生成器会以 CALENDAR_CONFLICT 拒绝生成（不自行选边）。",
+    "本 artifact 由 scripts/gen-cn-trading-calendar.js 从来源文件确定性生成，禁止手工编辑；不含生成时间戳。",
+    "holidays = 官方休市区间内的**工作日**；weekend_closures = 公告另行点明的周末休市日（信息性，周末本就不开市）。",
+    "超出 coverage 一律 BLOCKED（CALENDAR_OUT_OF_RANGE），不回退为 weekday-only。",
+    "严禁在运行时联网更新：到期只产生 warning，不自动拉取。"
+  ],
+  "provenance": {
+    "confirming_notice_identifiers": [
+      "上证公告〔2026〕22号"
+    ],
+    "generation_method": "expand_official_closure_ranges -> derive_weekday_closures -> cross_check_exchanges",
+    "source_authorities": [
+      "SSE",
+      "SZSE"
+    ],
+    "source_file": "src/common/data/sources/cn-trading-calendar.source.v1.json",
+    "source_file_sha256": "edd5147283ba22a3d271856ff0a0f1f67b1e63c6119c1193528154eb90ef6f6b",
+    "source_notice_dates": [
+      "2025-12-22",
+      "2025-12-22"
+    ],
+    "source_notice_identifiers": [
+      "上证公告〔2025〕45号",
+      "深证会〔2025〕481号"
+    ],
+    "source_notice_urls": [
+      "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml",
+      "https://www.szse.cn/www/disclosure/notice/general/t20251222_618087.html"
+    ]
+  },
+  "schema_version": "1.0",
+  "session_rule": {
+    "session_close_local": "15:00",
+    "timezone": "Asia/Shanghai",
+    "weekend": "sat_sun_non_trading"
+  },
+  "special_trading_days": [],
+  "synthetic": false,
+  "weekend_closures": [
+    "2026-01-03",
+    "2026-01-04",
+    "2026-02-14",
+    "2026-02-15",
+    "2026-02-21",
+    "2026-02-22",
+    "2026-02-28",
+    "2026-04-04",
+    "2026-04-05",
+    "2026-05-02",
+    "2026-05-03",
+    "2026-05-09",
+    "2026-06-20",
+    "2026-06-21",
+    "2026-09-20",
+    "2026-09-26",
+    "2026-09-27",
+    "2026-10-03",
+    "2026-10-04",
+    "2026-10-10"
+  ]
+}
