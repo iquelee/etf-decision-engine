@@ -838,3 +838,32 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 | 已登记部署总数 | **11**（D-001…D-011）；其中**真实生产部署** = D-001 / D-002 / D-004 / D-009 / **D-010** / **D-011** |
 | **当前线上**三函数身份 | 以 `_g1-current-online-baseline-20261005/`（R2 产出）为**唯一**参照 |
 | 本补登的性质 | **治理记录修复**；`DEPLOYMENT_AUTHORIZED = NO`（本次补登**不产生**任何新授权） |
+
+---
+
+### D-014 · 2026-10-27 · V3.6.8 后端部署（仅 apiGateway / runDecisionEngine）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对新 40 位 SHA 发布请求回复“继续”；原 `3eae94a…` 因远端 CI 失败未部署，授权未自动转移；修复 CI 并准备新包后另行确认 |
+| `source_repo_sha` | `ffd2b4ff626c124629af4c4073cc42066952d3b4`（干净提交，包内 `RELEASE_SOURCE.json` 自述，与上传后逐文件对拍交叉验证） |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / **apiGateway、runDecisionEngine** |
+| `deploy_command` | `tcb fn deploy <fn> --dir dist-functions/<fn> --config-file cloudbaserc.json --force --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b`，逐函数执行一次 |
+| `ci` | PR #68 / Actions #184，Node16/22 × Python3.11/3.12 四组通过；CI portable 与本机完整历史验收分别披露，不混称 |
+| `apiGateway ModTime / CodeSize` | `2026-10-12 12:54:17 / 4446521` → **`2026-10-27 11:51:44 / 4455096`** |
+| `runDecisionEngine ModTime / CodeSize` | `2026-10-08 11:39:46 / 4470485` → **`2026-10-27 11:53:18 / 4475744`** |
+| `source_parity` | 上传后独立 `fn code download`：apiGateway **EXACT_MATCH 1796/1796**；runDecisionEngine **EXACT_MATCH 1799/1799**；包括依赖和配置的完整文件树，0 差异 |
+| `apiGateway candidate_zip_sha256` | `7ee0703c12f596c3eebd2e5fb304a6376f80a92ae7cf2df13abccce05f067362` |
+| `runDecisionEngine candidate_zip_sha256` | `db33a2ef8f2ec39263707df53ff3df8653587965348f021d5651adf042a74cac` |
+| `apiGateway rollback_zip_sha256` | `d2b7929065cd470b302fe89a8e7e5757c6634444eb370d1f3a930f742f2a8d37` |
+| `runDecisionEngine rollback_zip_sha256` | `093ca32f3afb5afcf724ce6015f47f42fb2ee080480496ad17728284a3e3ec3b` |
+| 配置 | 两函数 Nodejs16.13 / index.main / 256MB；timeout 30s / 120s；环境变量、触发器及上述配置前后逐项相同 |
+| 只读 API 验收 | 513310 的 2026-10-01~2026-10-27 历史 13 条，`history.status=OK`；旧数组响应同样 13 条；dashboard pointer revision 14、无 latest fallback |
+| 版本分轴 | API 包 V3.6.8 + 本次 SHA；已有正式结果发布 V3.6.7 / 策略族 V3.6.1。未将网关包版本填入旧 run |
+| 后续状态 | 主引擎新自然 run 的 manifest/history release、source_commit 和 context hash **PENDING_NEXT_NATURAL_RUN**；未人工调用生产决策 |
+| `rollback_used` | **NO**；ZIP 是部署前导出的完整目录重封装，未声称与原云端压缩字节相同或已做回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/release-ffd2b4f/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,execution/}`；候选 ZIP、逐文件指纹及回滚 ZIP 不公开入库 |
+
+部署前后生产 pointer、runtime/authority 记录逐字一致，作为边界证据保存。观察的 `adminGateway`、`materializeIndicators`、`runGen1ShadowEod` 的代码元数据未变；本行不把三函数观察扩称全环境核验。未部署前端，未合并 master，未做生产资格或 ML 权限升格。
+
+本记录为后续台账提交；它不改变以上已部署源码 SHA。前端独立批次仍须绑定其候选和回滚身份。
