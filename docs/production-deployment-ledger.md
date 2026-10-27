@@ -920,3 +920,28 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 本行解决 D-015 记录的 K 线窗口问题，不改写该行当时事实。其他四个已观察函数的代码/配置元数据、全部前端托管对象及生产 pointer/runtime/authority 记录前后相同。未部署主引擎或前端、未做行情写入、未改策略或 ML 权限、未人工调用生产决策。
 
 主引擎部署源码仍为 D-014 的 `ffd2b4f…`，其新 run 的 release/source/context 元数据继续等待自然运行验收；API 包的新提交不替代生产 run 身份。本条及后续文档提交不改变已部署的 API 源码 SHA。
+
+---
+
+### D-017 · 2026-10-27 · 独立 Node 24 API 探针（无生产切流）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 在绑定完整 SHA、包指纹和仅新建/固定只读调用的请求后回复“继续”；按该明确范围执行，不沿用旧批次授权 |
+| `wrapper_source_repo_sha` | `17144395c02571f6666e27010c4e9cec9a65cdc3`，部署前干净提交 |
+| `base_api_source_repo_sha` | `49e7c765c586bb81dc707849992fa7386b9a663c`；原 API 的 RELEASE_SOURCE.json 保留该身份，新增 RUNTIME_PROBE_SOURCE.json 单独记录 wrapper |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / 仅新建 **apiGatewayRuntime24**，Event 类型；不是生产流量入口 |
+| `deploy_command` | `tcb fn deploy apiGatewayRuntime24 --dir <approved-candidate> --config-file <private-config> --runtime Nodejs24.11 --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b --json`；无 force/all/path/httpFn，执行一次、exit 0 |
+| `AddTime / ModTime / CodeSize` | **2026-10-27 18:11:43 / 2026-10-27 18:11:43 / 4456487**（北京时间）；创建前目标不存在 |
+| 配置 | Nodejs24.11 / runtime-probe.main / 30s / 256MB / Event / 依赖安装 FALSE；环境和既有角色与私有批准配置相符，零触发器 |
+| `candidate_zip_sha256` | `ce61dfb72521015cf08ca6ca77f686a0fc665865ab293bea6e18b27c68bd6d20` |
+| `source_parity` | 创建后独立下载 **EXACT_MATCH 1798/1798**，原始 SHA256 零差异。相对刚重新下载核验的 D-016 API：仅增加 runtime-probe.js、RUNTIME_PROBE_SOURCE.json，替换嵌入 config.json 以清空 triggers/环境值；API/common/SDK 字节不变 |
+| 实际云端运行时 | **v24.11.1**；SDK **2.11.0** 完成本批真实鉴权与多集合读取，未升级依赖 |
+| 固定只读验收 | 七类用例，8 次调用（含首尾 constants），观察到 2 实例；看板权威与五个 production card、版本身份与正式 API 相同；notFound=404 |
+| K 线 / 历史 | 日线 320 根截至 2026-10-27；周线 210 根截至 2026-10-26；payload 与稳定正式 API 前后响应一致，日期与最新库内窗口一致、升序；增强历史 13 条 / OK，旧数组 13 条，均相同 |
+| `ci` / 本机 | 部署源码 Actions #190 Node16/22/24 × Python3.11/3.12 六组成功（portable 历史边界保留）；本机完整 Node 84/84、封包 Node22/24 离线回放通过 |
+| 生产边界 | 原 11 函数列表代码/配置字段未变；五个重点函数 Runtime/Handler/内存/超时/环境/触发器/角色及代码元数据不变；托管对象和已列出的 HTTP 服务不变；pointer revision 14、runtime 状态不变。无生产决策调用、路由切换、timer 变更或资源删除 |
+| 回退 / 清理 | 没有生产路由指向探针；未执行回滚或删除。失败时停止调用并留存诊断；清理为独立明确操作，不删除/重建原生产函数 |
+| evidence | 仓外 `_v3-core-review-20261027/runtime24-probe/{DEPLOYMENT_REPORT.json,DEPLOYMENT_REPORT.md,read-verification.json,creation-verification.json,probe-download/}` |
+
+本条仅证明隔离 API 读取在目标运行时通过，不能把固定 case 探针直接接入前端，也不代表全部函数/SDK 写入能力、策略或 ML 权限已获新资格。主引擎新 source 的 manifest/history 仍各 0 条，保留自然运行待验收。正式 API 候选、现有 /apiGateway 事件映射与入口回退须另批准备；本条文档提交不改变已部署 wrapper 或原 API 的源码身份。
