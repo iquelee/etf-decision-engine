@@ -894,3 +894,29 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 观察的五个后端函数代码/配置元数据及生产 pointer、runtime/authority 记录部署前后相同。后端部署源码仍为 D-014 的 `ffd2b4f…`，没有因本次前端或台账更新变化。主引擎新 run 的版本元数据继续等待自然运行；未人工触发决策，未更改策略或 ML 权限。
 
 已知后续问题：现存 K 线接口按升序截取最早 N 根，数据库行情并非因此缺失；513310 最新库内交易日 2026-10-27，而展示窗口止于 2024-08-27。本前端批次如实保留过期标记，未声称已修复；另列下一 API 修复批次。
+
+---
+
+### D-016 · 2026-10-27 · K 线最新窗口修复（仅 apiGateway）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对 API 单函数批次及 40 位 SHA 明确回复“批准”；不沿用此前前端授权 |
+| `source_repo_sha` | `49e7c765c586bb81dc707849992fa7386b9a663c`，部署前干净提交；沿用 V3.6.8 工程版本，以源码和包指纹区分补丁 |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / **apiGateway 一函数** |
+| 改动 | `getKline` 按日期降序取最新日线 320 / 周线 260，再逆序返回；保留原 payload、日线 null-close 过滤与错误语义 |
+| `deploy_command` | `tcb fn deploy apiGateway --dir dist-functions/apiGateway --config-file cloudbaserc.json --force --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b`，执行一次、exit 0 |
+| `ModTime / CodeSize` | `2026-10-27 11:51:44 / 4455096` → **`2026-10-27 13:40:33 / 4455196`** |
+| `candidate_zip_sha256` | `0ea5509e8c0021a5159cbfc1acaa4d7df196145c2afe577ba3fbac7b2312b2ae` |
+| `source_parity` | 上传后独立下载 **EXACT_MATCH 1796/1796**，每个文件按原始 SHA256 对拍，0 差异；相对部署前仅 `index.js` / `RELEASE_SOURCE.json` 不同 |
+| 配置 | Nodejs16.13 / index.main / 30s / 256MB；环境变量、触发器及配置逐项不变 |
+| 验证 | 原代码 321 根日线 case 确认失败；修复后本机完整 Node **82/82**，Actions #187 Node16/22 × Python3.11/3.12 四组成功；实际构建包真实行情离线回放通过 |
+| 线上日/周线 | 日线 **320 根，2025-07-02~2026-10-27**；周线 **210 根，2023-05-12~2026-10-26**，与最新数据库日期窗口一致、升序；浏览器截至日期为 2026-10-27，标记数据新鲜 |
+| 其他只读回归 | 历史 2026-10-01~27 的 13 条、history.status=OK、旧数组兼容；API source 为本补丁，既有正式结果 v3.6.7 / 策略族 v3.6.1；pointer 未变、无 latest fallback |
+| 回滚 ZIP SHA256 | `cbe2d5e0ecdbfbb82e4e80beab632363bb942a73ba110e1ed7e1cb8001980389`；本轮重新下载 D-014 线上完整目录后封装，逐项匹配先前已验收的 1,796 文件 |
+| `rollback_used` | **NO**；未声称云端原始 ZIP 压缩字节同一或实际回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/kline-window/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,production-kline.png,execution/}` |
+
+本行解决 D-015 记录的 K 线窗口问题，不改写该行当时事实。其他四个已观察函数的代码/配置元数据、全部前端托管对象及生产 pointer/runtime/authority 记录前后相同。未部署主引擎或前端、未做行情写入、未改策略或 ML 权限、未人工调用生产决策。
+
+主引擎部署源码仍为 D-014 的 `ffd2b4f…`，其新 run 的 release/source/context 元数据继续等待自然运行验收；API 包的新提交不替代生产 run 身份。本条及后续文档提交不改变已部署的 API 源码 SHA。

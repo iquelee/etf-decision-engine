@@ -2,7 +2,7 @@
 
 日期：2026-10-27（北京时间）。分支：`codex/v3-core-convergence`。
 
-当前 `apiGateway`、`runDecisionEngine` 已于 2026-10-27 发布 **V3.6.8**，部署源码为 `ffd2b4ff626c124629af4c4073cc42066952d3b4`；见生产部署台账 D-014。前端独立批次已发布，源码为 `ddc8f32ba38bf67bbabd6636fbde82022a0b2d30`；见 D-015。现有正式结果仍来自 **V3.6.7 发布 / V3.6.1 策略族**，新主引擎的自然运行身份尚待验收。部署事实不表示资格升格、冻结或 ML 生效。
+当前已发布 **V3.6.8**：`apiGateway` 的 K 线窗口补丁源码为 `49e7c765c586bb81dc707849992fa7386b9a663c`（D-016）；`runDecisionEngine` 源码仍为 `ffd2b4ff626c124629af4c4073cc42066952d3b4`（D-014）；前端源码为 `ddc8f32ba38bf67bbabd6636fbde82022a0b2d30`（D-015）。现有正式结果仍来自 **V3.6.7 发布 / V3.6.1 策略族**，新主引擎的自然运行身份尚待验收。部署事实不表示资格升格、冻结或 ML 生效。
 
 ## 按顺序完成的代码工作
 
@@ -48,7 +48,7 @@ V3.6.8 增加的五项 legacy 残差由 `release/verify-legacy-divergence.js` �
 
 ## 验证与证明范围
 
-远端首次验证（PR #68 / Actions #182）发现五项测试依赖本机环境，尚未部署。修复后的 CI 显式使用 `node scripts/test-all.js --portable`：79 个 Node 文件运行，两个依赖受治理私有历史的 RPG 回放文件标记 `NOT_RUN`；prospective 的机制负向检查照常运行，15 个历史证据段单列 `NOT_RUN`。这不是完整历史回放资格。默认 `npm test` 和 `release-preflight --apply` 不接受 portable 模式，仍执行 81 个文件及全部历史证据；runner 会覆盖继承的测试环境变量，防止发布意外使用 portable 模式。
+远端首次验证（PR #68 / Actions #182）发现五项测试依赖本机环境，当时尚未部署。修复后的 CI 显式使用 `node scripts/test-all.js --portable`：首批 79 个 Node 文件运行，后续 K 线回归新增一文件后为 80 个；两个依赖受治理私有历史的 RPG 回放文件标记 `NOT_RUN`，prospective 的机制负向检查照常运行，15 个历史证据段单列 `NOT_RUN`。这不是完整历史回放资格。默认 `npm test` 和 `release-preflight --apply` 不接受 portable 模式，完整模式首批 81 文件、当前 82 文件及全部历史证据；runner 会覆盖继承的测试环境变量，防止发布意外使用 portable 模式。
 
 授权/分类测试的子进程采用测试专用、内存中的确定性合成 OHLCV，实际执行原 replay 和决策代码；不复制私有行情或成交至 GitHub，不修改生产 replay harness。仓外依赖过滤测试使用自己的临时 probe 脚本验证，不再要求宿主注入 shim。本机修复后 81/81，独立干净 checkout（无 deliverables）portable 79/79。历史文件缺失时完整模式必须失败，不能以 portable 绿色代替发布门禁。修复改变提交及构建身份，原 `3eae94a` 授权不会自动转移到新提交。
 
@@ -68,19 +68,21 @@ V3.6.8 增加的五项 legacy 残差由 `release/verify-legacy-divergence.js` �
 - 前端 23/23 suite 和显式 Rewrite 根入口构建通过，Actions #185 四组 CI 通过。owner 批准后于 13:11:38（上海）更新三个入口，CLI `--entry legacy.html,rewrite.html,index.html --verify` 成功。生产域名独立下载 67 个候选文件，原始 SHA256 全量 EXACT_MATCH；旧 2,025 key 保留，新增 36 项；托管配置、范围外对象及五个已观察后端函数和生产状态未变。
 - 浏览器生产域名首页正常读取数据，版本分轴正确；513310 显示 47 条历史，覆盖至 2026-10-26；Legacy 入口正常。CloudBase 测试域名有平台自带访问提示，确认后访问；未更改域名/安全配置。完整报告及生产截图：仓外 `frontend-ddc8f32/DEPLOYMENT_REPORT.md`。回滚快照仍位于 `frontend-ffd2b4f/`，未使用。
 - 只读查询尚无 `source_commit=ffd2b4f…` 的新 manifest/history；主引擎无自身 timer，当前由 `materializeIndicators` 的工作日 08:00 管线调用。保留自然运行待验收，不人工造数。
-- 新发现：`getKline` 日线按 `trade_date asc, limit 320` 选中最早窗口；513310 图表截至 2024-08-27，而库内最新日为 2026-10-27。周线同样采用升序截断，须在下一 API 修复批次核验并改为“取最新 N 根，再按日期升序返回”，覆盖日/周线、少量数据及排序契约。此处仅登记问题，不从图表旧窗口推导策略输入陈旧，不在前端拼接或伪造行情。
+- 前端验收时发现 `getKline` 升序 LIMIT 取最早窗口，图表截至 2024-08-27，但数据库最新日为 2026-10-27。已由后续 D-016 的 API 单函数补丁修复；未在前端拼接/伪造行情，也未据旧图表窗口推导策略输入陈旧。
 
 本机复核制品位于代码仓之外 `_v3-core-review-20261027/`。其中下载包、配置和真实持仓数据不作为可分享源码或 Git 提交。
 
 ## 后续顺序
 
-### K 线窗口补丁（2026-10-27，代码候选，尚未部署）
+### K 线窗口补丁（2026-10-27，已发布并验收）
 
 - 已复现：原 `getKline` 日/周线升序 LIMIT 取得最早窗口。仅修改 `apiGateway.getKline`：数据库按日期降序选最新日线 320 根 / 周线 260 根，再逆序输出，保持图表的升序日期和原响应字段。
 - 日线原有 `close != null` 过滤保留，仍在已选 raw window 内过滤，不从更早行情补齐。空/短历史、代码隔离和读取失败语义保持不变；未触碰策略、主引擎、行情写入或前端。
 - 新增实际 HTTP handler 回归：超过上限、恰好上限、短/空历史、其他标的隔离、payload、null close 与错误响应。原代码在 321 根日线 case 确认失败，修复后通过；本机完整 Node **82/82** 通过。
 - 本候选重新生成 V368 manifest；V361/V364、旧 V365 manifest、策略冻结件不改。目标发布范围仅 `apiGateway`，沿用 V3.6.8 工程版本，以新源码提交和包指纹区分；不会把 API 补丁版本写入旧生产 run。
-- 重新下载并核验当前 V3.6.8 API 线上完整文件树，用于本批次依赖与回滚基线。远端 CI、真实行情离线验收、最终候选包及明确 SHA 授权齐备后方可上传；未执行生产决策。
+- 重新下载当时 V3.6.8 API 完整文件树作为依赖/回滚基线；Actions #187 四组 CI 和实际构建包真实行情离线验收通过后，owner 绑定 `49e7c765c586bb81dc707849992fa7386b9a663c` 批准，仅部署 apiGateway。ModTime=2026-10-27 13:40:33，CodeSize=4455196；上传后独立下载 1,796 文件，原始 SHA256 EXACT_MATCH，0 差异。
+- 线上日线 320 根，2025-07-02~2026-10-27；周线 210 根，止于 2026-10-26，均与最新数据库窗口一致且升序。浏览器 K 线显示“数据新鲜”；历史 13 条、旧数组响应、版本分轴、正式 pointer 回归通过。
+- API 配置/触发器、其他四个已观察函数、前端全部托管对象、生产 pointer/runtime 记录未变。未人工调用主引擎、未使用回滚。报告：仓外 `kline-window/DEPLOYMENT_REPORT.md`；台账 D-016。
 
 1. **先发布与验收本工程批次**：部署函数集合拟为 `apiGateway`、`runDecisionEngine`；前端单独发布。需新鲜、逐函数绑定的依赖/回滚包和上传后全量对拍。新主引擎的元数据须由自然运行验证，不能为验收人工调用生产决策函数。
 2. **第 4 项基础设施批次单独推进**：`release/operational-readiness.js` 已提供只读检查。现有日历覆盖至 2026-12-31；2027-01-04 反向核验返回 `CALENDAR_COVERAGE_OUT_OF_RANGE`，未放宽 fail-closed。下一年度日历必须来自官方交易所通知并另出版本。运行时目标须先核验平台支持及 SDK 兼容，不能因本地 Node 22 通过就声称云端运行时已升级。
