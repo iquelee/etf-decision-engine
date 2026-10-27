@@ -867,3 +867,30 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 部署前后生产 pointer、runtime/authority 记录逐字一致，作为边界证据保存。观察的 `adminGateway`、`materializeIndicators`、`runGen1ShadowEod` 的代码元数据未变；本行不把三函数观察扩称全环境核验。未部署前端，未合并 master，未做生产资格或 ML 权限升格。
 
 本记录为后续台账提交；它不改变以上已部署源码 SHA。前端独立批次仍须绑定其候选和回滚身份。
+
+---
+
+### D-015 · 2026-10-27 · V3.6.8 前端独立发布
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对独立前端请求及完整 SHA 明确回复“批准”；与 D-014 两函数授权分开 |
+| `source_repo_sha` | `ddc8f32ba38bf67bbabd6636fbde82022a0b2d30`（部署前工作区干净；相对 D-014 源码仅补充两份文档，前端源码无新增改动） |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / 静态托管根目录前端 **67 文件**；无云函数部署 |
+| `build` | Node22 / Vite production / `VITE_ENABLE_REWRITE_ENTRY=1`；保持 Rewrite 根入口和 legacy / rewrite 独立入口 |
+| `deploy_command` | `tcb hosting deploy web/dist --entry legacy.html,rewrite.html,index.html --verify -e tradingview-etf-d0fa42yy57cbc11b`；先资源后入口；无 prune、无删除、无路由配置更改 |
+| `deploy/mod_time` | 三入口 `2026-10-27T05:11:38Z`（上海 **13:11:38**）；CLI exit 0，完成于 `05:11:40.607256Z` |
+| `candidate_zip_sha256` | `39680b3fcd8f74369c2ae0de35cb0b768df7ab3fcf428433d290afe79143a27f` |
+| `frontend_source_inventory_sha256` | `6c13cf2887e374fbb6350f78af77096f0ae356ee691128027cbd571f9fde7d73`（284 项输入） |
+| `source_parity` | 发布后从生产域名独立下载全部 67 文件，逐个原始 SHA256 与批准清单 **EXACT_MATCH 67/67**，0 差异 |
+| 托管资源边界 | 原 **2,025 key 全保留**，新增 36 项，总 2,061；候选范围外对象元数据、网站文档/域名配置未变 |
+| 浏览器验收 | 生产首页实际取数正常；策略族 V3.6.1 / 已有正式结果发布 V3.6.7 分开显示；513310 历史 47 条，覆盖至 2026-10-26；Legacy 入口正常。平台测试域名访问提示确认后访问，未改变安全配置 |
+| `ci` / 前端检查 | Actions #185 四组 Node16/22 × Python3.11/3.12 成功（portable 范围另行披露）；前端 23/23 suite、显式 Rewrite 根入口构建通过 |
+| 回滚 ZIP SHA256 | `d391567c11494cff146b08b38cf9bc87aa764461be8d2194798e919dad35c4c2` |
+| 回滚覆盖 | 三个发布前入口、递归资源闭包、候选覆盖的已有 key，共 67 文件；捕获时逐个匹配提供方大小及 MD5。不是全部历史孤立资源；新内容指纹资源保留不妨碍恢复旧入口 |
+| `rollback_used` | **NO**；无实际回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/frontend-ddc8f32/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,production-history.png,execution/}`；快照位于相邻 `frontend-ffd2b4f/` |
+
+观察的五个后端函数代码/配置元数据及生产 pointer、runtime/authority 记录部署前后相同。后端部署源码仍为 D-014 的 `ffd2b4f…`，没有因本次前端或台账更新变化。主引擎新 run 的版本元数据继续等待自然运行；未人工触发决策，未更改策略或 ML 权限。
+
+已知后续问题：现存 K 线接口按升序截取最早 N 根，数据库行情并非因此缺失；513310 最新库内交易日 2026-10-27，而展示窗口止于 2024-08-27。本前端批次如实保留过期标记，未声称已修复；另列下一 API 修复批次。
