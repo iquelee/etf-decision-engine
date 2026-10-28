@@ -29,7 +29,9 @@
 
 ## 生产自然运行验收
 
-本次只读复查仍未发现 `source_commit=ffd2b4ff626c124629af4c4073cc42066952d3b4` 的新 manifest/history。正式 pointer 仍为 2026-10-26、revision 14。主引擎无独立 timer，由 materializeIndicators 的 `dailyPipeline-0800`（工作日 08:00）调用；下一次预期机会为 2026-10-28 08:00 北京时间，最终以真实记录为准。
+10-28 早间只读复查确认：10-27 22:01 的新 source 自然 run 已发布，正式 pointer 为交易日 2026-10-27、revision 15，manifest/history/source/context 及 5+1 候选记录一致。主引擎无独立 timer；除 materializeIndicators 的早间 timer，fetchDailyData 也会链式调用物化→决策，因此已有夜间自然发布记录。
+
+10-28 08:00 run 又因发布日期错位被 mixed_date_detected 拒绝，pointer 保持 revision 15。根因及候选修复见 [发布交易日补丁](V368_PUBLISH_TRADE_DATE_FIX.md)；先修复并完成自然运行验收，再继续正式 API 切流及写链迁移，未关闭持续运行验收项。
 
 后续验收须同时核对 source_commit、release_version、input_context_sha256、COMPLETE / validation_passed，以及 promoted history 与 pointer 的一致性。不得仅凭 runtime.updated_at 或上传成功关闭验收项，也不为验证而人工调用生产主引擎。
 

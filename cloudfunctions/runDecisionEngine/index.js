@@ -1370,8 +1370,14 @@ exports.main = async (event = {}, context = {}) => {
     //    ✅ 平台级 CAS 并发证据**已取得**（`docs/V365_PLATFORM_CAS_EVIDENCE.md`；
     //       `CAS_EVIDENCE.platform_single_document_cas_verified === true`）⇒ `promotionAllowed() === true`。
     //    ⚠️ 但 RDE 侧**尚未接线**提升调用（OD-3 属 WP-RH2/R2-c）⇒ 当前实际仍是 "candidate 已写、指针未切"。
+    // Authoritative run objects share the calendar-resolved trade date. The
+    // legacy snapshot keeps its wall-clock date; never mutate that object or
+    // substitute observed/max input dates for the calendar authority.
+    const v365PublishPortfolioDoc = v365Mode === 'ENFORCE'
+      ? { ...v365SnapshotDoc, snapshot_date: v365Envelope.expected_trade_date }
+      : v365SnapshotDoc;
     const v365PortfolioPublish = (v365Finality.status === runIntegrity.RUN_STATUS.COMPLETE)
-      ? await v365WritePortfolio(v365SnapshotDoc, snapshotDate)
+      ? await v365WritePortfolio(v365PublishPortfolioDoc, v365PublishPortfolioDoc.snapshot_date)
       : {
         created: false, skipped: true,
         reason: 'run_not_complete:' + v365Finality.status
@@ -1396,7 +1402,7 @@ exports.main = async (event = {}, context = {}) => {
       const v365Manifest = {
         run_id: v365EngineRunIdBase,
         revision: v365Revision,
-        expected_trade_date: snapshotDate,
+        expected_trade_date: v365Envelope.expected_trade_date,
         expected_codes: v365CandidateCodes.slice(),
         input_hash: 'engine:' + v365EngineRunIdBase,
         input_hash_basis: 'LEGACY_RUN_IDENTITY',
@@ -1414,7 +1420,7 @@ exports.main = async (event = {}, context = {}) => {
           manifest: v365Manifest,
           expected_codes: v365CandidateCodes.slice(),
           decisions: v365CandidateDocs,
-          portfolio: v365SnapshotDoc
+          portfolio: v365PublishPortfolioDoc
         });
       } catch (e) {
         v365PublishResult = { promoted: false, cas_reason: null, publish_error: String(e.message || e) };
