@@ -1,4 +1,4 @@
-# 盘前发布交易日错位修复（候选，未部署）
+# 盘前发布交易日错位修复（D-018 已部署，自然验收待完成）
 
 日期：2026-10-28（北京时间）。范围仅 `runDecisionEngine` 的 lifecycle_writer 区段；沿用 V3.6.8 工程版本，以新源码/包指纹区分补丁。API、前端、Node 24 探针、策略计算和运行时迁移不在本批发布范围。
 
@@ -32,7 +32,7 @@ RDE 在输入门使用正确的日历权威，但创建发布 manifest 时重新
 
 另用今早失败批次的真实五条 candidate decision 和一条 portfolio 快照，在仓外离线执行原/新 writer：原代码重现 mixed_date_detected、不提升、历史不可读；修复后 expected_trade_date / portfolio.snapshot_date 均为 10-27、提升成功且历史可读。整个过程只操作内存，没有调用生产决策或回写失败批次。
 
-重新下载线上主引擎，1,799 文件与已验收 D-014 包精确匹配，作为本批新鲜依赖/回滚基线。最终候选从干净提交 archive 构建，发布前须明确源码 SHA、单函数范围、候选和回滚指纹，并完成对应远端 CI；上传后独立下载逐文件核验。当前仍为准备状态，未获得本补丁的生产发布授权。
+重新下载线上主引擎，1,799 文件与已验收 D-014 包精确匹配，作为本批新鲜依赖/回滚基线。最终候选从干净提交 archive 构建；owner 已绑定完整源码 SHA、单函数范围、候选和回滚指纹批准发布。对应远端 CI 六组通过，上传后独立下载逐文件核验通过，详见下方 D-018 回执。
 
 ## 发布后验收
 
@@ -41,3 +41,13 @@ RDE 在输入门使用正确的日历权威，但创建发布 manifest 时重新
 新源码的自然 run 需验证：盘前 manifest/五条决策/候选组合均指向日历应到交易日，validation_passed=true、promoted=true，history 与 pointer/前台读链一致。部署包验收不代替自然运行证明；不为验收人工调用主引擎，不补改历史失败行或强推 pointer。同日重跑的 supersede 仍按既有协议留痕。
 
 仓外证据：`_v3-core-review-20261027/status-20261028/`（现网状态）及 `morning-date-fix/`（失败快照、A/B 回放、测试、独立下载和包指纹）。真实持仓、配置和下载包不提交 Git。
+
+## D-018 发布验收（2026-10-28）
+
+owner 对完整源码 `7627356b9cc0441d52368a96e60105254b19f2aa`、候选包和单函数范围回复“批准”后，执行一次 runDecisionEngine 更新，exit 0。ModTime `2026-10-28 09:44:24`（北京时间），CodeSize `4475917`。
+
+上传后独立下载 **EXACT_MATCH 1799/1799**，原始 SHA256 零差异；相对旧包仅 index.js / RELEASE_SOURCE.json 改变。保留 Nodejs16.13 / index.main / 120s / 256MB，以及环境变量、触发器、角色；其余五个已观察函数的配置和代码元数据未变。托管对象、已列出的 HTTP 服务未变。
+
+候选 ZIP SHA256：`7f88b3fc0c20f76facb3a44e79ff54d9cebf35891340c2c7fef8902a54035358`；回滚 ZIP SHA256：`46300f09ddab2496cc48e6a89975d40a89d86af794fc30e5bc04b1f9d2420441`，未使用回滚、未进行实际回滚演练。本机完整 Node 85/85、源码 Actions #193 六组 CI 通过，portable 的私有历史 NOT_RUN 边界保留。
+
+部署前后 pointer 相同，runtime 记录相同。未人工调用生产决策、未回写历史记录；新源码自然运行验收 **PENDING**。后续核验交易日一致、validation_passed/promoted、history 与 pointer/前台读链一致，不能把包核验当作业务验收。

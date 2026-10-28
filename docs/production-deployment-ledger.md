@@ -945,3 +945,17 @@ PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
 | evidence | 仓外 `_v3-core-review-20261027/runtime24-probe/{DEPLOYMENT_REPORT.json,DEPLOYMENT_REPORT.md,read-verification.json,creation-verification.json,probe-download/}` |
 
 本条仅证明隔离 API 读取在目标运行时通过，不能把固定 case 探针直接接入前端，也不代表全部函数/SDK 写入能力、策略或 ML 权限已获新资格。主引擎新 source 的 manifest/history 仍各 0 条，保留自然运行待验收。正式 API 候选、现有 /apiGateway 事件映射与入口回退须另批准备；本条文档提交不改变已部署 wrapper 或原 API 的源码身份。
+
+---
+
+### D-018 · 2026-10-28 · 盘前发布交易日对齐（仅 runDecisionEngine）
+
+owner 对完整源码 `7627356b9cc0441d52368a96e60105254b19f2aa`、候选包和单函数范围回复“批准”后，执行一次 runDecisionEngine 更新，exit 0。ModTime `2026-10-28 09:44:24`（北京时间），CodeSize `4475917`。
+
+上传后独立下载 **EXACT_MATCH 1799/1799**，原始 SHA256 零差异；相对旧包仅 index.js / RELEASE_SOURCE.json 改变。保留 Nodejs16.13 / index.main / 120s / 256MB，以及环境变量、触发器、角色；其余五个已观察函数的配置和代码元数据未变。托管对象、已列出的 HTTP 服务未变。
+
+候选 ZIP SHA256：`7f88b3fc0c20f76facb3a44e79ff54d9cebf35891340c2c7fef8902a54035358`；回滚 ZIP SHA256：`46300f09ddab2496cc48e6a89975d40a89d86af794fc30e5bc04b1f9d2420441`，未使用回滚、未进行实际回滚演练。本机完整 Node 85/85、源码 Actions #193 六组 CI 通过，portable 的私有历史 NOT_RUN 边界保留。
+
+部署前后 pointer 相同，runtime 记录相同。未人工调用生产决策、未回写历史记录；新源码自然运行验收 **PENDING**。后续核验交易日一致、validation_passed/promoted、history 与 pointer/前台读链一致，不能把包核验当作业务验收。
+
+证据：仓外 `_v3-core-review-20261027/morning-date-fix/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,execution/}`。上传源码身份不随后续文档提交变化；PR 保持 draft、未合并。
