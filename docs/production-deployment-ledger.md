@@ -1007,3 +1007,21 @@ owner 已批准干净执行源码 `2342a5612e6f8d8aacb400be07ecb6b8edeac4d7`、�
 执行源码本机 Node24 Stage A **86/86**、Actions [#197](https://github.com/iquelee/etf-decision-engine/actions/runs/40802113199) 六组成功；portable84、两份私有历史回放及15段收据 NOT_RUN 的边界保留。候选31文件及冻结23文件指纹未变。旧 API 保留用于限定路由回退；**未使用回退，未进行实际回退演练**。该验收证明只读 API 迁移，不授予生产写链迁移资格。
 
 证据：仓外 `_v3-core-review-20261027/runtime24-cutover/` 的 DEPLOYMENT_REPORT.md 及 execution 下的授权、两次命令、原生载荷、完整路由、public-verification.json、boundary-verification.json、browser-verification.json 和 production-kline.png。准备计划保留 PREPARED_NOT_APPLIED 历史状态，实际生产事实以本条和执行报告为准；后续文档提交不改变本批批准源码或已部署身份。PR保持 draft、未合并。
+
+---
+
+### D-021 · 2026-10-29 · 隔离准入探针创建；固定验证被入口拒绝
+
+owner 在已封存的源码/ZIP/资源/一次调用授权申请之后回复“继续”，据此执行该明确范围。源码为 `8898c0651f0f622bf227b9ebdb357846cfa52121`；候选ZIP SHA256 `01220e79694ccdba67ca59bc904f78c1295533cac2993b3f2c2c41ee3c94ba81`，私有部署配置 SHA256 `eac3bfe2bbfb90b9bf533ca54a6e3f86d3accdcf430fad12d1a7079dfa73ed2b`。
+
+北京时间17:54:25仅创建空集合 `runtime24_admission_probe_20261029`，CreateTable exit0，回读0条；17:55:40仅创建 `writerAdmissionRuntime24`，部署exit0，CodeSize4055916。Event / Nodejs24.11 / index.main /30s/256MB、零timer、零自定义环境变量，沿用封存既有角色。创建后独立下载 **EXACT_MATCH1711/1711**，1703份依赖文件原字节保持SDK2.11.0，无RDE/common生产代码。
+
+17:57:14返回唯一一次固定鉴权调用结果：**FUNCTIONS_EXECUTE_FAIL**。函数确已进入main，但CloudBase鉴权调用通道给事件额外注入空 `tcbContext:{}` / `userInfo:{}`，原严格deepStrictEqual事件校验在SDK初始化之前拒绝。它不是CAM拒绝，也不是数据库CAS失败；当前云端SDK数据库写入/条件更新验证 **NOT_RUN**，没有取得PASS或实际process.version回传。运行时仅依据Nodejs24.11配置，不借用旧探针进程采样。
+
+没有重试。独立只读回查验证集合仍为 **0条**；五个fixture均未写入。失败后保留函数和空集合，无删除、fixture重置、权限调整或生产回退。后续只在本地准备兼容两项空平台元数据的修复；新源码、更新该隔离函数及再一次调用须另行绑定申请，不把原一次调用授权当作无限重跑。
+
+边界核验PASS：原13函数列表代码/配置字段及全部13函数受控完整配置未变；完整两个域名路由不变，ETF前端67对象元数据不变；pointer/runtime未变。函数清单13→14只新增该探针，集合清单32→33只新增该验证集合。共享托管8个kindle路径并发变化另行列档，本批无托管上传，不声称全域不可变。没有生产决策/物化/抓取/后台写函数调用、timer/策略/ML变更或资源清理。
+
+源码本机Node24 Stage A89/89，实际候选入口及真实SDK序列化在Node22/24内存回放通过；Actions [#201](https://github.com/iquelee/etf-decision-engine/actions/runs/40825093867) 六组成功。portable87、两份私有历史回放及15段收据NOT_RUN边界保留。该本地验证遗漏了真实调用通道事件封装；不能用CI成功替代本批失败的云端验证。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v2/execution/` 下授权、创建结果、独立下载、invocation-result.json、fixture-after-rejected-call.json、invocation-failure-verification.json、boundary-verification.json 和 DEPLOYMENT_REPORT.json。准备请求保留历史状态；本条状态为 **资源创建完成 / 固定验证失败 / SDK云写资格未取得**。PR保持draft、未合并，后续文档或修复提交不改变本条已部署源码身份。

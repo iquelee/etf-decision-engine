@@ -54,8 +54,18 @@ async function verify(database) {
     drain_and_owner_switch: true, nested_state_cleared: true, unknown_and_ack_loss_retained: true,
     production_writer_invocations: 0, proof_note: 'Fixture evidence only; drain proof flags do not prove production drain.'};
 }
+function validateEvent(event) {
+  assert(event && typeof event === 'object' && !Array.isArray(event), 'fixed verification event required');
+  const business = {...event};
+  // The real CloudBase invoke channel adds these empty objects. They are not
+  // business parameters and are never consumed. Reject non-empty metadata too.
+  for (const key of ['tcbContext', 'userInfo']) if (Object.prototype.hasOwnProperty.call(business, key)) {
+    assert.deepStrictEqual(business[key], {}, 'only empty platform metadata is accepted'); delete business[key];
+  }
+  assert.deepStrictEqual(business, plan.event, 'only the one fixed verification event is accepted');
+}
 async function main(event) {
-  assert.deepStrictEqual(event, plan.event, 'only the one fixed verification event is accepted');
+  validateEvent(event);
   const sdk = require('@cloudbase/node-sdk');
   assert.strictEqual(sdk.version, plan.sdk_version, 'unexpected SDK dependency');
   const context = sdk.getCloudbaseContext();
@@ -63,4 +73,4 @@ async function main(event) {
   const app = sdk.init({env: sdk.SYMBOL_CURRENT_ENV});
   return verify(app.database());
 }
-module.exports = {main, verify};
+module.exports = {main, verify, validateEvent};

@@ -2,12 +2,19 @@
 const assert = require('assert');
 const protocol = require('../release/writer-admission');
 const adapter = require('../release/writer-admission-cloudbase');
-const {verify, main} = require('../release/runtime24-admission-probe');
+const {verify, main, validateEvent} = require('../release/runtime24-admission-probe');
 const plan = require('../release/runtime24-admission-probe-plan.json');
 const {createDatabase} = require('../scripts/lib/admission-probe-memory-db');
 const binding = {environment: plan.environment, scope: plan.scope};
 const options = database => ({database, collection: plan.collection, document: 'probe:cas', binding});
 (async () => {
+  for (const extra of [{}, {tcbContext: {}}, {userInfo: {}}, {tcbContext: {}, userInfo: {}}])
+    validateEvent({...plan.event, ...extra});
+  for (const event of [null, [], {}, {...plan.event, collection: 'active_run_pointer'},
+    {...plan.event, document: 'production'}, {...plan.event, name: 'runDecisionEngine'},
+    {...plan.event, tcbContext: {env: plan.environment}}, {...plan.event, userInfo: {admin: true}},
+    {...plan.event, userInfo: []}, {...plan.event, tcbContext: null}, {...plan.event, body: {}}])
+    assert.throws(() => validateEvent(event), 'extra business arguments or non-empty metadata must fail');
   const db = createDatabase(); const result = await verify(db);
   assert.strictEqual(result.status, 'PASS'); assert.strictEqual(result.race_winners, 1);
   assert.strictEqual(db.calls.filter(r => r.action === 'add').length, 5);

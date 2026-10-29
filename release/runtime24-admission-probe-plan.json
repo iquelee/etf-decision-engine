@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "LOCAL_CANDIDATE_NOT_DEPLOYED",
+  "status": "ENTRY_FIX_CANDIDATE_NOT_DEPLOYED",
   "environment": "tradingview-etf-d0fa42yy57cbc11b",
   "function_name": "writerAdmissionRuntime24",
   "runtime": "Nodejs24.11",
@@ -17,12 +17,18 @@
   "documents": ["probe:cas", "probe:race", "probe:drain", "probe:unknown", "probe:ack-lost"],
   "event": {"case": "verify-admission-v1"},
   "invocation_limit": 1,
-  "abort_if_function_or_collection_exists": true,
+  "operation": "UPDATE_EXISTING_ISOLATED_PROBE_ONLY",
+  "required_existing_function_source": "8898c0651f0f622bf227b9ebdb357846cfa52121",
+  "required_existing_function_files": 1711,
+  "required_existing_collection_empty": true,
+  "create_resources": [],
+  "update_functions": ["writerAdmissionRuntime24"],
+  "accepted_platform_metadata": {"tcbContext": {}, "userInfo": {}},
   "production_imports": [],
   "production_function_updates": [],
   "production_collections": [],
   "permission_changes": false,
   "delete_resources": [],
   "source_files": ["release/writer-admission.js", "release/writer-admission-cloudbase.js", "release/runtime24-admission-probe.js", "release/runtime24-admission-probe-plan.json"],
-  "scope_note": "Preparation only. A source/package/resource-bound approval is required before creating the probe function or collection and making the one fixed SDK write verification call. This does not approve any production writer admission wiring or runtime cutover."
+  "scope_note": "Fix preparation only. D-021 created this isolated function/collection but its single call was rejected by strict event validation before SDK initialization; collection remains empty. A NEW source/package-bound approval is required to update only this exact probe and make one new fixed call. No fixture reset, new resource creation, production writer wiring or runtime cutover is approved."
 }

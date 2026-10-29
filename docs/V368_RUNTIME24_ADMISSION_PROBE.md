@@ -1,8 +1,8 @@
 # Node 24 准入适配器隔离验证候选
 
-状态：**本地候选准备，未创建云资源、未作云端写验证**。这是[写链迁移设计](V368_RUNTIME24_WRITER_MIGRATION.md)的下一批准备，不是生产RDE迁移，也不赋予原型长期写资格。
+状态：**D-021资源已创建，首次固定验证被入口拒绝；入口修复仅在本地，未更新云端**。这是[写链迁移设计](V368_RUNTIME24_WRITER_MIGRATION.md)的下一批准备，不是生产RDE迁移，也不赋予原型长期写资格。
 
-## 精确拟执行范围
+## D-021原创建范围（资源创建完成，调用验证失败）
 
 配置以[探针计划](../release/runtime24-admission-probe-plan.json)为准：
 
@@ -41,3 +41,11 @@ Actions #200六组均通过portable测试，但在V364 legacy surface gate失败
 候选完整源码SHA、ZIP SHA256及私有配置指纹在仓外`APPROVAL_REQUEST.md`确定后，才请求创建函数/空验证集合和一次固定调用的授权。依据[仓库部署纪律](V365_RUN_LIFECYCLE_IMPLEMENTATION_ROADMAP.md)，部署要求owner逐位绑定40位SHA显式授权；先前D-020切流批准不覆盖本批新资源和SDK写入。
 
 云端成功也只证明该隔离集合内SDK写入/条件更新及本批协议行为。生产准入接线、外部调用方与重试封闭、真实在途排空、长期回执存储、门面时限以及写链夜间/盘前自然验收仍未完成。若失败则停用探针调用、保留证据；没有自动删资源或修改生产配置的回退动作。
+
+## D-021失败事实与入口修复候选
+
+2026-10-29 17:55:40创建隔离函数、独立下载1711文件精确匹配后，仅作一次固定鉴权调用。CloudBase将事件封装为`{case:'verify-admission-v1', tcbContext:{}, userInfo:{}}`；旧main的全事件deepStrictEqual在SDK初始化之前抛错，返回FUNCTIONS_EXECUTE_FAIL。集合独立回查0条、生产边界PASS。没有重试或删除资源，SDK云写/CAS资格NOT_RUN；完整事实见[D-021台账](production-deployment-ledger.md)。
+
+本地`validateEvent`仅剥离**确切为空对象**的tcbContext/userInfo，再要求其余事件精确等于固定case。空元数据的组合均有回归；非空/数组/null元数据、集合/主键/函数名/body等额外参数均拒绝。元数据内容不参与任何授权或数据库选择，正常CloudBase封装是这次修复的唯一兼容范围。
+
+新批次拟只更新已建`writerAdmissionRuntime24`的入口修复包，并在已建且仍为空的`runtime24_admission_probe_20261029`作一次新的固定调用；不再创建资源，也不重置fixture。执行前须确认现有函数仍是D-021源码8898c0651f0f622bf227b9ebdb357846cfa52121、原1711文件及配置不漂移，集合0条；新源/ZIP/配置/一次调用范围另行封存请求。原一次调用额度已用，不能以“修复后重试”跳过新源码绑定。
