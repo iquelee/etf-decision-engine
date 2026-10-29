@@ -32,3 +32,30 @@ V1 数据不能直接作为 V2 使用：发现控制记录带 COMPLETE 回执时
 4. 排空及迁移方案、回滚边界和自然运行验收条件齐备后，另行申请生产切换。当前生产写链仍维持 D-018。
 
 本批验证收据：Node24 完整 Stage A 90/90；新增测试在 Node22.22.2 同样通过。legacy surface 自检、31 文件候选清单、23 项冻结件、显式文件敏感信息扫描和 diff whitespace 检查通过。现有候选 content 9969ae7472e6690af962cb6a2fb3e7d5c75a2a1a00d6934b82c440911d845aa1 不变，本离线 V2 不在该 31 文件资格面内。
+
+## 后续：锁定 SDK 核对和隔离适配器
+
+2026-10-29 新增 `release/writer-journal-cloudbase.js`，状态 **ISOLATED_TRANSACTION_CANDIDATE_NOT_DEPLOYED**。它拒绝生产集合名，只允许 `runtime24_journal_probe_*`；当前准备唯一集合 `runtime24_journal_probe_20261029`。
+
+已核对独立 RDE 下载的 SDK 2.11.0 / database 1.4.1 实际源码：执行入口使用 `transaction/index.js` 的手动 `startTransaction/commit/rollback`。`runTransaction` 默认冲突重试，故不用。事务内 doc.get 返回对象/null，事务外返回数组，适配器分别严格检查；不使用文档中较新 SDK 的 `{data: ...}` 写法。SDK HTTP 层在 keepalive=true 时还可能重发 ECONNRESET 请求，故强制显式环境、retries=0、keepalive=false。
+
+[官方事务文档](https://docs.cloudbase.net/database/transaction) 说明支持服务端跨文档原子提交，采用快照隔离，写冲突会终止事务；事务限 30 秒、100 操作，使用 doc 而非 where。旧路线中“无跨文档事务”的历史判断不能作为当前 SDK 能力结论。此处对协议串行性的推导依赖**每个变更事务都写同一个控制主键**，使准入/完成/排空/切换互相产生写冲突；不是声称平台隔离级别本身为可串行化。实际环境的冲突、持久性和错误返回仍须隔离验证。
+
+两个回执唯一索引用请求 ID、token 及环境/作用域的规范编码 SHA256 生成固定主键，均存完整身份，读取时交叉核对；无需在生产或隔离集合新建二级唯一索引。控制记录采用 V2 外层标记，拒绝旧控制形状；完成时控制更新与两个账本主键的 COMPLETE 更新一并提交。所有读取均限定 doc；已有回执只更新原身份且禁止改 COMPLETE，无 set/upsert/remove。事务回调接收显式预取身份提示，保持同步纯函数。业务 handler 在准入提交明确确认后才运行，且在事务之外。
+
+新增自动发现测试 `tests/writer-journal-cloudbase.test.js`：140 条完成回执/280 个索引文档；20 路竞争；准入/完成四种提交确认故障；第二索引写失败回滚；零更新/错误确认、环境/配置错误、控制缺失及索引损坏拒绝。锁定 1799 文件独立包在执行前后复核不变，Node22.22.2 和 Node24.20.0 均通过真实 SDK 数据库类、EJSON 序列化和内存传输回放。无认证、网络或云写；完整 Stage A 91/91。
+
+## 下一批精确隔离验证范围
+
+`release/runtime24-journal-probe-plan.json` 与 `release/runtime24-journal-probe.js` 仅拟新增：
+
+- 函数 `writerJournalRuntime24`：Event / Nodejs24.11 / index.main / 30s / 256MB，沿用已存在的环境函数角色；零 timer、路由、自定义环境变量，不安装/升级依赖。
+- 集合 `runtime24_journal_probe_20261029`：先创建空集合；唯一固定初始化步骤创建三个控制主键，不允许重置、删除、覆盖已存在 fixture。
+- 最多 29 次固定调用：初始化 1；8 个并发竞争者各 1；完成/切换/跨 epoch 去重 1；17 个有序批次各 8 个终结请求；UNKNOWN 1；最终审计 1。任一步失败或确认不明立即停，不重试、不补偿。
+- 共 136 条 durable 完成回执、1 个 race 完成回执、1 个 UNKNOWN；每条两份主键索引加三个控制记录，最终恰好 279 个文档。允许的 race 请求只有 race:0..7，且只保留一个胜者；其他请求只有 durable:0..135 和 unknown，全部绑定固定作用域。
+- 竞争结果必须恰好一个准入，且观察到至少两个独立加载实例标记才计多实例覆盖；同一实例内的并发不算。UNKNOWN 来自模拟 handler 异常，不能计真实网络故障验证。
+- 调用后必须由独立只读通道逐个验证 279 个主键、两索引一致性、控制 revision/owner/epoch/槽状态，核对现有函数、集合清单、路由、托管和生产 pointer/runtime 边界。保留全部 fixture 和失败证据。
+
+本地已用上述固定调用序列回放；最终 137 COMPLETE + 1 UNKNOWN、279 文档全部双索引核对，内存线格式共 2478 请求。该请求数是本地模型计数，不是云端测量。本候选尚未创建资源或调用云函数，具体完整源码和 ZIP hash 由 `release/prepare-journal-probe.js` 在干净提交上封包后绑定；原 D-022 探针和生产链均不在更新范围。
+
+整体目标还包括 RDE 后续的物化、日线抓取等分批迁移及各自自然验收，不能用此隔离回执验证代替生产写链完成。每批须保持实际下载包依赖/common 边界并独立验收。

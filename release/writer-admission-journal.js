@@ -43,7 +43,7 @@ async function apply(store, binding, action) {
       next.receipts = next.receipts.filter(r => r.status !== 'COMPLETE');
       v1.validate(next, binding);
       return {control: next, receipt};
-    });
+    }, {request_id: action && action.request_id, token: action && action.token});
     if (acknowledged !== true) return {ok: false, reason: 'TRANSACTION_UNAVAILABLE_OR_AMBIGUOUS'};
     return answer || {ok: false, reason: 'INVALID_TRANSACTION_RESULT'};
   } catch (_) { return {ok: false, reason: 'TRANSACTION_UNAVAILABLE_OR_AMBIGUOUS'}; }
