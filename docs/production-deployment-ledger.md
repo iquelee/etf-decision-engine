@@ -1045,3 +1045,21 @@ owner 对新源码 `5b3da41b2aa13a1031cf452f8eb3eae202e202aa`、ZIP/私有配置
 源码本机Node24 Stage A **89/89**，实际修复候选在观测事件封装下的Node22/24离线回放通过；Actions [#202](https://github.com/iquelee/etf-decision-engine/actions/runs/40854167148) 六组成功，portable87、两份私有历史及15段收据NOT_RUN证明边界保留。V368候选content SHA `9969ae7472e6690af962cb6a2fb3e7d5c75a2a1a00d6934b82c440911d845aa1`与冻结23项保持本批既定指纹。
 
 证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v3/execution/` 的授权、更新结果、前后独立下载、invocation-verification.json、fixture-verification.json、boundary-verification.json及DEPLOYMENT_REPORT.json。五条fixture保留，不作未经授权清理。生产RDE仍为D-018源码/原运行时，生产API仍为D-020路由；后续文档提交不改变已部署探针源码身份。PR保持draft、未合并。
+
+---
+
+### D-023 · 2026-10-29 · 隔离事务账本与136条持久回执验证
+
+源码 `7380081f5fdcaa92190bda01d19c6f2306f6b586`，ZIP `382e23ba6f0580b1be6e47dc9b7704926049694b3912490fc973c18e931823dc`。用户对精确源码/包/资源/最多29调用申请连续回复“继续”，授权仅限该隔离范围。
+
+北京时间 2026-10-29 23:35:21 新建 writerJournalRuntime24，CodeSize 4062080，Event/Nodejs24.11/index.main/30s/256MB，现有角色、零timer/自定义变量/公开路由，不安装依赖。仅另建 runtime24_journal_probe_20261029，初始独立回读为空。独立下载1713/1713字节精确匹配，1703依赖不变。
+
+29次固定调用均成功，实际 Node v24.11.1 / SDK2.11.0 / database1.4.1。8个客户端重叠调用具有8个唯一requestId和8个独立加载实例标记，1个准入；其余7个均 STALE_REVISION。完成、owner/epoch切换、去重、136条durable回执、UNKNOWN槽及最终审计通过。
+
+独立只读查询279个固定主键：137 COMPLETE+1 UNKNOWN，双索引逐个一致，durable控制revision273/空槽，race revision5/new/epoch2/空槽，unknown revision3/HOLD/保留槽。最早 durable:0 在136次完成后仍拒绝，未使用TTL/删除/缓存驱逐。
+
+边界PASS：其他14个既有函数完整受控配置及列表代码/配置不变（含D-022旧探针）；函数14→15仅新增本探针，集合33→34仅新增隔离集合。全部域路由、ETF67及观察的全部托管元数据、pointer/runtime不变；无生产写函数调用、IAM/timer/策略/ML改动、删除/重置或回退。
+
+限制：此次没有触发底层事务写冲突，不能把7次旧revision拒绝当成DATABASE_TRANSACTION_CONFLICT实证。UNKNOWN仅为模拟handler异常；实际网络故障未注入。生产准入接线、真实入口/延迟重试/排空、门面时限、生产迁移及Node24自然验收仍未完成。下一步补强制共同快照事务冲突/回滚用例，须新源码/包/更新范围绑定。
+
+证据位于 execution/ 下的授权、创建结果、独立下载、22个调用阶段收据（共29调用）、race-platform-verification、fixture-verification、boundary-verification 和 DEPLOYMENT_REPORT.json。全部fixture保留，不进行未经授权清理。准备请求的待批准标签保留历史原样，实际执行以本报告为准。

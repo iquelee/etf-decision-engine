@@ -1,6 +1,6 @@
 # 长期回执与完整入口接线：离线 V2 候选
 
-状态：OFFLINE_CONTRACT_ONLY，2026-10-29。生产函数、配置、路由、定时器、数据库均未修改，不追加部署台账。D-022 的隔离单记录 CAS 资格不能延伸到这里的跨记录事务。
+当前状态（2026-10-29）：**D-023 隔离账本验证通过，有明确证明边界；生产写链尚未迁移**。下文保留首次 OFFLINE_CONTRACT_ONLY 和后续准备过程。实际新增隔离函数/集合及调用见文末与部署台账；D-022 单记录 CAS 资格不能替代事务验证。
 
 ## 本次实现
 
@@ -59,3 +59,24 @@ V1 数据不能直接作为 V2 使用：发现控制记录带 COMPLETE 回执时
 本地已用上述固定调用序列回放；最终 137 COMPLETE + 1 UNKNOWN、279 文档全部双索引核对，内存线格式共 2478 请求。该请求数是本地模型计数，不是云端测量。本候选尚未创建资源或调用云函数，具体完整源码和 ZIP hash 由 `release/prepare-journal-probe.js` 在干净提交上封包后绑定；原 D-022 探针和生产链均不在更新范围。
 
 整体目标还包括 RDE 后续的物化、日线抓取等分批迁移及各自自然验收，不能用此隔离回执验证代替生产写链完成。每批须保持实际下载包依赖/common 边界并独立验收。
+
+## D-023 实际执行结果
+
+owner 在精确源码/包/资源/29次固定调用申请后连续回复“继续”。执行源码 `7380081f5fdcaa92190bda01d19c6f2306f6b586`；ZIP SHA256 `382e23ba6f0580b1be6e47dc9b7704926049694b3912490fc973c18e931823dc`。北京时间23:35:21仅新建 `writerJournalRuntime24`（CodeSize4062080），仅另建上述隔离集合，初始回读为空。函数配置与计划完全一致，沿用已有角色、零timer/路由/自定义变量；独立下载 EXACT_MATCH1713/1713，1703依赖未变。
+
+29次固定调用全部PASS，实际Node v24.11.1、SDK2.11.0、database1.4.1。8次客户端时间区间重叠调用有8个独立requestId和8个独立加载实例标记，仅1个获准。随后完成、owner/epoch切换和跨epoch去重、17批136个durable请求、UNKNOWN保留及审计均通过。独立只读回查279个精确主键：137 COMPLETE+1 UNKNOWN，两个索引全部一致，最早 durable:0 在136次终结后仍拒绝；control分别为race revision5/new/epoch2/空槽，durable revision273/空槽，unknown revision3/HOLD/保留槽。
+
+边界PASS：其他14既有函数（包含D-022探针）的完整受控配置与列表代码/配置字段不变；函数14→15仅增加本探针，集合33→34仅增加隔离集合；全部域路由、ETF67及本次观察的全部托管对象元数据、正式pointer/runtime不变。无生产写函数调用、权限/timer/策略/ML改动、删除/重置或回退。仓外 `runtime24-journal-probe-v2/execution/` 封存授权、创建、独立下载、29调用、并发、fixture和边界报告；279文档保留。准备请求的待批准标签为历史封存内容，以执行报告和台账D-023为准。
+
+**尚缺证据：**7个竞争失败者均为 `STALE_REVISION`，不是数据库 `DATABASE_TRANSACTION_CONFLICT`。本批不能证明“两个事务先读到同一revision后，后写者被平台冲突拒绝”。UNKNOWN仅模拟handler异常，不是网络故障注入。生产入口身份、门面、真实排空及Node24自然验收依然未完成。
+
+## 强制共同快照冲突与回滚补测候选
+
+新增 `release/runtime24-journal-conflict-probe.js` 和明确计划JSON，默认尚未部署/调用。拟仅更新既有隔离函数，保留原配置、集合及全部279文档，不新增云资源：
+
+1. 一次固定事件 `verify-journal-conflict-v1`，仅新作用域 `isolated-journal-conflict`；创建一个新控制主键，已有fixture即拒绝。
+2. 两个原生手动事务均预读control revision1和两份不存在的forced索引；先提交事务A的control+双索引，再要求事务B更新原快照时明确返回 `DATABASE_TRANSACTION_CONFLICT`。若未观察到该码，回滚B并报失败，禁止冒充通过。
+3. 完成forced回执，control变revision3/空槽；另一个事务暂存rolled-back请求的control+双索引后显式rollback，要求原control保持revision3、两份rolled-back索引均不存在，forced两索引保持COMPLETE。
+4. 最终仅增加3文档（共282）；独立通道核对新三主键、缺失两主键、旧279文档逐字节内容及全部生产边界。无调用重试、TTL接管、回退或清理。
+
+本地模型通过上述共同快照/回滚序列，也验证旧279行完全不变、重复补测不重置fixture。真实SDK内存传输与实际封包入口还须按最终源码重验；此处的模型配置冲突不算平台实证。`prepare-journal-probe.js --conflict` 只选择明确六个补测源码文件，依赖仍来自绑定1799文件独立下载，不能借此扩到生产函数。后续需完整40位新源码/ZIP/仅更新既有函数与一次固定调用的独立批准。

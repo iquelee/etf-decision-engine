@@ -6,10 +6,12 @@ const {execFileSync} = require('child_process');
 const {verifyPackage, sha} = require('../scripts/lib/verified-writer-package');
 const repo = path.resolve(__dirname, '..');
 const git = (...args) => execFileSync('git', args, {cwd: repo});
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const conflict = rawArgs[rawArgs.length - 1] === '--conflict';
+const args = conflict ? rawArgs.slice(0, -1) : rawArgs;
 assert(args.length === 8 && args[0] === '--source' && args[2] === '--dependency-root'
   && args[4] === '--file-map' && args[6] === '--out',
-  'Usage: --source <40SHA> --dependency-root <independent-package> --file-map <map> --out <new-directory>');
+  'Usage: --source <40SHA> --dependency-root <independent-package> --file-map <map> --out <new-directory> [--conflict]');
 const source = args[1]; assert(/^[a-f0-9]{40}$/.test(source));
 assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
 assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'clean committed source required');
@@ -18,7 +20,8 @@ let out = path.resolve(args[7]);
 assert(!fs.existsSync(out));
 out = path.join(fs.realpathSync(path.dirname(out)), path.basename(out));
 assert(out !== repo && !out.startsWith(repo + path.sep));
-const plan = JSON.parse(git('show', source + ':release/runtime24-journal-probe-plan.json'));
+const planFile = conflict ? 'release/runtime24-journal-conflict-plan.json' : 'release/runtime24-journal-probe-plan.json';
+const plan = JSON.parse(git('show', source + ':' + planFile));
 assert.strictEqual(plan.function_name, 'writerJournalRuntime24');
 assert.strictEqual(plan.collection, 'runtime24_journal_probe_20261029');
 const mappings = {
@@ -26,8 +29,8 @@ const mappings = {
   'release/writer-admission-cloudbase.js': 'writer-admission-cloudbase.js',
   'release/writer-admission-journal.js': 'writer-admission-journal.js',
   'release/writer-journal-cloudbase.js': 'writer-journal-cloudbase.js',
-  'release/runtime24-journal-probe.js': 'probe.js',
-  'release/runtime24-journal-probe-plan.json': 'runtime24-journal-probe-plan.json'
+  [conflict ? 'release/runtime24-journal-conflict-probe.js' : 'release/runtime24-journal-probe.js']: 'probe.js',
+  [planFile]: path.basename(planFile)
 };
 assert.deepStrictEqual(Object.keys(mappings).sort(), [...plan.source_files].sort());
 fs.mkdirSync(out);
@@ -57,7 +60,7 @@ fs.writeFileSync(path.join(candidate, 'index.js'), "'use strict';\nexports.main 
 writeJson(path.join(candidate, 'config.json'), {permissions: {openapi: []}, timeout: plan.timeout_seconds, envVariables: {}, triggers: []});
 writeJson(path.join(candidate, 'SOURCE_IDENTITY.json'), {source_commit: source, source_files_sha256: sourceHashes,
   independent_dependency_map_sha256: sha(fs.readFileSync(path.resolve(args[5]))),
-  dependency_files: dependencyFiles.length, scope: 'Isolated transaction journal fixture only; no production writer imports'});
+  dependency_files: dependencyFiles.length, scope: conflict ? 'Isolated forced-snapshot conflict/rollback only; preserve existing279 fixtures' : 'Isolated transaction journal fixture only; no production writer imports'});
 const files = {};
 function walk(dir) { for (const name of fs.readdirSync(dir).sort()) {
   const file = path.join(dir, name);

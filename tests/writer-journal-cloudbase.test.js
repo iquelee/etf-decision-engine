@@ -47,6 +47,7 @@ function backend(EJSON = JSON, namespace = collection) {
         const row = data.get(query._id);
         return {requestId, data: {list: row ? [EJSON.stringify(row)] : [], offset: 0, limit: 1}};
       }
+      if (tx && tx.version !== version) return {requestId, code: 'DATABASE_TRANSACTION_CONFLICT'};
       if (action === 'database.insertDocument') {
         const insertedIds = [];
         for (const raw of params.data) {
@@ -190,8 +191,20 @@ async function probeReplay(make) {
   }
   assert.strictEqual(requests.filter(r => JSON.parse(r.payload_json).status === 'COMPLETE').length, 137);
   assert.strictEqual(requests.filter(r => JSON.parse(r.payload_json).status === 'UNKNOWN').length, 1);
+  const forced = require('../release/runtime24-journal-conflict-probe');
+  assert.throws(() => forced.validateEvent({case: 'verify-journal-conflict-v1', phase: 'other'}));
+  assert.throws(() => forced.validateEvent({case: 'verify-journal-conflict-v1', userInfo: {id: 'other'}}));
+  forced.validateEvent({case: 'verify-journal-conflict-v1', userInfo: {}, tcbContext: {}});
+  const supplemental = await forced.verify(database);
+  assert.strictEqual(supplemental.status, 'PASS');
+  assert.strictEqual(supplemental.native_conflict_code, 'DATABASE_TRANSACTION_CONFLICT');
+  assert.strictEqual(b.rows().length, 282);
+  const after = new Map(b.rows().map(r => [r._id, r]));
+  for (const row of rows) assert.deepStrictEqual(after.get(row._id), row, 'all D-023 fixtures unchanged');
+  await assert.rejects(forced.verify(database), /fixture already exists/);
+  assert.strictEqual(b.rows().length, 282, 'supplemental fixture cannot reset/re-run');
   return {fixed_probe_replay: true, fixed_probe_documents: rows.length, completed_receipts: 137, unknown_receipts: 1,
-    real_multi_instance_proof: false, wire_requests: b.calls.length};
+    forced_snapshot_and_three_document_rollback_model: true, real_multi_instance_proof: false, wire_requests: b.calls.length};
 }
 async function main() {
   const args = process.argv.slice(2);
