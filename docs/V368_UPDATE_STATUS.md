@@ -95,3 +95,5 @@ V3.6.8 增加的五项 legacy 残差由 `release/verify-legacy-divergence.js` �
 ## 正式 API 运行时迁移进度（2026-10-29）
 
 D-019 已创建独立 `apiGatewayNode24`（完整 index.main / Nodejs24.11），独立下载 1,797 文件精确匹配、14 类固定 GET 和三个事件形式通过，共18次成功鉴权调用。原生 SCF Invoke 通道 CAM 拒绝，已用同一环境 API Key 的 CloudBase 鉴权通道完成验证，无权限改动。现有正式 API、完整生产路由及 ETF 前端资源保持原状；下一步针对静态托管域 `/apiGateway` 仅替换上游名称准备独立切流授权与原域验收。详见 [完整入口迁移结果](V368_RUNTIME24_API_MIGRATION.md)。
+
+单路由批次已完成本地纯校验/正反向载荷、真实完整路由内存回放、新旧 API 新鲜独立下载及原生产域 14 类 GET 基线准备。本机完整 Node24 Stage A **86/86**（新增路由边界回归），冻结件和候选清单未变；云端路由尚未写入，需绑定新源码、目标包和正向/回退指纹另行授权。见 [单路由切流方案](V368_RUNTIME24_API_CUTOVER.md)。
