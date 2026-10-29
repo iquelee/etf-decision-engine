@@ -1,0 +1,13 @@
+{
+  "status": "ISOLATED_VALIDATION_NOT_PRODUCTION",
+  "hash_basis": "SHA256 of UTF-8 file bytes after CRLF to LF normalization",
+  "file_sha256": {
+    "scripts/admission-probe-sdk-replay.js": "f6f905144ab8a679136de701d3125c0a9bde9f9a39884566ca7e84e7ee4e0c37",
+    "scripts/lib/admission-probe-memory-db.js": "695859413faa903b138524f5ce3b16416c242cf68e0632b6195cc30a3c2459e8",
+    "scripts/lib/rde-offline-harness.js": "bd405b8dfcca9fcb0736aea203ea66754fc9b6c4c03f3e3725552262b3ef16ae",
+    "scripts/lib/verified-writer-package.js": "ab20ccf7d032df055d12e3f9b64af5d9477e20d6b69fa20f52ffc176a4cbe132",
+    "scripts/lib/writer-admission-memory-store.js": "37ef9e0ad1aa6eaf4ef94d5b2cd7f9a3d7a7b3f3cfece0bde2948cba9d7f95df",
+    "scripts/prepare-admission-probe.js": "d07815179a83908ba5253c3983fcffbafb6214d31ffd37a560163e844dc6ce07",
+    "scripts/writer-package-replay.js": "b8e3d730964578f5966a27c3b0f1e350cf6613277818c11b47eba5f421c2b1ab"
+  }
+}
