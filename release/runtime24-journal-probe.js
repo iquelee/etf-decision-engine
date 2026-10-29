@@ -74,12 +74,14 @@ async function verify(database, rawEvent) {
   }
   return {ok: true, phase: event.phase, instance_marker: instanceMarker, ...result};
 }
-async function main(event, context) {
+async function main(event) {
   validateEvent(event); // Reject before SDK init or any write.
   const sdk = require('@cloudbase/node-sdk');
   assert.strictEqual(require('@cloudbase/node-sdk/package.json').version, plan.sdk_version);
   assert.strictEqual(require('@cloudbase/database/package.json').version, plan.database_version);
-  const c = sdk.getCloudbaseContext(context);
+  // Match the D-022 qualified environment parser. Do not require a particular
+  // runtime context serialization shape from the invocation channel.
+  const c = sdk.getCloudbaseContext();
   assert.strictEqual(c.TCB_ENV || c.SCF_NAMESPACE, plan.environment);
   const app = sdk.init({env: plan.environment, retries: 0, keepalive: false, throwOnCode: true});
   return {runtime: process.version, sdk: plan.sdk_version, database: plan.database_version, ...await verify(app.database(), event)};
