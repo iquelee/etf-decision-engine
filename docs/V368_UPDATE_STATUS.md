@@ -4,9 +4,11 @@
 
 当前已发布 **V3.6.8**：`apiGateway` 的 K 线窗口补丁源码为 `49e7c765c586bb81dc707849992fa7386b9a663c`（D-016）；`runDecisionEngine` 日期补丁源码为 `7627356b9cc0441d52368a96e60105254b19f2aa`（D-018）；前端源码为 `ddc8f32ba38bf67bbabd6636fbde82022a0b2d30`（D-015）。10-27 22:01 自然 run 已发布 **V3.6.8 / V3.6.1 策略族** 的正式结果，pointer revision 15、交易日 10-27；该正式结果 source 为 D-014 的 `ffd2b4f…`，source/context 指纹及 5+1 记录核验通过。部署事实不表示资格升格、冻结或 ML 生效。
 
-10-28 08:00 的自然 run 因发布清单/组合日期使用当天、决策使用上一已完成交易日而被 mixed_date_detected 拒绝，正式 pointer 保持不变。[日期错位修复](V368_PUBLISH_TRADE_DATE_FIX.md)已完成本地代码与 85/85 Node 回归，已按批准范围仅更新主引擎，独立下载 1,799 文件精确匹配、配置保持不变；10-28 22:01 和 10-29 08:00 两次自然运行均正式发布，revision 16 / 17；五条决策、清单和组合交易日一致，API/history 回读通过。本补丁自然验收 PASS；下一步准备正式 API 的 Node 24 候选，见 [迁移方案](V368_RUNTIME24_API_MIGRATION.md)。
+10-28 08:00 的自然 run 因发布清单/组合日期使用当天、决策使用上一已完成交易日而被 mixed_date_detected 拒绝，正式 pointer 保持不变。[日期错位修复](V368_PUBLISH_TRADE_DATE_FIX.md)已完成本地代码与 85/85 Node 回归，已按批准范围仅更新主引擎，独立下载 1,799 文件精确匹配、配置保持不变；10-28 22:01 和 10-29 08:00 两次自然运行均正式发布，revision 16 / 17；五条决策、清单和组合交易日一致，API/history 回读通过。本补丁自然验收 PASS；正式 API 已完成 D-019 创建及 D-020 切流，见 [迁移方案](V368_RUNTIME24_API_MIGRATION.md)。
 
-基础设施 D-017 已新建并验收独立 `apiGatewayRuntime24`：wrapper 源码 `17144395c02571f6666e27010c4e9cec9a65cdc3`，复用上述 D-016 API，实际 Node **v24.11.1**。1,798 文件精确匹配，七类固定只读用例通过；生产入口和原函数未切换。下一步准备正式 API 的 Node 24 候选与入口绑定/回退方案，详见 [探针结果](V368_RUNTIME24_PROBE.md)。
+基础设施 D-017 已新建并验收独立 `apiGatewayRuntime24`：wrapper 源码 `17144395c02571f6666e27010c4e9cec9a65cdc3`，复用上述 D-016 API，实际 Node **v24.11.1**。1,798 文件精确匹配，七类固定只读用例通过；生产入口和原函数未切换。后续 D-019 / D-020 已完成完整入口创建和切流，详见 [探针结果](V368_RUNTIME24_PROBE.md)。
+
+**当前生产入口（D-020）**：2026-10-29 12:49:50，原域 `/apiGateway` 已切至 `apiGatewayNode24` / Nodejs24.11，API实现源码仍为D-016的49e7c765…；14类原域GET和浏览器看板/历史/K线/Legacy验收通过。旧函数保留、未用回退，生产写链仍保持原运行时。下一步梳理写链调用依赖、timer及防重复运行方案，见 [切流结果](V368_RUNTIME24_API_CUTOVER.md)。
 
 ## 按顺序完成的代码工作
 

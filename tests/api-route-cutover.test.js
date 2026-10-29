@@ -11,6 +11,8 @@ const before={data:{RequestId:'before',OriginDomain:'same',TotalCount:2,Domains:
 const after=clone(before);after.data.RequestId='after';after.data.Domains[0].UpdateTime='new';after.data.Domains[0].Routes[0].UpdateTime='new';after.data.Domains[0].Routes[0].UpstreamResourceName='apiGatewayNode24';
 assert.deepStrictEqual(guard.payload(plan),{EnvId:plan.environment,Domain:plan.domain,Routes:[{Path:'/apiGateway',UpstreamResourceName:'apiGatewayNode24'}]});
 assert.deepStrictEqual(guard.payload(plan,'rollback'),{EnvId:plan.environment,Domain:plan.domain,Routes:[{Path:'/apiGateway',UpstreamResourceName:'apiGateway'}]});
+assert.deepStrictEqual(guard.nativePayload(plan),{EnvId:plan.environment,Domain:{Domain:plan.domain,Routes:[{Path:'/apiGateway',UpstreamResourceName:'apiGatewayNode24'}]}});
+assert.deepStrictEqual(guard.nativePayload(plan,'rollback'),{EnvId:plan.environment,Domain:{Domain:plan.domain,Routes:[{Path:'/apiGateway',UpstreamResourceName:'apiGateway'}]}});
 assert.strictEqual(guard.verifyTransition(before,after,plan).ok,true);
 assert.strictEqual(guard.verifyTransition(after,before,plan,'rollback').ok,true);
 const reordered=clone(after);reordered.data.Domains.reverse();reordered.data.Domains[1].Routes.reverse();assert.ok(guard.verifyTransition(before,reordered,plan));

@@ -51,6 +51,12 @@ function payload(plan, direction = 'cutover') {
   validatePlan(plan); assert.ok(['cutover','rollback'].includes(direction));
   return {EnvId:plan.environment,Domain:plan.domain,Routes:[{Path:plan.path,UpstreamResourceName:direction==='cutover'?plan.new_upstream:plan.old_upstream}]};
 }
+// The reviewed payload above is a semantic route change. The native Tencent
+// API expects Domain to be an object, matching CLI routes edit's conversion.
+function nativePayload(plan, direction = 'cutover') {
+  const p = payload(plan,direction);
+  return {EnvId:p.EnvId,Domain:{Domain:p.Domain,Routes:p.Routes}};
+}
 function normalized(snapshot, plan) {
   const d = JSON.parse(JSON.stringify(data(snapshot))); delete d.RequestId;
   for (const domain of d.Domains) {
@@ -71,4 +77,4 @@ function verifyTransition(before, after, plan, direction = 'cutover') {
   equal(expected,normalized(after,plan));
   return {ok:true,domain:plan.domain,path:plan.path,direction,only_changed_field:'UpstreamResourceName'};
 }
-module.exports = {target,payload,verifyTransition};
+module.exports = {target,payload,nativePayload,verifyTransition};

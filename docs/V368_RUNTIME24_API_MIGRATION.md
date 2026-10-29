@@ -1,6 +1,6 @@
 # 正式 API 的 Node 24 迁移准备
 
-日期：2026-10-29（北京时间）。状态：**D-019 已创建并通过独立完整入口只读验收，生产尚未切流**。
+日期：2026-10-29（北京时间）。状态：**D-019 创建验收完成，D-020 已于12:49:50切换原生产API路由并验收通过**。当前原域 `/apiGateway` 指向 `apiGatewayNode24`（Nodejs24.11）；旧函数保留。详见 [切流结果](V368_RUNTIME24_API_CUTOVER.md)。下文创建阶段事实保留。
 
 主引擎 D-018 已通过夜间与盘前自然运行验收；D-017 已证明固定只读探针在 Node v24.11.1 / SDK 2.11.0 下完成实际鉴权及数据库读取。本批准备完整 `index.main` API，保留现有正式函数及探针。工程发布仍为 V3.6.8，策略族 V3.6.1，无策略或 ML 权限变更。
 
@@ -16,7 +16,7 @@ CLI 3.8.5 的 `routes list` 实现固定增加 `DomainType=HTTPSERVICE`，因此
 |---|---|
 | Domain | `tradingview-etf-d0fa42yy57cbc11b-1253568636.tcloudbaseapp.com` |
 | DomainType / Path | `STATIC_STORE` / `/apiGateway` |
-| UpstreamResourceType / Name | `SCF` / `apiGateway` |
+| UpstreamResourceType / Name | `SCF` / `apiGatewayNode24`（D-020；切流前为 `apiGateway`） |
 | Enable / EnableAuth / EnableSafeDomain | true / false / true |
 | EnablePathTransmission / PathRewrite / QPSPolicy | true / `{}` / `{}` |
 

@@ -989,3 +989,21 @@ owner 对迁移源码 `c82e5b5c691f5aaf87ab7d3e0a85ff1812c2b423`、包指纹及�
 **生产 `/apiGateway` 仍指向旧 `apiGateway`，未切流、未新增公共路由。** 本条证明独立完整入口及实际 SDK 鉴权读取；新函数公共 HTTP 映射尚未验证，须待另批路由授权并在原域验收。未更新现有函数、触碰 timer/策略/ML 权限或调用生产决策；未删除资源。
 
 证据：仓外 `_v3-core-review-20261027/runtime24-api/execution/`（授权、独立下载、固定调用、HTTP 对照、原生通道诊断、完整路由和托管边界）。后续文档提交不改变已部署迁移或 API 实现源码身份；PR 保持 draft、未合并。
+
+---
+
+### D-020 · 2026-10-29 · 生产 API 单路由切至 Node 24
+
+owner 已批准干净执行源码 `2342a5612e6f8d8aacb400be07ecb6b8edeac4d7`、目标包和正向/故障回退范围，并在参数修正期间回复“继续”。北京时间 **12:49:50**，仅将静态托管原域 `/apiGateway` 的 SCF 上游从 `apiGateway` 改为 `apiGatewayNode24`，成功请求 exit 0、RequestId `9d72a0da-bb38-4edb-9182-36f56f13195c`。完整两个域名路由比较通过，只有该 UpstreamResourceName 改变；鉴权、安全域、路径透传、重写和限流字段均保持不变。
+
+09:52:44 首次请求误将审阅用语义载荷直接作为原生参数，接口返回 `InvalidParameter: Domain must be object-type`，复读确认未写入。检查已安装官方 CLI 的 routes edit 实现后，将原生参数封装为 `{EnvId, Domain: {Domain, Routes}}`；语义与批准范围不变，随后执行上述成功请求。共一次被拒请求、一次有效路由写入，不把首次失败计为成功或回退。仓内新增 nativePayload 正向/逆向封装及 Node22/24 回归通过，属于事后工具修正，不改已部署函数源码身份。
+
+迁移源码仍为 `c82e5b5c691f5aaf87ab7d3e0a85ff1812c2b423`，API 实现仍为 `49e7c765c586bb81dc707849992fa7386b9a663c`；目标为 Event / Nodejs24.11 / index.main / 30s / 256MB、零 timer。目标 ZIP SHA256 `86b5e7428bc3aeeebafba8d8ecf801c9ce966709aae075edfba55964fa372485`；执行前独立下载旧/新入口 1796/1797 文件与既有清单精确匹配。语义正向/逆向载荷 SHA256 分别为 `336abfd4db2bea86a6bf5e6d3115a06f2e827ec70c51744bb69c548138727748` / `a16fab772cb1c101c39e5b5c2e373f8037a3705d3044e4aad3ebcd74d677d58a`；原生正向载荷文件 SHA256 `ea049161c1b1b5092ac950a21e4c354dbb5e0104ffbcc78e66190120050b0a6c`。授权请求、完整路由与私有配置快照另存仓外。
+
+原域原 URL 的 **14 类 GET 全部 PASS**，共15次公共 GET；旧 API 前后夹读及新 API 身份校验共29次成功鉴权调用。完整稳定 payload、状态、Content-Type/CORS、路径和 query 契约保持一致；仅排除逐请求的 `data.ml_shadow.generated_at`，并验证 ISO 格式和180秒新鲜度。notFound 保持 HTTP200 / API code404。五个正式 card 及 authority/source/context 一致；日线320根截至10-29、周线212根截至10-28，与数据库最新窗口及升序一致；限定10-28的增强历史1条 / OK / 无缺口，旧数组兼容。正式 pointer revision17、交易日10-28；V3.6.8 / V3.6.1 策略族身份不变。
+
+切流后真实浏览器重新加载原域看板，标的513310的历史、320根K线及 Legacy 五票入口通过，截图封存。全部13函数列表代码/配置元数据、七个重点函数完整受控配置及 ETF 前端67对象元数据未变；pointer/runtime 未变。共享托管另有27个 kindle 路径并发变化，已逐项记录，不声称全域托管不变。本批没有函数部署、托管上传、生产决策调用、timer/权限/策略/ML 变更或资源删除。
+
+执行源码本机 Node24 Stage A **86/86**、Actions [#197](https://github.com/iquelee/etf-decision-engine/actions/runs/40802113199) 六组成功；portable84、两份私有历史回放及15段收据 NOT_RUN 的边界保留。候选31文件及冻结23文件指纹未变。旧 API 保留用于限定路由回退；**未使用回退，未进行实际回退演练**。该验收证明只读 API 迁移，不授予生产写链迁移资格。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-cutover/` 的 DEPLOYMENT_REPORT.md 及 execution 下的授权、两次命令、原生载荷、完整路由、public-verification.json、boundary-verification.json、browser-verification.json 和 production-kline.png。准备计划保留 PREPARED_NOT_APPLIED 历史状态，实际生产事实以本条和执行报告为准；后续文档提交不改变本批批准源码或已部署身份。PR保持 draft、未合并。
