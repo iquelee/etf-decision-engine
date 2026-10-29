@@ -16,11 +16,29 @@ const path = require('path');
 const REPO = path.join(__dirname, '..');
 const { SCHEMAS, getSchema, getCollectionNames } = require(path.join(REPO, 'src/common/schema.js'));
 const { COLLECTIONS } = require(path.join(REPO, 'src/common/constants.js'));
+const { V365_COLLECTIONS } = require(path.join(REPO, 'src/common/utils/v365-contracts.js'));
 
-const declared = Object.entries(COLLECTIONS)
+// ⚠️ WP-RH1：集合名有**两个合法来源** ——
+//    ① `constants.js::COLLECTIONS`（既有 29 个）
+//    ② `v365-contracts.js::V365_COLLECTIONS`（v365 的 5 个；OD-5 冻结为**唯一来源**）
+//    ⛔ 不把 v365 名复制进 constants.js —— 该文件属 DECISION_CALCULATION_CORE（HD12-D8），绝对保护。
+//    ⇒ 本守卫接受两源**并集**，并额外断言**两源不得重叠**（防双源漂移）。
+const fromConstants = Object.entries(COLLECTIONS)
   .filter(([, v]) => typeof v === 'string')
-  .map(([k, v]) => ({ key: k, name: v }));
+  .map(([k, v]) => ({ key: k, name: v, source: 'constants.js' }));
+const fromV365 = Object.entries(V365_COLLECTIONS)
+  .filter(([, v]) => typeof v === 'string')
+  .map(([k, v]) => ({ key: k, name: v, source: 'v365-contracts.js' }));
+const declared = [...fromConstants, ...fromV365];
 const schemaNames = new Set(SCHEMAS.map((s) => s.name));
+
+/* ---- 0) ★ WP-RH1：两个来源不得声明同名集合（防双源漂移）---- */
+{
+  const names = declared.map((d) => d.name);
+  const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+  assert.deepStrictEqual([...new Set(dupes)], [],
+    `★ 集合名在两个来源中重复声明（双源漂移风险）：${[...new Set(dupes)].join(', ')}`);
+}
 
 /* ---- 1) ★ constants 声明了但 SCHEMAS 未登记 → FAIL（本类 bug 的根因） ---- */
 {

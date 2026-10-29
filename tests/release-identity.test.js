@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('assert');
+const {buildReleaseIdentity}=require('../src/common/utils/release-identity');
+const baseline={manifest:{run_id:'r14',input_hash:'engine:r14'},history:{run_id:'r14',engine_version:'v3.6.7'},
+  decision:{engine_version:'v3.6.1'},apiSource:{release_version:'v3.6.8',source_commit:'a'.repeat(40),source_dirty:false}};
+let r=buildReleaseIdentity(baseline);
+assert.strictEqual(r.release_version,'v3.6.7');
+assert.strictEqual(r.strategy_version,'v3.6.1');
+assert.strictEqual(r.api_release_version,'v3.6.8');
+assert.strictEqual(r.source_commit,null);
+assert.strictEqual(r.input_context_sha256,null);
+assert.strictEqual(r.legacy_input_hash_kind,'RUN_IDENTITY');
+r=buildReleaseIdentity({...baseline,history:{run_id:'another',engine_version:'v9'}});
+assert.strictEqual(r.release_version,null);
+r=buildReleaseIdentity({...baseline,manifest:{...baseline.manifest,input_context_sha256:'b'.repeat(64),source_commit:'c'.repeat(40)}});
+assert.strictEqual(r.input_context_sha256,'b'.repeat(64));assert.strictEqual(r.source_commit,'c'.repeat(40));
+r=buildReleaseIdentity({...baseline,apiSource:{...baseline.apiSource,source_dirty:true}});
+assert.strictEqual(r.api_source_commit,null);
+r=buildReleaseIdentity({runtime:{production_engine:'v3.6.1'}});
+assert.strictEqual(r.strategy_version,'v3.6.1');assert.strictEqual(r.release_version,null);
+assert.strictEqual(buildReleaseIdentity().release_version,null);
+console.log('release-identity: split identities, no cross-run inference, legacy hash semantics and unknown provenance PASS');

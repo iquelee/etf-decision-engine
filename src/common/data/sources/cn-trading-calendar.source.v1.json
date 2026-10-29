@@ -1,0 +1,83 @@
+{
+  "source_schema": "cn-trading-calendar-source/1.0",
+  "market": "CN_A_SHARE",
+  "calendar_version": "cn-a-share-2026.1",
+  "coverage_start": "2026-01-01",
+  "coverage_end": "2026-12-31",
+  "generation_method": "expand_official_closure_ranges -> derive_weekday_closures -> cross_check_exchanges",
+  "authority_policy": {
+    "cn_trading_day_definition": "Monday-Friday AND NOT official exchange closure",
+    "allowed_sources": [
+      "SSE official annual/partial-holiday market closure notices",
+      "SZSE official annual/partial-holiday market closure notices"
+    ],
+    "forbidden_sources": [
+      "generic calendar websites",
+      "third-party finance websites",
+      "deriving exchange open days from government make-up working days",
+      "HOLIDAYS environment variable",
+      "runtime network API",
+      "max(snapshot date) observed from existing data"
+    ],
+    "conflict_policy": "if SSE and SZSE official arrangements disagree -> CALENDAR_CONFLICT -> BLOCKED (no side-taking)"
+  },
+  "authorities": [
+    {
+      "exchange": "SSE",
+      "notice_title": "关于上海证券交易所2026年部分节假日休市安排的通知",
+      "notice_identifier": "上证公告〔2025〕45号",
+      "notice_date": "2025-12-22",
+      "notice_url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml",
+      "notice_basis": "根据中国证监会有关通知要求",
+      "closures": [
+        { "holiday": "元旦", "start": "2026-01-01", "end": "2026-01-03", "resume": "2026-01-05" },
+        { "holiday": "春节", "start": "2026-02-15", "end": "2026-02-23", "resume": "2026-02-24" },
+        { "holiday": "清明节", "start": "2026-04-04", "end": "2026-04-06", "resume": "2026-04-07" },
+        { "holiday": "劳动节", "start": "2026-05-01", "end": "2026-05-05", "resume": "2026-05-06" },
+        { "holiday": "端午节", "start": "2026-06-19", "end": "2026-06-21", "resume": "2026-06-22" },
+        { "holiday": "中秋节", "start": "2026-09-25", "end": "2026-09-27", "resume": "2026-09-28" },
+        { "holiday": "国庆节", "start": "2026-10-01", "end": "2026-10-07", "resume": "2026-10-08" }
+      ],
+      "weekend_closures": [
+        "2026-01-04", "2026-02-14", "2026-02-28", "2026-05-09", "2026-09-20", "2026-10-10"
+      ]
+    },
+    {
+      "exchange": "SZSE",
+      "notice_title": "关于2026年部分节假日休市安排的通知",
+      "notice_identifier": "深证会〔2025〕481号",
+      "notice_date": "2025-12-22",
+      "notice_url": "https://www.szse.cn/www/disclosure/notice/general/t20251222_618087.html",
+      "notice_basis": "根据中国证监会《关于2026年部分节假日放假和休市安排的通知》(证监办发〔2025〕130号)",
+      "closures": [
+        { "holiday": "元旦", "start": "2026-01-01", "end": "2026-01-03", "resume": "2026-01-05" },
+        { "holiday": "春节", "start": "2026-02-15", "end": "2026-02-23", "resume": "2026-02-24" },
+        { "holiday": "清明节", "start": "2026-04-04", "end": "2026-04-06", "resume": "2026-04-07" },
+        { "holiday": "劳动节", "start": "2026-05-01", "end": "2026-05-05", "resume": "2026-05-06" },
+        { "holiday": "端午节", "start": "2026-06-19", "end": "2026-06-21", "resume": "2026-06-22" },
+        { "holiday": "中秋节", "start": "2026-09-25", "end": "2026-09-27", "resume": "2026-09-28" },
+        { "holiday": "国庆节", "start": "2026-10-01", "end": "2026-10-07", "resume": "2026-10-08" }
+      ],
+      "weekend_closures": [
+        "2026-01-04", "2026-02-14", "2026-02-28", "2026-05-09", "2026-09-20", "2026-10-10"
+      ]
+    }
+  ],
+  "confirming_notices": [
+    {
+      "exchange": "SSE",
+      "notice_title": "关于2026年中秋节、国庆节休市安排的公告",
+      "notice_identifier": "上证公告〔2026〕22号",
+      "notice_date": "2026-09-17",
+      "notice_url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_20260915_10832273.shtml",
+      "confirms": "中秋节 9月25日至9月27日休市 / 国庆节 10月1日至10月7日休市 / 周末休市 9月20日、10月10日"
+    },
+    {
+      "exchange": "SZSE",
+      "notice_title": "关于2026年中秋节、国庆节休市安排的通知",
+      "notice_date": "2026-09-17",
+      "notice_url": "https://www.szse.cn/www/disclosure/notice/general/",
+      "confirms": "中秋节 9月25日至9月27日休市 / 国庆节 10月1日至10月7日休市 / 周末休市 9月20日、10月10日"
+    }
+  ]
+}

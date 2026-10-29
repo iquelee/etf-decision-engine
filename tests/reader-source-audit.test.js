@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('path');
+const {sourceFingerprint,inspect}=require('../scripts/tools/reader-source-audit');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'reader-source-'));
+fs.mkdirSync(path.join(dir,'common/utils'),{recursive:true});
+fs.writeFileSync(path.join(dir,'common/utils/v365-active-read.js'),'async function readAuthoritativeDataset() {}');
+const source=['getDashboard','getEtfList','getPortfolio'].map(n=>`async function ${n}() { return resolveAuthoritative([]); }`);
+source.push('async function getEtfDetail() {return resolveAuthoritativeDecision();}','async function getConstants() {return resolvePointerProvenance();}');
+fs.writeFileSync(path.join(dir,'index.js'),source.join('\n'));
+const fp=sourceFingerprint(dir).sha256;
+assert.strictEqual(inspect(dir,fp,'2026-10-27T10:20:41+08:00').current_reader_status,'MIGRATED');
+assert.throws(()=>inspect(dir,'a'.repeat(64),'2026-10-27'),/MISMATCH/);
+assert.throws(()=>inspect(dir,fp,null),/observation time/);
+fs.writeFileSync(path.join(dir,'index.js'),source.join('\r\n'));
+assert.strictEqual(sourceFingerprint(dir).sha256,fp);
+fs.writeFileSync(path.join(dir,'common/utils/v365-active-read.js'),'');
+assert.strictEqual(inspect(dir,sourceFingerprint(dir).sha256,'2026-10-27').current_reader_status,'PENDING');
+console.log('reader-source-audit: bound snapshot, stale source rejection, missing helper and LF normalization PASS');

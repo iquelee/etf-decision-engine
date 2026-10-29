@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
 const REPO = path.join(__dirname, '..');
 const SRC_COMMON = path.join(REPO, 'src', 'common');
@@ -41,6 +42,7 @@ const EXTRA_FILES = {
   runDecisionEngine: [
     'ml/manifests/GEN1_GUARDED_EFFECTIVE_FREEZE.json',
     'ml/manifests/GEN1_GUARDED_EFFECTIVE_EVIDENCE.json',
+    'ml/manifests/GEN1_MODEL_SHA.json',
   ],
 };
 
@@ -79,12 +81,21 @@ function main() {
     }
   })(SRC_COMMON, '');
 
+  const releaseSource = {
+    source_commit: execFileSync('git',['rev-parse','HEAD'],{cwd:REPO,encoding:'utf8'}).trim(),
+    source_dirty: execFileSync('git',['status','--porcelain','--untracked-files=all'],{cwd:REPO,encoding:'utf8'}).trim().length > 0,
+    canonical_common_sha256: sha256(JSON.stringify(canonical)),
+    release_version: require('../src/common/utils/v365-contracts').ENGINE_VERSION,
+    source_kind: 'BUILD_GIT_HEAD'
+  };
+
   const manifest = {};       // fn -> { files: {rel: sha}, common_sha }
   const perFileSha = {};     // rel -> { fn: sha }（parity 校验用）
 
   for (const fn of FUNCTIONS) {
     const out = path.join(DIST, fn);
     fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out,'RELEASE_SOURCE.json'),JSON.stringify(releaseSource,null,2)+'\n');
 
     // 1) 函数自身源码（排除 common / MANIFEST / node_modules）
     const srcFn = path.join(CF_DIR, fn);
@@ -111,7 +122,7 @@ function main() {
         const p = path.join(dir, e.name);
         const r = rel ? `${rel}/${e.name}` : e.name;
         if (e.isDirectory()) walkCommon(p, r);
-        else {
+        else if (e.name !== 'MANIFEST.json') {
           const h = sha256(fs.readFileSync(p));
           fnFiles[r] = h;
           perFileSha[r] = perFileSha[r] || {};
@@ -127,6 +138,10 @@ function main() {
   // 4) parity validation：同名 common 文件跨函数 SHA 必须一致
   let parityFail = 0;
   for (const [rel, shas] of Object.entries(perFileSha)) {
+    if (!Object.prototype.hasOwnProperty.call(canonical,rel)) {
+      parityFail++;
+      console.error(`[PARITY FAIL] stale common file absent from canonical source: ${rel}`);
+    }
     const unique = new Set(Object.values(shas));
     if (unique.size > 1) {
       parityFail++;

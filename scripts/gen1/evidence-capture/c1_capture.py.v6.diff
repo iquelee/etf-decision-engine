@@ -1,0 +1,276 @@
+# c1_capture.py v5.0 -> v6.0 migration diff（**APPLIED**）
+# 施加批次：V6.0 FREEZE + B3 同批次工具迁移（owner 2026-10-02 / O-1 = APPROVED）
+# 契约 §11 规则 5：工具语义迁移与契约冻结同批次 ⇒ ⛔ 不存在预登记违规窗口
+# v5.0 sha256 = dd2ea8b0090853e36a28e8590fbf62519b2e7461ab7a5160c0e475a9841c8c42（26369 B / 546 行）
+# v6.0 sha256 = d0acc9e427f6ce52de903abd40ef41c76e87f7e5ba3441dea92f6a3d013a4337（31143 B / 629 行）
+# 同批次必改：c1_gate_redproof.py §[6] checkpoint 期望（09:00 单窗口 -> W1/W2 + 反向证明）
+--- a/scripts/gen1/evidence-capture/c1_capture.py
++++ b/scripts/gen1/evidence-capture/c1_capture.py
+@@ -1,21 +1,24 @@
+ # -*- coding: utf-8 -*-
+ """
+-C-1 每日只读 Evidence Capture —— **v5.0 语义**（Gen-1 Evidence Contract v5.0 §5）
+-
+-★ 本文件是 `_evidence-capture-tool/c1_capture.py`（v3.0 语义）的**迁移版**。
+-  迁移依据：契约 **§11 元规则 规则 5** —— 「工具语义迁移与契约冻结**同批次**」；
+-            契约 **§12 第 12 项** —— 迁移随冻结一并执行。
++C-1 每日只读 Evidence Capture —— **v6.0 语义**（Gen-1 Evidence Contract v6.0 §5）
++
++★ **v6.0 正式版** —— owner 2026-10-02 裁定 **V6.0 FREEZE + B3 工具迁移 = 同一（原子）治理批次**。
++  迁移依据：契约 **§11 元规则 规则 5** —— 「工具语义迁移与契约冻结**同批次**」。
++  ✅ 本文件与冻结载体 `docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md`（🔒 FROZEN 2026-10-02）**同批次**落盘：
++     迁移方案（`c1_capture.py.v6.diff` / `c1_capture_v6_migration_test.py`）先期设计并测试 → 本批次施加。
++  ⛔ 本工具**只读**、⛔ **不写生产 DB**、⛔ 不构成任何生产授权。
+ 
+ 冻结绑定（★ 任何一项不符 ⇒ 工具与契约不同源，⛔ 不得据其结果计入样本）：
+-  契约路径      docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md
+-  契约版本      v5.0（FROZEN 2026-10-02）
+-  carrier commit 05da0efa73e948921bc7b9b60c0d500cc98e3e9b
+-  git blob id   7f86d12aaed99a877c170c25c5a481f21a661256      （sha1，git 对象）
+-  content sha256 4fb9463f4a437e310cb52b04498a1d4cc0f23fbc64eb3c1d846d90a460a9f55b（64580 B / LF）
++  契约路径      docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md
++  契约版本      v6.0（FROZEN 2026-10-02）
++  carrier commit ccb0f4b8cf402a16b16d468cbff1c02109d72476
++  git blob id   294259338ba3fa60f689ed9139072a35b2368b0e      （sha1，git 对象）
++  content sha256 7e3e5d876522b512e0ba46de248c92b8e1cb17bde0180003f7041559e2ad272e（97203 B / LF）
+   ⚠️ 三种指纹**不可混用**（blob id 是 sha1；content sha256 是文件内容哈希）
+-  ⚠️ 冻结指纹由外部**封存记录**与载体 PR body 承载，⛔ 不写入契约文件本身（自指悖论）
+-
+-v5.0 相对 v3.0 的语义变更（★ 摘要）：
++  ⚠️ 冻结指纹由外部**封存记录**与 `V6.0 Evidence Freeze Seal` 制品承载，
++    ⛔ 不写入契约文件本身（自指悖论）
++
++v5.0 相对 v3.0 的语义变更（★ 摘要，**保留历史**）：
+   1. 读源整体改绑 **run 轴**：`decision_result` → `run_candidate_decision`；
+      `portfolio_snapshot` → `run_candidate_portfolio`（两者**退出**评分源，仍为前台现行读链）
+   2. 源集合 5 → **8**：新增 `run_manifest` / `active_run_pointer` / `run_history`
+@@ -25,6 +28,14 @@
+   6. gate 由 9 条 → **14 条**（规则 1/2 改按 pointer revision；新增组 A1/A2/A3 与 B3/B4）
+   7. checkpoint 由 工作日 09:00 → **工作日 [22:30:00, 23:30:00)（北京）**
+   8. CHAIN PROOF 重锚到 **22:00 入口管线**（`fetchDailyData`），⛔ 不再要求落在 capture 窗口内
++
++v6.0 相对 v5.0 的语义变更（★ 摘要，**本批次生效**）：
++  9. checkpoint 由**单窗口** → **预登记有序窗口序列** `W1 = [22:30, 23:30)` ∪ `W2 = 次一工作日 [08:30, 09:30)`（北京），
++     执行规则 = **first-window-wins**（契约 §5.8）；bundle 新增 `checkpoint_window_id`
++     （⚠️ **仅记录窗口身份**；⛔ 窗口不同**不**产生第二个独立事件 —— 独立性一律由契约 §3.4A 裁决）
++ 10. CHAIN PROOF → **逐链尝试**：`W1-2200`（入口 `fetchDailyData`）与 `W2-0800`（入口 `materializeIndicators`）**同等有效**
++ 11. 八源 / 17 列 / selector / 判定阈值 **未变**；⛔ §3.4A `INDEPENDENCE REQUIREMENTS` 由**契约**承担，
++     本工具**不**判定独立事件
+ 
+ 硬约束（与契约一致，⛔ 勿改）：
+   1. 只读：云端仅 `QUERY/find` + `COMMAND/count` + `logs search`；⛔ 零 INSERT/UPDATE/DELETE
+@@ -57,15 +68,22 @@
+ # ------------------------------------------------------------------
+ # 冻结绑定常量（★ 与契约 §11 规则 5 同批次固定）
+ # ------------------------------------------------------------------
+-CONTRACT_PATH = "docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md"
+-CONTRACT_VERSION = "v5.0"
++CONTRACT_PATH = "docs/gen1/GEN1_EVIDENCE_CONTRACT_V6.md"
++CONTRACT_VERSION = "v6.0"
+ CONTRACT_FROZEN_DATE = "2026-10-02"
+-CONTRACT_CARRIER_COMMIT = "05da0efa73e948921bc7b9b60c0d500cc98e3e9b"
+-CONTRACT_GIT_BLOB_SHA1 = "7f86d12aaed99a877c170c25c5a481f21a661256"
++CONTRACT_CARRIER_COMMIT = "ccb0f4b8cf402a16b16d468cbff1c02109d72476"
++CONTRACT_GIT_BLOB_SHA1 = "294259338ba3fa60f689ed9139072a35b2368b0e"
+ CONTRACT_CONTENT_SHA256 = \
+-    "4fb9463f4a437e310cb52b04498a1d4cc0f23fbc64eb3c1d846d90a460a9f55b"
+-
+-BUNDLE_REVISION = "v5.0"
++    "7e3e5d876522b512e0ba46de248c92b8e1cb17bde0180003f7041559e2ad272e"
++
++BUNDLE_REVISION = "v6.0"
++
++# v6.0 §5.8：预登记的**有序**窗口序列（工作日，北京时间；⛔ 不得事后新增 / 移动 / 放宽）
++CHECKPOINT_WINDOWS = [
++    {"id": "W1", "start": "22:30", "end": "23:30"},   # decision_date D 的当日夜间
++    {"id": "W2", "start": "08:30", "end": "09:30"},   # decision_date D 的次一工作日晨间
++]
++CHECKPOINT_RULE = "工作日 W1 [22:30,23:30) ∪ W2 次日工作日 [08:30,09:30)（北京）；first-window-wins"
+ 
+ # ------------------------------------------------------------------
+ # 环境
+@@ -93,9 +111,14 @@
+ OUTDIR = "%s/_evidence-capture-%s" % (ROOT, NOW.strftime("%Y%m%d"))
+ 
+ # ⚠️ CHAIN PROOF 只用来定位「产生该 run 的入口管线」的日志窗口，
+-#    ⛔ 不是统计 checkpoint（契约 §5.6 第 5 条：run 的 invocation 不必落在 checkpoint 窗口内）。
+-CHAIN_WINDOW_START = "21:50:00"
+-CHAIN_WINDOW_END = "22:30:00"
++#    ⛔ 不是统计 checkpoint（契约 §5.6：run 的 invocation 不必落在 checkpoint 窗口内）。
++# v6.0：两条 PROMOTION-CAPABLE 链（W1-2200 / W2-0800）**同等适用** ⇒ 逐链一个入口日志窗口。
++CHAIN_WINDOWS = [
++    {"chain_id": "W1-2200", "entry": "fetchDailyData", "start": "21:50:00", "end": "22:30:00"},
++    {"chain_id": "W2-0800", "entry": "materializeIndicators", "start": "07:50:00", "end": "08:30:00"},
++]
++CHAIN_WINDOW_START = CHAIN_WINDOWS[0]["start"]   # 兼容旧名（⛔ 新代码请用 CHAIN_WINDOWS）
++CHAIN_WINDOW_END = CHAIN_WINDOWS[0]["end"]
+ 
+ 
+ # ============================================================
+@@ -183,10 +206,53 @@
+     ]
+ 
+ 
++def _minute_of_day(now):
++    return now.hour * 60 + now.minute
++
++
++def _hhmm_to_min(t):
++    return int(t[:2]) * 60 + int(t[3:5])
++
++
++def evaluate_checkpoint_v6(now):
++    """契约 §5.8（v6.0）：工作日 **W1 ∪ W2**（预登记有序窗口序列）。
++
++    返回 {"ok": bool, "window_id": "W1"|"W2"|None, "reason": str}。
++    ⚠️ 本函数只判**单次捕获会话**是否落在窗口内、且落在**哪一个**窗口；
++       「该 decision_date 是否已由**首个**窗口产出」属**会话序**判定 ⇒ 由调用方按 §5.8
++       （first-window-wins）处理，⛔ 不由本函数承担。
++    ⚠️ 窗口身份（W1 / W2）⛔ **不是**独立事件判据（契约 §3.4A 明文排除）。
++    """
++    if now.weekday() >= 5:
++        return {"ok": False, "window_id": None, "reason": "WEEKEND"}
++    minute = _minute_of_day(now)
++    for w in CHECKPOINT_WINDOWS:
++        if _hhmm_to_min(w["start"]) <= minute < _hhmm_to_min(w["end"]):
++            return {"ok": True, "window_id": w["id"], "reason": "IN_WINDOW"}
++    return {"ok": False, "window_id": None, "reason": "OFF_CHECKPOINT"}
++
++
++def first_window_wins_checkpoint(sessions):
++    """契约 §5.8 first-window-wins：按序 W1 → W2，**首个**满足者胜出并终止该 D 的捕获。
++
++    sessions = [{"now": datetime, "pinned_decision_date": str, "target_decision_date": str}, ...]
++    返回 {"winner_index": int|None, "window_id": str|None, "bundles": int}
++    ⛔ 一旦某 session 产出 ⇒ 后续 session 一律 SKIPPED（⛔ 不产生第二个 bundle，§5.5 ③）。
++    """
++    for i, s in enumerate(sessions):
++        r = evaluate_checkpoint_v6(s["now"])
++        if not r["ok"]:
++            continue
++        if str(s.get("pinned_decision_date")) != str(s.get("target_decision_date")):
++            continue                      # §5.8：本窗口不产出，继续下一窗口
++        return {"winner_index": i, "window_id": r["window_id"], "bundles": 1}
++    return {"winner_index": None, "window_id": None, "bundles": 0}
++
++
++# ⛔ DEPRECATED（v6.0）：保留旧签名以满足既有打红脚本；新代码一律用 evaluate_checkpoint_v6。
+ def evaluate_checkpoint(now):
+-    """契约 §5.8：工作日 **[22:30:00, 23:30:00)（北京）**。"""
+-    return (now.weekday() < 5) and (
+-        (now.hour == 22 and now.minute >= 30) or (now.hour == 23 and now.minute < 30))
++    """⛔ DEPRECATED（v6.0）：返回 bool，**丢弃** window_id。"""
++    return evaluate_checkpoint_v6(now)["ok"]
+ 
+ 
+ def evaluate_eligibility(*, eligibility, cand_dec):
+@@ -284,13 +350,28 @@
+     ⚠️ 局限（如实声明）：SCF 日志**不含** `engine_run_id` 字段
+        ⇒ 第 ③ 条以「时间区间包含」做**间接**归属，⛔ 不主张为直接证得。
+     """
+-    out = {"verified": False, "hops": [], "limitation": "invocation log 不含 engine_run_id；"
++    out = {"verified": False, "hops": [], "chain_id": None,
++           "limitation": "invocation log 不含 engine_run_id；"
+            "run↔invocation 归属以 [START, Report] 区间包含 run_manifest.created_at 作间接证明"}
+     if not run_date:
+         return out
+-    w0 = "%s %s" % (run_date, CHAIN_WINDOW_START)
+-    w1 = "%s %s" % (run_date, CHAIN_WINDOW_END)
+     created = _parse_iso_local(manifest_created_at)
++
++    # v6.0：逐链尝试（W1-2200 / W2-0800 **同等有效**）；任一链证明成功即 verified。
++    for _cw in CHAIN_WINDOWS:
++        w0 = "%s %s" % (run_date, _cw["start"])
++        w1 = "%s %s" % (run_date, _cw["end"])
++        _res = _chain_attempt(_cw, w0, w1, created)
++        if _res["verified"]:
++            return _res
++        out = _res
++    return out
++
++
++def _chain_attempt(cw, w0, w1, created):
++    """单链 CHAIN PROOF 尝试（v6.0 抽出；语义与 v5.0 一致，仅**参数化**日志窗口）。"""
++    out = {"verified": False, "hops": [], "chain_id": cw["chain_id"],
++           "entry": cw["entry"], "window": [w0, w1]}
+ 
+     fetch, _ = logs('function_name:"fetchDailyData"', w0, w1, 40)
+     mat, _ = logs('function_name:"materializeIndicators"', w0, w1, 40)
+@@ -411,11 +492,11 @@
+     ap.add_argument("--dry-run", action="store_true")
+     a = ap.parse_args()
+ 
+-    print("=== C-1 capture (v5.0 语义)  as-of %s ===" % NOW.strftime("%Y-%m-%d %H:%M:%S"))
++    print("=== C-1 capture (v6.0 语义)  as-of %s ===" % NOW.strftime("%Y-%m-%d %H:%M:%S"))
+     print("    契约 = %s @ %s（blob %s）" % (CONTRACT_PATH, CONTRACT_VERSION,
+                                              CONTRACT_GIT_BLOB_SHA1[:12]))
+     print("    selector = S-PROMOTED")
+-    print("    checkpoint = 工作日 [22:30:00, 23:30:00)（北京）")
++    print("    checkpoint = %s" % CHECKPOINT_RULE)
+ 
+     if not do_login(load_cred()):
+         print("!! 登录失败，⛔ 不继续")
+@@ -435,8 +516,8 @@
+     gate_pass = all(ok for _, ok in checks)
+     elig = evaluate_eligibility(eligibility=d["rs"], cand_dec=d["cand_dec"])
+     elig_pass = all(ok for _, ok in elig)
+-    ck = evaluate_checkpoint(NOW)
+-    official = gate_pass and elig_pass and ck
++    ck = evaluate_checkpoint_v6(NOW)
++    official = gate_pass and elig_pass and ck["ok"]
+ 
+     print()
+     print("=== COHERENCE GATE (%d/%d PASS) ===" % (sum(1 for _, o in checks if o), len(checks)))
+@@ -448,8 +529,9 @@
+         print("   [%s] %s" % ("OK" if ok else "EXCLUDED", n))
+     print()
+     print("=== CHECKPOINT ===")
+-    print("   [%s] 现在=%s 要求=工作日 22:30–23:29（北京）"
+-          % ("PASS" if ck else "FAIL", NOW.strftime("%Y-%m-%d %H:%M:%S")))
++    print("   [%s] 现在=%s window=%s reason=%s 要求=%s"
++          % ("PASS" if ck["ok"] else "FAIL", NOW.strftime("%Y-%m-%d %H:%M:%S"),
++             ck["window_id"], ck["reason"], CHECKPOINT_RULE))
+     print()
+     print("=== CHAIN PROOF ===")
+     for h in d["chain_proof"].get("hops", []):
+@@ -457,7 +539,7 @@
+                                            {k: v for k, v in h.items() if k not in ("hop", "function", "request_source")}))
+     print("   verified = %s" % d["chain_proof"].get("verified"))
+     print()
+-    print("   ⇒ scoring = %s" % decide(gate_pass and elig_pass, ck))
++    print("   ⇒ scoring = %s" % decide(gate_pass and elig_pass, ck["ok"]))
+ 
+     bundle = {
+         "bundle_revision": BUNDLE_REVISION,
+@@ -470,8 +552,9 @@
+         "contract_content_sha256": CONTRACT_CONTENT_SHA256,
+         "contract_frozen_date": CONTRACT_FROZEN_DATE,
+         "capture_timestamp": NOW.isoformat(),
+-        "checkpoint_rule": "工作日 [22:30:00, 23:30:00)（北京）",
+-        "checkpoint_ok": ck,
++        "checkpoint_rule": CHECKPOINT_RULE,
++        "checkpoint_ok": ck["ok"],
++        "checkpoint_window_id": ck["window_id"],   # v6.0 新增（⛔ 仅记录窗口身份，⛔ 非独立判据）
+         "selector": "S-PROMOTED",
+         # --- run identity ---
+         "run_id": d["run_id"],
+@@ -485,7 +568,7 @@
+         "gate_checks": [{"rule": n, "pass": ok} for n, ok in checks],
+         "eligibility_pass": elig_pass,
+         "eligibility_checks": [{"rule": n, "not_excluded": ok} for n, ok in elig],
+-        "scoring": decide(gate_pass and elig_pass, ck),
++        "scoring": decide(gate_pass and elig_pass, ck["ok"]),
+         # --- run provenance ---
+         "run_manifest": {k: d["manifest"].get(k) for k in [
+             "run_id", "revision", "expected_trade_date", "validation_passed", "created_at"]},
+@@ -516,8 +599,8 @@
+                        % "；".join(n for n, ok in checks if not ok))
+         if not elig_pass:
+             why.append("EXCLUDED_BY_§4.2：" + "；".join(n for n, ok in elig if not ok))
+-        if not ck:
+-            why.append("OFF_CHECKPOINT（§5.8）")
++        if not ck["ok"]:
++            why.append("OFF_CHECKPOINT（§5.8：%s）" % ck["reason"])
+         bundle["non_scoring_reason"] = " ⇒ ".join(why) + " ⇒ 不作为该日正式样本，⛔ 不倒填"
+     blob = json.dumps(bundle, ensure_ascii=False, indent=2).encode("utf-8")
+     print("   bundle sha256 = %s (%d B)" % (sha(blob), len(blob)))

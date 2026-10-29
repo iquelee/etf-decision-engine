@@ -50,16 +50,16 @@ function stable(v) {
   return JSON.stringify(v, Object.keys(v || {}).sort());
 }
 
-function main() {
+async function main() {
   console.log(`[Gate B] 载入真实数据 & 重放 RUN_ONCE vs RUN_${RUNS}X（最近 ${DAYS} 个共同交易日）…`);
   const t0 = Date.now();
-  const probe = H.replay({ runsPerDay: 1 });
+  const probe = await H.replay({ runsPerDay: 1 });
   const axis = probe.axis.slice(-DAYS);
   const from = axis[0];
   const to = axis[axis.length - 1];
 
-  const once = H.replay({ from, to, runsPerDay: 1 });
-  const thrice = H.replay({ from, to, runsPerDay: RUNS, collectRuns: true });
+  const once = await H.replay({ from, to, runsPerDay: 1 });
+  const thrice = await H.replay({ from, to, runsPerDay: RUNS, collectRuns: true });
   console.log(`[Gate B] 重放完成：${once.axis.length} 天 × 5 票 × (1+${RUNS}) 次，用时 ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   /* ---- 1) 逐日决策字段比对 ---- */
@@ -230,4 +230,4 @@ function main() {
   console.log(`[Gate B] 报告：${path.relative(REPO, DOC)}`);
 }
 
-main();
+main().catch((e) => { console.error(`[Gate B] [FATAL] ${e && e.stack ? e.stack : e}`); process.exit(1); });

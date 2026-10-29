@@ -24,24 +24,9 @@
     </header>
 
     <div class="pending">
-      <div class="pending-title">待实现（M7）</div>
-      <div class="pending-sub">数据来源：GET /api/review（带 X-Admin-Token）</div>
-      <p class="pending-sub">SPEC §8.1：涉及 account snapshot / holdings / trade_log / actual execution / deviation 的数据不得变成公开页面。</p>
+      <div class="pending-title">当前版本暂未提供</div>
+      <div class="pending-sub">本页功能将在后续版本开放。</div>
     </div>
 
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">约定区块</div>
-          <div class="section-sub">以下区块按 SPEC §4.1 前台 D · §4.2 · §8.1 落实，实现后删除本占位块</div>
-        </div>
-      </div>
-      <ul class="block-list">
-        <li>复盘统计 8 项</li>
-        <li>事件流（决策-执行配对，可展开）</li>
-        <li>偏差</li>
-        <li>历史趋势</li>
-      </ul>
-    </div>
   </section>
 </template>

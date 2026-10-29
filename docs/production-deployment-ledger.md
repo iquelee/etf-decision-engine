@@ -219,6 +219,124 @@
 未部署 · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
 · 未补 FINDING-1/2 字段 · 未处置 OBS-001 · 未回滚 · 未追溯修正历史 `days_in_stage`。
 
+---
+
+### D-007 · 2026-09-29 · C-021 只读核验 —— 线上仍为 V3.6.4（零漂移）+ 部署候选冻结登记
+
+> **本行为只读核验 + 设计登记（docs-only）**：**未部署、未改任何云函数、未改 `param_config`、
+> 未动冻结件、未移动 tag、未执行 production run、未初始化 pointer**。
+> 依 `## 3. 追加规范` 第 2 条（只读核验亦追加一行）登记。
+> **`supersedes`：无** —— D-001~D-006 全部字段**逐字未动**。
+
+#### 1. 只读核验（§2 Production Deployment Baseline Audit）
+
+| 字段 | 值 |
+|---|---|
+| `record_date` | 2026-09-29 |
+| `record_type` | 只读核验 + 部署候选冻结设计登记（**无部署**） |
+| `deploy/mod_time` | **未变** —— `runDecisionEngine` 仍 `2026-09-22 16:29:48` |
+| `runDecisionEngine.FunctionId` | `lam-eiye285p` |
+| `runDecisionEngine.Runtime` | `Nodejs16.13` |
+| `runDecisionEngine.Handler` | `index.main` |
+| `runDecisionEngine.ModTime` | **2026-09-22 16:29:48（未变，= D-005 / D-006）** |
+| `runDecisionEngine.CodeSize` | **4013498（未变，= D-005 / D-006）** |
+| `index_sha256_raw` | `072b40089c7bc260a888bda913e68b1afb546b49a3d19ef88d4eec7fe9ae477b`（**本地下载复算，逐位一致**） |
+| `index_sha256_lf` | `77f7d50042cee0a9a7e5f84c7769dd95de92f8091b7547307b6f325f8fe01529`（同） |
+| `source_parity`（复算） | **EXACT_MATCH 74 / 76**（`CONTENT_DIFF 0`；`ONLY_ONLINE 2` = `GEN1_GUARDED_EFFECTIVE_{FREEZE,EVIDENCE}.json`，build 注入属预期） |
+| `CodeSha256`（CLI 字段） | **N/A —— `tcb fn detail` 不返回该字段** ⇒ 以 `index.js` 双 SHA + 逐文件 parity 替代，⛔ 不得因字段缺失判漂移 |
+| `CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY` | **V3.6.4**（冻结 `aa634e264270f26207c59c19ef3e1c31dde01e64`） |
+| `PRODUCTION_DEPLOYMENT_DRIFT` | **NO**（三重独立一致：`ModTime`/`CodeSize` + `index.js` 双 SHA + 逐文件 parity `diff=0`） |
+| `DEPLOYMENT_IDENTITY_VERIFIED` | **false** —— ⛔ 线上 = V3.6.4，**并非**本轮 V3.6.5 candidate ⇒ 部署身份**尚未**成立（正是 C-021 缺口） |
+| `rollback artifact（独立验证）` | **PASS** —— 线上包下载 → 本地复算 `index.js` 双 SHA == D-006 记录值（独立双源一致）；⛔ 非仅存下载链接 |
+| `production writes` | **NO**（全程只读） |
+| `deploy triggered` | **NO** |
+| `production run triggered` | **NO** |
+| `pointer initialized` | **NO** |
+| `switch date` | **null（未设置）** |
+
+#### 2. 部署候选冻结登记（§3 / §4 · 设计层，尚未部署）
+
+| 字段 | 值 |
+|---|---|
+| `candidate base_head_sha` | `c6bd006fd76ffc5358cddd07347df8ed23d9e61d` |
+| `candidate_manifest_sha` | `8c53f93fa66bbc2768f23843530f3997e2c9d38030e58b65c2bc0d7497c501c1`（两次重算逐位一致 ⇒ deterministic） |
+| `candidate_content_sha` = `dependency_closure_sha` | `e80ea8c20785f3c8c4da70e8316d84321cfe944cb7ba25f85df2dba04ff79016` |
+| `V365_DEPLOYMENT_REQUIRED_FILES` | **91**（function own 2 + canonical common 87 + extra frozen 2） |
+| `V365_DEPLOYMENT_EXCLUDED_FILES` | **69**（docs 24 / scripts 26 / tests 15 / 其它 4） |
+| `changed_in_closure` | **7**（⛔ 非 76 全量部署） |
+| `materializeIndicators_touched` | **false** |
+| `expected runtime / handler` | `Nodejs16.13` / `index.main` |
+| `build_method` | `scripts/build-cloudfunctions.js` |
+| `build_tool_versions` | `node v22.22.2` · `tcb_cli CloudBase CLI 3.8.1` |
+| `mutable_working_tree_deploy_forbidden` | **true**（⛔ 禁止直接从 mutable working tree 部署） |
+| `gate_d_status` | **PENDING_OWNER_DEPLOYMENT_APPROVAL**（`may_deploy = false`；`owner_deployment_authorization = NOT_GRANTED`） |
+
+#### 3. 本次记录未做的事（边界声明）
+
+**未部署** · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
+· 未执行 production run · 未初始化 pointer · 未写任何业务数据 · 未设置 switch date · 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{deployment-identity-audit,deployment-scope,deployment-candidate-manifest,rollback-artifact}.json`
+> 设计详情：`docs/V365_DEPLOYMENT_IDENTITY_AND_CANDIDATE_FREEZE.md`
+
+---
+
+### D-008 · 2026-09-30 · C-021.1 只读核验 —— 部署 bundle 已物化（**未部署**）
+
+> **本行为只读核验 + 本地 bundle 物化登记（local-only）**：**未部署、未改任何云函数、未改 `param_config`、
+> 未动冻结件、未移动 tag、未执行 production run、未初始化 pointer**。
+> 依 `## 3. 追加规范` 第 2 条（只读核验亦追加一行）登记。
+> **`supersedes`：无** —— D-001~D-007 全部字段**逐字未动**。
+
+#### 1. 只读核验（线上身份复核 —— 与 D-007 逐位一致）
+
+| 字段 | 值 |
+|---|---|
+| `record_date` | 2026-09-30 |
+| `record_type` | 只读核验 + **本地** deployment bundle 物化登记（**无部署**） |
+| `deploy/mod_time` | **未变** —— `runDecisionEngine` 仍 `2026-09-22 16:29:48` |
+| `runDecisionEngine.FunctionId` | `lam-eiye285p`（未变） |
+| `runDecisionEngine.Runtime / Handler` | `Nodejs16.13` / `index.main`（未变） |
+| `runDecisionEngine.ModTime / CodeSize` | **2026-09-22 16:29:48 / 4013498（未变，= D-005 / D-006 / D-007）** |
+| `index_sha256_raw / lf` | `072b4008…477b` / `77f7d500…1529`（本地下载复算，**逐位一致**） |
+| `source_parity`（复算） | **EXACT_MATCH 74 / 76**（`CONTENT_DIFF 0`） |
+| `CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY` | **V3.6.4**（冻结 `aa634e264270f26207c59c19ef3e1c31dde01e64`） |
+| `PRODUCTION_DEPLOYMENT_DRIFT` | **NO** |
+| `DEPLOYMENT_IDENTITY_VERIFIED` | **false** —— ⛔ 线上仍为 V3.6.4，**并非**本轮 V3.6.5 candidate |
+| `production writes` | **NO**（全程只读；本地 bundle 仅写入 `deliverables/`） |
+| `deploy triggered` | **NO** |
+| `production run triggered` | **NO** |
+| `pointer initialized` | **NO** |
+| `switch date` | **null（未设置）** |
+
+#### 2. 本地 deployment bundle 物化登记（§1~§5 · 尚未部署）
+
+| 字段 | 值 |
+|---|---|
+| `DEPLOYMENT_ARTIFACT_MATERIALIZED` | **true** |
+| `DEPLOYMENT_BUNDLE_SHA` | **`e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4`** |
+| `bundle_content_manifest_sha` | `0e544793534552c693807f6e1985cdebdb7c235f5244c28296a29512bf00e5d4` |
+| `bundle_path / size / format` | `deliverables/v365-production-history/c021/bundle/runDecisionEngine.V365.e996e88ae808.tar` / `1161728` / `ustar-deterministic`（mtime=0 · uid=0 · gid=0 · mode=0644） |
+| `required_file_count` | **91**（= D-007 登记值） |
+| `BUNDLE_SOURCE_PARITY` | **EXACT_MATCH**（`MISSING_REQUIRED_FILE 0` · `UNEXPECTED_FILE 0` · `CONTENT_DIFF 0` · `ONLINE_IRRELEVANT_ARTIFACT_DIFF 0`） |
+| `§1 source drift` | **0 / 91**（逐文件 `sha256(current) == manifest.expected`；⛔ 不一致 ⇒ `STOP = CANDIDATE_SOURCE_DRIFT`） |
+| `§4 UNEXPECTED_PACKAGE_DIFF` | **0**（`added 15` · `modified 4` · `deleted 0` · `unchanged 72`） |
+| `§4 计数对账` | `19 = 7 working-tree + 12 committed-since-aa634e2`；C-021 §3 的 `7` ⊂ 本 delta `19`（**包含**关系） |
+| `§4 红线三项` | `materializeIndicators_changed = false` · `param_config_semantic_change = false` · `protected_CALC_unexpected_change = false` |
+| `DEPLOYMENT_ROLLBACK_BINDING` | **BOUND** |
+| `previous_package_sha`（回滚目标） | `aa576c20599528a66737f154b31b8cca87f25c1cf50068093bc243ed7084caea`（线上 V3.6.4 · 台账 D-006） |
+| `rollback_bundle_sha256`（V3.6.4 源码级） | `4c7949f5dcf3da99b1cbbc20e159fee8a86f8279c2b5f89c9a57982563d0295e`（76 文件 · 独立复核 `EXACT_MATCH` · `index.js` 双 SHA 匹配 D-006） |
+| `gate_d_status` | **PENDING_OWNER_DEPLOYMENT_APPROVAL**（D-01~D-09 PASS · **D-10 `owner_deployment_authorization` = NOT_GRANTED**；`may_deploy = false`） |
+| `authorization_binding`（未来授权必需） | `base_head_sha` + `candidate_manifest_sha` + **`deployment_bundle_sha`** + `production_env` + `function_name`（⛔ 仅绑 HEAD SHA 一律 REJECTED） |
+
+#### 3. 本次记录未做的事（边界声明）
+
+**未部署** · 未改任何云函数 · 未改 `param_config` · 未改任何冻结件或 tag · 未移动 `v3.6.4-frozen^{}`
+· 未执行 production run · 未初始化 pointer · 未写任何业务数据 · 未设置 switch date · 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{deployment-artifact,pre-deploy-package-diff,deployment-rollback-binding}.json` · `c021/bundle/` · `c021/rollback/`
+> 设计详情：`docs/V365_DEPLOYMENT_IDENTITY_AND_CANDIDATE_FREEZE.md`（附 §A.1~§A.11）
+
 ## 2. 勘误指针（不改历史行）
 
 | # | 对象 | 已过期的字段 | 现状 | 处理 |
@@ -238,3 +356,728 @@
 3. 只允许追加；更正用新行 + `supersedes: D-xxx`。
 4. `source_repo_sha` 若无法确证，必须显式写「推定」，不得默认属实。
 5. 不得在此文件写入密钥、envId 之外的真实凭据、或任何个人资金数据。
+
+---
+
+### D-009 · 2026-09-30 · **V3.6.5 CONTROLLED DEPLOYMENT 已执行**（owner 授权 §3 · 单次 · runDecisionEngine only）
+
+> **本行为真实生产部署**（owner 于 C-021.2 §3 明确授权，五元组逐位绑定）。
+> `supersedes`：无 —— D-001~D-008 全部字段**逐字未动**（append-only）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`CONTROLLED DEPLOYMENT AUTHORIZATION = GRANTED`**（owner §3；⛔ 不含 FIRST CONTROLLED RUN） |
+| `base_head_sha` | `c6bd006fd76ffc5358cddd07347df8ed23d9e61d` |
+| `candidate_manifest_sha` | `8c53f93fa66bbc2768f23843530f3997e2c9d38030e58b65c2bc0d7497c501c1` |
+| `deployment_bundle_sha`（授权值） | `e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4` |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine`（**仅此一个**；⛔ 未部署 materializeIndicators 或任何其他函数） |
+| `AUTHORIZATION_SCOPE_RATIFIED_BY_OWNER` | `true` · `changed_files_count = 85` |
+| `APPROVAL_MANIFEST_SHA256` | `a972cb914b6df4aee5d03da5a718c0e3ebf0ee43afbfe0caa428baed68323594` |
+| `CHANGED_FILES_LIST_SHA256` | `c124f178a635b0aeaaf58251efea5987576ce90bf1212a934f1ce4c4b58cb50e` |
+| `CHANGED_REGIONS_LIST_SHA256` | `59cceefaccb008a8ded07912833bfb3f1e366d0481f590c9834919a05470e899` |
+
+#### 2. 部署输入（⛔ 非 mutable working tree）
+
+| 字段 | 值 |
+|---|---|
+| `deploy_input_method` | **解包已冻结 bundle**（⛔ 非 `build-cloudfunctions.js` / 非 mutable worktree） |
+| `bundle_sha_recomputed`（部署前从磁盘复算） | `e996e88ae8084a38e186471b561867267fc4280c3ea5758ccb0eff75092455a4`（**逐位 == 授权值**） |
+| `STAGED_SOURCE_PARITY` | **`EXACT_MATCH`**（91 文件 · MISSING 0 · EXTRA 0 · CONTENT_DIFF 0） |
+| `staging_removed_stale` | `common/MANIFEST.json`（陈旧残留，⛔ 不在 bundle 内 ⇒ 已移除，避免多带文件） |
+| `preserved_ignore_policy` | `node_modules/**` · `config.json`（由快照恢复，不在 bundle 闭包内） |
+
+#### 3. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deployment_started_at` | `2026-09-30T05:37:19Z`（= 2026-09-30 13:37:19 +08） |
+| `deployment_finished_at` | `2026-09-30T05:38:13Z`（= 2026-09-30 13:38:13 +08） |
+| `deploy_command` | `tcb fn deploy runDecisionEngine --dir dist-functions/runDecisionEngine --force -e <env>` |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ [runDecisionEngine] Cloud function deployed successfully!`**（exit 0） |
+| `deployment_count` | **1**（单次；⛔ 未重试） |
+
+#### 4. 部署后线上身份（§8 POST_DEPLOY_IDENTITY_GATE · 只读）
+
+| 字段 | 部署前（V3.6.4） | **部署后（V3.6.5）** |
+|---|---|---|
+| `FunctionId` | `lam-eiye285p` | `lam-eiye285p`（未变） |
+| `Runtime` | `Nodejs16.13` | **`Nodejs16.13`** ✅ exact match |
+| `Handler` | `index.main` | **`index.main`** ✅ exact match |
+| `ModTime` | `2026-09-22 16:29:48` | **`2026-09-30 13:38:07`** |
+| `CodeSize` | `4013498` | **`4465434`** |
+| `Status` | `Active` | `Active` |
+| `Timeout` | `120` | `120` |
+| `CodeSha256`（CLI 字段） | `N/A` | `N/A`（`tfn detail` 不返回；以逐文件 parity + `index.js` 双 SHA 替代） |
+
+#### 5. 部署后源码 parity（LF-normalized · vs **授权 bundle**）
+
+```text
+线上源码文件                 = 91（部署前 76）
+bundle 文件                  = 91
+MISSING_REQUIRED_FILE        = 0
+UNEXPECTED_FILE              = 0
+CONTENT_DIFF                 = 0
+ONLINE_SOURCE_PARITY         = EXACT_MATCH
+UNEXPECTED_PACKAGE_DIFF      = 0
+
+index.js raw sha  online = eb1868cb0f386bee4b89452833a1f9167a8c17723a0381c8f659aef1d55c5178
+                  bundle = eb1868cb0f386bee4b89452833a1f9167a8c17723a0381c8f659aef1d55c5178  ✅
+index.js LF  sha  online = 7e339fb2a9eeb87d857d8a30205df5e1d4c67c65049f6a28c871066c7281d84c
+                  bundle = 7e339fb2a9eeb87d857d8a30205df5e1d4c67c65049f6a28c871066c7281d84c  ✅
+```
+
+> ⚠️ 上表 LF 行以证据件 `post-deploy-identity-gate.json` 为准（逐位一致）。
+> 修正记录（2026-09-30 · 同一轮内）：本行 `bundle` 侧曾误录为 `…d4c67e65049f…`（漏一个 `c`），
+> 已按证据件更正为 `…d4c67c65049f…`。**部署事实与判定不受影响**（online/bundle 双侧实为逐位一致）。
+
+#### 6. 部署后判定（§9）
+
+```text
+DEPLOYMENT_IDENTITY_VERIFIED            = true
+CURRENT_PRODUCTION_DEPLOYMENT_IDENTITY  = V3.6.5
+READY_FOR_V365_FIRST_CONTROLLED_RUN     = PENDING_OWNER_RUN_APPROVAL
+OWNER_RUN_AUTHORIZATION                 = false
+PRODUCTION_ACTIVATION_AUTHORIZATION     = NOT_GRANTED
+```
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | V3.6.4 production package `aa576c20599528a66737f154b31b8cca87f25c1cf50068093bc243ed7084caea`（已独立验证） |
+| `rollback_used` | **NO**（部署后身份核验全部 PASS） |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未执行 production run · ⛔ 未初始化 `active_run_pointer` · ⛔ 未写 `run_manifest` / `run_history` ·
+⛔ 未设置 `V365_ENFORCE_SWITCH_DATE` · ⛔ 未建立 `PROSPECTIVE_EPOCH` · ⛔ 未改 `param_config` ·
+⛔ 未改生产 schema · ⛔ 未创建/删除生产 collection · ⛔ 未 backfill · ⛔ 未改 CALC 文件 ·
+⛔ 未改 immutable lock · ⛔ 未部署任何其他 Cloud Function · ⛔ 未 commit / push / PR / merge / tag。
+
+> 证据件：`deliverables/v365-production-history/c021/{pre-deploy-gate,staged-deploy-input,post-deploy-identity-gate,authorization-ratification}.json`
+> 部署日志：`_v365-deploy/deploy-output.log` · 时点：`_v365-deploy/deploy-{started,finished}-at.txt`
+## 4. 补登区（backfill · 2026-10-05 · Owner `R1` 裁定）
+
+> **本节性质**：**治理记录修复**，⛔ **不是**新的 deployment authorization，⛔ **不**改变任何历史行的判定。
+>
+> **为什么需要补登**：本台账末条长期为 `D-009`（2026-09-30 · `runDecisionEngine` V3.6.5）。
+> 但 **2026-10-04 实际发生了两次生产部署**（`runGen1ShadowEod` / `adminGateway`），
+> 二者**当时均已有 Owner 授权、均已在当日工作日志留痕、且线上实测可复现**，唯独**未登记进本台账**
+> ⇒ 台账**滞后 2 次部署**。此滞后于 2026-10-05 只读复核线上身份时暴露（`ModTime` 与台账不符）。
+>
+> **补登依据（三条，全部为既存证据，本轮未新增任何生产动作）**：
+> 1. `.workbuddy/memory/2026-10-04.md` **§38**（`C3-R2 DEPLOY AUTHORIZED` → 19:05 部署成功）与 **§42**（`C2 DEPLOY AUTHORIZED` → 20:19 部署成功）；
+> 2. 2026-10-05 22:0x `tcb fn detail --json` **只读实测**（`ModTime` / `CodeSize` / `CodeInfo` 双 sha）；
+> 3. `_g1-current-online-baseline-20261005/`（本批 R2 产出的**当前线上**基线快照）。
+>
+> **补登纪律**：`D-001`…`D-009` **逐字节未动**（本区仅在文件末尾追加；后端校验 = 历史 36 184 B 的 sha256 `45ceb0d7…3527` 保持不变）。
+> `source_repo_sha` 一律标 **推定**，不得默认属实。
+
+### D-010 · 2026-10-04 · **C3-R2 CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `runGen1ShadowEod` only）
+
+> **本行为真实生产部署**（owner 于 2026-10-04 下发 `C3-R2 DEPLOY AUTHORIZED`）。**补登**：见 §4 抬头。
+> `supersedes`：无。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`C3-R2 DEPLOY AUTHORIZED`**（owner，2026-10-04）· 授权范围 = **仅** `runGen1ShadowEod` production deployment + 部署后只读回读 |
+| `authorization_evidence` | `.workbuddy/memory/2026-10-04.md` **§38**（19:05 条目） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runGen1ShadowEod`（**仅此一个**；⛔ 未部署 `adminGateway`、⛔ 未 EOD、⛔ 未进 C-2 / recovery） |
+| `deploy_input_method` | 解包 **`_g1-c2-impl-20261004/dist-functions/runGen1ShadowEod`**（⛔ 非 mutable working tree） |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy runGen1ShadowEod --dir <…\_g1-c2-impl-20261004\dist-functions\runGen1ShadowEod> --config-file <…\cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` | `3.8.5`（`c3b67f4e…d76af5`）· cwd = 仓库根 |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`[runGen1ShadowEod] Cloud function deployed successfully!`**（exit 0） |
+| `deployment_count` | **1**（单次；⛔ 未重试） |
+| `deployment_started/finished` | 2026-10-04 19:05（+08） |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | 部署前（2026-09-10 vintage） | **部署后（2026-10-04）** | 取法 |
+|---|---|---|---|
+| `FunctionId` | `lam-9mab98b1` | `lam-9mab98b1`（未变） | 2026-10-05 只读实测 |
+| `Runtime` | `Nodejs16.13` | `Nodejs16.13`（未变） | 同上 |
+| `Handler` | `index.main` | `index.main`（未变） | 同上 |
+| `Timeout` / `MemorySize` | `300` / `512` | `300` / `512`（未变） | 同上 |
+| `ModTime` | `2026-09-10 16:07:20` | **`2026-10-04 19:05:36`** | §38 + 2026-10-05 实测（一致） |
+| `CodeSize` | `3737350` | **`4079238`**（+341 888） | 同上 |
+| `Status` | `Active` | `Active` | 2026-10-05 实测 |
+
+#### 4. 代码身份（`index.js`）
+
+| 口径 | 值 |
+|---|---|
+| `index.js` RAW sha256 | `d74fe27392c9dd80a4a5f693d0306945b15f065e644556088c292dfc2c8871d0`（14756 B） |
+| `index.js` **LF** sha256 | `485244e4f79931b5f07c5216d83e6ce36f5ebb9112194d63a0f910e90eec33d7` |
+| 包内 CODE RAW（部署后回读） | `95275e02…85905`（部署前 `711ccd4f…ddf7`） |
+| 包内 CODE LF（部署后回读） | `b903d157…75080` |
+| `node_modules` 聚合 / `config.json` | `5efb85ae…a7eb` / `90deec0a…aae31` |
+| 部署后回读判定 | **与冻结 artifact 逐位一致**（`1625` 文件 / `1547` nm / `77` code，五项全 MATCH） |
+| `CodeSha256`（包级） | **`NOT EXPOSED BY CLI 3.8.5`**（`fn detail` 不返回；⇒ 以「CODE RAW + `index.js` 双 sha + `CodeSize`」为等价身份链） |
+
+#### 5. 配置 / 触发器 / 副作用
+
+| 字段 | 值 |
+|---|---|
+| `Trigger` | **未变**：1× timer `gen1-eod-weekdays-2220`（cron `0 20 22 * * 1-5 *`，`ModTime` 仍 `2026-09-17 13:38:04`） |
+| `Config` | **仅 1 项**：`InstallDependency` `TRUE → FALSE`（授权既定） |
+| `Environment` | 未变（`Variables = null`） |
+| `Runtime` | 未变（`Nodejs16.13` 前后一致） |
+| 其他 9 函数 | `ModTime` **全不变**（`adminGateway` 仍 `2026-09-08 11:32:23`） |
+
+#### 6. 本行为生产带来的语义变化（C3-R2）
+
+- 变更面 = `common/utils/gen1-data-health.js`（**唯一** require 消费者 = `runGen1ShadowEod`）。
+- 效果（2026-10-04 19:23 只读确证，见 §39）：`515880` 于同一交易日 `2026-09-30` **原地 upsert**，
+  `DATA_DEGRADED` / `STATISTICAL_MISSING` / `missing_features=["sideway_range"]` → **`DATA_OK` / `reason_code=null` / `missing_features=[]`**；
+  全 5 只标的均 `DATA_OK`。
+- 写入面 = 仅 `ml_shadow_signal`（原地 upsert，无新增行）+ `gen1_health_state`（1 条 update，`_id` 不变）；
+  **未写** `decision_result` / `portfolio_snapshot` / `runtime_status` / `param_config` / `trade_log` / `etf_daily`。
+- `current_health` / `runtime_data_health` `DEGRADED → OK`；但 **`latched_health` 保持 `DEGRADED`**（`wasDown ∧ nowUp ∧ manualReviewConfirmed≠true ⇒ recovery_rejected`，fail-closed 设计）
+  ⇒ **`canary_allowed = false`**，提升须走 `/api/admin/gen1/health/review`（**本轮未授权、未调用**）。
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | 部署前线上包（`2026-09-10` vintage，`CodeSize 3737350`，CODE RAW `711ccd4f…ddf7`）· 载荷源见 `%TEMP%/c3r2r7/pre_code/` |
+| `rollback_used` | **NO**（部署后逐位回读全部 MATCH） |
+
+> 证据件：`%TEMP%/c3r2r7/C3R2_DEPLOY_EXECUTION_20261004.md`（10097 B，断言 PASS）· `%TEMP%/c3r2r7/{pre_detail,post_detail}.json` · `{pre_code,post_code}/`
+> ⚠️ 上述为 **Temp** 路径，**不持久** ⇒ 持久化属独立工作项（见 R3）。
+
+---
+
+### D-011 · 2026-10-04 · **C-2 CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `adminGateway` only）
+
+> **本行为真实生产部署**（owner 于 2026-10-04 下发 `C2 DEPLOY AUTHORIZED`，基于已 PASS 的 `C2_FINAL_DEPLOY_PRE_CHECK`）。
+> 授权范围 = **仅** `adminGateway` production deployment + 部署后只读验收；⛔ 不含 Recovery / Decision Chain。**补登**：见 §4 抬头。
+> `supersedes`：无。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`C2 DEPLOY AUTHORIZED`**（owner，2026-10-04；⛔ 不得解释为 Recovery 或 Decision Chain 的授权） |
+| `authorization_evidence` | `.workbuddy/memory/2026-10-04.md` **§42**（20:1x 条目）；前置预检 §41（12 项全 PASS） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `adminGateway`（**仅此一个**；⛔ 未 `--all`、⛔ 未 `--runtime`） |
+| `deploy_input_method` | 解包 **`_g1-c2-impl-20261004/dist-functions/adminGateway`**（⛔ 非 mutable working tree） |
+| `payload_restore_source` | 生产 zip `89e4c6d9…9fd5`（= 部署前 `CodeSha256`；`CodeSize 4263152`）⇒ 恢复 `node_modules/**`(1703 文件) + `config.json` |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy adminGateway --dir <…\_g1-c2-impl-20261004\dist-functions\adminGateway> --config-file <…\cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` / cwd | `3.8.5` / 仓库根 |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ [adminGateway] Cloud function deployed successfully!`**（exit 0） |
+| `deployment_count` | **1**（单次；⛔ 未执行第二次） |
+| `deployment_started/finished` | `2026-10-04T12:19:23Z → 12:19:43Z`（= 20:19:23 → 20:19:43 +08；耗时 20 s） |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | 部署前（2026-09-08 vintage） | **部署后（2026-10-04）** |
+|---|---|---|
+| `FunctionId` | `lam-09ya1rgt` | `lam-09ya1rgt`（未变） |
+| `Runtime` / `Handler` | `Nodejs16.13` / `index.main` | 同（未变） |
+| `Timeout` / `MemorySize` | `60` / `256` | 同（未变） |
+| `ModTime` | `2026-09-08 11:32:23` | **`2026-10-04 20:19:37`** |
+| `CodeSize` | `4263152` | **`4366244`** |
+| `CodeSha256`（包级） | `89e4c6d9…9fd5` | **`3d1e234a1c579da55162d0b495a3c127f3c4b8b42cab346090685d0d0aa59873`** |
+| `Status` | `Active` | `Active` |
+
+> ★ `CodeSha256` 的唯一可得通道 = `queryFunctions(action=getFunctionDownloadUrl).codeSha256`；
+> `tcb fn detail` 与 MCP `getFunctionDetail` **均不返回**该字段。
+
+#### 4. 代码身份与全域对拍
+
+| 口径 | 值 |
+|---|---|
+| `index.js` RAW sha256 | `fb729d9d6f6a439547704128aeaa67d9f8208ee883b44eee8c4c813401d17dd4`（55845 B · 1205 CRLF · 0 lone-LF） |
+| `index.js` **LF** sha256 | `3a7696e9ec1534be819107bcbc8d2eceedb0de150c8ecdf77107b86dff643f1c` |
+| 部署后下载 `$LATEST` 包 | `size 4366244 == CodeSize` · `sha256 3d1e234a…9873 == CodeSha256` ⇒ 下载完整 |
+| 全部 **1777 文件**复算 | `ALL_RAW 5690d11a…1829` · `ALL_LF 23fe024c…594b` · `CODE_RAW` · `CODE_LF` · `NM_AGG` · `INDEX_JS.raw` · `INDEX_JS.lf` · `CONFIG_JSON.raw` ⇒ **ARTIFACT == DEPLOYED（全域）**；`index.js` 另作 `cmp` = IDENTICAL |
+| `CODE RAW` / `CODE LF`（artifact） | `9354fdab…bf040` / `83039485…ba2df` |
+| `node_modules` 条目 / 聚合 | `1703` / `e6928b94…d5a39d`（`ARTIFACT_NM_AGG == PRODZIP_NM_AGG` ⇒ `NM_PARITY = PASS`） |
+| `config.json` | `f6189fd9…3b20`（282 B · `timeout 60` · `envVariables={DECISION_ENV:"prod"}` · `triggers` 1× `http` `/adminGateway`） |
+
+> ★ 口径提醒：`CodeInfo` **只能覆盖 `index.js`**，**覆盖不到 `node_modules`**；
+> 要证明「整包」一致，唯一办法 = **下载 `$LATEST` 包 + 跑同一个 fingerprint 函数**（本行即如此做的）。
+
+#### 5. 语义变化（C-2）
+
+- **新增生产路由**：`POST /api/admin/gen1/health/review`（受控人工恢复）⇒ 线上 `index.js` 命中 **4** 处
+  （`POST_ONLY` Set / 405 闸门 / 分派 `reviewGen1Health(body)` / impl）；部署前 **ABSENT**；**仅 POST**。
+  ⛔ **未调用**（本轮未做 Recovery）。
+- `GET /api/admin/gen1/health` 未变（两侧同存）。
+- 环境变量 `DECISION_ENV=prod` **仍存在**（`config.json` 为**惰性载荷**：`cloudbaserc.json` 无 `envVariables` ⇒ CLI 不下发 `Environment`）。
+- `Triggers` `[] ↔ []` **未变**（触发器只来自 `cloudbaserc.json`，该文件无 `triggers` 键）。
+  ⚠️ **既存偏差（非本轮引入）**：`config.json` 声明 1× http trigger `/adminGateway` 而线上 `Triggers` 恒空。**保留原样**，属独立项。
+- `Auto install dependencies` 部署前后一致 = `FALSE`。
+
+#### 6. 其他 9 函数 = UNCHANGED
+
+同时刻取 10 函数列表逐行 `diff`：**恰 1 行变化**（`adminGateway` 的 `ModTime`）。
+`runDecisionEngine`(09-30 13:38:07) · `runGen1ShadowEod`(10-04 19:05:36) · `runGen2ShadowEod`(09-08 11:30:54) ·
+`extractFundamental`(09-09 10:22:40) · `fetchFundamentalNews`(09-08 11:34:24) · `apiGateway`(09-08 11:32:53) ·
+`materializeIndicators`(09-08 11:35:24) · `fetchRealtimeData`(09-08 11:34:52) · `fetchDailyData`(09-10 14:27:12) **全部未变**。
+（线上共 **10** 个函数；**无** `runIntegratedShadowEod`。）
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | 部署前线上包 `sha256 = 89e4c6d9…9fd5`（`CodeSize 4263152`）· 载荷源 `_v365-audit-20260930/online/adminGateway.zip`（`_cb-connect-20260921/readpath-20261002/adminGateway.zip` 第二份完全相同） |
+| `rollback_used` | **NO**（部署后身份 / route / runtime / config / triggers 全部 PASS） |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未调用 `/api/admin/gen1/health/review` · ⛔ 未 Recovery · ⛔ 未 manual review · ⛔ 未 EOD ·
+⛔ 未 decision-chain Canary / Effective · ⛔ 未改 latch / Authority / selector / `FROZEN_PARAM_KEYS` / V364 lock ·
+⛔ 未 merge / tag / rebase / cherry-pick · 除单次 `adminGateway` 部署外**无任何额外 production write**。
+
+> 证据件：`%TEMP%/c2deployrun/C2_PRODUCTION_DEPLOYMENT_20261004.md`（9569 B / 208 行，断言 PASS）·
+> `%TEMP%/c2deployrun/{pre,post}_fn_list.txt` · `{pre,post}_detail_adminGateway.{txt,json}` · `deployed_adminGateway.zip` · `deployed/` · `sanity_fp.json` · `deployed_fp.json`
+> 前置预检：`%TEMP%/c2restore/C2_FINAL_DEPLOY_PRE_CHECK_20261004.md`（14925 B / 261 行，12 项全 PASS）
+> ⚠️ 上述均为 **Temp** 路径 ⇒ 持久化属独立工作项（见 R3）。
+
+---
+
+### D-012 · 2026-10-06 · **D-D CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `runDecisionEngine` + `adminGateway`）
+
+> **本行为真实生产部署**（owner 于 2026-10-06 下发 `D-D = AUTHORIZED`）。
+> 授权范围 = **`DEPLOY_SET = {runDecisionEngine, adminGateway}`**；`runGen1ShadowEod` = **NO DEPLOY**（线上已 `ALREADY_DEPLOYED_MATCHES_RC`）。
+> `supersedes`：无。**性质**：**补登**（部署事实发生于 2026-10-06，本行为事后追加登记；本补登**不产生**任何新授权）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`D-D = AUTHORIZED`**（owner，2026-10-06；⛔ 不得解释为任何后续 Gate 的授权） |
+| `authorization_evidence` | `_g1-dd-deploy-20261006/DD_EXECUTION_RECORD.md`（执行证据件，落于载体树 / RC 树外） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine` + `adminGateway`（**仅此两个**；⛔ 未 `--all`、⛔ 未 `--runtime`；`runGen1ShadowEod` 明确排除） |
+| `deploy_input_method` | RC 树外干净工作区 `_g1-dd-deploy-20261006/ws`（`inputs_verified = 131/131` tracked 文件 LF 归一后 ≡ RC HEAD blob；`node scripts/build-cloudfunctions.js` sanctioned） |
+| `payload_restore_source` | `node_modules/**`(各 1703 文件) + `config.json` 从**当前线上包**恢复（rde: `_v365-audit-20260930/online/runDecisionEngine.zip`；ag: `_g1-rollback-artifacts-20261005/.../adminGateway.C2_0390a32.3d1e234a.zip`） |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy <fn> --dir <…_g1-dd-deploy-20261006/ws/dist-functions/<fn>> --config-file <…ws/cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` / cwd | `3.8.5` / 仓库根 |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ … Cloud function deployed successfully!`**（两函数各 exit 0 · count=1） |
+| `deployment_count` | **2**（`runDecisionEngine` 1 次 + `adminGateway` 1 次；⛔ 无第二次） |
+| `deployment_started/finished` | rde `2026-10-06T01:01:02+08 → 01:03:23+08`；ag `2026-10-06T01:05:18+08 → 01:05:39+08` |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `FunctionId` | `lam-eiye285p`（未变） | `lam-09ya1rgt`（未变） |
+| `Runtime` / `Handler` | `Nodejs16.13` / `index.main`（未变） | 同（未变） |
+| `Timeout` / `MemorySize` | `120` / `256`（未变） | `60` / `256`（未变） |
+| `ModTime`（前 → 后） | `2026-09-30 13:38:07` → **`2026-10-06 01:01:17`** | `2026-10-04 20:19:37` → **`2026-10-06 01:05:34`** |
+| `CodeSize`（前 → 后） | `4465434` → **`4468203`** | `4366244` → **`4451179`** |
+| `Status` | `Active` / `Available` | `Active` / `Available` |
+
+#### 4. 代码身份与全域对拍
+
+| 口径 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `index.js` RAW sha256 | `9cebff3b…`（103258 B · 1781 CRLF · 0 lone-LF） | `692893fa…`（66218 B · 1372 CRLF · 0 lone-LF） |
+| `index.js` **LF** sha256 | **`32168b2c1213157cfa756295725c6226c6f7fd11df5a3b87ec898c2e7043e95f`** | **`121e6f0de67913de168b1fbb3a12a9eba41629da1068322d9ac48b949c53999a`** |
+| 部署包指纹 `ALL_RAW` | `fd68ca0f0aed7dc4…` | `b095394a85da390a…` |
+| 包文件数（code / nm） | `1796`（93 / 1703） | `1793`（90 / 1703） |
+| `source_parity`（部署制品 vs 线上 `$LATEST`） | **`EXACT_MATCH 1796/1796`**（ONLY_ARTIFACT 0 / ONLY_ONLINE 0 / REAL_DIFF 0） | **`EXACT_MATCH 1793/1793`**（同上全 0） |
+| `source_repo_sha`（推定 = RC HEAD @ D-D） | `dd610cb5dd0a782459d3789b94de3e1a3170c539` | 同 |
+
+#### 5. 语义变化（D-D 代码变化面）
+
+- `runDecisionEngine`：`index.js` + `common/utils/gen1-guarded-seal.js`(`d51b406b`) + `common/utils/gen1-data-health.js`(`3f2ff5e4`) + **新增** `GEN1_MODEL_SHA.json`。
+- `adminGateway`：`index.js` + `common/schema.js` + `common/utils/datasource.js` + `common/utils/gen1-guarded-seal.js` + `common/utils/v361-run-context.js` + **新增 16 个 common 文件**（`ONLY_RC = 16`）。
+- `runGen1ShadowEod`：**零变化**。
+
+#### 6. 其他 8 函数 = UNCHANGED
+
+同时刻 10 函数列表逐行 `diff`：**恰 2 行变化** = `DEPLOY_SET`。
+`runGen1ShadowEod`(10-04 19:05:36 · 线上 LF `485244e4…`) 仍 `ALREADY_DEPLOYED_MATCHES_RC` 未变。
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | rde 部署前线上包 LF `7e339fb2…d84c`（V3.6.5 · 载荷 `runDecisionEngine.V365.e996e88ae808.tar`）；ag 部署前线上包 LF `3a7696e9…3f1c`（C-2 · 载荷 `adminGateway.C2_0390a32.3d1e234a.zip`） |
+| `rollback_used` | **NO**（部署后身份 / 整包对拍 / runtime / config / triggers 全部 PASS） |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未开 production write / auto execution / broker wiring / guarded-effective ·
+⛔ 未改 Authority · ⛔ 未改 `FROZEN_PARAM_KEYS` · ⛔ 未改 production configuration ·
+⛔ 未执行任何 trading / broker 动作 · ⛔ 未修复/绕过 health gate（`gen1_health_status = DEGRADED` 保持原样） ·
+⛔ 未 commit / push / tag / merge · 除 `DEPLOY_SET` 两函数部署外**无任何额外 production write**。
+
+> **γ 口径（Owner 2026-10-07 裁定 = γ）**：`authority state` 与 `Gen-1 effective state`
+> **不是本台账的一等字段** ⇒ 本行**不新增** `authority_state` / `gen1_effective_state` 字段；
+> 二者继续作为 **deployment boundary / production reconciliation 的独立证据**
+> （D-D 已载：`gen1_authority = CANARY` · 全 effective 旗标 `false` · `updated_at = 2026-10-01T00:00:22.690Z`
+> 部署前后一致 ⇒ 无 Authority 写入）。`configuration state` 同样不扩展 schema，按既有字段（`config.json` / `Triggers` / `Environment`）填写。
+
+> 证据件：`_g1-dd-deploy-20261006/DD_EXECUTION_RECORD.md` · `deploy_package_fingerprint.json` ·
+> `postdeploy_parity_{runDecisionEngine,adminGateway}.json` · `logs/dd1_deploy_runDecisionEngine.log` · `logs/dd2_deploy_adminGateway.log`
+
+---
+
+### D-013 · 2026-10-08 · **DG-8 CONTROLLED DEPLOYMENT 已执行**（owner 授权 · 单次 · `runDecisionEngine` + `adminGateway`）
+
+> **本行为真实生产部署**（owner 于 2026-10-08 下发 `DG-8 DEPLOYMENT = AUTHORIZED`）。
+> 授权范围 = **`DEPLOYMENT_SCOPE = {runDecisionEngine, adminGateway}`**；`runGen1ShadowEod` = **NO DEPLOY**（线上仍 `485244e4…`）。
+> `supersedes`：无。**性质**：**当期登记**（部署事实发生于 2026-10-08，同日登记）。
+
+#### 1. 授权与绑定
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | **`DG-8 DEPLOYMENT = AUTHORIZED`**（owner，2026-10-08；⛔ 不得解释为任何后续 Gate 的授权） |
+| `authorization_evidence` | `_g1-da-v367-dg8-final-deployment-preflight-readonly-20261008/DG8_FINAL_DEPLOYMENT_PREFLIGHT_REPORT.md`（预检 PASS）· `_g1-da-v367-dg8-deployment-20261008/DG8_DEPLOYMENT_REPORT.md`（执行 + C1–C7） |
+| `production_env` | `tradingview-etf-d0fa42yy57cbc11b` |
+| `function_name` | `runDecisionEngine` + `adminGateway`（**仅此两个**；⛔ 未 `--all`、⛔ 未 `--runtime`） |
+| `deploy_input_method` | 载体树外 clean export `git archive 5aa1ad10`（927 文件）→ `node scripts/build-cloudfunctions.js`（sanctioned，11 包 parity PASS） |
+| `payload_restore_source` | `node_modules/**`（各 1703 文件）+ `config.json` 从**当前线上包**恢复（`tcb fn code download` 只读 `$LATEST`） |
+
+#### 2. 部署执行
+
+| 字段 | 值 |
+|---|---|
+| `deploy_command` | `tcb fn deploy <fn> --dir <…_g1-da-v367-dg8-clean-build-20261008/source/dist-functions/<fn>> --config-file <…cloudbaserc.json> --force -y -e tradingview-etf-d0fa42yy57cbc11b --install-dependency false` |
+| `tcb_version` / cwd | `3.8.5` / 仓库根（凭证按 cwd 分档；与 D-010 / D-011 / D-D 同口径） |
+| `deploy_mode` | `COS 上传` |
+| `deploy_result` | **`✔ … Cloud function deployed successfully!`**（两函数各 exit 0） |
+| `deployment_count` | **2**（`runDecisionEngine` 1 次 + `adminGateway` 1 次；⛔ 无第二次） |
+| `deployment_started/finished` | rde `2026-10-08T11:39:25+08 → 11:39:50+08`；ag `2026-10-08T11:40:29+08 → 11:40:52+08` |
+
+#### 3. 部署前 → 部署后（线上元数据）
+
+| 字段 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `ModTime`（前 → 后） | `2026-10-06 01:01:17` → **`2026-10-08 11:39:46`** | `2026-10-06 01:05:34` → **`2026-10-08 11:40:48`** |
+| `CodeSize`（前 → 后） | `4468203` → **`4470485`** | `4451179` → **`4453461`** |
+| `Status` | `Active` | `Active` |
+
+#### 4. 代码身份与全域对拍
+
+| 口径 | `runDecisionEngine` | `adminGateway` |
+|---|---|---|
+| `index.js` RAW sha256 | `9cebff3b…`（103258 B）**未变** | `692893fa…`（66218 B）**未变** |
+| `index.js` **LF** sha256 | `32168b2c1213157cfa756295725c6226c6f7fd11df5a3b87ec898c2e7043e95f` **未变** | `121e6f0de67913de168b1fbb3a12a9eba41629da1068322d9ac48b949c53999a` **未变** |
+| 包文件数（code / nm） | `1796`（93 / 1703） | `1793`（90 / 1703） |
+| `source_parity`（`fn code download` 全量 vs 构建包） | **`EXACT_MATCH 1796/1796`** | **`EXACT_MATCH 1793/1793`** |
+| 部署包 `sha256`（zip） | `dc63c095…99fffd` | `b94f586a…11c509` |
+| `source_repo_sha` | `5aa1ad100443f45ec2b690ff6bba73b85a19e04b`（**已确证**：`git ls-remote origin refs/heads/gen1-da-rc-impl-20261006` = 该 sha） | 同 |
+
+> ★ **本轮为「common-only」变更**：两函数 `index.js` 与部署前**逐字节未变**（改动全在 `common/`）⇒ `CodeInfo` / `index sha` **不变属预期**；
+> 部署事实由 `ModTime` / `CodeSize` 变化 **及** `fn code download` 全量对拍（§4 `EXACT_MATCH`）双重证明（⛔ 不可只比 index sha）。
+
+#### 5. 语义变化（DG-8 代码变化面）
+
+- 两包与**部署前线上包**逐文件对拍：**唯一差异 = 3 个 shared common 文件** = `common/utils/cn-trading-calendar.js` · `common/utils/datasource.js` · `common/utils/v365-contracts.js`（`ENGINE_VERSION` `v3.6.5` → **`v3.6.7`**）。
+- ⚠️ 该 3 件属 **O-2 CALC / DA-Health 修复轴**的 change surface，**本轮不作为部署目标**；其中 `cn-trading-calendar.js` 经 rde 运行时 require 链（`index.js:116 → common/utils/v365-run-integrity.js:28 → cn-trading-calendar.js`）作为 **dependency** 进入目标包。
+- `materializeIndicators` / `fetchRealtimeData` = **change surface 内，但 NOT DEPLOYED**。
+
+#### 6. 其他 8 函数 = UNCHANGED
+
+同时刻 10 函数列表逐行 `diff`：**恰 2 行变化** = `DEPLOYMENT_SCOPE`。
+`runGen1ShadowEod`（`2026-10-04 19:05:36` · 线上 LF `485244e4…33d7`）未变。
+
+#### 7. 回滚参考（未使用）
+
+| 字段 | 值 |
+|---|---|
+| `rollback_target` | rde `25b8327b05be9523180b323755e40e71e2e97bbe355b99a1360491fc6c8fe690`（tar · ustar · 92 files）；ag `00ca008c828b5adaf0c5f96af9cba0469cafd8433997b89d09ca5228971c7f4a`（zip · 2128 entries） |
+| `rollback_binding` | rde `8a08de7c…2c23` / ag `b347a237…1c4d`（`_g1-rollback-remediation-20261007/`） |
+| `rollback_binding_target_state` | **PRE_DEPLOY 线上身份**（rde LF `32168b2c…43e95f` / ag LF `121e6f0d…c53999a`）—— ⚠️ **不含**本轮 DG-8 变更；绑定**不随部署前移** |
+| `rollback_used` | **NO** |
+
+#### 8. 本次记录**未**做的事（边界声明）
+
+⛔ 未开 production write / auto execution / broker wiring / guarded-effective ·
+⛔ 未改 Authority · ⛔ 未改 `active_run_pointer` · ⛔ 未改 `FROZEN_PARAM_KEYS` · ⛔ 未改 production configuration ·
+⛔ 未执行任何 trading / broker 动作 · ⛔ 未 commit / push / tag / merge / refreeze ·
+除 `DEPLOYMENT_SCOPE` 两函数部署外**无任何额外 production write**。
+
+> **γ 口径（Owner 2026-10-07 裁定 = γ）**：`authority state` / `Gen-1 effective state` **不是本台账一等字段** ⇒ 本行**不新增**对应字段；
+> 二者作为 **deployment boundary 证据**记录如下（部署前后**逐字一致** ⇒ 无 Authority 写入）：
+> `gen1_authority = CANARY` · 全 effective 旗标 `false` · `independent_events = 0` · `updated_at = 2026-10-01T00:00:22.690Z`；
+> `active_run_pointer`：`engine:2026-09-30:b1790776862980` / `revision 1` / `updated_at = 2026-09-30T14:01:11.797Z`（**未变**）。
+
+> 证据件：`_g1-da-v367-dg8-deployment-20261008/{DG8_DEPLOYMENT_REPORT.md, evidence/DG8_DEPLOYMENT_EVIDENCE.json, evidence/postdeploy_verify.json}` ·
+> 日志：`logs/dg8a1_deploy_runDecisionEngine.log` · `logs/dg8a2_deploy_adminGateway.log`
+
+---
+
+## 5. 补登后状态（as-of 2026-10-05）
+
+| 项 | 值 |
+|---|---|
+| 台账末条 | **D-011** |
+| 已登记部署总数 | **11**（D-001…D-011）；其中**真实生产部署** = D-001 / D-002 / D-004 / D-009 / **D-010** / **D-011** |
+| **当前线上**三函数身份 | 以 `_g1-current-online-baseline-20261005/`（R2 产出）为**唯一**参照 |
+| 本补登的性质 | **治理记录修复**；`DEPLOYMENT_AUTHORIZED = NO`（本次补登**不产生**任何新授权） |
+
+---
+
+### D-014 · 2026-10-27 · V3.6.8 后端部署（仅 apiGateway / runDecisionEngine）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对新 40 位 SHA 发布请求回复“继续”；原 `3eae94a…` 因远端 CI 失败未部署，授权未自动转移；修复 CI 并准备新包后另行确认 |
+| `source_repo_sha` | `ffd2b4ff626c124629af4c4073cc42066952d3b4`（干净提交，包内 `RELEASE_SOURCE.json` 自述，与上传后逐文件对拍交叉验证） |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / **apiGateway、runDecisionEngine** |
+| `deploy_command` | `tcb fn deploy <fn> --dir dist-functions/<fn> --config-file cloudbaserc.json --force --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b`，逐函数执行一次 |
+| `ci` | PR #68 / Actions #184，Node16/22 × Python3.11/3.12 四组通过；CI portable 与本机完整历史验收分别披露，不混称 |
+| `apiGateway ModTime / CodeSize` | `2026-10-12 12:54:17 / 4446521` → **`2026-10-27 11:51:44 / 4455096`** |
+| `runDecisionEngine ModTime / CodeSize` | `2026-10-08 11:39:46 / 4470485` → **`2026-10-27 11:53:18 / 4475744`** |
+| `source_parity` | 上传后独立 `fn code download`：apiGateway **EXACT_MATCH 1796/1796**；runDecisionEngine **EXACT_MATCH 1799/1799**；包括依赖和配置的完整文件树，0 差异 |
+| `apiGateway candidate_zip_sha256` | `7ee0703c12f596c3eebd2e5fb304a6376f80a92ae7cf2df13abccce05f067362` |
+| `runDecisionEngine candidate_zip_sha256` | `db33a2ef8f2ec39263707df53ff3df8653587965348f021d5651adf042a74cac` |
+| `apiGateway rollback_zip_sha256` | `d2b7929065cd470b302fe89a8e7e5757c6634444eb370d1f3a930f742f2a8d37` |
+| `runDecisionEngine rollback_zip_sha256` | `093ca32f3afb5afcf724ce6015f47f42fb2ee080480496ad17728284a3e3ec3b` |
+| 配置 | 两函数 Nodejs16.13 / index.main / 256MB；timeout 30s / 120s；环境变量、触发器及上述配置前后逐项相同 |
+| 只读 API 验收 | 513310 的 2026-10-01~2026-10-27 历史 13 条，`history.status=OK`；旧数组响应同样 13 条；dashboard pointer revision 14、无 latest fallback |
+| 版本分轴 | API 包 V3.6.8 + 本次 SHA；已有正式结果发布 V3.6.7 / 策略族 V3.6.1。未将网关包版本填入旧 run |
+| 后续状态 | 主引擎新自然 run 的 manifest/history release、source_commit 和 context hash **PENDING_NEXT_NATURAL_RUN**；未人工调用生产决策 |
+| `rollback_used` | **NO**；ZIP 是部署前导出的完整目录重封装，未声称与原云端压缩字节相同或已做回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/release-ffd2b4f/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,execution/}`；候选 ZIP、逐文件指纹及回滚 ZIP 不公开入库 |
+
+部署前后生产 pointer、runtime/authority 记录逐字一致，作为边界证据保存。观察的 `adminGateway`、`materializeIndicators`、`runGen1ShadowEod` 的代码元数据未变；本行不把三函数观察扩称全环境核验。未部署前端，未合并 master，未做生产资格或 ML 权限升格。
+
+本记录为后续台账提交；它不改变以上已部署源码 SHA。前端独立批次仍须绑定其候选和回滚身份。
+
+---
+
+### D-015 · 2026-10-27 · V3.6.8 前端独立发布
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对独立前端请求及完整 SHA 明确回复“批准”；与 D-014 两函数授权分开 |
+| `source_repo_sha` | `ddc8f32ba38bf67bbabd6636fbde82022a0b2d30`（部署前工作区干净；相对 D-014 源码仅补充两份文档，前端源码无新增改动） |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / 静态托管根目录前端 **67 文件**；无云函数部署 |
+| `build` | Node22 / Vite production / `VITE_ENABLE_REWRITE_ENTRY=1`；保持 Rewrite 根入口和 legacy / rewrite 独立入口 |
+| `deploy_command` | `tcb hosting deploy web/dist --entry legacy.html,rewrite.html,index.html --verify -e tradingview-etf-d0fa42yy57cbc11b`；先资源后入口；无 prune、无删除、无路由配置更改 |
+| `deploy/mod_time` | 三入口 `2026-10-27T05:11:38Z`（上海 **13:11:38**）；CLI exit 0，完成于 `05:11:40.607256Z` |
+| `candidate_zip_sha256` | `39680b3fcd8f74369c2ae0de35cb0b768df7ab3fcf428433d290afe79143a27f` |
+| `frontend_source_inventory_sha256` | `6c13cf2887e374fbb6350f78af77096f0ae356ee691128027cbd571f9fde7d73`（284 项输入） |
+| `source_parity` | 发布后从生产域名独立下载全部 67 文件，逐个原始 SHA256 与批准清单 **EXACT_MATCH 67/67**，0 差异 |
+| 托管资源边界 | 原 **2,025 key 全保留**，新增 36 项，总 2,061；候选范围外对象元数据、网站文档/域名配置未变 |
+| 浏览器验收 | 生产首页实际取数正常；策略族 V3.6.1 / 已有正式结果发布 V3.6.7 分开显示；513310 历史 47 条，覆盖至 2026-10-26；Legacy 入口正常。平台测试域名访问提示确认后访问，未改变安全配置 |
+| `ci` / 前端检查 | Actions #185 四组 Node16/22 × Python3.11/3.12 成功（portable 范围另行披露）；前端 23/23 suite、显式 Rewrite 根入口构建通过 |
+| 回滚 ZIP SHA256 | `d391567c11494cff146b08b38cf9bc87aa764461be8d2194798e919dad35c4c2` |
+| 回滚覆盖 | 三个发布前入口、递归资源闭包、候选覆盖的已有 key，共 67 文件；捕获时逐个匹配提供方大小及 MD5。不是全部历史孤立资源；新内容指纹资源保留不妨碍恢复旧入口 |
+| `rollback_used` | **NO**；无实际回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/frontend-ddc8f32/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,production-history.png,execution/}`；快照位于相邻 `frontend-ffd2b4f/` |
+
+观察的五个后端函数代码/配置元数据及生产 pointer、runtime/authority 记录部署前后相同。后端部署源码仍为 D-014 的 `ffd2b4f…`，没有因本次前端或台账更新变化。主引擎新 run 的版本元数据继续等待自然运行；未人工触发决策，未更改策略或 ML 权限。
+
+已知后续问题：现存 K 线接口按升序截取最早 N 根，数据库行情并非因此缺失；513310 最新库内交易日 2026-10-27，而展示窗口止于 2024-08-27。本前端批次如实保留过期标记，未声称已修复；另列下一 API 修复批次。
+
+---
+
+### D-016 · 2026-10-27 · K 线最新窗口修复（仅 apiGateway）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 对 API 单函数批次及 40 位 SHA 明确回复“批准”；不沿用此前前端授权 |
+| `source_repo_sha` | `49e7c765c586bb81dc707849992fa7386b9a663c`，部署前干净提交；沿用 V3.6.8 工程版本，以源码和包指纹区分补丁 |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / **apiGateway 一函数** |
+| 改动 | `getKline` 按日期降序取最新日线 320 / 周线 260，再逆序返回；保留原 payload、日线 null-close 过滤与错误语义 |
+| `deploy_command` | `tcb fn deploy apiGateway --dir dist-functions/apiGateway --config-file cloudbaserc.json --force --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b`，执行一次、exit 0 |
+| `ModTime / CodeSize` | `2026-10-27 11:51:44 / 4455096` → **`2026-10-27 13:40:33 / 4455196`** |
+| `candidate_zip_sha256` | `0ea5509e8c0021a5159cbfc1acaa4d7df196145c2afe577ba3fbac7b2312b2ae` |
+| `source_parity` | 上传后独立下载 **EXACT_MATCH 1796/1796**，每个文件按原始 SHA256 对拍，0 差异；相对部署前仅 `index.js` / `RELEASE_SOURCE.json` 不同 |
+| 配置 | Nodejs16.13 / index.main / 30s / 256MB；环境变量、触发器及配置逐项不变 |
+| 验证 | 原代码 321 根日线 case 确认失败；修复后本机完整 Node **82/82**，Actions #187 Node16/22 × Python3.11/3.12 四组成功；实际构建包真实行情离线回放通过 |
+| 线上日/周线 | 日线 **320 根，2025-07-02~2026-10-27**；周线 **210 根，2023-05-12~2026-10-26**，与最新数据库日期窗口一致、升序；浏览器截至日期为 2026-10-27，标记数据新鲜 |
+| 其他只读回归 | 历史 2026-10-01~27 的 13 条、history.status=OK、旧数组兼容；API source 为本补丁，既有正式结果 v3.6.7 / 策略族 v3.6.1；pointer 未变、无 latest fallback |
+| 回滚 ZIP SHA256 | `cbe2d5e0ecdbfbb82e4e80beab632363bb942a73ba110e1ed7e1cb8001980389`；本轮重新下载 D-014 线上完整目录后封装，逐项匹配先前已验收的 1,796 文件 |
+| `rollback_used` | **NO**；未声称云端原始 ZIP 压缩字节同一或实际回滚演练 |
+| evidence | 仓外 `_v3-core-review-20261027/kline-window/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,production-kline.png,execution/}` |
+
+本行解决 D-015 记录的 K 线窗口问题，不改写该行当时事实。其他四个已观察函数的代码/配置元数据、全部前端托管对象及生产 pointer/runtime/authority 记录前后相同。未部署主引擎或前端、未做行情写入、未改策略或 ML 权限、未人工调用生产决策。
+
+主引擎部署源码仍为 D-014 的 `ffd2b4f…`，其新 run 的 release/source/context 元数据继续等待自然运行验收；API 包的新提交不替代生产 run 身份。本条及后续文档提交不改变已部署的 API 源码 SHA。
+
+---
+
+### D-017 · 2026-10-27 · 独立 Node 24 API 探针（无生产切流）
+
+| 字段 | 值 |
+|---|---|
+| `authorization` | owner 在绑定完整 SHA、包指纹和仅新建/固定只读调用的请求后回复“继续”；按该明确范围执行，不沿用旧批次授权 |
+| `wrapper_source_repo_sha` | `17144395c02571f6666e27010c4e9cec9a65cdc3`，部署前干净提交 |
+| `base_api_source_repo_sha` | `49e7c765c586bb81dc707849992fa7386b9a663c`；原 API 的 RELEASE_SOURCE.json 保留该身份，新增 RUNTIME_PROBE_SOURCE.json 单独记录 wrapper |
+| `production_env` / `scope` | `tradingview-etf-d0fa42yy57cbc11b` / 仅新建 **apiGatewayRuntime24**，Event 类型；不是生产流量入口 |
+| `deploy_command` | `tcb fn deploy apiGatewayRuntime24 --dir <approved-candidate> --config-file <private-config> --runtime Nodejs24.11 --install-dependency false -e tradingview-etf-d0fa42yy57cbc11b --json`；无 force/all/path/httpFn，执行一次、exit 0 |
+| `AddTime / ModTime / CodeSize` | **2026-10-27 18:11:43 / 2026-10-27 18:11:43 / 4456487**（北京时间）；创建前目标不存在 |
+| 配置 | Nodejs24.11 / runtime-probe.main / 30s / 256MB / Event / 依赖安装 FALSE；环境和既有角色与私有批准配置相符，零触发器 |
+| `candidate_zip_sha256` | `ce61dfb72521015cf08ca6ca77f686a0fc665865ab293bea6e18b27c68bd6d20` |
+| `source_parity` | 创建后独立下载 **EXACT_MATCH 1798/1798**，原始 SHA256 零差异。相对刚重新下载核验的 D-016 API：仅增加 runtime-probe.js、RUNTIME_PROBE_SOURCE.json，替换嵌入 config.json 以清空 triggers/环境值；API/common/SDK 字节不变 |
+| 实际云端运行时 | **v24.11.1**；SDK **2.11.0** 完成本批真实鉴权与多集合读取，未升级依赖 |
+| 固定只读验收 | 七类用例，8 次调用（含首尾 constants），观察到 2 实例；看板权威与五个 production card、版本身份与正式 API 相同；notFound=404 |
+| K 线 / 历史 | 日线 320 根截至 2026-10-27；周线 210 根截至 2026-10-26；payload 与稳定正式 API 前后响应一致，日期与最新库内窗口一致、升序；增强历史 13 条 / OK，旧数组 13 条，均相同 |
+| `ci` / 本机 | 部署源码 Actions #190 Node16/22/24 × Python3.11/3.12 六组成功（portable 历史边界保留）；本机完整 Node 84/84、封包 Node22/24 离线回放通过 |
+| 生产边界 | 原 11 函数列表代码/配置字段未变；五个重点函数 Runtime/Handler/内存/超时/环境/触发器/角色及代码元数据不变；托管对象和已列出的 HTTP 服务不变；pointer revision 14、runtime 状态不变。无生产决策调用、路由切换、timer 变更或资源删除 |
+| 回退 / 清理 | 没有生产路由指向探针；未执行回滚或删除。失败时停止调用并留存诊断；清理为独立明确操作，不删除/重建原生产函数 |
+| evidence | 仓外 `_v3-core-review-20261027/runtime24-probe/{DEPLOYMENT_REPORT.json,DEPLOYMENT_REPORT.md,read-verification.json,creation-verification.json,probe-download/}` |
+
+本条仅证明隔离 API 读取在目标运行时通过，不能把固定 case 探针直接接入前端，也不代表全部函数/SDK 写入能力、策略或 ML 权限已获新资格。主引擎新 source 的 manifest/history 仍各 0 条，保留自然运行待验收。正式 API 候选、现有 /apiGateway 事件映射与入口回退须另批准备；本条文档提交不改变已部署 wrapper 或原 API 的源码身份。
+
+---
+
+### D-018 · 2026-10-28 · 盘前发布交易日对齐（仅 runDecisionEngine）
+
+owner 对完整源码 `7627356b9cc0441d52368a96e60105254b19f2aa`、候选包和单函数范围回复“批准”后，执行一次 runDecisionEngine 更新，exit 0。ModTime `2026-10-28 09:44:24`（北京时间），CodeSize `4475917`。
+
+上传后独立下载 **EXACT_MATCH 1799/1799**，原始 SHA256 零差异；相对旧包仅 index.js / RELEASE_SOURCE.json 改变。保留 Nodejs16.13 / index.main / 120s / 256MB，以及环境变量、触发器、角色；其余五个已观察函数的配置和代码元数据未变。托管对象、已列出的 HTTP 服务未变。
+
+候选 ZIP SHA256：`7f88b3fc0c20f76facb3a44e79ff54d9cebf35891340c2c7fef8902a54035358`；回滚 ZIP SHA256：`46300f09ddab2496cc48e6a89975d40a89d86af794fc30e5bc04b1f9d2420441`，未使用回滚、未进行实际回滚演练。本机完整 Node 85/85、源码 Actions #193 六组 CI 通过，portable 的私有历史 NOT_RUN 边界保留。
+
+部署前后 pointer 相同，runtime 记录相同。未人工调用生产决策、未回写历史记录；新源码自然运行验收 **PENDING**。后续核验交易日一致、validation_passed/promoted、history 与 pointer/前台读链一致，不能把包核验当作业务验收。
+
+证据：仓外 `_v3-core-review-20261027/morning-date-fix/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,execution/}`。上传源码身份不随后续文档提交变化；PR 保持 draft、未合并。
+
+## D-018 自然运行验收补记（2026-10-29）
+
+只读复查确认：新补丁源码 `7627356b9cc0441d52368a96e60105254b19f2aa` 已自然运行并正式发布两次：10-28 22:01:08（北京时间）revision 16，10-29 08:00:31 revision 17。两次 manifest 均 COMPLETE / validation_passed=true / reason=ok，history 均 promoted=true、read_after_write_consistent=true，交易日为 2026-10-28。
+
+今早正式 pointer 为 revision 17；五条 decision_date / calc_date、manifest.expected_trade_date 和组合 snapshot_date 全为 2026-10-28，5+1 记录绑定同一 run。原生产域 API 读取同一权威及 source/context，latest_fallback_used=false；513310 当日增强历史为 OK、无缺口，返回同一 run。工程版本 V3.6.8 / 策略族 V3.6.1 分轴不变。
+
+本次夜间及盘前日期修复自然验收 **PASS**；不代表长期持续运行、实际回滚演练或运行时迁移资格全部完成。没有人工调用生产决策、修补历史失败行或强推 pointer。原始证据在仓外 `_v3-core-review-20261027/status-20261029/{live-status.json,active-candidates.json,http-readback.json}`。
+
+---
+
+### D-019 · 2026-10-29 · 独立完整入口 Node 24 API（未切流）
+
+owner 对迁移源码 `c82e5b5c691f5aaf87ab7d3e0a85ff1812c2b423`、包指纹及仅创建/固定只读范围回复“批准”。仅创建 `apiGatewayNode24` 一次、exit 0；AddTime/ModTime **2026-10-29 09:21:49**（北京时间），CodeSize **4455567**。Event / Nodejs24.11 / index.main / 30s / 256MB，零 timer、依赖安装 FALSE，环境和既有角色与批准私有配置一致。
+
+候选 ZIP SHA256 **`86b5e7428bc3aeeebafba8d8ecf801c9ce966709aae075edfba55964fa372485`**。独立下载 **EXACT_MATCH 1797/1797**，原始 SHA256 零差异；相对新鲜核验的 D-016 API 仅 RUNTIME_MIGRATION_SOURCE.json / config.json 不同，API/common/SDK 2.11.0/RELEASE_SOURCE 字节未变，API 实现身份仍为 `49e7c765c586bb81dc707849992fa7386b9a663c`。独立回滚基线 ZIP SHA256 `50b181558d721c49f60f5bb00046d91ed03fce2479e48ed5f0f668850405722e`，未使用回滚、未作实际回滚演练。
+
+14 类固定 GET 全部通过：constants、dashboard、ETF list/detail、日/周 K 线、增强/旧数组 history、portfolio、review、fundamentals、intel、macro、notFound。完整响应与原生产 HTTP API 前后稳定基线一致；仅排除源码中明确逐请求生成的 `ml_shadow.generated_at`（校验 ISO 格式及时间新鲜度），排除路径另存报告，不忽略其他业务字段。看板五个 production card、权威/source/context 保持一致，历史为 OK。三个声明的事件形式一致。共 **18 次成功鉴权调用**（17 次验收含首尾 constants，加一次诊断 constants）。
+
+日线 **320 根，截至 2026-10-29**；周线 **212 根，截至 2026-10-28**。完整 payload、升序及最新数据库窗口匹配；增强历史 1 条 / OK，published_through=2026-10-28，旧数组兼容；notFound 保留 API code404。日线最新日期与正式决策交易日是不同轴，不用盘中 K 线日期改写正式发布身份。
+
+原生 SCF Invoke 通道返回 CAM 鉴权失败（包括同一 API Key 新会话），发生在业务执行前；额外带 Stamp 的诊断被接口拒绝为 UnknownParameter。改用同一环境 API Key 的 CloudBase `functions.invokeFunction` 鉴权通道成功，凭据只在内存/子进程 stdin 中传递，不改 IAM/角色/安全规则/登录存储或云端依赖。上述原生通道失败不算成功调用，不据此归因 Node 24 或 SDK 业务不兼容。此处平台配置为 Nodejs24.11；未修改正式响应来额外暴露 process.version，也不把 D-017 的进程版本采样冒充本函数实测。
+
+原 **12 个函数**列表代码/配置字段未变；六个重点函数的运行时/入口/超时/内存/环境/触发器/角色及代码元数据未变。完整两个域名的路由前后不变，ETF 前端 67 个入口/依赖对象元数据未变。共享托管清单观察到 `kindle/` 目录的并发变化，逐项保留在边界报告；本批没有托管上传，不能宣称全域所有对象不变，也不把这些变化归因于本批。pointer 是否变化=False，runtime 是否变化=False；自然变化不作人工冻结。
+
+工程校验沿用绑定源码的本机 Node24 Stage A 85/85、实际封包 Node22/24 离线回放及 Actions #195 六组成功；CI portable83、两份私有历史回放及15段收据 NOT_RUN 的证明边界保留。额外本机 Python stage 中断不计通过。
+
+**生产 `/apiGateway` 仍指向旧 `apiGateway`，未切流、未新增公共路由。** 本条证明独立完整入口及实际 SDK 鉴权读取；新函数公共 HTTP 映射尚未验证，须待另批路由授权并在原域验收。未更新现有函数、触碰 timer/策略/ML 权限或调用生产决策；未删除资源。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-api/execution/`（授权、独立下载、固定调用、HTTP 对照、原生通道诊断、完整路由和托管边界）。后续文档提交不改变已部署迁移或 API 实现源码身份；PR 保持 draft、未合并。
+
+---
+
+### D-020 · 2026-10-29 · 生产 API 单路由切至 Node 24
+
+owner 已批准干净执行源码 `2342a5612e6f8d8aacb400be07ecb6b8edeac4d7`、目标包和正向/故障回退范围，并在参数修正期间回复“继续”。北京时间 **12:49:50**，仅将静态托管原域 `/apiGateway` 的 SCF 上游从 `apiGateway` 改为 `apiGatewayNode24`，成功请求 exit 0、RequestId `9d72a0da-bb38-4edb-9182-36f56f13195c`。完整两个域名路由比较通过，只有该 UpstreamResourceName 改变；鉴权、安全域、路径透传、重写和限流字段均保持不变。
+
+09:52:44 首次请求误将审阅用语义载荷直接作为原生参数，接口返回 `InvalidParameter: Domain must be object-type`，复读确认未写入。检查已安装官方 CLI 的 routes edit 实现后，将原生参数封装为 `{EnvId, Domain: {Domain, Routes}}`；语义与批准范围不变，随后执行上述成功请求。共一次被拒请求、一次有效路由写入，不把首次失败计为成功或回退。仓内新增 nativePayload 正向/逆向封装及 Node22/24 回归通过，属于事后工具修正，不改已部署函数源码身份。
+
+迁移源码仍为 `c82e5b5c691f5aaf87ab7d3e0a85ff1812c2b423`，API 实现仍为 `49e7c765c586bb81dc707849992fa7386b9a663c`；目标为 Event / Nodejs24.11 / index.main / 30s / 256MB、零 timer。目标 ZIP SHA256 `86b5e7428bc3aeeebafba8d8ecf801c9ce966709aae075edfba55964fa372485`；执行前独立下载旧/新入口 1796/1797 文件与既有清单精确匹配。语义正向/逆向载荷 SHA256 分别为 `336abfd4db2bea86a6bf5e6d3115a06f2e827ec70c51744bb69c548138727748` / `a16fab772cb1c101c39e5b5c2e373f8037a3705d3044e4aad3ebcd74d677d58a`；原生正向载荷文件 SHA256 `ea049161c1b1b5092ac950a21e4c354dbb5e0104ffbcc78e66190120050b0a6c`。授权请求、完整路由与私有配置快照另存仓外。
+
+原域原 URL 的 **14 类 GET 全部 PASS**，共15次公共 GET；旧 API 前后夹读及新 API 身份校验共29次成功鉴权调用。完整稳定 payload、状态、Content-Type/CORS、路径和 query 契约保持一致；仅排除逐请求的 `data.ml_shadow.generated_at`，并验证 ISO 格式和180秒新鲜度。notFound 保持 HTTP200 / API code404。五个正式 card 及 authority/source/context 一致；日线320根截至10-29、周线212根截至10-28，与数据库最新窗口及升序一致；限定10-28的增强历史1条 / OK / 无缺口，旧数组兼容。正式 pointer revision17、交易日10-28；V3.6.8 / V3.6.1 策略族身份不变。
+
+切流后真实浏览器重新加载原域看板，标的513310的历史、320根K线及 Legacy 五票入口通过，截图封存。全部13函数列表代码/配置元数据、七个重点函数完整受控配置及 ETF 前端67对象元数据未变；pointer/runtime 未变。共享托管另有27个 kindle 路径并发变化，已逐项记录，不声称全域托管不变。本批没有函数部署、托管上传、生产决策调用、timer/权限/策略/ML 变更或资源删除。
+
+执行源码本机 Node24 Stage A **86/86**、Actions [#197](https://github.com/iquelee/etf-decision-engine/actions/runs/40802113199) 六组成功；portable84、两份私有历史回放及15段收据 NOT_RUN 的边界保留。候选31文件及冻结23文件指纹未变。旧 API 保留用于限定路由回退；**未使用回退，未进行实际回退演练**。该验收证明只读 API 迁移，不授予生产写链迁移资格。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-cutover/` 的 DEPLOYMENT_REPORT.md 及 execution 下的授权、两次命令、原生载荷、完整路由、public-verification.json、boundary-verification.json、browser-verification.json 和 production-kline.png。准备计划保留 PREPARED_NOT_APPLIED 历史状态，实际生产事实以本条和执行报告为准；后续文档提交不改变本批批准源码或已部署身份。PR保持 draft、未合并。
+
+---
+
+### D-021 · 2026-10-29 · 隔离准入探针创建；固定验证被入口拒绝
+
+owner 在已封存的源码/ZIP/资源/一次调用授权申请之后回复“继续”，据此执行该明确范围。源码为 `8898c0651f0f622bf227b9ebdb357846cfa52121`；候选ZIP SHA256 `01220e79694ccdba67ca59bc904f78c1295533cac2993b3f2c2c41ee3c94ba81`，私有部署配置 SHA256 `eac3bfe2bbfb90b9bf533ca54a6e3f86d3accdcf430fad12d1a7079dfa73ed2b`。
+
+北京时间17:54:25仅创建空集合 `runtime24_admission_probe_20261029`，CreateTable exit0，回读0条；17:55:40仅创建 `writerAdmissionRuntime24`，部署exit0，CodeSize4055916。Event / Nodejs24.11 / index.main /30s/256MB、零timer、零自定义环境变量，沿用封存既有角色。创建后独立下载 **EXACT_MATCH1711/1711**，1703份依赖文件原字节保持SDK2.11.0，无RDE/common生产代码。
+
+17:57:14返回唯一一次固定鉴权调用结果：**FUNCTIONS_EXECUTE_FAIL**。函数确已进入main，但CloudBase鉴权调用通道给事件额外注入空 `tcbContext:{}` / `userInfo:{}`，原严格deepStrictEqual事件校验在SDK初始化之前拒绝。它不是CAM拒绝，也不是数据库CAS失败；当前云端SDK数据库写入/条件更新验证 **NOT_RUN**，没有取得PASS或实际process.version回传。运行时仅依据Nodejs24.11配置，不借用旧探针进程采样。
+
+没有重试。独立只读回查验证集合仍为 **0条**；五个fixture均未写入。失败后保留函数和空集合，无删除、fixture重置、权限调整或生产回退。后续只在本地准备兼容两项空平台元数据的修复；新源码、更新该隔离函数及再一次调用须另行绑定申请，不把原一次调用授权当作无限重跑。
+
+边界核验PASS：原13函数列表代码/配置字段及全部13函数受控完整配置未变；完整两个域名路由不变，ETF前端67对象元数据不变；pointer/runtime未变。函数清单13→14只新增该探针，集合清单32→33只新增该验证集合。共享托管8个kindle路径并发变化另行列档，本批无托管上传，不声称全域不可变。没有生产决策/物化/抓取/后台写函数调用、timer/策略/ML变更或资源清理。
+
+源码本机Node24 Stage A89/89，实际候选入口及真实SDK序列化在Node22/24内存回放通过；Actions [#201](https://github.com/iquelee/etf-decision-engine/actions/runs/40825093867) 六组成功。portable87、两份私有历史回放及15段收据NOT_RUN边界保留。该本地验证遗漏了真实调用通道事件封装；不能用CI成功替代本批失败的云端验证。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v2/execution/` 下授权、创建结果、独立下载、invocation-result.json、fixture-after-rejected-call.json、invocation-failure-verification.json、boundary-verification.json 和 DEPLOYMENT_REPORT.json。准备请求保留历史状态；本条状态为 **资源创建完成 / 固定验证失败 / SDK云写资格未取得**。PR保持draft、未合并，后续文档或修复提交不改变本条已部署源码身份。
+
+---
+
+### D-022 · 2026-10-29 · 隔离准入入口修复与一次SDK写/CAS验证
+
+owner 对新源码 `5b3da41b2aa13a1031cf452f8eb3eae202e202aa`、ZIP/私有配置及仅更新隔离探针/一次固定调用的封存申请回复“批准”。ZIP SHA256 `f7769f65e361a4a7a5cb27348e94add145fa41272d8e08d9129cbd85ffb16032`，私有配置 SHA256 `223cd527523ccd3c9a461bc4ad7252106d1ed15c2bfdfea9bac29d1509724cd8`。
+
+更新前重新独立下载旧探针 **EXACT_MATCH1711/1711**，确认仍为D-021源码及原配置，集合0条，14函数和完整路由无漂移。只更新现有 `writerAdmissionRuntime24` 一次，exit0；ModTime **2026-10-29 19:17:20**（北京时间）、CodeSize **4056407**。Event/Nodejs24.11/index.main/30s/256MB、原角色、空自定义环境变量与timer保持不变；无新建或清理资源。相对D-021包仅probe.js、SOURCE_IDENTITY.json和修复范围计划JSON三项改变，1703份依赖文件及准入协议/CAS适配器字节不变。
+
+更新后独立下载 **EXACT_MATCH1711/1711**，源码身份和配置通过。19:18:20取得唯一一次固定鉴权调用的 **PASS**；实际回传Node **v24.11.1**，SDK **2.11.0**。事件仍为固定case，只兼容CloudBase观察到的空tcbContext/userInfo，非空元数据及额外业务字段仍拒绝。客户端重试关闭，没有再调用其他业务函数。D-021的失败记录保留，不将两批调用混算为本批重试。
+
+真实云端SDK add/get/条件update完成本批隔离验证：旧快照CAS被拒、同一次函数调用中的8路并发准入只有1个赢家、排空期间拒绝切换、完成后owner/epoch切换正确、active归null且COMPLETE回执保留、旧owner不执行、UNKNOWN与确认丢失保留执行槽。随后通过独立只读通道回查**恰好五个固定主键**，对应状态全部匹配：cas revision2/DRAINING；race revision2/单个RUNNING回执；drain revision5/new/epoch2/空槽；unknown revision3/HOLD/UNKNOWN；ack-lost revision2/占用槽。
+
+本批并发为单次云函数调用内的8个SDK请求，不是多函数实例性能或全场景证明。UNKNOWN和确认丢失是固定代码模拟的异常分支，并非真实网络故障注入。88个数据库请求是本地固定流程回放计数，不声称已对云端请求数作独立测量。该结果只证明本集合/固定用例中的SDK写入、条件更新和协议行为；不等于生产写链迁移、长期回执、外部调用方封闭或真实在途排空验收。
+
+边界PASS：除本批目标外的13个既有函数的完整受控配置及列表代码/配置字段不变；仅该隔离探针代码元数据更新，运行配置保持。函数14→14、集合33→33，名称清单不变；全部域名路由、ETF前端67对象元数据及本次观察的全部托管对象元数据不变；pointer/runtime未变。无生产决策/物化/抓取/后台写函数调用、timer/权限/策略/ML变更、资源创建/删除、fixture重置或回退。
+
+源码本机Node24 Stage A **89/89**，实际修复候选在观测事件封装下的Node22/24离线回放通过；Actions [#202](https://github.com/iquelee/etf-decision-engine/actions/runs/40854167148) 六组成功，portable87、两份私有历史及15段收据NOT_RUN证明边界保留。V368候选content SHA `9969ae7472e6690af962cb6a2fb3e7d5c75a2a1a00d6934b82c440911d845aa1`与冻结23项保持本批既定指纹。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v3/execution/` 的授权、更新结果、前后独立下载、invocation-verification.json、fixture-verification.json、boundary-verification.json及DEPLOYMENT_REPORT.json。五条fixture保留，不作未经授权清理。生产RDE仍为D-018源码/原运行时，生产API仍为D-020路由；后续文档提交不改变已部署探针源码身份。PR保持draft、未合并。
+
+---
+
+### D-023 · 2026-10-29 · 隔离事务账本与136条持久回执验证
+
+源码 `7380081f5fdcaa92190bda01d19c6f2306f6b586`，ZIP `382e23ba6f0580b1be6e47dc9b7704926049694b3912490fc973c18e931823dc`。用户对精确源码/包/资源/最多29调用申请连续回复“继续”，授权仅限该隔离范围。
+
+北京时间 2026-10-29 23:35:21 新建 writerJournalRuntime24，CodeSize 4062080，Event/Nodejs24.11/index.main/30s/256MB，现有角色、零timer/自定义变量/公开路由，不安装依赖。仅另建 runtime24_journal_probe_20261029，初始独立回读为空。独立下载1713/1713字节精确匹配，1703依赖不变。
+
+29次固定调用均成功，实际 Node v24.11.1 / SDK2.11.0 / database1.4.1。8个客户端重叠调用具有8个唯一requestId和8个独立加载实例标记，1个准入；其余7个均 STALE_REVISION。完成、owner/epoch切换、去重、136条durable回执、UNKNOWN槽及最终审计通过。
+
+独立只读查询279个固定主键：137 COMPLETE+1 UNKNOWN，双索引逐个一致，durable控制revision273/空槽，race revision5/new/epoch2/空槽，unknown revision3/HOLD/保留槽。最早 durable:0 在136次完成后仍拒绝，未使用TTL/删除/缓存驱逐。
+
+边界PASS：其他14个既有函数完整受控配置及列表代码/配置不变（含D-022旧探针）；函数14→15仅新增本探针，集合33→34仅新增隔离集合。全部域路由、ETF67及观察的全部托管元数据、pointer/runtime不变；无生产写函数调用、IAM/timer/策略/ML改动、删除/重置或回退。
+
+限制：此次没有触发底层事务写冲突，不能把7次旧revision拒绝当成DATABASE_TRANSACTION_CONFLICT实证。UNKNOWN仅为模拟handler异常；实际网络故障未注入。生产准入接线、真实入口/延迟重试/排空、门面时限、生产迁移及Node24自然验收仍未完成。下一步补强制共同快照事务冲突/回滚用例，须新源码/包/更新范围绑定。
+
+证据位于 execution/ 下的授权、创建结果、独立下载、22个调用阶段收据（共29调用）、race-platform-verification、fixture-verification、boundary-verification 和 DEPLOYMENT_REPORT.json。全部fixture保留，不进行未经授权清理。准备请求的待批准标签保留历史原样，实际执行以本报告为准。
+
+---
+
+### D-024 · 2026-10-30 · 共同快照事务冲突与三文档回滚补测
+
+owner明确回复“批准”，仅覆盖源码 `85bc24e7762105fb44db9250b653252314c1a2e3`、ZIP `42957f01544b5da8af28c318c828c739a40a86a9218146b2438a62815328c646`、私有配置 `1c3a6e7a983ffc5686934aaa04453cadb094de97f73bf440c56090fea477e105`，更新既有隔离探针一次和固定调用一次；未授权生产切换。
+
+北京时间2026-10-30 07:35:14仅更新 writerJournalRuntime24，CodeSize4062434。更新前后各独立下载1713/1713字节精确匹配，原Event/Nodejs24.11/index.main/30s/256MB/角色/零timer/自定义变量配置保持。与D-023相比，仅probe.js、SOURCE_IDENTITY.json和隔离计划JSON换名/内容变化，1703依赖及四个准入/适配模块不变。
+
+唯一一次固定调用PASS，实际Node v24.11.1、SDK2.11.0、database1.4.1。两个原生手动事务都先读control revision1及空索引，事务A提交control+双RUNNING回执后，事务B用原快照写明确返回 DATABASE_TRANSACTION_CONFLICT，未提交B。随后forced回执完成，control revision3/空槽；另一个事务暂存control+rolled-back双索引后显式rollback，原control保持revision3，forced双索引保持COMPLETE，rolled-back双索引不存在。
+
+独立只读回查共282主键，仅新增指定scope的3主键；原279主键的原始内容全部不变，两份应回滚的主键不存在。边界PASS：其他14个函数完整受控配置及列表代码/配置不变；目标运行配置保持，仅代码更新；函数15→15、集合34→34且名称清单一致。全部路由、ETF67及全部已观察托管元数据、pointer/runtime不变，无生产写函数调用、IAM/timer/策略/ML变更、新建/删除/重置资源或回退。
+
+本批补齐D-023未触发的共同快照数据库写冲突和真实显式回滚；不计真实网络故障注入、多实例性能或生产写链迁移完成。D-023的8独立实例准入和136条回执证明继续独立保留，不能把不同批次混成一个无边界的全场景资格。
+
+执行源码本机完整Stage A91/91、Node22/24真实SDK内存传输及实际候选main通过；Actions #207六组成功：https://github.com/iquelee/etf-decision-engine/actions/runs/40905316365 。原31文件候选content与冻结23项不变。证据位于仓外runtime24-journal-conflict-v1/execution/，包含批准、前后下载、一次调用、独立fixture/边界与DEPLOYMENT_REPORT.json；282文档保留，不作清理。准备请求/计划中的待批准和未部署标签保留历史封存原样。
+
+下一步是生产入口身份、门面返回/时限、旧/新共同准入和真实排空的可审核接线候选。生产RDE仍为D-018/Node16，尚无Node24生产自然运行验收；目标保持进行中。

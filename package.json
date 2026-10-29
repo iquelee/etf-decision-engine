@@ -1,8 +1,8 @@
 {
   "name": "etf-decision-engine",
-  "version": "3.6.1",
+  "version": "3.6.8",
   "private": true,
-  "description": "ETF 智能仓位决策引擎（V3.6.1 生产 + Gen-1 + Gen-2 Shadow）",
+  "description": "ETF 决策引擎 V3.6.8 工程候选（V3.6.1 策略族；线上基线 V3.6.7）",
   "scripts": {
     "test": "node scripts/test-all.js",
     "test:node": "node scripts/run-tests.js",
