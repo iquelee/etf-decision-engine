@@ -1063,3 +1063,21 @@ owner 对新源码 `5b3da41b2aa13a1031cf452f8eb3eae202e202aa`、ZIP/私有配置
 限制：此次没有触发底层事务写冲突，不能把7次旧revision拒绝当成DATABASE_TRANSACTION_CONFLICT实证。UNKNOWN仅为模拟handler异常；实际网络故障未注入。生产准入接线、真实入口/延迟重试/排空、门面时限、生产迁移及Node24自然验收仍未完成。下一步补强制共同快照事务冲突/回滚用例，须新源码/包/更新范围绑定。
 
 证据位于 execution/ 下的授权、创建结果、独立下载、22个调用阶段收据（共29调用）、race-platform-verification、fixture-verification、boundary-verification 和 DEPLOYMENT_REPORT.json。全部fixture保留，不进行未经授权清理。准备请求的待批准标签保留历史原样，实际执行以本报告为准。
+
+---
+
+### D-024 · 2026-10-30 · 共同快照事务冲突与三文档回滚补测
+
+owner明确回复“批准”，仅覆盖源码 `85bc24e7762105fb44db9250b653252314c1a2e3`、ZIP `42957f01544b5da8af28c318c828c739a40a86a9218146b2438a62815328c646`、私有配置 `1c3a6e7a983ffc5686934aaa04453cadb094de97f73bf440c56090fea477e105`，更新既有隔离探针一次和固定调用一次；未授权生产切换。
+
+北京时间2026-10-30 07:35:14仅更新 writerJournalRuntime24，CodeSize4062434。更新前后各独立下载1713/1713字节精确匹配，原Event/Nodejs24.11/index.main/30s/256MB/角色/零timer/自定义变量配置保持。与D-023相比，仅probe.js、SOURCE_IDENTITY.json和隔离计划JSON换名/内容变化，1703依赖及四个准入/适配模块不变。
+
+唯一一次固定调用PASS，实际Node v24.11.1、SDK2.11.0、database1.4.1。两个原生手动事务都先读control revision1及空索引，事务A提交control+双RUNNING回执后，事务B用原快照写明确返回 DATABASE_TRANSACTION_CONFLICT，未提交B。随后forced回执完成，control revision3/空槽；另一个事务暂存control+rolled-back双索引后显式rollback，原control保持revision3，forced双索引保持COMPLETE，rolled-back双索引不存在。
+
+独立只读回查共282主键，仅新增指定scope的3主键；原279主键的原始内容全部不变，两份应回滚的主键不存在。边界PASS：其他14个函数完整受控配置及列表代码/配置不变；目标运行配置保持，仅代码更新；函数15→15、集合34→34且名称清单一致。全部路由、ETF67及全部已观察托管元数据、pointer/runtime不变，无生产写函数调用、IAM/timer/策略/ML变更、新建/删除/重置资源或回退。
+
+本批补齐D-023未触发的共同快照数据库写冲突和真实显式回滚；不计真实网络故障注入、多实例性能或生产写链迁移完成。D-023的8独立实例准入和136条回执证明继续独立保留，不能把不同批次混成一个无边界的全场景资格。
+
+执行源码本机完整Stage A91/91、Node22/24真实SDK内存传输及实际候选main通过；Actions #207六组成功：https://github.com/iquelee/etf-decision-engine/actions/runs/40905316365 。原31文件候选content与冻结23项不变。证据位于仓外runtime24-journal-conflict-v1/execution/，包含批准、前后下载、一次调用、独立fixture/边界与DEPLOYMENT_REPORT.json；282文档保留，不作清理。准备请求/计划中的待批准和未部署标签保留历史封存原样。
+
+下一步是生产入口身份、门面返回/时限、旧/新共同准入和真实排空的可审核接线候选。生产RDE仍为D-018/Node16，尚无Node24生产自然运行验收；目标保持进行中。
