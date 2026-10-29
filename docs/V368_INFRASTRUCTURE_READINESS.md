@@ -37,8 +37,10 @@
 
 本机原始观察与测试日志保存在仓外 `_v3-core-review-20261027/infrastructure-20261027/` 及同级 `infrastructure-node24-*.log`；下载源码、完整配置和数据快照未加入 Git。一次参数误用导致测试进入不需要重跑的 Python 阶段，已中止，该次运行不计为通过；最终 Node 24 完整 Stage A 为 83/83。Python 代码和依赖未变，本批由新增 CI 矩阵继续验证。
 
-2026-10-29 后续：D-018 自然验收已通过，现准备完整 index.main API 候选及静态托管域 /apiGateway 的独立切流/回退范围，见 [正式 API 迁移准备](V368_RUNTIME24_API_MIGRATION.md)。创建与切流尚未执行。
+2026-10-29 D-019前准备记录（历史）：D-018 自然验收已通过，当时准备完整 index.main API 候选及静态托管域 /apiGateway 的独立切流/回退范围，见 [正式 API 迁移准备](V368_RUNTIME24_API_MIGRATION.md)。创建与切流尚未执行。
 
 2026-10-29 D-019：完整 index.main / Nodejs24.11 独立 API 已创建并通过实际鉴权只读验证，1,797 文件精确匹配，14类GET/三个事件形式通过。原生 SCF Invoke 的 CAM 拒绝与 CloudBase 函数调用通道分开记录；未扩权限。生产入口仍在旧 API，后续切流另批，详见 [D-019 结果](V368_RUNTIME24_API_MIGRATION.md)。
 
-后续单路由批次已完成本地准备与 86/86 Node 回归，尚未写路由；正向仅替换 `/apiGateway` 上游，回退仅恢复旧上游，完整域名差异必须受限。见 [切流与回退方案](V368_RUNTIME24_API_CUTOVER.md)。
+D-020前准备记录（历史）：当时单路由批次已完成本地准备与 86/86 Node 回归，尚未写路由；正向仅替换 `/apiGateway` 上游，回退仅恢复旧上游，完整域名差异必须受限。见 [切流与回退方案](V368_RUNTIME24_API_CUTOVER.md)。
+
+2026-10-29 当前：D-020已完成生产API切流及原域/浏览器验收，最新工具修正提交Actions #198也已成功。写链仍为Node16；本次六函数新鲜配置及四份独立下载确认22:00抓取→物化→决策、08:00物化、后台直调，RDE无独立timer。RDE/common与canonical无差异，物化/后台各4项、抓取40项差异须分批审核。详见 [写链迁移设计](V368_RUNTIME24_WRITER_MIGRATION.md) 和 [脱敏清单](../release/runtime24-writer-inventory.json)。下一项是离线准入/排空及实包回放，没有写链部署或生产调用。
