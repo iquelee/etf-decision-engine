@@ -1025,3 +1025,23 @@ owner 在已封存的源码/ZIP/资源/一次调用授权申请之后回复“�
 源码本机Node24 Stage A89/89，实际候选入口及真实SDK序列化在Node22/24内存回放通过；Actions [#201](https://github.com/iquelee/etf-decision-engine/actions/runs/40825093867) 六组成功。portable87、两份私有历史回放及15段收据NOT_RUN边界保留。该本地验证遗漏了真实调用通道事件封装；不能用CI成功替代本批失败的云端验证。
 
 证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v2/execution/` 下授权、创建结果、独立下载、invocation-result.json、fixture-after-rejected-call.json、invocation-failure-verification.json、boundary-verification.json 和 DEPLOYMENT_REPORT.json。准备请求保留历史状态；本条状态为 **资源创建完成 / 固定验证失败 / SDK云写资格未取得**。PR保持draft、未合并，后续文档或修复提交不改变本条已部署源码身份。
+
+---
+
+### D-022 · 2026-10-29 · 隔离准入入口修复与一次SDK写/CAS验证
+
+owner 对新源码 `5b3da41b2aa13a1031cf452f8eb3eae202e202aa`、ZIP/私有配置及仅更新隔离探针/一次固定调用的封存申请回复“批准”。ZIP SHA256 `f7769f65e361a4a7a5cb27348e94add145fa41272d8e08d9129cbd85ffb16032`，私有配置 SHA256 `223cd527523ccd3c9a461bc4ad7252106d1ed15c2bfdfea9bac29d1509724cd8`。
+
+更新前重新独立下载旧探针 **EXACT_MATCH1711/1711**，确认仍为D-021源码及原配置，集合0条，14函数和完整路由无漂移。只更新现有 `writerAdmissionRuntime24` 一次，exit0；ModTime **2026-10-29 19:17:20**（北京时间）、CodeSize **4056407**。Event/Nodejs24.11/index.main/30s/256MB、原角色、空自定义环境变量与timer保持不变；无新建或清理资源。相对D-021包仅probe.js、SOURCE_IDENTITY.json和修复范围计划JSON三项改变，1703份依赖文件及准入协议/CAS适配器字节不变。
+
+更新后独立下载 **EXACT_MATCH1711/1711**，源码身份和配置通过。19:18:20取得唯一一次固定鉴权调用的 **PASS**；实际回传Node **v24.11.1**，SDK **2.11.0**。事件仍为固定case，只兼容CloudBase观察到的空tcbContext/userInfo，非空元数据及额外业务字段仍拒绝。客户端重试关闭，没有再调用其他业务函数。D-021的失败记录保留，不将两批调用混算为本批重试。
+
+真实云端SDK add/get/条件update完成本批隔离验证：旧快照CAS被拒、同一次函数调用中的8路并发准入只有1个赢家、排空期间拒绝切换、完成后owner/epoch切换正确、active归null且COMPLETE回执保留、旧owner不执行、UNKNOWN与确认丢失保留执行槽。随后通过独立只读通道回查**恰好五个固定主键**，对应状态全部匹配：cas revision2/DRAINING；race revision2/单个RUNNING回执；drain revision5/new/epoch2/空槽；unknown revision3/HOLD/UNKNOWN；ack-lost revision2/占用槽。
+
+本批并发为单次云函数调用内的8个SDK请求，不是多函数实例性能或全场景证明。UNKNOWN和确认丢失是固定代码模拟的异常分支，并非真实网络故障注入。88个数据库请求是本地固定流程回放计数，不声称已对云端请求数作独立测量。该结果只证明本集合/固定用例中的SDK写入、条件更新和协议行为；不等于生产写链迁移、长期回执、外部调用方封闭或真实在途排空验收。
+
+边界PASS：除本批目标外的13个既有函数的完整受控配置及列表代码/配置字段不变；仅该隔离探针代码元数据更新，运行配置保持。函数14→14、集合33→33，名称清单不变；全部域名路由、ETF前端67对象元数据及本次观察的全部托管对象元数据不变；pointer/runtime未变。无生产决策/物化/抓取/后台写函数调用、timer/权限/策略/ML变更、资源创建/删除、fixture重置或回退。
+
+源码本机Node24 Stage A **89/89**，实际修复候选在观测事件封装下的Node22/24离线回放通过；Actions [#202](https://github.com/iquelee/etf-decision-engine/actions/runs/40854167148) 六组成功，portable87、两份私有历史及15段收据NOT_RUN证明边界保留。V368候选content SHA `9969ae7472e6690af962cb6a2fb3e7d5c75a2a1a00d6934b82c440911d845aa1`与冻结23项保持本批既定指纹。
+
+证据：仓外 `_v3-core-review-20261027/runtime24-admission-probe-v3/execution/` 的授权、更新结果、前后独立下载、invocation-verification.json、fixture-verification.json、boundary-verification.json及DEPLOYMENT_REPORT.json。五条fixture保留，不作未经授权清理。生产RDE仍为D-018源码/原运行时，生产API仍为D-020路由；后续文档提交不改变已部署探针源码身份。PR保持draft、未合并。
