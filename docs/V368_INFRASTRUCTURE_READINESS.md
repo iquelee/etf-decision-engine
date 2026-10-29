@@ -38,3 +38,5 @@
 本机原始观察与测试日志保存在仓外 `_v3-core-review-20261027/infrastructure-20261027/` 及同级 `infrastructure-node24-*.log`；下载源码、完整配置和数据快照未加入 Git。一次参数误用导致测试进入不需要重跑的 Python 阶段，已中止，该次运行不计为通过；最终 Node 24 完整 Stage A 为 83/83。Python 代码和依赖未变，本批由新增 CI 矩阵继续验证。
 
 2026-10-29 后续：D-018 自然验收已通过，现准备完整 index.main API 候选及静态托管域 /apiGateway 的独立切流/回退范围，见 [正式 API 迁移准备](V368_RUNTIME24_API_MIGRATION.md)。创建与切流尚未执行。
+
+2026-10-29 D-019：完整 index.main / Nodejs24.11 独立 API 已创建并通过实际鉴权只读验证，1,797 文件精确匹配，14类GET/三个事件形式通过。原生 SCF Invoke 的 CAM 拒绝与 CloudBase 函数调用通道分开记录；未扩权限。生产入口仍在旧 API，后续切流另批，详见 [D-019 结果](V368_RUNTIME24_API_MIGRATION.md)。
