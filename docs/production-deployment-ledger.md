@@ -959,3 +959,11 @@ owner 对完整源码 `7627356b9cc0441d52368a96e60105254b19f2aa`、候选包和�
 部署前后 pointer 相同，runtime 记录相同。未人工调用生产决策、未回写历史记录；新源码自然运行验收 **PENDING**。后续核验交易日一致、validation_passed/promoted、history 与 pointer/前台读链一致，不能把包核验当作业务验收。
 
 证据：仓外 `_v3-core-review-20261027/morning-date-fix/{DEPLOYMENT_REPORT.md,DEPLOYMENT_REPORT.json,execution/}`。上传源码身份不随后续文档提交变化；PR 保持 draft、未合并。
+
+## D-018 自然运行验收补记（2026-10-29）
+
+只读复查确认：新补丁源码 `7627356b9cc0441d52368a96e60105254b19f2aa` 已自然运行并正式发布两次：10-28 22:01:08（北京时间）revision 16，10-29 08:00:31 revision 17。两次 manifest 均 COMPLETE / validation_passed=true / reason=ok，history 均 promoted=true、read_after_write_consistent=true，交易日为 2026-10-28。
+
+今早正式 pointer 为 revision 17；五条 decision_date / calc_date、manifest.expected_trade_date 和组合 snapshot_date 全为 2026-10-28，5+1 记录绑定同一 run。原生产域 API 读取同一权威及 source/context，latest_fallback_used=false；513310 当日增强历史为 OK、无缺口，返回同一 run。工程版本 V3.6.8 / 策略族 V3.6.1 分轴不变。
+
+本次夜间及盘前日期修复自然验收 **PASS**；不代表长期持续运行、实际回滚演练或运行时迁移资格全部完成。没有人工调用生产决策、修补历史失败行或强推 pointer。原始证据在仓外 `_v3-core-review-20261027/status-20261029/{live-status.json,active-candidates.json,http-readback.json}`。

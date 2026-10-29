@@ -31,8 +31,10 @@
 
 10-28 早间只读复查确认：10-27 22:01 的新 source 自然 run 已发布，正式 pointer 为交易日 2026-10-27、revision 15，manifest/history/source/context 及 5+1 候选记录一致。主引擎无独立 timer；除 materializeIndicators 的早间 timer，fetchDailyData 也会链式调用物化→决策，因此已有夜间自然发布记录。
 
-10-28 08:00 run 又因发布日期错位被 mixed_date_detected 拒绝，pointer 保持 revision 15。D-018 已部署交易日修复（独立下载 1,799 文件精确匹配，原运行时/配置不变）；新源码自然运行验收仍待完成。根因及修复见 [发布交易日补丁](V368_PUBLISH_TRADE_DATE_FIX.md)；先修复并完成自然运行验收，再继续正式 API 切流及写链迁移，未关闭持续运行验收项。
+10-28 08:00 run 又因发布日期错位被 mixed_date_detected 拒绝，pointer 保持 revision 15。D-018 已部署交易日修复（独立下载 1,799 文件精确匹配，原运行时/配置不变）；10-28 夜间与 10-29 盘前自然验收均通过（revision 16 / 17）。根因及修复见 [发布交易日补丁](V368_PUBLISH_TRADE_DATE_FIX.md)；先修复并完成自然运行验收，再继续正式 API 切流及写链迁移，未关闭持续运行验收项。
 
 后续验收须同时核对 source_commit、release_version、input_context_sha256、COMPLETE / validation_passed，以及 promoted history 与 pointer 的一致性。不得仅凭 runtime.updated_at 或上传成功关闭验收项，也不为验证而人工调用生产主引擎。
 
 本机原始观察与测试日志保存在仓外 `_v3-core-review-20261027/infrastructure-20261027/` 及同级 `infrastructure-node24-*.log`；下载源码、完整配置和数据快照未加入 Git。一次参数误用导致测试进入不需要重跑的 Python 阶段，已中止，该次运行不计为通过；最终 Node 24 完整 Stage A 为 83/83。Python 代码和依赖未变，本批由新增 CI 矩阵继续验证。
+
+2026-10-29 后续：D-018 自然验收已通过，现准备完整 index.main API 候选及静态托管域 /apiGateway 的独立切流/回退范围，见 [正式 API 迁移准备](V368_RUNTIME24_API_MIGRATION.md)。创建与切流尚未执行。

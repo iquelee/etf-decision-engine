@@ -1,4 +1,4 @@
-# 盘前发布交易日错位修复（D-018 已部署，自然验收待完成）
+# 盘前发布交易日错位修复（D-018 已部署，自然验收通过）
 
 日期：2026-10-28（北京时间）。范围仅 `runDecisionEngine` 的 lifecycle_writer 区段；沿用 V3.6.8 工程版本，以新源码/包指纹区分补丁。API、前端、Node 24 探针、策略计算和运行时迁移不在本批发布范围。
 
@@ -51,3 +51,11 @@ owner 对完整源码 `7627356b9cc0441d52368a96e60105254b19f2aa`、候选包和�
 候选 ZIP SHA256：`7f88b3fc0c20f76facb3a44e79ff54d9cebf35891340c2c7fef8902a54035358`；回滚 ZIP SHA256：`46300f09ddab2496cc48e6a89975d40a89d86af794fc30e5bc04b1f9d2420441`，未使用回滚、未进行实际回滚演练。本机完整 Node 85/85、源码 Actions #193 六组 CI 通过，portable 的私有历史 NOT_RUN 边界保留。
 
 部署前后 pointer 相同，runtime 记录相同。未人工调用生产决策、未回写历史记录；新源码自然运行验收 **PENDING**。后续核验交易日一致、validation_passed/promoted、history 与 pointer/前台读链一致，不能把包核验当作业务验收。
+
+## D-018 自然运行验收补记（2026-10-29）
+
+只读复查确认：新补丁源码 `7627356b9cc0441d52368a96e60105254b19f2aa` 已自然运行并正式发布两次：10-28 22:01:08（北京时间）revision 16，10-29 08:00:31 revision 17。两次 manifest 均 COMPLETE / validation_passed=true / reason=ok，history 均 promoted=true、read_after_write_consistent=true，交易日为 2026-10-28。
+
+今早正式 pointer 为 revision 17；五条 decision_date / calc_date、manifest.expected_trade_date 和组合 snapshot_date 全为 2026-10-28，5+1 记录绑定同一 run。原生产域 API 读取同一权威及 source/context，latest_fallback_used=false；513310 当日增强历史为 OK、无缺口，返回同一 run。工程版本 V3.6.8 / 策略族 V3.6.1 分轴不变。
+
+本次夜间及盘前日期修复自然验收 **PASS**；不代表长期持续运行、实际回滚演练或运行时迁移资格全部完成。没有人工调用生产决策、修补历史失败行或强推 pointer。原始证据在仓外 `_v3-core-review-20261027/status-20261029/{live-status.json,active-candidates.json,http-readback.json}`。
