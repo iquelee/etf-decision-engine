@@ -1,5 +1,5 @@
 'use strict';
-// ISOLATED CANDIDATE. Production namespaces are intentionally rejected.
+// Offline candidate. Isolation and production use separate namespace policies.
 const assert = require('assert');
 const crypto = require('crypto');
 const {isDeepStrictEqual} = require('util');
@@ -44,6 +44,24 @@ function decode(row, expectedId, binding, kind) {
 }
 function createStore({database, collection, binding: supplied}) {
   assert(/^runtime24_journal_probe_[a-z0-9_]+$/.test(collection), 'isolated journal collection required');
+  return createStoreInNamespace(database, collection, supplied);
+}
+const productionNamespace = Object.freeze({
+  environment: 'tradingview-etf-d0fa42yy57cbc11b',
+  collection: 'writer_admission_journal_v1',
+  scopes: Object.freeze(['fetchDailyData', 'fetchRealtimeData', 'materializeIndicators', 'runDecisionEngine',
+    'adminGateway', 'fetchFundamentalNews', 'extractFundamental', 'runGen1ShadowEod', 'runGen2ShadowEod']
+    .map(name => 'production/' + name))
+});
+function createProductionStore(options) {
+  assert(options && typeof options === 'object');
+  assert.deepStrictEqual(Object.keys(options).sort(), ['binding', 'database'], 'fixed production namespace required');
+  const {database, binding} = options;
+  assert(binding && binding.environment === productionNamespace.environment, 'production environment mismatch');
+  assert(productionNamespace.scopes.includes(binding.scope), 'production scope not declared');
+  return createStoreInNamespace(database, productionNamespace.collection, binding);
+}
+function createStoreInNamespace(database, collection, supplied) {
   assert(database && typeof database.startTransaction === 'function' && typeof database.collection === 'function');
   const binding = Object.freeze(clone(supplied));
   assert.deepStrictEqual(Object.keys(binding).sort(), ['environment', 'scope']);
@@ -138,4 +156,4 @@ function createStore({database, collection, binding: supplied}) {
     }
   };
 }
-module.exports = {id, encodeControl, encodeReceipt, decode, createStore};
+module.exports = {id, encodeControl, encodeReceipt, decode, createStore, createProductionStore, productionNamespace};
