@@ -57,3 +57,9 @@ owner绑定源码`9ad435620057efa8d0c409c7848e70c77ba9b08c`、两个ZIP和申请
 边界PASS：原15函数完整受控配置/代码元数据不变，函数15→17仅上述新增，集合34→35仅上述新增。旧282条journal原始内容全部不变，全部域名路由、已观察托管元数据、生产pointer/runtime不变。生产写链仍Node16，无生产调用或自然验收。
 
 本批资格为**NOT_QUALIFIED**。下一步先按官方写入契约及实测包装修复离线请求构造/回读检查，明确平台432重试与队列存活的实际边界，再针对两个既有隔离函数准备新的配置/调用范围。不重建资源、不清理现场；旧批准不作为本批失败后的重试授权。仓外证据：`runtime24-entry-proof-v1/execution/DEPLOYMENT_REPORT.json`及完整授权/部署/下载/配置拒绝/独立回查/边界记录。
+
+## 停止后的离线契约修复
+
+`release/entry-proof-async-config.js`只生成两个固定隔离目标的公开写入结构：TTL600和单个`RetryNum`项（facade1、worker0），不复制ErrorCode/RetryInterval。回读必须解包`data.AsyncTriggerConfig`并核对default与432类别、TTL、次数和间隔；包装缺失、未知/重复类别、旧默认值和错误响应均拒绝。该模块不导入SDK，不执行云请求，不更新已部署代码。
+
+[官方重试策略](https://cloud.tencent.com/document/product/583/41138)明确：异步432/系统错误按最长保留时间持续重试，运行错误才使用用户配置的次数。因此新的可行申请必须明确承认432 RetryNum-1及TTL600边界；预期6次调用不能宣称平台总调用数的硬上限，CLOSE timer也不能当作排空已有队列。原申请的432零重试未实现，不能悄然改为上述政策后继续。新构造和回读模型通过不等于真实配置请求已获接受；尚未发出第二次配置请求。
