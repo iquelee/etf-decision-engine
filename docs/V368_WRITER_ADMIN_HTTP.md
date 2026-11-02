@@ -20,11 +20,25 @@
 
 ## 实际包及验证边界
 
-离线构建器现覆盖 RDE、物化、后台三包，全部输入分别绑定 inventory 原始 map，保持各自 common/依赖。后台原 SDK 为 2.11.0；只更换三个 SDK import 和入口，移除原 /adminGateway HTTP trigger，保留 DECISION_ENV=prod 与 60 秒。所有新包增加根入口及维护模块，不运行依赖安装、不改旧包。
+离线构建器现覆盖 RDE、物化、后台三包，全部输入分别绑定 inventory 原始 map，保持各自 common/依赖。后台原 SDK 为 2.11.0；只更换三个 SDK import 和入口，移除原包配置中的 /adminGateway HTTP trigger，保留 DECISION_ENV=prod 与 60 秒。所有新包增加根入口及维护模块，不运行依赖安装、不改旧包。
 
 `writer-admin-http.test.js` 用实际 bootstrap、完整原后台及 RDE、共享内存业务集合验证：14 类维护拒绝零业务/准入写；缺操作 ID 在 SDK init 前拒绝；鉴权失败不占槽；风险新增/解除、参数更新三条完整链各 55 写，所有返回、写顺序及集合值与原入口一致；相同操作改 requestId 或载荷均不新增写；无 rollout 时认证读仍可用；失败登录保留原 guard 写且同 ID 不重复累计。Node22/24 模型通过，不是平台或真实业务 SDK 数据库写入证据。
 
 后台 triggerFetch/intel-refresh 的 fire-and-forget 和失败回调仍未完成持久化派发接线。候选保持 UNKNOWN/HOLD/占槽，不把 triggered:true 当成父业务完成，不能据此发布完整后台写服务。
+
+## 封存和实际包结果
+
+源码及构建来源 `5924859c670ee9ab095ae4c72219a716c889b9ba`。完整本地 Stage A **101/101**，候选 31 文件、冻结 23 项、legacy 自检及显式敏感扫描通过；Actions [221](https://github.com/iquelee/etf-decision-engine/actions/runs/41448515724) 六个 Node16/22/24 × Python3.11/3.12 任务全部通过。原候选 content 指纹保持，资格不扩展到新模块。
+
+| 包 | 原包 / 输出文件 | 依赖逐字节保持 | ZIP SHA256 |
+|---|---|---|---|
+| RDE | 1799 / 1814 | 1703 | `2e583137f15ac90a08473f37ac6ad4aa4fe67bf131f6c9df08bbaa9007c68ec4` |
+| 物化 | 1791 / 1806 | 1701 | `b31e4bf20f38d0614ca8a6296ce9bee9b4339ca95df06e644baf5e849e872d8b` |
+| 后台 | 1793 / 1808 | 1703 | `76dad576bd265bbb1bf10acf5307ec7ad1421bcc2c824084c944ab34f4ffbd5b` |
+
+Node24.20.0 原生加载三个实际包的 index/bootstrap/business：签名 RDE 54 写，签名/Timer 物化各 539 写，HTTP 风险新增/解除及参数变更各 55 写；完整返回、业务写顺序及所有集合值与各自独立原包基线一致。六组相同身份重放均零新增业务，五次子业务调用经过实际 SDK 函数序列化，根入口自调用零次。控制/rollout 读与事务走真实 SDK 内存边界；业务集合及会话查询仍是合成内存模型，不能声称真实业务数据库权限或 HTTP 网关已通过。
+
+三包 Node24 缺控制/HOLD 防护均不导入业务或自动初始化，Node22 在存储前拒绝。Node22 的 HTTP 错运行时应返回 503，核验器初版误期望 400，修正该断言后通过；没有改候选代码迁就测试。全部成功回放网络请求零次，结束后全部原输入及派生包逐文件复核不变。源码归档、验证脚本、收据、逐文件 map、JSON 结果和 evidence-index 在仓外 `writer-workers-5924859/` 及相邻审计脚本中封存；此前两批包和证据保留。
 
 ## 上线前剩余项
 
