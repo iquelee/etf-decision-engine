@@ -238,5 +238,5 @@ async function main() {
     console.log(JSON.stringify({runtime: process.version, sdk: '2.11.0', database: '1.4.1', transport: 'REAL_SDK_MEMORY_WIRE', ...result, ...probe}));
   } finally { Db.reqClass = original; }
 }
-module.exports = {backend, exercise};
+module.exports = {backend, exercise, fakeDatabase};
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
