@@ -27,3 +27,11 @@
 这个短业务fixture用于来源/Time/重试及本地root，不是115秒长转发补测，不改变D-026失败，不缩短任何生产业务预算。生产九条固定cron匹配仍由既有Timer适配器模型检查；本隔离单次Timer不伪装为生产08:00/22:00事件，也不自动取得所有生产函数资格。新路径的CORS通过还须结合实际生产路径字段及切换计划核验，不能靠新路由成功声称生产已切换。
 
 `prepare-native-proof.js` 只接受干净完整SHA，复制并前后复核1799文件独立RDE输入中的1703个原依赖，输出1716文件确定ZIP/map/收据。没有安装、登录、云请求或自动执行功能。最终执行仍需新鲜环境/资源/路由/旧数据边界、一次性执行状态机、全源码和包配置绑定、CI及owner单独批准；这些未完成前不创建任何云资源。
+
+## 离线封存结果
+
+源码 `2556a6109b3f529e83ee9615cdb38d1c85bc214f`，ZIP SHA256 `cd261bc2977bdd4c86d3c3172707948f3815f83aab6b7617d1fbeaed735af4af`，文件map SHA256 `8e166e6bbe0dd5f30eff7e5c1e145301f227a66013381bdc1dc9b140da7a0c48`。共1716文件、1703原依赖逐字节保持，输入前后1799文件复核不变。
+
+完整 Stage A **103/103**、冻结23项、候选31文件、legacy自检和显式敏感扫描通过；Actions [225](https://github.com/iquelee/etf-decision-engine/actions/runs/41488962939) 六个Node16/22/24 × Python3.11/3.12任务全部通过。Node22/24真实SDK数据库序列化内存回放均得到一次业务、七条固定记录和原生requestId变化时的重复拒绝；仍为MODEL/内存证据。
+
+实际生成包直接加载main：Node24的SDK伪造Timer拒绝与HTTP回显均在SDK init前完成，Node22错误运行时关闭，网络0。没有用注入的Node主版本来声称真实Node22可执行。包、源码归档、map、守卫结果和evidence-index在仓外 `native-identity-proof-2556a61/`；源码绑定核验脚本在相邻审计目录。真实Timer、重试、温热来源及CORS全部NOT_RUN；尚无最终部署批准申请。
