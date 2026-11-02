@@ -9,6 +9,9 @@ const codes = ['513310', '515880', '159582', '518880', '159570'];
 function createHarness(root, options = {}) {
   root = path.resolve(root);
   const common = path.resolve(options.common || path.join(root, 'common'));
+  const entries = [{root, common}, ...(options.entries || []).map(item => ({
+    root: path.resolve(item.root), common: path.resolve(item.common || path.join(item.root, 'common'))
+  }))];
   const tables = new Map(), writes = [], diagnostics = [], cache = new Map();
   let sequence = 0, onWrite = options.onWrite;
   const now = options.now || '2026-10-29T08:00:00+08:00';
@@ -51,11 +54,17 @@ function createHarness(root, options = {}) {
   }
   const database = {collection, command: {}, async createCollection(name) { rows(name); }};
   const sdk = {SYMBOL_CURRENT_ENV: 'offline-fixture', init: () => ({database: () => database,
-    callFunction: () => { throw Error('OFFLINE_FUNCTION_CALL_DENIED'); }})};
+    // Optional explicit in-process transport for whole CALLER entry replays.
+    // Existing callers without the hook retain the original deny-by-default.
+    callFunction: (request, opts) => {
+      if (typeof options.callFunction !== 'function') throw Error('OFFLINE_FUNCTION_CALL_DENIED');
+      return options.callFunction(request, opts);
+    }})};
   function permitted(file) {
     const full = path.resolve(String(file));
     const within = base => full === base || full.startsWith(base + path.sep);
-    return (within(root) || within(common)) && !/^(config\.json|\.env.*|cloudbaserc.*)$/i.test(path.basename(full));
+    return entries.some(item => within(item.root) || within(item.common))
+      && !/^(config\.json|\.env.*|cloudbaserc.*)$/i.test(path.basename(full));
   }
   const readonlyFs = {existsSync: file => permitted(file) && fs.existsSync(file),
     readFileSync: (file, encoding) => { assert(permitted(file), 'OFFLINE_FILE_DENIED'); return fs.readFileSync(file, encoding); }};
@@ -65,8 +74,12 @@ function createHarness(root, options = {}) {
     if (['path', 'crypto'].includes(request)) return require(request);
     if (!request.startsWith('.') && !path.isAbsolute(request)) throw Error('OFFLINE_MODULE_DENIED:' + request);
     let file = path.resolve(path.dirname(parent), request);
-    const commonPrefix = path.join(root, 'common');
-    if (file === commonPrefix || file.startsWith(commonPrefix + path.sep)) file = common + file.slice(commonPrefix.length);
+    for (const item of entries) {
+      const commonPrefix = path.join(item.root, 'common');
+      if (file === commonPrefix || file.startsWith(commonPrefix + path.sep)) {
+        file = item.common + file.slice(commonPrefix.length); break;
+      }
+    }
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       if (fs.existsSync(file + '.js')) file += '.js';
       else if (fs.existsSync(file + '.json')) file += '.json';
