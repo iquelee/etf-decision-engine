@@ -11,7 +11,7 @@ const proof = {reference: 'fixture:terminal', entries_closed: true, executions_t
 // Snapshot + conflicting write model at the wire boundary. No authentication,
 // sockets or server-side isolation proof. Optional explicit SDK package mode
 // exercises the actual captured 1.4.1 database and EJSON serializers.
-function backend(EJSON = JSON, namespace = collection) {
+function backend(EJSON = JSON, namespace = collection, options = {}) {
   let rows = new Map(), version = 0, sequence = 0;
   const sessions = new Map(), calls = [];
   const state = {fault: null, calls, seed(id, row) { rows.set(id, {_id: id, ...clone(row)}); version++; },
@@ -52,14 +52,15 @@ function backend(EJSON = JSON, namespace = collection) {
         const insertedIds = [];
         for (const raw of params.data) {
           const row = EJSON.parse(raw); assert(!data.has(row._id), 'unique primary key');
-          if (!tx) assert(row.kind === 'control' && row.revision === 0, 'only explicit probe fixture bootstrap outside transaction');
+          if (!tx) assert((row.kind === 'control' && row.revision === 0) || (options.entryFixture === true &&
+            ['entry:schedule', 'entry:business', 'entry:attempt-0', 'entry:attempt-1'].includes(row._id)), 'only explicit probe fixture bootstrap outside transaction');
           data.set(row._id, row); insertedIds.push(row._id);
         }
         if (tx) tx.dirty = true; else version++;
         return {requestId, data: {insertedIds}};
       }
-      assert(tx, 'all updates must be transactional');
-      tx.dirty = true;
+      assert(tx || (options.entryFixture === true && ['entry:attempt-0', 'entry:attempt-1'].includes(query._id)), 'all updates must be transactional');
+      if (tx) tx.dirty = true; else version++;
       assert.strictEqual(action, 'database.modifyDocument');
       assert.strictEqual(params.upsert, false); assert.strictEqual(params.multi, false);
       const update = EJSON.parse(params.data); assert.deepStrictEqual(Object.keys(update), ['$set']);

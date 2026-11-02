@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "status": "ENTRY_TIMER_AND_TRANSPORT_CANDIDATE_NOT_DEPLOYED",
+  "environment": "tradingview-etf-d0fa42yy57cbc11b",
+  "collection": "runtime24_journal_probe_entry_20261102",
+  "scope": "isolated-entry-timer-proof",
+  "root_name": "writerEntryFacade24",
+  "worker_name": "writerEntryWorker24",
+  "runtime": "Nodejs24.11",
+  "handler": "index.main",
+  "type": "Event",
+  "memory_mb": 256,
+  "root_timeout_seconds": 150,
+  "worker_timeout_seconds": 120,
+  "transport_timeout_ms": 135000,
+  "reserve_ms": 5000,
+  "worker_delay_ms": 115000,
+  "sdk_version": "2.11.0",
+  "database_version": "1.4.1",
+  "timer_name": "writerEntryOnce20261102",
+  "timer_message": "entry-timer-proof-v1",
+  "cron_timezone": "Asia/Shanghai",
+  "timer_schedule_rule": "One occurrence only: first whole UTC minute at least 180 seconds after prepare; prepare accepts 120..360 seconds in the future. Compile exact second/minute/hour/day/month/year in the independently verified native trigger timezone; weekday must be '?' (not '*'). Never a recurring cron.",
+  "root_async_config": {
+    "MsgTTL": 600,
+    "RetryConfig": [
+      {"ErrorCode": ["default"], "RetryNum": 1, "RetryInterval": 60},
+      {"ErrorCode": ["432"], "RetryNum": 0, "RetryInterval": 60}
+    ]
+  },
+  "worker_async_config": {
+    "MsgTTL": 600,
+    "RetryConfig": [
+      {"ErrorCode": ["default"], "RetryNum": 0, "RetryInterval": 60},
+      {"ErrorCode": ["432"], "RetryNum": 0, "RetryInterval": 60}
+    ]
+  },
+  "manual_prepare_case": "prepare-entry-proof-v1",
+  "manual_audit_case": "audit-entry-proof-v1",
+  "maximum_expected_root_calls": 4,
+  "maximum_expected_worker_calls": 2,
+  "maximum_expected_total_calls": 6,
+  "maximum_business_executions": 1,
+  "maximum_documents": 7,
+  "documents": ["entry:schedule", "entry:business", "entry:attempt-0", "entry:attempt-1", "derived control/request/token primary keys"],
+  "public_routes": [],
+  "custom_environment_variables": {},
+  "fixture_signing_key_note": "Public synthetic key for isolated fixed-scope fixture only, never a production signing key.",
+  "production_imports": [],
+  "production_function_updates": [],
+  "production_calls": [],
+  "production_timer_changes": [],
+  "iam_changes": false,
+  "fixture_resets": false,
+  "failure_timer_action": "At most one disable (CLOSE) of this new one-off timer if an unexpected outcome occurs. Never modify production timers; no delete or timer-create retry.",
+  "source_files": [
+    "release/writer-admission.js",
+    "release/writer-admission-cloudbase.js",
+    "release/writer-admission-journal.js",
+    "release/writer-journal-cloudbase.js",
+    "release/writer-entry.js",
+    "release/runtime24-entry-proof.js",
+    "release/runtime24-entry-proof-plan.json"
+  ],
+  "failure_policy": "Stop on unexpected outcome. Never resubmit prepare/audit/worker or reset fixtures. A root retry after unknown prior outcome returns STOPPED without forwarding. One intentional root failure is permitted only after confirmed first business completion, to observe exactly one configured native retry. No deployment or invocation is authorized by this plan alone."
+}
