@@ -17,7 +17,7 @@ async function fixture(producer = 'runDecisionEngine', seed = true) {
   }
   const state = {inits: [], loads: 0, contextArguments: [], cloudEnvironment: ns.environment, node: 24, secret: key.toString('hex')};
   const sdk = {SYMBOL_CURRENT_ENV: Symbol('current'), getCloudbaseContext(...args) {
-    state.contextArguments.push(args);return {TCB_ENV: state.cloudEnvironment};
+    state.contextArguments.push(args);return {TCB_ENV: state.cloudEnvironment, TRIGGER_SRC: state.triggerSource};
   }, init(config) {state.inits.push(config);return {config, database: () => database,
     callFunction: async (request, options) => {assert(state.call, 'NO_NETWORK');return state.call(request, options);}};}};
   const bootstrap = createBootstrap({producer, sdk, sdkVersion: '2.11.0', databaseVersion: '1.4.1',

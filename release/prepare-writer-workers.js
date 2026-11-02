@@ -7,7 +7,7 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const repo = path.resolve(__dirname, '..');
 const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1024 * 1024});
 const modules = ['writer-admission', 'writer-admission-cloudbase', 'writer-admission-journal', 'writer-journal-cloudbase',
-  'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap'];
+  'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root', 'writer-timer-identity'];
 function fileMap(root) {
   const files = {};
   function walk(dir) {for (const item of fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -72,8 +72,10 @@ function build({source, inventoryRoot, out}) {
     const config = JSON.parse(fs.readFileSync(path.join(root, 'config.json')));
     assert.strictEqual(config.timeout, 120);assert.deepStrictEqual(config.envVariables, {DECISION_ENV: 'prod'});
     config.triggers = [];json(path.join(candidate, 'config.json'), config);
-    json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_SIGNED_RPC_CANDIDATE_NOT_QUALIFIED', source_commit: source,
+    json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED', source_commit: source,
       producer, target, runtime: 'Nodejs24.11', timeout_seconds: 120, memory_mb: 256, source_files_sha256: sourceHashes,
+      accepted_entries: producer === 'materializeIndicators' ? ['signed-rpc', 'native-timer-local'] : ['signed-rpc'],
+      native_timer_source_and_retry_qualification: 'NOT_PROVEN',
       input_map_sha256: input.mapHash, input_entry_sha256: files['index.js'], alterations,
       configuration_delta: 'preserve timeout and DECISION_ENV; remove triggers; signing keys absent'});
     const output = fileMap(candidate), changed = Object.keys(files).filter(file => output[file] !== files[file]);

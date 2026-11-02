@@ -1,8 +1,8 @@
 # Node24 写链函数包候选
 
-状态：**OFFLINE_SIGNED_RPC_CANDIDATE_NOT_QUALIFIED**。本批没有部署、配置、调用或创建云资源，不追加部署台账。生产迁移和自然运行验收仍未完成；最后云端批次是 D-026，长转发失败后保持 HOLD，不能重用该批批准。
+状态：**OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED**。本批没有部署、配置、调用或创建云资源，不追加部署台账。生产迁移和自然运行验收仍未完成；最后云端批次是 D-026，长转发失败后保持 HOLD，不能重用该批批准。
 
-`release/writer-worker-bootstrap.js` 把现有签名准入和调用上下文接到两个静态目标：`runDecisionEngineNode24`、`materializeIndicatorsNode24`。这是仅接收签名 RPC 的入口，没有 Timer 或 HTTP 根入口适配。运行时使用 SDK 无参数 `getCloudbaseContext()` 读取环境，并核对原生 context.function_name 和 Node major 24；事件内环境或函数名不作为运行身份。
+`release/writer-worker-bootstrap.js` 把现有签名准入和调用上下文接到两个静态目标：`runDecisionEngineNode24`、`materializeIndicatorsNode24`。`0d29536` 封存版仅接收签名 RPC；后续新增了[原生 Timer 本地准入候选](V368_WRITER_NATIVE_ROOT.md)，尚未取得平台重试/来源资格或接上生产触发器。HTTP 根入口仍未接线。运行时使用 SDK 无参数 `getCloudbaseContext()` 读取环境，并核对原生 context.function_name 和 Node major 24；事件内环境或函数名不作为运行身份。
 
 密钥分别来自 `WRITER_RDE_SIGNING_KEY_HEX`、`WRITER_MATERIALIZER_SIGNING_KEY_HEX`，要求显式 32 字节十六进制值。没有默认生产密钥，仓库和包内不生成密钥。物化还需要 RDE 密钥来签子调用。每次调用重新检查密钥，热实例内密钥变化会拒绝请求，不能据此声称已经实现轮换协议。错误运行身份、缺密钥和签名错误在 SDK init、存储访问和业务导入前被拒绝。
 
@@ -16,7 +16,7 @@
 
 `release/prepare-writer-workers.js` 只接受当前干净的完整 40 位源码 SHA、新的仓外输出目录，以及独立下载包和原始文件 map。两个输入 map 必须匹配既有 inventory，逐文件核对全部内容、拒绝符号链接，构建后再次核对原包。
 
-每包保留自己的 common 和依赖，不运行安装，不叠加仓库 canonical common。仅将原 index 保存为 business.js，并对它及 common/utils/db.js、common/utils/intel-refresh.js 的唯一 SDK require 做明确替换；扫描到额外 SDK 引用即停止。新增签名入口、shim 和八个模块。保留原配置的 DECISION_ENV=prod 和 120 秒 timeout，去掉全部 triggers；新包不附带签名密钥。原 RELEASE_SOURCE 等历史文件保留，新的 SOURCE_IDENTITY.json 明确它是派生候选。输出逐文件 SHA、固定时间戳 ZIP 和构建收据，不调用云 API。
+每包保留自己的 common 和依赖，不运行安装，不叠加仓库 canonical common。仅将原 index 保存为 business.js，并对它及 common/utils/db.js、common/utils/intel-refresh.js 的唯一 SDK require 做明确替换；扫描到额外 SDK 引用即停止。新增入口、shim 和协议模块（`0d29536` 八个；后续 Timer 候选十个）。保留原配置的 DECISION_ENV=prod 和 120 秒 timeout，去掉全部 triggers；新包不附带签名密钥。原 RELEASE_SOURCE 等历史文件保留，新的 SOURCE_IDENTITY.json 明确它是派生候选。输出逐文件 SHA、固定时间戳 ZIP 和构建收据，不调用云 API。
 
 `tests/writer-worker-bootstrap.test.js` 使用内存事务模型验证九个范围的缺记录拒绝、固定命名空间、鉴权先于存储、业务延迟导入、业务 ok:false 保留、永久重复拒绝、热实例密钥变化拒绝，以及物化到 RDE 的两个范围和签名子请求。这些是模型证据，不是实际包整体业务对拍或真实 SDK 传输证明。
 

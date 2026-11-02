@@ -1,8 +1,10 @@
 'use strict';
-// Signed RPC package wiring only. No native Timer/HTTP adapter or cloud bootstrap.
+// Offline signed RPC / local Timer package wiring. No HTTP or cloud bootstrap.
 const assert = require('assert');
 const entry = require('./writer-entry');
 const {createInvocationWorker} = require('./writer-invocation-worker');
+const {createLocalRoot} = require('./writer-local-root');
+const {createTimerIdentity, policies: timerPolicies} = require('./writer-timer-identity');
 const {createProductionStore, productionNamespace} = require('./writer-journal-cloudbase');
 const plans = Object.freeze({
   runDecisionEngine: Object.freeze({target: 'runDecisionEngineNode24', key: 'WRITER_RDE_SIGNING_KEY_HEX'}),
@@ -17,7 +19,7 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
   assert(typeof loadMain === 'function');
   const plan = plans[producer], environment = productionNamespace.environment;
   const binding = Object.freeze({environment, scope: 'production/' + producer});
-  let service, sealedKeys;
+  let service, timerRoot, sealedKeys;
   function keys() {
     const names = [plan.key];
     if (producer === 'materializeIndicators') names.push(plans.runDecisionEngine.key);
@@ -32,8 +34,10 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
     const observed = sdk.getCloudbaseContext();
     assert(observed && (observed.TCB_ENV || observed.SCF_NAMESPACE) === environment);
     assert(context && context.function_name === plan.target && nodeMajor() === 24);
-    return {environment, function_name: context.function_name, node_major: 24};
+    return {environment, function_name: context.function_name, node_major: 24, trigger_source: observed.TRIGGER_SRC};
   }
+  const timerIdentity = Object.hasOwn(timerPolicies, producer) ?
+    createTimerIdentity({environment, producer, target: plan.target, runtimeIdentity: runtime}) : null;
   const configuredSdk = new Proxy(sdk, {get(original, property) {
     if (property !== 'init') return Reflect.get(original, property, original);
     return (config = {}) => {
@@ -59,19 +63,28 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
         key: currentKeys[1], action: 'decision', transportTimeoutMs: 15000,
         targets: {old: 'runDecisionEngine', new: plans.runDecisionEngine.target}};
     }
-    service = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
+    const candidate = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
       owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes});
+    const candidateRoot = timerIdentity ? createLocalRoot({store, binding, target: plan.target, owner: 'new', key: currentKeys[0],
+      identify: timerIdentity, runtimeIdentity: runtime, worker: candidate.main}) : null;
+    service = candidate;timerRoot = candidateRoot;
     sealedKeys = currentKeys.map(key => Buffer.from(key));
   }
   return {
     async main(event, context) {
+      let timer = false;
       try {
         runtime(context);
         const currentKeys = keys();
-        entry.authenticate(event, {binding, target: plan.target, owner: 'new', key: currentKeys[0]});
+        if (event && event.protocol === 'writer-entry-v1')
+          entry.authenticate(event, {binding, target: plan.target, owner: 'new', key: currentKeys[0]});
+        else {
+          assert(timerIdentity, 'no native timer declared');
+          await timerIdentity(event, context);timer = true;
+        }
         prepare(currentKeys);
       } catch (_) { return denied(); }
-      return service.main(event, context);
+      return timer ? timerRoot(event, context) : service.main(event, context);
     },
     getBusinessSdk() { assert(service, 'authenticated invocation required before SDK import');return service.sdk; }
   };
