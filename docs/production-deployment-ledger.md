@@ -1081,3 +1081,19 @@ owner明确回复“批准”，仅覆盖源码 `85bc24e7762105fb44db9250b653252
 执行源码本机完整Stage A91/91、Node22/24真实SDK内存传输及实际候选main通过；Actions #207六组成功：https://github.com/iquelee/etf-decision-engine/actions/runs/40905316365 。原31文件候选content与冻结23项不变。证据位于仓外runtime24-journal-conflict-v1/execution/，包含批准、前后下载、一次调用、独立fixture/边界与DEPLOYMENT_REPORT.json；282文档保留，不作清理。准备请求/计划中的待批准和未部署标签保留历史封存原样。
 
 下一步是生产入口身份、门面返回/时限、旧/新共同准入和真实排空的可审核接线候选。生产RDE仍为D-018/Node16，尚无Node24生产自然运行验收；目标保持进行中。
+
+---
+
+### D-025 · 2026-11-02 · 隔离入口资源创建，异步配置被拒后停止
+
+owner回复“批准上述精确范围”，绑定源码`9ad435620057efa8d0c409c7848e70c77ba9b08c`、申请SHA256 `572b913bc7b53c07ba54bfa391b978d44e9a26e819f062bf5cee7b841eb5d1f4`、facade ZIP `a33b649134086416eebd80cec2a9e227bda02e00d314d780ef8c980dfbd91a66`、worker ZIP `5d10bca8ea5e7d65683a9c491aaf8ac2cbd00192c836a0d1469fdfdaca8ea2e6`、私有部署配置`7643e06713cc5b002c787ad8763ecb6e3953fb14923dd5d00b89d9d8be501b08`及异步配置体`ddc28e6949d375613d34446de90c593a00e10576be5205b01eeed688038c4d9e`。
+
+初次只读预检因管理凭据invalid token停止，没有云写；恢复现有账号设备登录后，新鲜15函数/34集合与原15完整受控配置通过，新资源名不存在。仅新建空集合`runtime24_journal_probe_entry_20261102`，以及`writerEntryFacade24`（Add/ModTime北京时间14:26:31，CodeSize4067502，150s）和`writerEntryWorker24`（14:27:00，CodeSize4067507，120s）。均Event/Nodejs24.11/index.main/256MB，复用已批准角色，空自定义环境变量、无timer和公开路由。两包独立下载分别EXACT_MATCH1714/1714，1703份依赖原字节匹配。未调用main，不声称实际process.version已验证。
+
+唯一一次新facade异步配置请求被拒：`InvalidParameterValue.AsyncTriggerConfig`。按范围立即停止，没有提交worker异步配置、没有prepare/timer/audit/worker调用、没有重试或资源清理。独立回读两新函数均保持默认MsgTTL21600/default RetryNum2+60s/432 RetryNum-1+60s，新集合0条、两新函数触发器为空。原申请希望的TTL600及432零重试未生效；不能在默认配置下继续原定自然Timer验证。
+
+本批发现：读回ErrorCode/RetryInterval被误用于写请求，官方RetryConfig写入类型仅声明RetryNum，服务端未指出具体无效字段；原本地回读检查也应解包`data.AsyncTriggerConfig`。只能先修复离线契约并重新明确配置范围，不能把本批批准用于失败后试发不同参数。
+
+边界PASS：原15函数配置/代码元数据不变，函数15→17、集合34→35且仅上述新增；D-023/D-024旧282条journal原始内容全部不变，完整路由、已观察托管元数据、生产pointer/runtime不变。本批函数调用0、timer创建0，无生产调用、IAM/资源权限、策略或ML修改，无删除/重置/应急CLOSE。
+
+资格**NOT_QUALIFIED**：真实Timer事件身份、原生重试及真实115秒转发均NOT_RUN；本地93/93、Actions #210六组成功和内存115秒模型不替代这些证据。生产主要写函数仍Node16，目标未完成。所有新旧资源/记录保留。仓外证据`runtime24-entry-proof-v1/execution/DEPLOYMENT_REPORT.json`及授权、封包、独立下载、配置拒绝和边界记录；详见[实际结果](V368_WRITER_ENTRY_CLOUD_PROOF.md)。

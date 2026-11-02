@@ -1,6 +1,6 @@
 # 真实Timer重试身份与长转发：有界隔离候选
 
-状态：**LOCAL_CANDIDATE_NOT_DEPLOYED**，2026-11-02。目标是一次闭合入口接线的两个平台证据缺口，不替代生产迁移或夜间/盘前自然验收。本候选尚未创建云资源、设置timer、修改重试配置或调用函数。
+当前结果：**D-025 / RESOURCES_CREATED_ASYNC_CONFIGURATION_REJECTED_NOT_INVOKED**，2026-11-02。两个隔离函数和空集合已创建，独立下载逐字节一致；首次异步配置请求被拒后停止，没有创建timer或调用函数。真实Timer身份与115秒长转发均NOT_RUN，不替代生产迁移或夜间/盘前自然验收。以下拟执行序列保留为当时批准的历史范围，实际结果见文末。
 
 ## 精确拟验证范围
 
@@ -40,3 +40,20 @@
 已完成只读预检：15函数/34集合，新两函数名和集合名均不存在；所需已有角色与前次SDK隔离角色一致。代码、私有配置、两个ZIP和timer/异步配置范围须封存后，按仓库要求另行取得完整SHA绑定批准，才可执行上述云操作。本文件本身不构成部署授权。
 
 即使本批通过，生产仍需把观察过的native身份接到真实上游、建立管理操作ID、准备生产namespace和生产密钥/包overlay、封闭外部调用及6小时旧重试队列，再分批切换RDE/物化/抓取/后台/实时写入口并自然验收。旧D-021至D-024探针及全部fixture保留原样。
+
+## D-025实际执行：配置被拒后停止
+
+owner绑定源码`9ad435620057efa8d0c409c7848e70c77ba9b08c`、两个ZIP和申请SHA256 `572b913bc7b53c07ba54bfa391b978d44e9a26e819f062bf5cee7b841eb5d1f4`回复“批准上述精确范围”。最初管理通道invalid token导致预检停止、无云写；恢复现有账号设备登录后，新鲜15函数/34集合检查通过。没有IAM或资源权限修改。
+
+- facade在北京时间14:26:31创建，CodeSize4067502，Nodejs24.11/index.main/150s/256MB。
+- worker在14:27:00创建，CodeSize4067507，Nodejs24.11/index.main/120s/256MB。
+- 两函数各1714文件独立下载全部匹配，1703份依赖原字节不变，角色/零自定义环境变量/零timer/无公开路由通过；这里只证明Runtime配置，未取得实际process.version。
+- 新集合独立回查0条；新scope尚未初始化。
+
+第一次、也是唯一一次`UpdateFunctionEventInvokeConfig`只针对新facade，返回`InvalidParameterValue.AsyncTriggerConfig`。随即停止：worker配置未提交，prepare/timer/audit/worker均未调用，无重提、重置、删除或应急CLOSE。独立回读两函数仍为默认MsgTTL21600、default RetryNum2/60、432 RetryNum-1/60。不得在这些默认配置下继续原定timer验证。
+
+准备中误将读取返回的ErrorCode/RetryInterval也用于写请求；[官方RetryConfig输入结构](https://cloud.tencent.com/document/api/583/17244)仅声明RetryNum，[更新接口示例](https://cloud.tencent.com/document/api/583/53639)也仅使用RetryNum。服务端未细分具体无效字段，不能把推断当已验证根因。另外实测读取值位于`data.AsyncTriggerConfig`，原执行器直接读`data.MsgTTL`也需修复。不能在本批停止后试发不同请求来探测支持范围，亦不能声称公开接口能够将432重试设为0。
+
+边界PASS：原15函数完整受控配置/代码元数据不变，函数15→17仅上述新增，集合34→35仅上述新增。旧282条journal原始内容全部不变，全部域名路由、已观察托管元数据、生产pointer/runtime不变。生产写链仍Node16，无生产调用或自然验收。
+
+本批资格为**NOT_QUALIFIED**。下一步先按官方写入契约及实测包装修复离线请求构造/回读检查，明确平台432重试与队列存活的实际边界，再针对两个既有隔离函数准备新的配置/调用范围。不重建资源、不清理现场；旧批准不作为本批失败后的重试授权。仓外证据：`runtime24-entry-proof-v1/execution/DEPLOYMENT_REPORT.json`及完整授权/部署/下载/配置拒绝/独立回查/边界记录。
