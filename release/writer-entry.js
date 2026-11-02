@@ -141,4 +141,4 @@ function createFacade({store, binding, targets, key, identify, callFunction, bud
     return unknown();
   };
 }
-module.exports = {scheduledRequest, manualRequest, childRequest, seal, createWorker, createFacade, budgetCheck};
+module.exports = {scheduledRequest, manualRequest, childRequest, seal, authenticate, createWorker, createFacade, budgetCheck};

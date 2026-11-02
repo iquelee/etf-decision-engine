@@ -10,25 +10,32 @@ function potentialMutation(event = {}) {
   // can therefore mutate login guards/password migration/session records.
   return path === '/api/admin/login' || (path.startsWith('/api/admin/') && method === 'POST');
 }
-function createAdminMaintenanceEntry({binding, readRollout, loadMain}) {
+function createAdminMaintenanceCheck({binding, readRollout}) {
   assert(binding && text(binding.environment) && text(binding.scope));
   assert.deepStrictEqual(Object.keys(binding).sort(), ['environment', 'scope']);binding = Object.freeze({...binding});
-  assert(typeof readRollout === 'function' && typeof loadMain === 'function');
-  const denied = () => ({code: 503, data: null, message: '写入维护中，请稍后重试'});
-  return async (event = {}, context = {}) => {
+  assert(typeof readRollout === 'function');
+  return async (event = {}) => {
     let mutation;
-    try { mutation = potentialMutation(event); } catch (_) { return denied(); }
+    try { mutation = potentialMutation(event); } catch (_) { return false; }
     if (mutation) {
       try {
         const rollout = await readRollout(binding);
         assert(rollout && rollout.schema === 1 && rollout.environment === binding.environment && rollout.scope === binding.scope);
         assert.deepStrictEqual(Object.keys(rollout).sort(), ['environment', 'revision', 'schema', 'scope', 'state']);
         assert(Number.isSafeInteger(rollout.revision) && rollout.revision >= 0 && ['OPEN', 'CLOSED'].includes(rollout.state));
-        if (rollout.state !== 'OPEN') return denied();
-      } catch (_) { return denied(); }
+        if (rollout.state !== 'OPEN') return false;
+      } catch (_) { return false; }
     }
+    return true;
+  };
+}
+function createAdminMaintenanceEntry({binding, readRollout, loadMain}) {
+  assert.strictEqual(typeof loadMain, 'function');
+  const check = createAdminMaintenanceCheck({binding, readRollout});
+  return async (event = {}, context = {}) => {
+    if (!(await check(event))) return {code: 503, data: null, message: '写入维护中，请稍后重试'};
     const main = await loadMain();assert.strictEqual(typeof main, 'function');
     return main(event, context); // Original auth, validation, business and returns remain inside.
   };
 }
-module.exports = {potentialMutation, createAdminMaintenanceEntry};
+module.exports = {potentialMutation, createAdminMaintenanceCheck, createAdminMaintenanceEntry};
