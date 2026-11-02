@@ -1,14 +1,17 @@
 'use strict';
-// Offline signed RPC / local Timer package wiring. No HTTP or cloud bootstrap.
+// Offline signed RPC / local Timer / admin HTTP wiring. No cloud bootstrap.
 const assert = require('assert');
 const entry = require('./writer-entry');
 const {createInvocationWorker} = require('./writer-invocation-worker');
 const {createLocalRoot} = require('./writer-local-root');
 const {createTimerIdentity, policies: timerPolicies} = require('./writer-timer-identity');
+const {createAdminHttpRoot, inspect: inspectAdmin} = require('./writer-admin-http');
+const {createAdminMaintenanceCheck} = require('./writer-admin-maintenance');
 const {createProductionStore, productionNamespace} = require('./writer-journal-cloudbase');
 const plans = Object.freeze({
   runDecisionEngine: Object.freeze({target: 'runDecisionEngineNode24', key: 'WRITER_RDE_SIGNING_KEY_HEX'}),
-  materializeIndicators: Object.freeze({target: 'materializeIndicatorsNode24', key: 'WRITER_MATERIALIZER_SIGNING_KEY_HEX'})
+  materializeIndicators: Object.freeze({target: 'materializeIndicatorsNode24', key: 'WRITER_MATERIALIZER_SIGNING_KEY_HEX'}),
+  adminGateway: Object.freeze({target: 'adminGatewayNode24', key: 'WRITER_ADMIN_SIGNING_KEY_HEX'})
 });
 const denied = () => ({protocol: 'writer-result-v1', executed: false, admission: 'ENTRY_AUTHENTICATION_FAILED'});
 function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
@@ -19,10 +22,10 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
   assert(typeof loadMain === 'function');
   const plan = plans[producer], environment = productionNamespace.environment;
   const binding = Object.freeze({environment, scope: 'production/' + producer});
-  let service, timerRoot, sealedKeys;
+  let service, timerRoot, httpRoot, sealedKeys;
   function keys() {
     const names = [plan.key];
-    if (producer === 'materializeIndicators') names.push(plans.runDecisionEngine.key);
+    if (producer === 'materializeIndicators' || producer === 'adminGateway') names.push(plans.runDecisionEngine.key);
     return names.map(name => {
       const raw = readEnvironment(name);
       assert(typeof raw === 'string' && /^[0-9a-fA-F]{64}$/.test(raw), 'explicit 32-byte signing key required');
@@ -57,34 +60,52 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
     const database = configuredSdk.init({timeout: 15000}).database();
     const store = createProductionStore({database, binding});
     const childRoutes = {};
-    if (producer === 'materializeIndicators') {
+    if (producer === 'materializeIndicators' || producer === 'adminGateway') {
       const childBinding = {environment, scope: 'production/runDecisionEngine'};
       childRoutes.runDecisionEngine = {binding: childBinding, store: createProductionStore({database, binding: childBinding}),
         key: currentKeys[1], action: 'decision', transportTimeoutMs: 15000,
         targets: {old: 'runDecisionEngine', new: plans.runDecisionEngine.target}};
     }
+    let beforeAdmission;
+    const rolloutBinding = {environment, scope: 'production/writer-rollout'};
+    const checkedRows = r => {
+      assert(r && !r.code && typeof r.requestId === 'string' && r.requestId.length && Array.isArray(r.data));return r.data;
+    };
+    if (producer === 'adminGateway') beforeAdmission = createAdminMaintenanceCheck({binding: rolloutBinding, readRollout: async () => {
+      const rows = checkedRows(await database.collection(productionNamespace.collection).doc('rollout:adminGateway').get());
+      assert(rows.length <= 1);if (!rows.length) return null;
+      const {_id, ...record} = rows[0];assert.strictEqual(_id, 'rollout:adminGateway');return record;
+    }});
     const candidate = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
-      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes});
+      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission});
     const candidateRoot = timerIdentity ? createLocalRoot({store, binding, target: plan.target, owner: 'new', key: currentKeys[0],
       identify: timerIdentity, runtimeIdentity: runtime, worker: candidate.main}) : null;
-    service = candidate;timerRoot = candidateRoot;
+    const candidateHttp = producer === 'adminGateway' ? createAdminHttpRoot({binding, target: plan.target, owner: 'new',
+      key: currentKeys[0], store, runtimeIdentity: runtime, beforeAdmission, worker: candidate.main,
+      readToken: async () => {
+        const rows = checkedRows(await database.collection('param_config').where({key: 'admin_token'}).limit(2).get());
+        return rows.length === 1 && rows[0].value ? rows[0].value : null;
+      }, loadReadMain: () => loadMain(candidate.sdk)}) : null;
+    service = candidate;timerRoot = candidateRoot;httpRoot = candidateHttp;
     sealedKeys = currentKeys.map(key => Buffer.from(key));
   }
   return {
     async main(event, context) {
-      let timer = false;
+      let mode = producer === 'adminGateway' && !(event && event.protocol === 'writer-entry-v1') ? 'http' : 'signed';
       try {
         runtime(context);
         const currentKeys = keys();
         if (event && event.protocol === 'writer-entry-v1')
           entry.authenticate(event, {binding, target: plan.target, owner: 'new', key: currentKeys[0]});
-        else {
+        else if (mode === 'http') {
+          try {inspectAdmin(event);} catch (_) {return {code: 400, data: null, message: '请求或操作标识无效'};}
+        } else {
           assert(timerIdentity, 'no native timer declared');
-          await timerIdentity(event, context);timer = true;
+          await timerIdentity(event, context);mode = 'timer';
         }
         prepare(currentKeys);
-      } catch (_) { return denied(); }
-      return timer ? timerRoot(event, context) : service.main(event, context);
+      } catch (_) { return mode === 'http' ? {code: 503, data: null, message: '写入入口不可用'} : denied(); }
+      return mode === 'timer' ? timerRoot(event, context) : mode === 'http' ? httpRoot(event, context) : service.main(event, context);
     },
     getBusinessSdk() { assert(service, 'authenticated invocation required before SDK import');return service.sdk; }
   };

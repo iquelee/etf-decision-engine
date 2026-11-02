@@ -7,7 +7,8 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const repo = path.resolve(__dirname, '..');
 const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1024 * 1024});
 const modules = ['writer-admission', 'writer-admission-cloudbase', 'writer-admission-journal', 'writer-journal-cloudbase',
-  'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root', 'writer-timer-identity'];
+  'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root', 'writer-timer-identity',
+  'writer-admin-http', 'writer-admin-maintenance'];
 function fileMap(root) {
   const files = {};
   function walk(dir) {for (const item of fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -30,7 +31,7 @@ function build({source, inventoryRoot, out}) {
   assert(!fs.existsSync(out), 'new output directory required');
   const inventory = JSON.parse(git('show', source + ':release/runtime24-writer-inventory.json'));
   const sourceHashes = Object.fromEntries(modules.map(name => ['release/' + name + '.js', sha(git('show', source + ':release/' + name + '.js'))]));
-  const inputs = ['runDecisionEngine', 'materializeIndicators'].map(producer => {
+  const inputs = ['runDecisionEngine', 'materializeIndicators', 'adminGateway'].map(producer => {
     const root = fs.realpathSync(path.join(inventoryRoot, producer + '-download'));
     const mapFile = path.join(inventoryRoot, producer + '.files.json');
     const mapHash = inventory.functions.find(f => f.FunctionName === producer).download.raw_file_map_sha256;
@@ -70,11 +71,13 @@ function build({source, inventoryRoot, out}) {
       "  loadMain: async () => require('./business').main});\nexports.main = bootstrap.main;\nexports.getBusinessSdk = bootstrap.getBusinessSdk;\n");
     fs.writeFileSync(path.join(candidate, 'writer-sdk.js'), "'use strict';\nmodule.exports = require('./index').getBusinessSdk();\n");
     const config = JSON.parse(fs.readFileSync(path.join(root, 'config.json')));
-    assert.strictEqual(config.timeout, 120);assert.deepStrictEqual(config.envVariables, {DECISION_ENV: 'prod'});
+    const timeout = producer === 'adminGateway' ? 60 : 120;
+    assert.strictEqual(config.timeout, timeout);assert.deepStrictEqual(config.envVariables, {DECISION_ENV: 'prod'});
     config.triggers = [];json(path.join(candidate, 'config.json'), config);
     json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED', source_commit: source,
-      producer, target, runtime: 'Nodejs24.11', timeout_seconds: 120, memory_mb: 256, source_files_sha256: sourceHashes,
-      accepted_entries: producer === 'materializeIndicators' ? ['signed-rpc', 'native-timer-local'] : ['signed-rpc'],
+      producer, target, runtime: 'Nodejs24.11', timeout_seconds: timeout, memory_mb: 256, source_files_sha256: sourceHashes,
+      accepted_entries: ['signed-rpc', ...(producer === 'materializeIndicators' ? ['native-timer-local'] :
+        producer === 'adminGateway' ? ['admin-http-local'] : [])],
       native_timer_source_and_retry_qualification: 'NOT_PROVEN',
       input_map_sha256: input.mapHash, input_entry_sha256: files['index.js'], alterations,
       configuration_delta: 'preserve timeout and DECISION_ENV; remove triggers; signing keys absent'});

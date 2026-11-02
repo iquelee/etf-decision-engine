@@ -94,7 +94,7 @@ async function main() {
   const matResult = await materializer.bootstrap.main(await materializer.wire('fixture:materializer'), materializer.context);
   assert.strictEqual(matResult.outcome, 'COMPLETE');assert.deepStrictEqual(matResult.result, {child: {force: true}});
   assert.strictEqual(childCalls, 1);assert.strictEqual(materializer.b.rows().length, 6);
-  assert.throws(() => createBootstrap({producer: 'adminGateway'}), /producer/);
+  assert.throws(() => createBootstrap({producer: 'fetchDailyData'}), /producer/);
   assert.throws(() => createBootstrap({producer: 'runDecisionEngine', sdkVersion: '3.0.0'}), /versions/);
   console.log('writer bootstrap: fixed nine scopes, no auto-init, signed-only entry, lazy imports, SDK policy and warm key checks PASS (MODEL_ONLY)');
 }
