@@ -14,6 +14,7 @@
 
 // ⚠️ `import.meta.env` 由 Vite 注入；裸 Node（跑测试）下为 undefined ⇒ 用空对象兜底，
 //    使本模块可在无打包器环境下被 import（api-client 测试需要）。
+import {fetchAdminOperation} from '../utils/admin-operations.js';
 const ENV = import.meta.env || {};
 const API_BASE = ENV.VITE_API_BASE || '';
 const ADMIN_BASE = ENV.VITE_ADMIN_BASE || '';
@@ -47,7 +48,8 @@ export const API_ERROR_KIND = Object.freeze({
   HTTP: 'HTTP',
   UNAUTHORIZED: 'UNAUTHORIZED',
   ENVELOPE: 'ENVELOPE',
-  PARSE: 'PARSE'
+  PARSE: 'PARSE',
+  PENDING_OPERATION: 'PENDING_OPERATION'
 });
 
 export class ApiError extends Error {
@@ -97,13 +99,15 @@ async function call(base, path, { method = 'GET', body, auth = false, signal, ti
 
   let res;
   try {
-    res = await fetch(base + path, {
+    const init = {
       method,
       headers,
       body: method === 'GET' ? undefined : JSON.stringify(body === undefined ? {} : body),
       signal: controller ? controller.signal : signal
-    });
+    };
+    res = method === 'POST' && path.startsWith('/api/admin/') ? await fetchAdminOperation(base + path, init) : await fetch(base + path, init);
   } catch (e) {
+    if (e && e.pendingOperation) throw new ApiError(API_ERROR_KIND.PENDING_OPERATION, e.message);
     if (e && e.name === 'AbortError') {
       throw new ApiError(API_ERROR_KIND.TIMEOUT, '请求超时（' + timeoutMs + 'ms）');
     }

@@ -19,7 +19,7 @@ const sources = [
   { name: '美国实际利率', key: 'fred', desc: '黄金ETF（518880）宏观（FRED，需配 API Key）' },
   { name: '海外标的', key: 'global', desc: '美光/EWY/纳指/XBI 实时快照（腾讯，每日累积）' },
   { name: 'SEC财报', key: 'sec_financial', desc: '美光 10-Q/10-K 财报（SEC EDGAR 官方 API）' },
-  { name: '新闻搜集', key: 'fundamental_news', aliases: ['eastmoney_fastnews', 'news', 'cninfo_holding', 'hkex_holding', 'dart_holding', 'hk_income', 'dart_financial', 'eastmoney_search', 'clinicaltrials', 'openfda', 'biotech_intel', 'etf_holdings'], desc: '赛道公告 / 港交所 / OpenDART / 东财搜索 / 临床与 FDA。点一次即可，约 5～8 分钟；超时未完成可再点。不要连点' },
+  { name: '新闻搜集', key: 'fundamental_news', aliases: ['eastmoney_fastnews', 'news', 'cninfo_holding', 'hkex_holding', 'dart_holding', 'hk_income', 'dart_financial', 'eastmoney_search', 'clinicaltrials', 'openfda', 'biotech_intel', 'etf_holdings'], desc: '赛道公告 / 港交所 / OpenDART / 东财搜索 / 临床与 FDA。点一次即可，约 5～8 分钟；超时请先核对结果，勿作为新操作重复提交' },
   { name: 'LLM 提取', key: 'llm_extract', aliases: ['llm_global', 'llm_financial'], desc: '重仓股周评 + SEC 硬数字' }
 ];
 

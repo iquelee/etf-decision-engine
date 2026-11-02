@@ -9,8 +9,10 @@
  * 401 时清除本地 token 并跳转 /login。
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-const ADMIN_BASE = import.meta.env.VITE_ADMIN_BASE || '';
+import {fetchAdminOperation} from '../utils/admin-operations.js';
+const ENV = import.meta.env || {};
+const API_BASE = ENV.VITE_API_BASE || '';
+const ADMIN_BASE = ENV.VITE_ADMIN_BASE || '';
 
 const TOKEN_KEY = 'admin_token';
 
@@ -32,8 +34,9 @@ async function request(base, path, options = {}) {
 
   let res;
   try {
-    res = await fetch(`${base}${path}`, init);
+    res = method === 'POST' && path.startsWith('/api/admin/') ? await fetchAdminOperation(`${base}${path}`, init) : await fetch(`${base}${path}`, init);
   } catch (e) {
+    if (e && e.pendingOperation) throw e;
     throw new Error(`网络错误：${e.message || e}`);
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -57,8 +60,9 @@ async function adminRequest(path, options = {}) {
 
   let res;
   try {
-    res = await fetch(`${ADMIN_BASE}${path}`, init);
+    res = method === 'POST' ? await fetchAdminOperation(`${ADMIN_BASE}${path}`, init) : await fetch(`${ADMIN_BASE}${path}`, init);
   } catch (e) {
+    if (e && e.pendingOperation) throw e;
     throw new Error(`网络错误：${e.message || e}`);
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

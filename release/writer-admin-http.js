@@ -26,6 +26,7 @@ function inspect(event) {
   return {business, method, route, mutation, operationId};
 }
 const failure = (code, message, extra = {}) => ({code, data: null, message, ...extra});
+const acknowledge = (result, request, outcome) => ({...result, operation_id: request.operationId, writer_outcome: outcome});
 function createAdminHttpRoot({binding, target, owner, key, store, runtimeIdentity, beforeAdmission, readToken,
   worker, loadReadMain, now = () => Date.now()}) {
   assert([runtimeIdentity, beforeAdmission, readToken, worker, loadReadMain, now].every(fn => typeof fn === 'function'));
@@ -57,19 +58,19 @@ function createAdminHttpRoot({binding, target, owner, key, store, runtimeIdentit
       request = inspect(event);
     } catch (_) {return failure(400, '请求或操作标识无效');}
     let allowed = false;try {allowed = await beforeAdmission(request.business, context) === true;} catch (_) { /* closed */ }
-    if (!allowed) return failure(503, '写入维护中，请稍后重试');
+    if (!allowed) return request.mutation ? acknowledge(failure(503, '写入维护中，请稍后重试'), request, 'DENIED') : failure(503, '写入维护中，请稍后重试');
     if (!request.mutation) {
       const main = await loadReadMain();assert.strictEqual(typeof main, 'function');
       return main(request.business, context); // Original read auth remains authoritative.
     }
-    if (!(await authorized(request))) return failure(401, '未登录或登录已过期');
+    if (!(await authorized(request))) return acknowledge(failure(401, '未登录或登录已过期'), request, 'DENIED');
     const result = await local(request, context);
-    if (!result || !result.error_code || Object.hasOwn(result, 'code')) return result;
+    if (result && Object.hasOwn(result, 'code')) return acknowledge(result, request, 'COMPLETE');
     const uncertain = result.error_code === 'WRITER_EXECUTION_UNKNOWN';
     const duplicate = result.error_code === 'WRITER_ADMISSION_DENIED' && result.reason === 'ALREADY_COMPLETE';
-    return failure(duplicate || uncertain ? 409 : 503,
+    return acknowledge(failure(duplicate || uncertain ? 409 : 503,
       duplicate ? '该操作已执行，请刷新核对结果' : uncertain ? '操作结果待核对，请勿重复提交' : '写入暂不可用，请稍后核对',
-      {operation_id: request.operationId, ...result});
+      {operation_id: request.operationId, ...result}), request, duplicate ? 'ALREADY_COMPLETE' : 'UNKNOWN');
   };
 }
 module.exports = {createAdminHttpRoot, inspect, operationHeader, operationPattern};

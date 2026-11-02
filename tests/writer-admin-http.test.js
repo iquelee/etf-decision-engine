@@ -90,7 +90,9 @@ async function test() {
     post('param', {key: 'offline_fixture_param', value: 7})]) {
     const baseline = await setup(false), actual = await setup();
     const expected = await baseline.h.run(input), result = await actual.bootstrap.main(input, actual.context);
-    assert.deepStrictEqual(copy(result), copy(expected));assert.deepStrictEqual(actual.h.writes, baseline.h.writes);
+    const {operation_id, writer_outcome, ...business} = result;
+    assert.strictEqual(operation_id, input.headers[operationHeader]);assert.strictEqual(writer_outcome, 'COMPLETE');
+    assert.deepStrictEqual(copy(business), copy(expected));assert.deepStrictEqual(actual.h.writes, baseline.h.writes);
     for (const name of new Set(actual.h.writes.map(w => w.collection))) assert.deepStrictEqual(actual.h.rows(name), baseline.h.rows(name));
     const writes = actual.h.writes.length;
     assert.strictEqual((await actual.bootstrap.main({...input, requestId: 'different-transport-attempt'}, actual.context)).code, 409);
