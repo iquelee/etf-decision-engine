@@ -2,6 +2,8 @@
 
 状态：**OFFLINE_ENTRY_CANDIDATE_NOT_DEPLOYABLE**。D-024隔离事务验证已完成；本批新增真实业务入口之前的身份、签名、准入与单次转发代码，没有改生产入口、配置、角色、定时器或数据库，不追加部署台账。
 
+11-02后续实际限制：D-026隔离真实Timer长转发未通过。facade约67秒进入UNKNOWN，worker约118秒完成、实际业务等待115006ms；最终双COMPLETE、control revision4/HOLD/空槽，迟到完成没有重开HOLD。只观察到首次Timer发生时刻匹配，重试稳定身份NOT_RUN。当前135秒SDK转发路径不得用于生产迁移资格；后续按既定备选路线准备全调用方切换，保留120秒业务与共同准入/排空要求。生产入口仍未接线。见[D-026实际证据](V368_WRITER_ENTRY_CLOUD_PROOF.md)。
+
 ## 当前代码
 
 `release/writer-entry.js`可组合旧/新worker及稳定转发入口，复用D-024验证过的四个协议/适配模块，未修改它们。

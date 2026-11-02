@@ -1,6 +1,6 @@
 # 真实Timer重试身份与长转发：有界隔离候选
 
-当前结果：**D-025 / RESOURCES_CREATED_ASYNC_CONFIGURATION_REJECTED_NOT_INVOKED**，2026-11-02。两个隔离函数和空集合已创建，独立下载逐字节一致；首次异步配置请求被拒后停止，没有创建timer或调用函数。真实Timer身份与115秒长转发均NOT_RUN，不替代生产迁移或夜间/盘前自然验收。以下拟执行序列保留为当时批准的历史范围，实际结果见文末。
+当前结果：**D-026 / REAL_TIMER_LONG_FORWARD_FAILED_LATE_COMPLETION_HELD**，2026-11-02。D-025创建资源后配置被拒；D-026新批准的公开配置请求已接受，真实Timer首次发生时间匹配，worker完成115秒业务，但facade提前进入结果未知，端到端长转发未通过。迟到完成后HOLD保持；未执行预期原生重试或审计，不能计生产迁移或自然验收。以下拟执行序列与D-025记录保留历史范围，D-026实际结果见文末。
 
 ## 精确拟验证范围
 
@@ -63,3 +63,23 @@ owner绑定源码`9ad435620057efa8d0c409c7848e70c77ba9b08c`、两个ZIP和申请
 `release/entry-proof-async-config.js`只生成两个固定隔离目标的公开写入结构：TTL600和单个`RetryNum`项（facade1、worker0），不复制ErrorCode/RetryInterval。回读必须解包`data.AsyncTriggerConfig`并核对default与432类别、TTL、次数和间隔；包装缺失、未知/重复类别、旧默认值和错误响应均拒绝。该模块不导入SDK，不执行云请求，不更新已部署代码。
 
 [官方重试策略](https://cloud.tencent.com/document/product/583/41138)明确：异步432/系统错误按最长保留时间持续重试，运行错误才使用用户配置的次数。因此新的可行申请必须明确承认432 RetryNum-1及TTL600边界；预期6次调用不能宣称平台总调用数的硬上限，CLOSE timer也不能当作排空已有队列。原申请的432零重试未实现，不能悄然改为上述政策后继续。新构造和回读模型通过不等于真实配置请求已获接受；尚未发出第二次配置请求。
+
+## D-026：真实长转发失败，迟到完成后保持关闭
+
+owner另行批准配置源码`ff0f7205d23870278fc06cc33d21d0deeadcd5e2`和申请SHA256 `3910477dc47eb121649bfa8411beec1372b8bf70bdb3e57c5ef9b745ee6ae851`，明确接受432/系统错误重试至TTL、不保证平台总调用硬上限。既有两函数的部署源码仍为`9ad435620057efa8d0c409c7848e70c77ba9b08c`，无代码更新。前后再次独立下载两包，各1714文件全部匹配；未新建函数/集合、未重置旧scope。
+
+通过连接器分别仅提交一次公开格式的配置更新，两次均成功，独立回读均TTL600/default RetryNum分别1和0/432 RetryNum-1/间隔60秒。CLI环境查询仍失败时使用已登录连接器的环境、集合及路由只读通道；CLI函数下载与原始EJSON数据库读取继续可用，没有重复登录或IAM修改。
+
+prepare仅一次，在北京时间14:52:50返回PREPARED、实际Node v24.11.1。timer仅创建一次，创建时间14:53:10，固定cron `0 56 14 2 11 ? 2026`。真实事件在14:56:00发生；记录的Time与准备发生时刻一致，区别于创建时间。这只证明本次实际发生，不证明重试时Time稳定。
+
+实际首次timer请求`c292098d-ed8d-4105-8f6d-06284cf793b9`原生日志耗时67332ms，在14:57:09.892以平台status200/retCode0返回业务STOPPED/FIRST_RESULT_NOT_CONFIRMED；attempt-0记录FAILED/WRITER_EXECUTION_UNKNOWN。与此同时worker请求`37eba246-345b-4cf5-b9bf-b292af11fa63`仍继续执行，14:58:02.766以COMPLETE返回，原生总耗时117909ms，业务标记实测等待115006ms，实际Node v24.11.1/SDK2.11.0。
+
+facade将传输/解析异常统一折叠为UNKNOWN，没有保留底层错误码；因此**不能声称已证明统一60秒平台上限或某个确定HTTP错误**。事实是本次150s facade、120s worker、显式135s SDK预算的端到端转发失败，而worker成功迟到完成。不得用内存timeout覆盖测试或worker单点成功将其认定为长转发PASS，也不缩短原业务时限来凑通过。
+
+异常后14:58:23发起唯一一次仅新timer的CLOSE，并独立回读Enable0。没有人工重提、fallback、第二个prepare、audit或worker调用；未触发“业务完整返回后抛错”的预期重试。持续只读观察超过15:06的TTL边界，日志只见prepare1+timer1+worker1，共3个执行请求，没有额外投递。重试身份稳定性与原生去重仍NOT_RUN。
+
+最终独立回查正好6主键：schedule、FAILED attempt-0、一个business标记、control、两份COMPLETE索引；无attempt-1。control revision4/owner=new/epoch1/HOLD/active=null/receipts=[]。首次UNKNOWN时活动槽被保留，迟到完成清空槽但不重新开放HOLD；这一真实安全行为单独成立，不能替代迁移资格。
+
+边界：原15函数受控配置/代码元数据不变，两隔离包前后各1714文件精确匹配，函数17/集合35名称不变，旧282条记录原始EJSON内容一致；路由、ETF67资源元数据及生产pointer/runtime不变。全托管2062对象中8个kindle/路径并发变化，本批无托管写入且未确认外部操作者；不声称全托管不变。CLI简化Trigger投影遗漏CustomArgument/Enable使原边界检查报KeyError，已用独立原生SCF完整回读验证同一timer的名称、Message、cron及Enable0，不通过改写投影伪造字段。
+
+本批**NOT_QUALIFIED**。下一步按既有迁移路线准备**全调用方切换**，保留120秒业务契约、原包common边界及共同准入，逐个封闭调用源/旧队列；当前SDK长转发门面不可作为生产迁移已满足的前置条件。真实Timer重试稳定身份仍须独立补齐，生产主要写函数仍Node16。仓外`runtime24-entry-async-v1/execution/DEPLOYMENT_REPORT.json`保存实际授权、配置回读、前后下载、日志、6主键、应急停用、TTL后观察及边界证据。

@@ -1097,3 +1097,23 @@ owner回复“批准上述精确范围”，绑定源码`9ad435620057efa8d0c409c
 边界PASS：原15函数配置/代码元数据不变，函数15→17、集合34→35且仅上述新增；D-023/D-024旧282条journal原始内容全部不变，完整路由、已观察托管元数据、生产pointer/runtime不变。本批函数调用0、timer创建0，无生产调用、IAM/资源权限、策略或ML修改，无删除/重置/应急CLOSE。
 
 资格**NOT_QUALIFIED**：真实Timer事件身份、原生重试及真实115秒转发均NOT_RUN；本地93/93、Actions #210六组成功和内存115秒模型不替代这些证据。生产主要写函数仍Node16，目标未完成。所有新旧资源/记录保留。仓外证据`runtime24-entry-proof-v1/execution/DEPLOYMENT_REPORT.json`及授权、封包、独立下载、配置拒绝和边界记录；详见[实际结果](V368_WRITER_ENTRY_CLOUD_PROOF.md)。
+
+---
+
+### D-026 · 2026-11-02 · 既有隔离函数配置通过，真实长转发失败，迟到完成后HOLD
+
+owner对配置源码`ff0f7205d23870278fc06cc33d21d0deeadcd5e2`、完整申请SHA256 `3910477dc47eb121649bfa8411beec1372b8bf70bdb3e57c5ef9b745ee6ae851`和配置请求体`107ec78cedf41c1c84a4f5a375c551f2f7447dfb0f02f99962831c46da5244a7`回复“批准上述精确范围”。申请明确区别D-025：仅使用公开RetryNum写入字段，接受432/系统错误重试到TTL，名义6次调用不是平台总调用硬上限。无代码更新，两个函数仍是D-025源码`9ad435620057efa8d0c409c7848e70c77ba9b08c`与原两包SHA；批准前及执行前独立下载两包均EXACT_MATCH1714/1714。
+
+只对既有writerEntryFacade24、writerEntryWorker24各提交一次配置，两次成功，独立回读TTL600、default RetryNum1/0、432 RetryNum-1、间隔60秒。函数/集合不重建，角色/运行时/150秒及120秒预算/依赖不变。连接器提供已登录环境/集合/路由读和SCF配置更新，CLI提供函数下载与原始EJSON读，未重复登录、改IAM或资源权限。
+
+prepare唯一一次于北京时间14:52:50返回PREPARED，实际Node v24.11.1。14:53:10只新建一次writerEntryOnce20261102，固定cron `0 56 14 2 11 ? 2026`；14:56:00真实Timer事件Time匹配准备发生时刻，而非创建时刻。这是单次发生身份的证据，不证明重试稳定性。
+
+原生timer请求c292098d-ed8d-4105-8f6d-06284cf793b9总耗时67332ms，14:57:09.892以平台status200/retCode0返回业务STOPPED/FIRST_RESULT_NOT_CONFIRMED；attempt-0为FAILED/WRITER_EXECUTION_UNKNOWN。worker请求37eba246-345b-4cf5-b9bf-b292af11fa63继续执行，14:58:02.766以COMPLETE成功，原生总耗时117909ms，业务标记等待115006ms，Node v24.11.1/SDK2.11.0。**当前显式135秒SDK转发端到端失败**；由于底层异常被折叠为UNKNOWN，没有证据确定具体HTTP错误或统一60秒上限，不作此类归因。
+
+14:58:23发起唯一一次仅新timer的CLOSE，原生完整回读Enable0。按规则不重提、不fallback、不reset/delete，不再调用prepare/audit/worker，未执行“首笔完整返回后主动抛错”及其预期平台重试。只读观察超过15:06 TTL，最终日志只有prepare1+timer1+worker1，共3个执行请求；原生重试身份与去重NOT_RUN。
+
+独立最终6主键全部核对：schedule、FAILED attempt-0、一个business、control、双COMPLETE索引，无attempt-1。control revision4/new/epoch1/HOLD/active=null/receipts=[]。首次结果未知时槽被保留，真实迟到完成清槽但不重开HOLD；这一安全行为通过，不等于长转发或生产迁移资格。
+
+边界为**PASS_SCOPED_WITH_SHARED_HOSTING_CHANGES**：原15函数受控配置/代码元数据不变，两隔离函数前后独立下载各1714文件一致，17函数/35集合名称不变，旧282条原始EJSON内容全部不变，完整路由/ETF67资源元数据/生产pointer/runtime不变。全托管2062对象中仅8个kindle/路径并发变化，本批无托管写入，外部操作者未确认；不能声称全托管不变。CLI简化Trigger遗漏CustomArgument/Enable导致边界脚本KeyError，独立原生SCF完整回读已核对同一timer名称/Message/cron/Enable0，未伪造缺失投影字段。
+
+本批**NOT_QUALIFIED**。源提交本地94/94、Actions #212六组成功仅证明对应本地门禁，不替代本批失败的云端长转发。按既定备选路线准备全调用方切换，保留120秒业务契约、原包common边界、共同准入、稳定身份与旧入口/6小时队列封闭要求；不为凑通过缩短业务时限。生产主要写函数仍Node16，无生产写链自然运行验收。所有新旧资源和6+282记录保留。证据：仓外`runtime24-entry-async-v1/execution/DEPLOYMENT_REPORT.json`、原生日志、前后下载、6主键、配置与timer回读、TTL后观测和托管差异归档；详见[实际结果与后续路线](V368_WRITER_ENTRY_CLOUD_PROOF.md)。

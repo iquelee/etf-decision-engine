@@ -119,3 +119,5 @@ D-024实际结果（2026-10-30 07:36）：一次固定共同快照补测PASS，�
 真实身份/时限下一候选已完成固定代码：只拟新增两个隔离Node24函数、7主键集合和一个一次性timer，115秒worker与一次有意平台重试，异常停止而不重跑。93项本地测试含该模型；尚无真实Timer/长转发资格，封包与精确新批准后才可执行。见 [有界验证范围](V368_WRITER_ENTRY_CLOUD_PROOF.md)。本轮不新增部署台账。
 
 D-025实际结果（11-02 14:27之后）：精确批准后已建两个隔离Node24函数和空集合，两包各1714文件独立匹配。首次新facade异步配置请求被拒，错误InvalidParameterValue.AsyncTriggerConfig，随即停止；没有创建timer或执行prepare/audit/worker，集合0条。两函数仍默认6小时保留/default2/432-1重试，不能按原计划继续。原15函数、旧282条记录及路由/托管/pointer/runtime全部不变。真实Timer重试身份、115秒转发均NOT_RUN，生产写链迁移未完成。已补台账D-025；下一步修复官方RetryNum写入契约及data.AsyncTriggerConfig回读，再准备既有资源的独立配置/验证批次。见[实际结果](V368_WRITER_ENTRY_CLOUD_PROOF.md)。
+
+D-026实际结果（11-02 15:07后闭合）：新的配置/资源重试政策获精确批准，两既有函数TTL600/default1和0/432-1均真实更新并回读通过，无代码更新。唯一14:56 timer发生时间匹配；facade67332ms后UNKNOWN，worker117909ms后COMPLETE、业务等待115006ms。按规则停止并仅CLOSE新timer一次，无audit/重跑/预期抛错重试；观察超过15:06 TTL只见3次执行。最终6主键、双COMPLETE、control revision4/HOLD/空槽，迟到未重开；旧282、原15函数/路由/ETF67/pointer/runtime不变，8个kindle托管路径并发变化独立列档。资格NOT_QUALIFIED，原生重试稳定身份NOT_RUN。下一步转入既定全调用方切换准备，不缩短120秒业务或把当前SDK长门面当已通过。台账D-026与[实际证据](V368_WRITER_ENTRY_CLOUD_PROOF.md)已记录；生产写链仍Node16，自然验收未完成。
