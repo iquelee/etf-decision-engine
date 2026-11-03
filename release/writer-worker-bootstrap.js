@@ -64,7 +64,7 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
       const childBinding = {environment, scope: 'production/runDecisionEngine'};
       childRoutes.runDecisionEngine = {binding: childBinding, store: createProductionStore({database, binding: childBinding}),
         key: currentKeys[1], action: 'decision', transportTimeoutMs: 15000,
-        targets: {old: 'runDecisionEngine', new: plans.runDecisionEngine.target}};
+          targets: {old: 'runDecisionEngine', new: plans.runDecisionEngine.target}, allowedOwners: ['new']};
     }
     let beforeAdmission;
     const rolloutBinding = {environment, scope: 'production/writer-rollout'};

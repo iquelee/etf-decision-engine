@@ -23,9 +23,13 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
     assert(Buffer.isBuffer(route.key) && route.key.length >= 32 && text(route.action));
     assert(route.store && typeof route.store.read === 'function' && typeof route.store.transaction === 'function');
     assert(route.targets && text(route.targets.old) && text(route.targets.new) && route.targets.old !== route.targets.new);
+    const allowedOwners = route.allowedOwners === undefined ? ['old', 'new'] : route.allowedOwners;
+    assert(Array.isArray(allowedOwners) && allowedOwners.length > 0 && allowedOwners.every(x => ['old', 'new'].includes(x))
+      && new Set(allowedOwners).size === allowedOwners.length, 'qualified child owner policy required');
     if (route.transportTimeoutMs !== undefined)
       assert(Number.isSafeInteger(route.transportTimeoutMs) && route.transportTimeoutMs > 0 && route.transportTimeoutMs <= 135000);
-    routes.set(name, {...route, binding: {...route.binding}, targets: {...route.targets}, key: Buffer.from(route.key)});
+    routes.set(name, {...route, binding: {...route.binding}, targets: {...route.targets}, key: Buffer.from(route.key),
+      allowedOwners: Object.freeze([...allowedOwners])});
   }
   const unmanaged = new Set(unmanagedNames);assert([...unmanaged].every(name => !routes.has(name)));
   const context = new AsyncLocalStorage(), apps = new WeakMap();
@@ -49,6 +53,7 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
       try {
         operation = Promise.resolve(route ? createDirectCaller({store: route.store, binding: route.binding, key: route.key,
           logicalName: request.name, targets: route.targets, callerName: target,
+          allowedOwners: route.allowedOwners,
           callerNodeMajor: owner === 'new' ? 24 : 16, runtimeIdentity: () => invocation.runtime,
           resolveRequestId: () => entry.childRequest({parent_request_id: invocation.request_id, producer, action: route.action}),
           transportTimeoutMs: route.transportTimeoutMs === undefined ? app.config && app.config.timeout : route.transportTimeoutMs,

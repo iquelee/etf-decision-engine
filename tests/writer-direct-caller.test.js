@@ -68,6 +68,13 @@ async function test() {
   assert.deepStrictEqual(received, payload);assert.strictEqual(old.state.calls[0].name, targets.old);
   assert.strictEqual(old.state.calls[0].options.timeout, 23000);
   assert.deepStrictEqual(negative, {requestId: 'sdk:1', result: {ok: false, error: 'business rejected'}});
+  const qualifiedOwners = ['new'], limited = old.caller('captured:unqualified', {allowedOwners: qualifiedOwners});
+  qualifiedOwners.push('old'); // Later configuration mutation cannot widen the captured policy.
+  const priorCalls = old.state.calls.length, priorRows = old.b.rows();
+  await assert.rejects(limited({name: logicalName, data: payload}), e => e.code === 'WRITER_ADMISSION_DENIED' && e.reason === 'OWNER_NOT_QUALIFIED');
+  assert.strictEqual(old.state.calls.length, priorCalls);assert.deepStrictEqual(old.b.rows(), priorRows);
+  for (const allowedOwners of [[], ['old', 'old'], ['other'], 'new'])
+    assert.throws(() => old.caller('bad-policy', {allowedOwners}), /qualified owner policy/);
   const race = await setup(() => ({ok: true}));
   const settled = await Promise.allSettled(Array.from({length: 20}, (_, n) => race.caller('race:' + n)({name: logicalName, data: {}})));
   assert.strictEqual(settled.filter(x => x.status === 'fulfilled').length, 1);

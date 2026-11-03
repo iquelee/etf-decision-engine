@@ -12,13 +12,16 @@ class WriterCallError extends Error {
   constructor(code, message, details = {}) { super(message); this.name = 'WriterCallError'; this.code = code; Object.assign(this, details); }
 }
 function createDirectCaller({store, binding, key, logicalName, targets, callerName, callerNodeMajor,
-  runtimeIdentity, resolveRequestId, callFunction, transportTimeoutMs}) {
+  runtimeIdentity, resolveRequestId, callFunction, transportTimeoutMs, allowedOwners = ['old', 'new']}) {
   assert(binding && text(binding.environment) && text(binding.scope));
   assert.deepStrictEqual(Object.keys(binding).sort(), ['environment', 'scope']); binding = {...binding};
   assert(Buffer.isBuffer(key) && key.length >= 32); key = Buffer.from(key);
   assert(text(logicalName) && text(callerName) && [16, 24].includes(callerNodeMajor));
   assert(targets && text(targets.old) && text(targets.new) && targets.old !== targets.new);
   assert.deepStrictEqual(Object.keys(targets).sort(), ['new', 'old']); targets = {...targets};
+  assert(Array.isArray(allowedOwners) && allowedOwners.length > 0 && allowedOwners.every(x => ['old', 'new'].includes(x))
+    && new Set(allowedOwners).size === allowedOwners.length, 'qualified owner policy required');
+  allowedOwners = Object.freeze([...allowedOwners]);
   assert([runtimeIdentity, resolveRequestId, callFunction].every(x => typeof x === 'function'));
   assert(Number.isSafeInteger(transportTimeoutMs) && transportTimeoutMs > 0 && transportTimeoutMs <= 135000);
   async function hold(dispatched) {
@@ -55,6 +58,11 @@ function createDirectCaller({store, binding, key, logicalName, targets, callerNa
       control = await store.read(binding); protocol.validate(control, binding);
       if (control.state !== 'ACTIVE' || control.active)
         throw new WriterCallError('WRITER_ADMISSION_CLOSED', 'writer admission closed', {request_id: requestId});
+      // A legacy business entry is not a signed worker merely because its
+      // name occupies the old route. Refuse it before sealing or transport.
+      if (!allowedOwners.includes(control.owner))
+        throw new WriterCallError('WRITER_ADMISSION_DENIED', 'writer owner is not qualified for this route',
+          {request_id: requestId, reason: 'OWNER_NOT_QUALIFIED'});
       wire = entry.seal({binding, control, target: targets[control.owner], request_id: requestId, business, key});
     } catch (cause) {
       if (cause instanceof WriterCallError) throw cause;

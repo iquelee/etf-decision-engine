@@ -94,6 +94,20 @@ async function main() {
   const matResult = await materializer.bootstrap.main(await materializer.wire('fixture:materializer'), materializer.context);
   assert.strictEqual(matResult.outcome, 'COMPLETE');assert.deepStrictEqual(matResult.result, {child: {force: true}});
   assert.strictEqual(childCalls, 1);assert.strictEqual(materializer.b.rows().length, 6);
+  for (const producer of ['materializeIndicators', 'adminGateway']) {
+    const blocked = await fixture(producer);
+    blocked.b.seed(adapter.id(childBinding, 'control'), adapter.encodeControl(journal.initial(childBinding), childBinding));
+    const legacyStore = adapter.createProductionStore({database: blocked.database, binding: childBinding});
+    assert((await journal.apply(legacyStore, childBinding, {type: 'activate', owner: 'old', revision: 0, proof})).ok);
+    const priorControl = await legacyStore.read(childBinding);let dispatched = 0;
+    blocked.state.call = async () => {dispatched++;throw Error('unwrapped legacy entry must never receive signed wire');};
+    blocked.state.handler = async (wrapped, data) => (await wrapped.init({}).callFunction({name: 'runDecisionEngine', data})).result;
+    const denied = await blocked.bootstrap.main(await blocked.wire('fixture:unqualified-child'), blocked.context);
+    assert.strictEqual(denied.outcome, 'UNKNOWN');assert.strictEqual(dispatched, 0);
+    assert.deepStrictEqual(await legacyStore.read(childBinding), priorControl);
+    const parent = await blocked.store.read(blocked.binding);
+    assert.strictEqual(parent.state, 'HOLD');assert.strictEqual(parent.active.request_id, 'fixture:unqualified-child');
+  }
   assert.throws(() => createBootstrap({producer: 'fetchDailyData'}), /producer/);
   assert.throws(() => createBootstrap({producer: 'runDecisionEngine', sdkVersion: '3.0.0'}), /versions/);
   console.log('writer bootstrap: fixed nine scopes, no auto-init, signed-only entry, lazy imports, SDK policy and warm key checks PASS (MODEL_ONLY)');
