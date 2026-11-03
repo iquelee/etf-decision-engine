@@ -85,7 +85,12 @@
         }
       ],
       "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
-      "earlier_cli_download_content_map_equal": true
+      "earlier_cli_download_content_map_equal": true,
+      "live_environment_names": [
+        "DECISION_ENV",
+        "FRED_API_KEY"
+      ],
+      "public_environment": {}
     },
     {
       "FunctionName": "fetchRealtimeData",
@@ -130,7 +135,11 @@
           "description": "{\"cron\":\"0 */5 9-15 * * 1-5 *\"}"
         }
       ],
-      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
+      "live_environment_names": [
+        "DECISION_ENV"
+      ],
+      "public_environment": {}
     },
     {
       "FunctionName": "fetchFundamentalNews",
@@ -180,7 +189,11 @@
           "description": "{\"cron\":\"0 0,30 8-22 * * * *\"}"
         }
       ],
-      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
+      "live_environment_names": [
+        "DECISION_ENV"
+      ],
+      "public_environment": {}
     },
     {
       "FunctionName": "extractFundamental",
@@ -230,7 +243,12 @@
           "description": "{\"cron\":\"0 5,35 8-22 * * * *\"}"
         }
       ],
-      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
+      "live_environment_names": [
+        "DECISION_ENV",
+        "DEEPSEEK_API_KEY"
+      ],
+      "public_environment": {}
     },
     {
       "FunctionName": "runGen1ShadowEod",
@@ -275,7 +293,9 @@
         }
       ],
       "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
-      "current_gen1_observation_raw_map_equal": true
+      "current_gen1_observation_raw_map_equal": true,
+      "live_environment_names": [],
+      "public_environment": {}
     },
     {
       "FunctionName": "runGen2ShadowEod",
@@ -327,7 +347,11 @@
         "Qualifier": "$LATEST",
         "CustomArgument": "{\"mode\":\"REPLAY\"}",
         "preserve_business_mode": "REPLAY"
-      }
+      },
+      "live_environment_names": [
+        "DECISION_ENV"
+      ],
+      "public_environment": {}
     }
   ],
   "limitations": [

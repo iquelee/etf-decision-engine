@@ -38,7 +38,7 @@ function build({source, inventoryRoot, out}) {
       assert.strictEqual(JSON.parse(fs.readFileSync(path.join(root, 'node_modules/@cloudbase/' + lib + '/package.json'))).version, version);
     const config = Object.hasOwn(files, 'config.json') ? JSON.parse(fs.readFileSync(path.join(root, 'config.json'))) : {};
     if (config.timeout !== undefined) assert.strictEqual(config.timeout, f.Timeout);
-    assert.strictEqual(f.MemorySize, 256);
+    assert([256, 512].includes(f.MemorySize), 'observed memory budget required');
     for (const key of Object.keys(config.envVariables || {})) assert(/^[A-Z][A-Z0-9_]*$/.test(key));
     return {f, name, root, map, archive, files, config, sdkImports};
   });
@@ -67,10 +67,9 @@ function build({source, inventoryRoot, out}) {
     fs.writeFileSync(path.join(candidate, 'writer-sdk.js'), "'use strict';\nmodule.exports = require('./index').getBusinessSdk();\n");
     // Input config can contain provider credentials. Never copy their values
     // to a distributable candidate; future environment supply is a separate gate.
-    const publicEnvironment = {};
-    if (Object.hasOwn(config.envVariables || {}, 'DECISION_ENV')) {
-      assert.strictEqual(config.envVariables.DECISION_ENV, 'prod');publicEnvironment.DECISION_ENV = 'prod';
-    }
+    const publicEnvironment = f.public_environment;
+    assert(publicEnvironment && Object.keys(publicEnvironment).every(key => key === 'DECISION_ENV'));
+    assert(Object.values(publicEnvironment).every(value => value === 'prod'));
     fs.writeFileSync(path.join(candidate, 'config.json'), JSON.stringify({...config, timeout: f.Timeout,
       envVariables: publicEnvironment, triggers: []}, null, 2) + '\n');
     json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED', source_commit: source,
@@ -78,7 +77,9 @@ function build({source, inventoryRoot, out}) {
       input_archive_sha256: f.download.archive_sha256, input_map_sha256: f.download.raw_file_map_sha256,
       original_entry_sha256: files['index.js'], sdk_import_replacements: sdkImports,
       wrapper_source_sha256: Object.fromEntries(Object.entries(sourceModules).map(([file, bytes]) => [file, sha(bytes)])),
-      existing_environment_names_requiring_separate_supply: Object.keys(config.envVariables || {}).filter(key => key !== 'DECISION_ENV').sort(),
+      existing_environment_names_requiring_separate_supply: f.live_environment_names.filter(key => !Object.hasOwn(publicEnvironment, key)),
+      archive_environment_names: Object.keys(config.envVariables || {}).sort(),
+      live_environment_names: f.live_environment_names,
       signing_keys: 'ABSENT_REQUIRES_SEPARATE_SUPPLY', accepted_entries: ['signed-rpc', 'native-timer-local'],
       timer_message: name === 'runGen2ShadowEod' ? '{"mode":"REPLAY"}' : 'writer-root-timer-v1',
       triggers: 'NONE', cloud_source_retry_and_whole_business_qualification: 'NOT_PROVEN',

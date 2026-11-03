@@ -8,7 +8,7 @@
 | fetchRealtimeData | Node16.13 | 60秒 / 256MB | 1791 | 是 |
 | fetchFundamentalNews | Node16.13 | 540秒 / 256MB | 1725 | 是 |
 | extractFundamental | Node16.13 | 180秒 / 256MB | 1725 | 是 |
-| runGen1ShadowEod | Node16.13 | 300秒 / 256MB | 1632 | 否 |
+| runGen1ShadowEod | Node16.13 | 300秒 / 512MB | 1632 | 否 |
 | runGen2ShadowEod | Node16.13 | 300秒 / 256MB | 1624 | 否 |
 
 合计10264个文件；六个 ZIP 的原始 SHA256 均与平台 `codeSha256` 一致，逐条 ZIP 内容与本地证据文件及 map 一致，下载前后控制配置一致。六包均为 SDK2.11.0 / database1.4.1，未安装或升级依赖。Gen1 的当前1632文件 map 与当日已记录的实际基线完全相等。
@@ -16,6 +16,8 @@
 日线原 ZIP 含五个 `node_modules/.bin` 符号链接。下载检查最初因禁止符号链接而停止；后续独立确认只有已列明的 npm 命令入口、相对目标均在 node_modules 内。保留原 ZIP 和链接属性，证据目录仅把链接目标文本落为普通文件，不创建或执行符号链接。逐文件内容 map 不能表达文件类型，因此该目录不能直接当部署树；未来封包必须保留原 ZIP 链接类型，不能以普通文件 hash 相等冒充类型相等。
 
 Gen2 包不含 config.json。其300秒/256MB来自云端实际配置；现有三包打包器假设配置文件存在、index.js 必有 SDK import，也不适用于两个 shadow 入口。后者只经 common/db 和 common/intel-refresh 引用 SDK。不能直接套用三包打包器，也不能用仓库中不同的入口替换线上业务后宣称只迁移运行时。
+
+归档 config 的环境变量名与线上实际环境变量名并非完全一致：例如日线归档另列 TUSHARE_TOKEN/AKSHARE_PROXY，新闻归档另列 OPENDART_API_KEY；只读线上配置没有这些项。新清单分开记录实际变量名与可公开的 DECISION_ENV=prod，未来密钥供应以新鲜线上配置为准。候选不携带数据源凭据值或签名密钥。六包预检首次因错误的统一256MB断言而停止；更正为保留清单中的实际内存，尤其 Gen1 512MB，没有生成该次候选目录或改云资源。
 
 ## 实际 Gen2 的 Timer 业务契约
 
