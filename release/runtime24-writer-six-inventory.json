@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "status": "OBSERVED_INPUTS_ONLY_NOT_DEPLOYABLE",
+  "environment": "tradingview-etf-d0fa42yy57cbc11b",
+  "inspection_source_commit": "50d6b06004c30b43624a067dc200f555de621204",
+  "cloud_mutations": 0,
+  "producer_invocations": 0,
+  "functions": [
+    {
+      "FunctionName": "fetchDailyData",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 120,
+      "MemorySize": 256,
+      "ModTime": "2026-09-10 14:27:12",
+      "CodeSize": 3936596,
+      "captured_at": "2026-11-03T11:30:29.028Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1767,
+        "archive_sha256": "12a0969bcbe8a8a040ee02cc666a54769b0fdbfb1fb1855dcab364abfc97c254",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "a0a868488bb6871b4827bfb146bedfc80cbe3bd645f15d0cafd0612e6007c5e7",
+        "entry_sha256": "6a45adb02fc9cbc8f9a2c852737716dd696041d1c285d5d301d5444aa36f3bf2",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js",
+          "index.js"
+        ],
+        "entry_repo_raw_equal": true,
+        "entry_repo_lf_equal": true,
+        "archive_symlinks": [
+          {
+            "path": "node_modules/.bin/semver",
+            "target": "../semver/bin/semver",
+            "zip_external_attr": 2717843456,
+            "local_materialization": "REGULAR_FILE_CONTAINING_LINK_TARGET_TEXT_NOT_A_DEPLOYMENT_TREE"
+          },
+          {
+            "path": "node_modules/.bin/sshpk-conv",
+            "target": "../sshpk/bin/sshpk-conv",
+            "zip_external_attr": 2717843456,
+            "local_materialization": "REGULAR_FILE_CONTAINING_LINK_TARGET_TEXT_NOT_A_DEPLOYMENT_TREE"
+          },
+          {
+            "path": "node_modules/.bin/sshpk-sign",
+            "target": "../sshpk/bin/sshpk-sign",
+            "zip_external_attr": 2717843456,
+            "local_materialization": "REGULAR_FILE_CONTAINING_LINK_TARGET_TEXT_NOT_A_DEPLOYMENT_TREE"
+          },
+          {
+            "path": "node_modules/.bin/sshpk-verify",
+            "target": "../sshpk/bin/sshpk-verify",
+            "zip_external_attr": 2717843456,
+            "local_materialization": "REGULAR_FILE_CONTAINING_LINK_TARGET_TEXT_NOT_A_DEPLOYMENT_TREE"
+          },
+          {
+            "path": "node_modules/.bin/uuid",
+            "target": "../uuid/bin/uuid",
+            "zip_external_attr": 2717843456,
+            "local_materialization": "REGULAR_FILE_CONTAINING_LINK_TARGET_TEXT_NOT_A_DEPLOYMENT_TREE"
+          }
+        ],
+        "package_config_present": true
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        },
+        {
+          "file": "index.js",
+          "line": 424
+        }
+      ],
+      "triggers": [
+        {
+          "name": "dailyFetch-2200",
+          "type": "timer",
+          "description": "{\"cron\":\"0 0 22 * * 1-5 *\"}"
+        }
+      ],
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
+      "earlier_cli_download_content_map_equal": true
+    },
+    {
+      "FunctionName": "fetchRealtimeData",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 60,
+      "MemorySize": 256,
+      "ModTime": "2026-10-08 16:49:02",
+      "CodeSize": 4387988,
+      "captured_at": "2026-11-03T11:30:27.880Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1791,
+        "archive_sha256": "2f9194d00a09ff2788ee21b30640c96fae4adafaafc3ed5989016ab956cd0c5f",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "63191be3eb5b7485d55dda75b5a49a4a19430b26ffdfdc71f484fbb31eedd8fd",
+        "entry_sha256": "8c515f75189c689f64741b6753cd89cdc12bddc16c5149126cdc72b3996d6035",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js",
+          "index.js"
+        ],
+        "entry_repo_raw_equal": true,
+        "entry_repo_lf_equal": true,
+        "archive_symlinks": [],
+        "package_config_present": true
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        }
+      ],
+      "triggers": [
+        {
+          "name": "realtime-5min",
+          "type": "timer",
+          "description": "{\"cron\":\"0 */5 9-15 * * 1-5 *\"}"
+        }
+      ],
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+    },
+    {
+      "FunctionName": "fetchFundamentalNews",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 540,
+      "MemorySize": 256,
+      "ModTime": "2026-09-08 11:34:24",
+      "CodeSize": 4107877,
+      "captured_at": "2026-11-03T11:30:27.878Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1725,
+        "archive_sha256": "e828601f9d657a2add86d333fb50cf37b60746bedacab14b1248e5ae09e43eed",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "3e8dcb0d45fb2f99bc2a4987ecbd23d16967a5dbecf24329260087e023ef9163",
+        "entry_sha256": "06c045a400ad943d70f77a65bd0c1e6db09e59a312ab69402aa3a535acc992f9",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js",
+          "index.js"
+        ],
+        "entry_repo_raw_equal": false,
+        "entry_repo_lf_equal": true,
+        "archive_symlinks": [],
+        "package_config_present": true
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        }
+      ],
+      "triggers": [
+        {
+          "name": "newsFetch-1630",
+          "type": "timer",
+          "description": "{\"cron\":\"0 30 16 * * 1-5 *\"}"
+        },
+        {
+          "name": "intelFetch-30min",
+          "type": "timer",
+          "description": "{\"cron\":\"0 0,30 8-22 * * * *\"}"
+        }
+      ],
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+    },
+    {
+      "FunctionName": "extractFundamental",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 180,
+      "MemorySize": 256,
+      "ModTime": "2026-09-09 10:22:40",
+      "CodeSize": 4108933,
+      "captured_at": "2026-11-03T11:30:27.699Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1725,
+        "archive_sha256": "45851e4e23c6f221a476d7d704da1239182cca4b9c6288c55a6e80492dba717e",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "b0639b60bc9af8b70b6b0d1304c6eef0632eb6f818751e102c6a41b89c965bcb",
+        "entry_sha256": "b944b0918f836107e4445312d38f33a67f4bb8a0ab8a14c9d7eabebf3bfef1d8",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js",
+          "index.js"
+        ],
+        "entry_repo_raw_equal": false,
+        "entry_repo_lf_equal": true,
+        "archive_symlinks": [],
+        "package_config_present": true
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        }
+      ],
+      "triggers": [
+        {
+          "name": "newsExtract-1640",
+          "type": "timer",
+          "description": "{\"cron\":\"0 40 16 * * 1-5 *\"}"
+        },
+        {
+          "name": "intelExtract-30min",
+          "type": "timer",
+          "description": "{\"cron\":\"0 5,35 8-22 * * * *\"}"
+        }
+      ],
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY"
+    },
+    {
+      "FunctionName": "runGen1ShadowEod",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 300,
+      "MemorySize": 512,
+      "ModTime": "2026-11-03 11:02:41",
+      "CodeSize": 3577646,
+      "captured_at": "2026-11-03T11:30:27.766Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1632,
+        "archive_sha256": "f96fec48794b96a703bf8003055fb1dec41e7e617c0a7340a3b4a630ef968c5a",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "56fa1f65dbb6cf47c0dd80095f28e3ee3a9ef0b33500344aa69769f2cad28c85",
+        "entry_sha256": "54774105be4a5cf0a02ee64ba5d6cf1457eab8e23c16134ac234a10ee6c814eb",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js"
+        ],
+        "entry_repo_raw_equal": false,
+        "entry_repo_lf_equal": false,
+        "archive_symlinks": [],
+        "package_config_present": true
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        }
+      ],
+      "triggers": [
+        {
+          "name": "gen1-eod-weekdays-2220",
+          "type": "timer",
+          "description": "{\"cron\":\"0 20 22 * * 1-5 *\"}"
+        }
+      ],
+      "qualification": "NOT_QUALIFIED_NO_CANDIDATE_OR_WHOLE_BUSINESS_REPLAY",
+      "current_gen1_observation_raw_map_equal": true
+    },
+    {
+      "FunctionName": "runGen2ShadowEod",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 300,
+      "MemorySize": 256,
+      "ModTime": "2026-10-28 10:42:56",
+      "CodeSize": 3143067,
+      "captured_at": "2026-11-03T11:30:27.677Z",
+      "configuration_stable_across_download": true,
+      "download": {
+        "files": 1624,
+        "archive_sha256": "8b73012114b7f6b263bf818fd62073c208671b7b15eb4256bd6983d044509fe2",
+        "reported_code_sha256_equal": true,
+        "raw_file_map_sha256": "485eddb128c7427439675763370873c60f72a3e32fc561e7dd8751160ac20bb1",
+        "entry_sha256": "2771663bddee870c0661c6ec5a37a5f06114140ebd81988f2319275def1d114e",
+        "sdk_versions": {
+          "node-sdk": "2.11.0",
+          "database": "1.4.1"
+        },
+        "sdk_imports": [
+          "common/utils/db.js",
+          "common/utils/intel-refresh.js"
+        ],
+        "entry_repo_raw_equal": false,
+        "entry_repo_lf_equal": false,
+        "archive_symlinks": [],
+        "package_config_present": false
+      },
+      "call_sites": [
+        {
+          "file": "common/utils/intel-refresh.js",
+          "line": 36
+        }
+      ],
+      "triggers": [
+        {
+          "name": "gen2-eod-weekdays-2230",
+          "type": "timer",
+          "description": "{\"cron\":\"0 30 22 * * 1-5 *\"}"
+        }
+      ],
+      "qualification": "WHOLE_ENTRY_MODEL_ONLY_CLOUD_AND_ACTUAL_CANDIDATE_NOT_QUALIFIED",
+      "native_timer_observation": {
+        "source": "scf/ListTriggers/2018-04-16",
+        "observed_at": "2026-11-03",
+        "Enable": 1,
+        "Qualifier": "$LATEST",
+        "CustomArgument": "{\"mode\":\"REPLAY\"}",
+        "preserve_business_mode": "REPLAY"
+      }
+    }
+  ],
+  "limitations": [
+    "Per-file map hashes bind regular evidence files, including link-target bytes, not original ZIP file types.",
+    "Preserve archive_symlinks metadata when creating a future package; extracted evidence directories are not deployment trees.",
+    "Generic writer-root-timer-v1 is incompatible with actual Gen2; offline identity now preserves the observed exact REPLAY CustomArgument. Cloud source/retry and candidate qualification remain incomplete.",
+    "Actual Gen1/Gen2 entries differ semantically from this repository; retain captured business bytes.",
+    "Gen2 has no package config.json; authoritative Timeout/MemorySize come from live function configuration."
+  ]
+}

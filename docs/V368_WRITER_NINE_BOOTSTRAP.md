@@ -2,6 +2,8 @@
 
 状态：离线候选，未部署，尚未取得生产写链或自然运行资格。此工作在独立分支 `codex/writer-nine-bootstrap` 进行；原生隔离验证申请所绑定的主分支源码 `5a448533c175ad4dd0296fc23f577f918717db0e` 保持不变。
 
+后续已取得其余六个实际包，并发现通用 Timer 文本与线上 Gen2 的 JSON/REPLAY 契约冲突；现已按原生只读配置修正离线身份规则，完成实际 Gen2 全入口98写回放。原模型测试不构成该业务契约证明；详见[实际包与修正](V368_WRITER_SIX_PACKAGE_INPUTS.md)。
+
 `release/writer-worker-bootstrap.js` 现在声明九个生产 scope 对应的 Node24 目标及九个不同的密钥配置名。新增日线、实时行情、新闻抓取、新闻抽取、Gen1 和 Gen2 的入口适配，沿用实际 SDK 来源、Node24/环境/函数名检查、缺少密钥时在 SDK 初始化和业务加载前拒绝、懒加载及 journal 去重；不自动创建或激活控制记录。
 
 已声明的同步业务边为 `fetchDailyData → materializeIndicators → runDecisionEngine` 以及 `adminGateway → runDecisionEngine`。每条边只读取自己的子节点 scope，使用该子节点密钥和派生请求 ID，固定重试为零，并只允许具备新入口资格的 `new` 归属。子节点仍为 old/ACTIVE 时，网络调用前拒绝；即使原业务捕获错误后返回成功，父 journal 仍保持 UNKNOWN/HOLD/占用，不能记为完成。父业务在尝试子调用之前可能已经有写入，启用前仍须完成全部下游资格检查。
