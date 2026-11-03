@@ -23,6 +23,7 @@ const WRITER_FILES=Object.freeze([
   'scripts/lib/verified-writer-package.js',
   'scripts/lib/writer-admission-memory-store.js',
   'scripts/prepare-admission-probe.js',
+  'scripts/writer-gen2-timer-compatibility.js',
   'scripts/writer-package-replay.js'
 ]);
 function writerHashes() {
