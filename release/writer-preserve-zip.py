@@ -42,5 +42,5 @@ def build(template, expected_sha, tree, map_path, destination):
     return {'zip_sha256':sha(destination.read_bytes()),'preserved_symlinks':sorted(links)}
 
 if __name__=='__main__':
-    assert len(sys.argv)==7
+    assert len(sys.argv)==6
     print(json.dumps(build(*sys.argv[1:])))
