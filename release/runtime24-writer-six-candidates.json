@@ -1,0 +1,133 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "source_commit": "9cbad9ea19e5d9918caad79ec27679647dd24bbc",
+  "archive_helper_sha256": "cc3e6c01887ae439490eb221b44466e261e1ab22c34bf79fe418ee8efb03e7f1",
+  "cloud_mutations": 0,
+  "cloud_invocations": 0,
+  "packages": [
+    {
+      "producer": "fetchDailyData",
+      "target": "fetchDailyDataNode24",
+      "input_files": 1767,
+      "output_files": 1782,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "timeout_seconds": 120,
+      "memory_mb": 256,
+      "zip_sha256": "9450754f3fb638934ba1eb20a82ce534dd189740ff076559d4192cd68f4f1c58",
+      "map_sha256": "9e77001add8958a50307c9ce38af1dfa795d5ac9949447d3a5483c8d1b4fb53c",
+      "preserved_symlinks": [
+        "node_modules/.bin/semver",
+        "node_modules/.bin/sshpk-conv",
+        "node_modules/.bin/sshpk-sign",
+        "node_modules/.bin/sshpk-verify",
+        "node_modules/.bin/uuid"
+      ]
+    },
+    {
+      "producer": "fetchRealtimeData",
+      "target": "fetchRealtimeDataNode24",
+      "input_files": 1791,
+      "output_files": 1806,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 60,
+      "memory_mb": 256,
+      "zip_sha256": "9ef6c68518cfef6899683751989e8ccd5928333e798c3c433b195ee0b59c68aa",
+      "map_sha256": "90e87d9337875bb804ed8e09ea862e5fe1eafe2a6377acdd8bb00dbe9161f0cf",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "fetchFundamentalNews",
+      "target": "fetchFundamentalNewsNode24",
+      "input_files": 1725,
+      "output_files": 1740,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 540,
+      "memory_mb": 256,
+      "zip_sha256": "045c0bca10f1ddde5d03d1c01b1cc1423ca079ab6c92555787045b1da7af9652",
+      "map_sha256": "373c9c71a2a5adf23f5e88a9ecd63ac44335bbbd363441004d58ca4fc5fef4ac",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "extractFundamental",
+      "target": "extractFundamentalNode24",
+      "input_files": 1725,
+      "output_files": 1740,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 180,
+      "memory_mb": 256,
+      "zip_sha256": "267bbee3ee27ee0f1d90b01185c5fda809d3d6402595dc695531ea32fb42531c",
+      "map_sha256": "940895fb350e2bd08c15f9f0b76e4224f652330b223242cfe119ad7b00109958",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "runGen1ShadowEod",
+      "target": "runGen1ShadowEodNode24",
+      "input_files": 1632,
+      "output_files": 1647,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1547,
+      "timeout_seconds": 300,
+      "memory_mb": 512,
+      "zip_sha256": "b06ef66ac23f08d2c8dd110bb9d038612ce203919437974d702501f35c7130ab",
+      "map_sha256": "593841919f53f0255a5206933d3f31025e6dfbcf1bbd23eaa2e9f736e4757180",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "runGen2ShadowEod",
+      "target": "runGen2ShadowEodNode24",
+      "input_files": 1624,
+      "output_files": 1640,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1547,
+      "timeout_seconds": 300,
+      "memory_mb": 256,
+      "zip_sha256": "52c60b66e4637b0ceebdb4769e1f70463fe6806272c7cef06c4df1e3d60d114d",
+      "map_sha256": "29438775891f04e4b14eed93303a8fc9cc8e564f3818cdde2e147c84bd5e122b",
+      "preserved_symlinks": []
+    }
+  ],
+  "independent_zip_boundary_verification": "PASS_OFFLINE_PACKAGE_BOUNDARY_ONLY",
+  "actual_local_package_load": "PASS_MISSING_KEYS_REJECTED_BEFORE_SDK_INIT_AND_BUSINESS_LOAD",
+  "whole_candidate_sdk_business_replay": "NOT_PROVEN",
+  "production_deployment": "NOT_RUN",
+  "natural_acceptance": "NOT_RUN",
+  "limitations": [
+    "Candidate ZIPs preserve captured dependency bytes and file types; local evidence folders materialize symlink targets as ordinary files.",
+    "All environment values are withheld because connected readback redacts them. Actual environment names and archive environment names are recorded separately.",
+    "Input config provider credential values and signing keys are absent. Exact environment supply is a separate release gate.",
+    "No CLI deployment config or cloud resource changes were created."
+  ]
+}
