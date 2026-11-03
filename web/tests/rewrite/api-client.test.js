@@ -167,7 +167,12 @@ await ok('review 带 X-Admin-Token（SPEC §8.1）', async () => {
 await ok('GET 不带 body；POST 带 JSON body', async () => {
   const seen = [];
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => { seen.push({ method: init.method, body: init.body }); return { ok: true, status: 200, json: async () => ({ code: 0, data: {} }) }; };
+  const savedNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const savedCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'navigator', {configurable: true, value: {locks: {request: async (_name, _options, fn) => fn({})}}});
+  Object.defineProperty(globalThis, 'crypto', {configurable: true, value: {randomUUID: () => '00000000-0000-4000-8000-000000000001'}});
+  globalThis.fetch = async (url, init) => { seen.push({ method: init.method, body: init.body }); return { ok: true, status: 200,
+    json: async () => ({ code: 0, data: {}, message: 'ok', operation_id: init.headers['X-Writer-Operation-Id'], writer_outcome: 'COMPLETE' }) }; };
   try {
     await mod.api.dashboard();
     await mod.admin.login('pw');
@@ -175,7 +180,11 @@ await ok('GET 不带 body；POST 带 JSON body', async () => {
     assert.equal(seen[0].body, undefined, 'GET 不得带 body');
     assert.equal(seen[1].method, 'POST');
     assert.equal(JSON.parse(seen[1].body).password, 'pw');
-  } finally { globalThis.fetch = origFetch; }
+  } finally {
+    globalThis.fetch = origFetch;
+    if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);else delete globalThis.navigator;
+    if (savedCrypto) Object.defineProperty(globalThis, 'crypto', savedCrypto);else delete globalThis.crypto;
+  }
 });
 
 /* ---------------- 汇总 ---------------- */

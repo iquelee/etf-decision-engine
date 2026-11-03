@@ -1,0 +1,369 @@
+{
+ "_doc": "GEN-1 EVIDENCE CONTRACT —— **Trigger Registry**（DRAFT / PROPOSAL 级构件）。⛔ 不是冻结契约本体；⛔ 不得据此采样。§5.6 CHAIN PROOF 的 trigger 清单与 §5.8 checkpoint 的静默窗口论证均**以本表为枚举域**。★ 口径：「不写八源」≠「可以从 Trigger Registry 消失」—— **全部**真实 trigger 必须在册，并逐条写明写入集合与排除理由。",
+ "proposal_binding": {
+  "path": "docs/gen1/GEN1_EVIDENCE_CONTRACT_REVISION_PROPOSAL_20261002.md",
+  "status": "DRAFT / PROPOSAL",
+  "revised_clauses": [
+   "§5.6 revised（trigger registry）",
+   "§5.8 revised（checkpoint 重锚）"
+  ]
+ },
+ "frozen_baseline": {
+  "path": "docs/gen1/GEN1_EVIDENCE_CONTRACT_V5.md",
+  "carrier_commit": "05da0efa73e948921bc7b9b60c0d500cc98e3e9b",
+  "git_blob_id": "7f86d12aaed99a877c170c25c5a481f21a661256",
+  "content_sha256": "4fb9463f4a437e310cb52b04498a1d4cc0f23fbc64eb3c1d846d90a460a9f55b",
+  "bytes": 64580,
+  "lines": 1072
+ },
+ "eight_sources": [
+  "runtime_status",
+  "ml_shadow_signal",
+  "invocation_log",
+  "run_candidate_decision",
+  "run_candidate_portfolio",
+  "run_manifest",
+  "active_run_pointer",
+  "run_history"
+ ],
+ "schema_required_fields": [
+  "trigger_id",
+  "function",
+  "schedule_cron",
+  "schedule_human",
+  "entry_point",
+  "role",
+  "candidate_producer",
+  "validation_gate",
+  "promotion_gate",
+  "writes_collections",
+  "writes_eight_source_direct",
+  "writes_eight_source_transitive",
+  "evidence_candidate_capable",
+  "participates_in_checkpoint",
+  "checkpoint_role",
+  "independence_class",
+  "exclusion_reason"
+ ],
+ "promotion_capable_chains": [
+  {
+   "chain_id": "W1-2200",
+   "entry_trigger": "dailyFetch-2200",
+   "hops": [
+    "fetchDailyData",
+    "materializeIndicators",
+    "runDecisionEngine"
+   ],
+   "chain_proof_anchor": {
+    "fetchDailyData/index.js": 424,
+    "materializeIndicators/index.js": 127
+   },
+   "as_of_status": "PROMOTION-CAPABLE（实测：2026-09-30 run 已 promoted）"
+  },
+  {
+   "chain_id": "W2-0800",
+   "entry_trigger": "dailyPipeline-0800",
+   "hops": [
+    "materializeIndicators",
+    "runDecisionEngine"
+   ],
+   "chain_proof_anchor": {
+    "materializeIndicators/index.js": 127
+   },
+   "as_of_status": "PROMOTION-CAPABLE（结构上）；CD-04 修复后（V3.6.6 `0342abd`）转为**实际**可提升"
+  }
+ ],
+ "checkpoint_windows": {
+  "legacy_v5": {
+   "id": "legacy",
+   "definition": "工作日 [22:30:00, 23:30:00)（北京）",
+   "status": "SUPERSEDED_BY_PROPOSAL（其前提「只有 22:00 管线能提升」已随 CD-04 修复失效）"
+  },
+  "proposed_v6": [
+   {
+    "id": "W1",
+    "definition": "工作日 [22:30:00, 23:30:00)（北京）—— decision_date D 当日夜间"
+   },
+   {
+    "id": "W2",
+    "definition": "次日工作日 [08:30:00, 09:30:00)（北京）—— decision_date D 的次日晨间"
+   }
+  ],
+  "rule": "first-window-wins（预登记有序窗口；先到先得；⛔ 不得事后新增/移动窗口）"
+ },
+ "excluded_unscheduled": [
+  {
+   "trigger_id": null,
+   "function": "runDecisionEngine",
+   "role": "CHAINED_ONLY",
+   "writes_eight_source_direct": true,
+   "exclusion_reason": "Triggers=0 ⇒ 自然调用必为 TCB_API；自身无 cron，故不进 trigger 清单，但**是**八源直接写入者",
+   "checkpoint_role": "N/A（无调度）"
+  },
+  {
+   "trigger_id": null,
+   "function": "adminGateway",
+   "role": "MANUAL_REENTRY",
+   "writes_eight_source_direct": false,
+   "exclusion_reason": "§5.6 明确排除：:547 riskResolve / :578 riskTrigger / :661 paramChange 直接 callFunction runDecisionEngine ⇒ 非自然运行",
+   "checkpoint_role": "EXCLUDED"
+  },
+  {
+   "trigger_id": null,
+   "function": "apiGateway",
+   "role": "READ_ONLY",
+   "writes_eight_source_direct": false,
+   "exclusion_reason": "只读读链（orderBy …limit(1)），不产生 run",
+   "checkpoint_role": "EXCLUDED"
+  }
+ ],
+ "absent": [
+  {
+   "trigger_id": "dailyFetch-1530",
+   "source": "仓库 cloudbaserc.example.json",
+   "cloud_status": "ABSENT_IN_CLOUD",
+   "note": "仓库配置 ≠ 云端实读；`fetchDailyData` 云端仅 1 个 trigger"
+  },
+  {
+   "trigger_id": null,
+   "function": "runIntegratedShadowEod",
+   "cloud_status": "RESOURCE_NOT_FOUND（函数不存在）",
+   "note": "仓库有源码，云端无函数"
+  }
+ ],
+ "entries": [
+  {
+   "trigger_id": "dailyFetch-2200",
+   "function": "fetchDailyData",
+   "schedule_cron": "0 0 22 * * 1-5 *",
+   "schedule_human": "工作日 22:00（北京）",
+   "entry_point": "fetchDailyData",
+   "role": "ENTRY",
+   "candidate_producer": "runDecisionEngine（链式：fetchDailyData → materializeIndicators → runDecisionEngine）",
+   "validation_gate": "runDecisionEngine 内 validateCandidateSet（V3.6.6 后：门 2 绑 (IV) CALENDAR TRADE DATE）",
+   "promotion_gate": "v365-publish-store.classifyPointerPromotion → CAS",
+   "writes_collections": [
+    "etf_daily",
+    "fetch_log",
+    "fundamental_series"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": true,
+   "evidence_candidate_capable": "YES",
+   "participates_in_checkpoint": "YES",
+   "checkpoint_role": "W1 主来源（22:30 窗口的首选提升链）",
+   "independence_class": "PROMOTION-CAPABLE（当前实测唯一曾 promoted 的链）",
+   "exclusion_reason": null,
+   "code_evidence": [
+    "fetchDailyData/index.js:104 upsert etf_daily",
+    "fetchDailyData/index.js:40 fetch_log",
+    "fetchDailyData/index.js:424 callFunction materializeIndicators"
+   ]
+  },
+  {
+   "trigger_id": "dailyPipeline-0800",
+   "function": "materializeIndicators",
+   "schedule_cron": "0 0 8 * * 1-5 *",
+   "schedule_human": "工作日 08:00（北京）",
+   "entry_point": "materializeIndicators",
+   "role": "ENTRY",
+   "candidate_producer": "runDecisionEngine（链式：materializeIndicators → runDecisionEngine）",
+   "validation_gate": "同上",
+   "promotion_gate": "同上",
+   "writes_collections": [
+    "etf_weekly",
+    "indicator_snapshot"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": true,
+   "evidence_candidate_capable": "YES",
+   "participates_in_checkpoint": "YES",
+   "checkpoint_role": "W2 主来源（次日晨间窗口；捕获 decision_date = D 的最新 promoted run）",
+   "independence_class": "PROMOTION-CAPABLE（结构上恒真；CD-04 修复后转为实际）",
+   "exclusion_reason": null,
+   "code_evidence": [
+    "materializeIndicators/index.js:69 upsert etf_weekly",
+    "materializeIndicators/index.js:109 upsert indicator_snapshot",
+    "materializeIndicators/index.js:127 callFunction runDecisionEngine"
+   ]
+  },
+  {
+   "trigger_id": "gen1-eod-weekdays-2220",
+   "function": "runGen1ShadowEod",
+   "schedule_cron": "0 20 22 * * 1-5 *",
+   "schedule_human": "工作日 22:20（北京）",
+   "entry_point": "runGen1ShadowEod",
+   "role": "ENTRY",
+   "candidate_producer": "N/A（不产 run）",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "ml_shadow_signal"
+   ],
+   "writes_eight_source_direct": true,
+   "writes_eight_source_transitive": true,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "YES",
+   "checkpoint_role": "组 B 右端供给者 ⇒ §5.8 窗口必须**晚于** 22:20",
+   "independence_class": "INPUT-SIDE ONLY（八源写入者，但不产 candidate）",
+   "exclusion_reason": "不产 Evidence Candidate；作用 = 为字段 5/6 与组 B 提供 `ml_shadow_signal`；⛔ 仍必须留在 Registry（因为它写八源）",
+   "code_evidence": [
+    "runGen1ShadowEod/index.js:216 upsert ml_shadow_signal"
+   ]
+  },
+  {
+   "trigger_id": "gen2-eod-weekdays-2230",
+   "function": "runGen2ShadowEod",
+   "schedule_cron": "0 30 22 * * 1-5 *",
+   "schedule_human": "工作日 22:30（北京）",
+   "entry_point": "runGen2ShadowEod",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "gen2_shadow"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "落在 W1 内（22:30），但写非八源 ⇒ 不破坏静默性质；仍**必须**在册",
+   "independence_class": "OUT OF SCOPE（Gen-2 lane，与 Gen-1 隔离）",
+   "exclusion_reason": "写 `gen2_shadow`（非八源）；函数头自述与 Gen-1 / V3.6.1 完全隔离",
+   "code_evidence": [
+    "runGen2ShadowEod/index.js:2239/2266 gen2_ranking",
+    "runGen2ShadowEod/index.js:2277/2296 gen2_candidate_leg"
+   ]
+  },
+  {
+   "trigger_id": "newsFetch-1630",
+   "function": "fetchFundamentalNews",
+   "schedule_cron": "0 30 16 * * 1-5 *",
+   "schedule_human": "工作日 16:30（北京）",
+   "entry_point": "fetchFundamentalNews",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "fundamental_news",
+    "fetch_log"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "不在任何候选窗口内",
+   "independence_class": "OUT OF SCOPE（基本面管线）",
+   "exclusion_reason": "写新闻集合（非八源）",
+   "code_evidence": [
+    "fetchFundamentalNews/index.js:73/78/273/312 fundamental_news"
+   ]
+  },
+  {
+   "trigger_id": "intelFetch-30min",
+   "function": "fetchFundamentalNews",
+   "schedule_cron": "0 0,30 8-22 * * * *",
+   "schedule_human": "每天 08:00–22:30 每 30 分钟",
+   "entry_point": "fetchFundamentalNews",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "fundamental_news",
+    "fetch_log"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "落在 W1（22:30）与 W2（08:30/09:00）内 —— 写非八源 ⇒ 不破坏静默性质",
+   "independence_class": "OUT OF SCOPE",
+   "exclusion_reason": "写新闻集合（非八源）；§5.8 v5.0 正文已提到本 trigger",
+   "code_evidence": [
+    "与 newsFetch-1630 同函数同写入路径"
+   ]
+  },
+  {
+   "trigger_id": "newsExtract-1640",
+   "function": "extractFundamental",
+   "schedule_cron": "0 40 16 * * 1-5 *",
+   "schedule_human": "工作日 16:40（北京）",
+   "entry_point": "extractFundamental",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "fundamental_series",
+    "fundamental_evidence",
+    "fetch_log"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "不在任何候选窗口内",
+   "independence_class": "OUT OF SCOPE（⛔ v5.0 §5.6 trigger 表未列 —— 本提案补录）",
+   "exclusion_reason": "写 `fundamental_series` / `fundamental_evidence`（非八源）",
+   "code_evidence": [
+    "extractFundamental/index.js:147/162/203/226 upsert",
+    "extractFundamental/index.js:71 fetch_log"
+   ]
+  },
+  {
+   "trigger_id": "intelExtract-30min",
+   "function": "extractFundamental",
+   "schedule_cron": "0 5,35 8-22 * * * *",
+   "schedule_human": "每天 08:05–22:35 每 30 分钟",
+   "entry_point": "extractFundamental",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "fundamental_series",
+    "fundamental_evidence",
+    "fetch_log"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "★ 落在 W1 **内**（22:35）与 W2 内（08:35/09:05）—— 写非八源 ⇒ 不破坏静默性质；⛔ v5.0 §5.8 枚举域漏列本项",
+   "independence_class": "OUT OF SCOPE（⛔ v5.0 §5.6/§5.8 均未列 —— 本提案补录）",
+   "exclusion_reason": "写 `fundamental_series`（非八源）",
+   "code_evidence": [
+    "与 newsExtract-1640 同函数同写入路径"
+   ]
+  },
+  {
+   "trigger_id": "realtime-5min",
+   "function": "fetchRealtimeData",
+   "schedule_cron": "0 */5 9-15 * * 1-5 *",
+   "schedule_human": "工作日 09:00–15:55 每 5 分钟",
+   "entry_point": "fetchRealtimeData",
+   "role": "ENTRY",
+   "candidate_producer": "N/A",
+   "validation_gate": "N/A",
+   "promotion_gate": "N/A",
+   "writes_collections": [
+    "etf_daily",
+    "fetch_log"
+   ],
+   "writes_eight_source_direct": false,
+   "writes_eight_source_transitive": false,
+   "evidence_candidate_capable": "NO",
+   "participates_in_checkpoint": "NO",
+   "checkpoint_role": "落在 W2 内（09:00–09:25）—— 写 `etf_daily`（非八源）⇒ 不破坏静默性质；⛔ 但它是 **official bars 之外的 realtime 行**，§9.1 forward 收益须排除 `source='realtime'`",
+   "independence_class": "OUT OF SCOPE（⛔ v5.0 §5.6 trigger 表未列 —— 本提案补录）",
+   "exclusion_reason": "写 `etf_daily` 的 realtime 行（非八源）；⛔ 不得进入 Evidence 四源",
+   "code_evidence": [
+    "fetchRealtimeData/index.js:53 upsert etf_daily",
+    "fetchRealtimeData/index.js:19 fetch_log"
+   ]
+  }
+ ]
+}

@@ -8,7 +8,12 @@
  *
  * 硬性要求：
  *  - 前台 4 页（/dashboard · /etf/:code · /intel · /review）+ 后台 9 页（含 /admin/production 与
- *    /admin/password）+ 登录页；⛔ 无「空壳业务页」；
+ *    /admin/password）+ 登录页；
+ *    ⚠️ 现状更正（2026-10-02，纯注释修正，⛔ 未改任何路由/权限/导航/runtime）：
+ *       路由表齐备，但**当前只有 /dashboard 与 /etf/:code 已接线**；
+ *       /intel、/review 与后台 9 页的 adapter 虽已存在，却**没有 compose/view 消费链**
+ *       ⇒ 这些页渲染为「当前版本暂未提供」。原文此处的「⛔ 无「空壳业务页」」与事实不符，已删除。
+ *       后续建设登记为 POST_GEN1（M6 / M7 / M8），本轮不实施。
  *    ★ M5-P1-OBS-1（2026-10-01）：`/structure` 与 `/structure/:code` **不再是页**（仅剩兼容 redirect）；
  *  - 旧 URL 保留 redirect 兼容（§11.5），⛔ 不再维护无业务内容的空页面；
  *  - `/review` 保持鉴权（§8.1）。

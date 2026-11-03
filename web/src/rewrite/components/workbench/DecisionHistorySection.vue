@@ -47,6 +47,7 @@ defineProps({
     </SectionHeader>
 
     <p class="state-sub mb-3">{{ history.inlineNote }}</p>
+    <p v-if="history.coverageNote" class="banner mb-3" role="status">{{ history.coverageNote }}</p>
 
     <!-- ① 未请求 / ② 读取失败 / ③ 畸形：三种文案必须不同 -->
     <div v-if="!history.available" class="banner mb-3">

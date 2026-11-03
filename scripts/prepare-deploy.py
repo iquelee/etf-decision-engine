@@ -59,8 +59,17 @@ BASELINE_DEFAULT = r"D:/AI-Projects/Codex/etf-decision-engine/_gen2-online-basel
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--baseline", default=BASELINE_DEFAULT, help="线上函数 zip 快照目录")
+    ap.add_argument("--baseline", required=True, help="已核验的线上函数 zip 快照目录")
+    ap.add_argument("--functions", required=True, help="本批函数名，逗号分隔；禁止隐式全量部署")
+    ap.add_argument("--env", required=True, help="目标环境，与部署入口显式指定值一致")
     args = ap.parse_args()
+
+    selected = args.functions.split(',')
+    if not selected or len(selected) != len(set(selected)) or any(fn not in FUNCTIONS for fn in selected):
+        ap.error("--functions 含未知或重复函数")
+    for fn in selected:
+        if not os.path.isfile(os.path.join(args.baseline, fn + '.zip')):
+            ap.error("缺少已核验快照: " + fn + '.zip')
 
     dist = os.path.join(REPO, "dist-functions")
     # 覆盖式更新（不整目录删除，避免触发批量删除守卫）；
@@ -69,7 +78,7 @@ def main():
 
     cloudbaserc_functions = []
 
-    for fn in FUNCTIONS:
+    for fn in selected:
         out = os.path.join(dist, fn)
         os.makedirs(out, exist_ok=True)
 
@@ -96,8 +105,21 @@ def main():
         #    node_modules 缓存：已存在且非空则跳过解压（避免每次部署解压 6 分钟）；
         #    如需强制刷新依赖，删掉 dist-functions/<fn>/node_modules 后重跑。
         nm_dir = os.path.join(out, "node_modules")
-        nm_cached = os.path.isdir(nm_dir) and bool(os.listdir(nm_dir))
         z = zipfile.ZipFile(zip_path)
+        if 'node_modules/@cloudbase/node-sdk/package.json' not in [n.replace('\\', '/') for n in z.namelist()]:
+            raise ValueError("快照缺少 CloudBase SDK 依赖: " + fn)
+        # Rebuild dependencies from the reviewed archive. A previously populated
+        # directory is not evidence that it belongs to this baseline ZIP.
+        resolved_repo = os.path.realpath(REPO)
+        resolved_out = os.path.realpath(out)
+        resolved_nm = os.path.realpath(nm_dir)
+        if (os.path.commonpath([resolved_repo, resolved_out]) != resolved_repo
+                or os.path.commonpath([resolved_out, resolved_nm]) != resolved_out
+                or resolved_nm == resolved_out):
+            raise ValueError("依赖输出目录越界")
+        if os.path.isdir(nm_dir):
+            shutil.rmtree(nm_dir)
+        nm_cached = False
         for name in z.namelist():
             nn = name.replace("\\", "/")
             if nn.endswith("/"):
@@ -105,7 +127,9 @@ def main():
             if nm_cached and nn.startswith("node_modules/"):
                 continue  # 依赖已缓存，跳过
             if nn.startswith("node_modules/") or nn == "config.json":
-                target = os.path.join(out, nn.replace("/", os.sep))
+                target = os.path.realpath(os.path.join(out, nn.replace("/", os.sep)))
+                if os.path.commonpath([os.path.realpath(out), target]) != os.path.realpath(out):
+                    raise ValueError("ZIP 路径越界")
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 with z.open(name) as f, open(target, "wb") as g:
                     shutil.copyfileobj(f, g)
@@ -135,7 +159,7 @@ def main():
     # 4) 生成 cloudbaserc.json（本地部署用，不入 git）
     cloudbaserc = {
         "version": "2.0",
-        "envId": ENV_ID,
+        "envId": args.env,
         "functionRoot": "./dist-functions",
         "functions": cloudbaserc_functions,
     }

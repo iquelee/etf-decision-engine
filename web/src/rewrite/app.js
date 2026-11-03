@@ -8,6 +8,8 @@
  *  - 全局样式按 tokens → base → utilities 顺序加载（base/utilities 依赖 tokens 变量）。
  */
 import { createApp, h } from 'vue';
+import AdminOperationNotice from '../components/AdminOperationNotice.vue';
+import {useAdminOperationNotice} from '../compose/useAdminOperationNotice.js';
 import { RouterView } from 'vue-router';
 import router from './router.js';
 
@@ -29,3 +31,16 @@ const app = createApp({
 
 app.use(router);
 app.mount('#rewrite-app');
+
+// Keep the governed router root intact; the notice survives route changes.
+const noticeHost = document.createElement('div');
+noticeHost.id = 'admin-operation-notice';
+document.body.appendChild(noticeHost);
+createApp({
+  setup() {
+    const notice = useAdminOperationNotice();
+    return () => h(AdminOperationNotice, {state: notice.state.value,
+      reviewed: notice.reviewed.value, feedback: notice.feedback.value, 'onUpdate:reviewed': value => {notice.reviewed.value = value;},
+      onReview: notice.review, onAcknowledge: notice.acknowledge});
+  }
+}).mount(noticeHost);

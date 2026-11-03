@@ -2,9 +2,12 @@
 /**
  * 生成 Gen-1 Feature Pipeline Lock + Runtime Bundle（WP-G1 / G1-04）。
  *
- * 冻结「模型之外」的输入语义：指标实现、阶段实现、Gen-1 PARAMS、特征构建、
- * RS20 计算、特征 schema、sector 映射。这样即使模型没变，只要 indicators.js
- * 等任一环节变化，CI 也会 FAIL。
+ * 冻结「模型之外」的输入语义（与锁 `rule` 的 9 域对齐）：指标实现、阶段实现、
+ * Gen-1 PARAMS、特征构建、RS20 计算、特征 schema、sector 映射、数据健康、域策略。
+ * 这样即使模型没变，只要上述任一环节变化，CI 也会 FAIL。
+ *
+ * ⚠️ 双层语义（LC-C）：`rule` = 受管行为域（**范围**权威）；`files[]` = 当前已绑
+ *    字节（**状态**权威）。域未绑定 ≠ 不受管 ⇒ 须经 dependency closure 补绑定。
  *
  * 用法：node scripts/gen-gen1-pipeline-lock.js
  */
@@ -34,7 +37,9 @@ const PIPELINE_FILES = [
   { role: 'indicator_implementation', path: 'src/common/utils/indicators.js' },
   { role: 'trend_stage_implementation', path: 'src/common/utils/trend-stage.js' },
   { role: 'feature_builder_and_params', path: 'cloudfunctions/runGen1ShadowEod/index.js' },
-  { role: 'feature_schema_and_thresholds', path: 'cloudfunctions/runGen1ShadowEod/frozen-manifest.json' }
+  { role: 'feature_schema_and_thresholds', path: 'cloudfunctions/runGen1ShadowEod/frozen-manifest.json' },
+  // LC-C closure：`rule` 第 8 域「数据健康」的实现文件（2026-10-03 R2 补绑定）。
+  { role: 'data_health', path: 'src/common/utils/gen1-data-health.js' }
 ];
 
 function main() {

@@ -21,8 +21,161 @@ const { buildPortfolioMlShadow, buildEtfMlShadow, slimCardMlShadow } = require('
 const {
   buildSystemRuntime, buildEtfUiViewModel, buildReviewGen1, buildLegacyNotice, engineFromDecision
 } = require('./common/utils/gen1-ui-view-model');
+// V3.6.5 Reader Migration：统一 Authoritative Read Resolver
+//   语义：endpoint → resolver → active_run_pointer → active run_id → 只读该 run_id 的数据
+//   ⛔ 不得用 orderBy(...desc).limit(1) 猜"当前权威结果"（见 v365-active-read 的 FORBIDDEN_READ_PATTERNS）
+const publishStore = require('./common/utils/v365-publish-store');
+const activeRead = require('./common/utils/v365-active-read');
+const { readProductionHistory } = require('./common/utils/production-history');
+const { buildReleaseIdentity } = require('./common/utils/release-identity');
+const { V365_COLLECTIONS: RUN_COLLECTIONS } = require('./common/utils/v365-contracts');
+let apiBuildSource = null;
+try { apiBuildSource = require('./RELEASE_SOURCE.json'); } catch (e) { /* older/source-only packages have no build identity */ }
+
+async function withReleaseIdentity(dataset, runtime) {
+  const manifest = dataset.run_status;
+  let history = null;
+  if (manifest && manifest.run_id) {
+    try {
+      const rows=await db.query(RUN_COLLECTIONS.RUN_HISTORY, {run_id:manifest.run_id},{limit:1});
+      history=rows[0] || null;
+    } catch (e) { /* expose missing identity as null; never infer it from another run */ }
+  }
+  const identity=buildReleaseIdentity({runtime,manifest,history,decision:dataset.decisions && dataset.decisions[0],apiSource:apiBuildSource});
+  return {...dataset,version_identity:identity,
+    run_status:manifest ? {...manifest,engine_version:identity.release_version} : null};
+}
 
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
+
+/* ------------------------------------------------------------------ *
+ * V3.6.5 authoritative 读取入口（唯一；⛔ endpoint 不得自行拼装）
+ * ------------------------------------------------------------------ */
+
+let _authStore = null;
+/** 懒建发布存储适配器（只读用途；读 pointer + candidate 集合） */
+function authoritativeStore() {
+  if (!_authStore) {
+    try {
+      _authStore = publishStore.createCloudbaseStore({ db });
+    } catch (e) {
+      _authStore = null;
+    }
+  }
+  return _authStore;
+}
+
+/**
+ * 解析 authoritative 数据集（**一次请求只调一次** ⇒ 单请求 run pinning）。
+ * store 不可用时返回 fail-closed 结果（⛔ 绝不回退 latest）。
+ */
+async function resolveAuthoritative(codes) {
+  const store = authoritativeStore();
+  if (!store) {
+    return activeRead.readAuthoritativeDataset({
+      // 空 store：所有读取均视为不可用 ⇒ fail-closed
+      getPointer: async () => null,
+      listCandidates: async () => [],
+      getCandidate: async () => null,
+      getManifest: async () => null
+    }, { expected_codes: codes });
+  }
+  return withReleaseIdentity(await activeRead.readAuthoritativeDataset(store, { expected_codes: codes }));
+}
+
+/** 读一个 code 的 authoritative decision（薄封装，内部仍只读一次 pointer） */
+async function resolveAuthoritativeDecision(code) {
+  return activeRead.readActiveDecision(authoritativeStore() || {
+    getPointer: async () => null,
+    listCandidates: async () => [],
+    getCandidate: async () => null,
+    getManifest: async () => null
+  }, { code, expected_codes: [code] });
+}
+
+/**
+ * 兼容投影：把「run 产物」与「用户维护的可变资产字段」合成一个 **legacy-shape** 快照对象。
+ *
+ * ⚠️ 两轴来源不同，必须分别取：
+ *   - run 轴（`run_candidate_portfolio`）：snapshot_date / market_regime / strategic_cash /
+ *     deployable_cash / semi_position / 诊断字段 / intended_* …
+ *   - 可变轴（legacy `portfolio_snapshot` 最新）：total_asset / cash_balance / total_pnl /
+ *     asset_source / auto_pnl / holdings_mv —— **用户手工维护**，其 selector 就是自身 updated_at
+ * ⛔ 不是"大一统 snapshot"；两条轴的时间语义不同（见 provenance）。
+ */
+const MUTABLE_ASSET_FIELDS = Object.freeze([
+  'total_asset', 'cash_balance', 'total_pnl', 'asset_source', 'auto_pnl', 'holdings_mv'
+]);
+
+function projectCompatSnapshot(runPortfolio, mutableLatest) {
+  if (!runPortfolio && !mutableLatest) return null;
+  const out = {};
+  // 1) 先铺可变轴（仅限用户维护字段）
+  if (mutableLatest) {
+    MUTABLE_ASSET_FIELDS.forEach((f) => {
+      if (mutableLatest[f] !== undefined) out[f] = mutableLatest[f];
+    });
+  }
+  // 2) run 轴覆盖（run 产物优先；可变字段不在覆盖集内，故不会被冲掉）
+  if (runPortfolio) {
+    Object.keys(runPortfolio).forEach((k) => {
+      if (MUTABLE_ASSET_FIELDS.indexOf(k) >= 0) return;   // 可变字段跳过
+      if (k === 'run_id' || k === 'candidate_key' || k === 'written_at') return;
+      out[k] = runPortfolio[k];
+    });
+  }
+  return out;
+}
+
+/** 可变轴 provenance（§8） */
+async function mutableStateProvenance(positions) {
+  const rows = positions || [];
+  let latest = null;
+  rows.forEach((r) => {
+    const t = r && r.updated_at != null ? String(r.updated_at) : null;
+    if (t && (latest == null || t > latest)) latest = t;
+  });
+  return activeRead.buildMutableStateProvenance({
+    rows,
+    position_source: 'portfolio_position(current mutable state, admin/trade-maintained)'
+  });
+}
+
+/**
+ * 轻量 pointer provenance（供只读单文档的端点用，例如 `getConstants`）。
+ * 只读 pointer，不读 run 数据 ⇒ 开销最小；⛔ 仍走同一 selector，不得用 latest 猜。
+ */
+async function resolvePointerProvenance(runtime) {
+  const store = authoritativeStore();
+  if (!store) {
+    return activeRead.buildAuthoritativeProvenance({
+      status: activeRead.AUTH_READ_STATUS.AUTHORITATIVE_READ_UNAVAILABLE,
+      available: false, reason: activeRead.AUTH_READ_REASON.READ_ERROR
+    });
+  }
+  try {
+    const ptr = await activeRead.resolveActivePointer(store);
+    if (!ptr.resolved) {
+      return activeRead.buildAuthoritativeProvenance({
+        status: activeRead.AUTH_READ_STATUS.AUTHORITATIVE_READ_UNAVAILABLE,
+        available: false, reason: activeRead.AUTH_READ_REASON.NO_ACTIVE_POINTER
+      });
+    }
+    const manifests=await db.query(RUN_COLLECTIONS.RUN_MANIFEST,{run_id:ptr.run_id},{limit:1});
+    const ds=await withReleaseIdentity({run_status:manifests[0] || null,decisions:[]},runtime);
+    const authority=activeRead.buildAuthoritativeProvenance({
+      status: activeRead.AUTH_READ_STATUS.OK, available: true, reason: null,
+      active_run_id: ptr.run_id, active_revision: ptr.revision,
+      expected_trade_date: ptr.expected_trade_date, run_status: ds.run_status
+    });
+    return {...authority,version_identity:ds.version_identity};
+  } catch (e) {
+    return activeRead.buildAuthoritativeProvenance({
+      status: activeRead.AUTH_READ_STATUS.AUTHORITATIVE_READ_UNAVAILABLE,
+      available: false, reason: activeRead.AUTH_READ_REASON.READ_ERROR
+    });
+  }
+}
 
 async function getLatestMlShadowSignal(code) {
   try {
@@ -158,20 +311,29 @@ async function getDashboard() {
   } catch (e) { /* 读不到不阻断 */ }
   // 组合级 Shadow 状态（顶栏）；标的级信号挂在 cards[].ml_shadow
   const ml_shadow = buildPortfolioMlShadow(paramBag);
-  const snapshots = await db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
-    orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 1
-  });
-  const portSnapshot = snapshots[0] || null;  // P2-2：并发拉取所有 ETF 的最新决策（原顺序 await → Promise.all，标的池扩大不线性变慢）
-  // PR-UI-01：三层契约的运行时真相（authority/health 只来自 runtime_status）
+
+  // ================= V3.6.5 Reader Migration：双轴读取 =================
+  // ① Authoritative 轴（不可变 run 产物）：decision + run portfolio —— selector = active_run_pointer.run_id
+  const auth = await resolveAuthoritative(etfs.map((e) => e.code));
+  // ② Mutable 轴（持续变化的现实状态）：portfolio_position + 用户维护的资产字段
+  //    ⚠️ 这里对 portfolio_snapshot 取最新**只**用于「用户维护资产字段」，不作为决策权威判据。
+  const mutableSnapshots = await db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
+    orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 1 // v365-reader-allow:mutable-axis (仅取用户维护资产字段)
+  }).catch(() => []);
+  const mutableLatest = mutableSnapshots[0] || null;
+  // 兼容投影：run 轴供决策字段、可变轴供资产字段（⛔ 两者不是同一时间轴）
+  const portSnapshot = projectCompatSnapshot(auth.available ? auth.portfolio : null, mutableLatest);
+
+  // PR-UI-01：三层契约的运行时真相（authority/health 只来自 runtime_status —— 单文档按 key 取，不可能读到 candidate）
   const runtime = await getRuntimeStatus();
   const decisionsMap = {};
   const mlSignalMap = {};
   await Promise.all(etfs.map(async (etf) => {
-    const [dec, sig] = await Promise.all([
-      db.getLatestDecision(etf.code),
+    const [sig] = await Promise.all([
       getLatestMlShadowSignal(etf.code)
     ]);
-    decisionsMap[etf.code] = dec;
+    // ★ authoritative decision 只来自 active run（⛔ 不再 db.getLatestDecision 取最新）
+    decisionsMap[etf.code] = auth.available ? (auth.decision_map[etf.code] || null) : null;
     mlSignalMap[etf.code] = sig;
   }));
 
@@ -332,7 +494,12 @@ async function getDashboard() {
       cash_ratio: book.cash_ratio,
       etf_total: etfTotal, innovation_position: innovationPosition, overall_risk: overallRisk
     },
-    cards
+    cards,
+    // ================= V3.6.5 Reader Migration：双轴 provenance（additive）=================
+    // ⛔ 不改变任何既有业务字段语义；两轴分别标注，不得合成一句。
+    authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
+    mutable_axis: await mutableStateProvenance(positions)
   };
 }
 
@@ -340,14 +507,14 @@ async function getDashboard() {
 async function getEtfList() {
   const etfs = await db.getEtfList();
   const positions = await db.query(COLLECTIONS.PORTFOLIO_POSITION, {});
-  // P2-2：并发拉取决策 + 快照
-  const [decisionsArr, snapshotsArr] = await Promise.all([
-    Promise.all(etfs.map((etf) => db.getLatestDecision(etf.code))),
-    Promise.all(etfs.map((etf) => db.getLatestSnapshot(etf.code)))
-  ]);
+  // ===== V3.6.5 Reader Migration =====
+  // ① authoritative 轴：decision 只来自 active run（一次 pointer 读取 + run pinning）
+  const auth = await resolveAuthoritative(etfs.map((e) => e.code));
+  // ② 输入数据（indicator_snapshot）：非决策产物，沿用原语义
+  const snapshotsArr = await Promise.all(etfs.map((etf) => db.getLatestSnapshot(etf.code)));
   const list = [];
   etfs.forEach((etf, i) => {
-    const decision = decisionsArr[i];
+    const decision = auth.available ? (auth.decision_map[etf.code] || null) : null;
     const snapshot = snapshotsArr[i];
     const pos = positions.find((p) => p.code === etf.code);
     // 防守级：放量下跌/周线反转=高；放量滞涨/周线破坏=中；否则低
@@ -387,20 +554,29 @@ async function getEtfList() {
     const rb = b.action ? (actionRank[b.action] != null ? actionRank[b.action] : 6) : 6;
     return ra - rb;
   });
-  return { list };
+  return {
+    list,
+    // V3.6.5 Reader Migration：additive 双轴 provenance
+    authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
+    mutable_axis: await mutableStateProvenance(positions)
+  };
 }
 
 /** ETF 详情 */
 async function getEtfDetail(code) {
-  // P2-2：并发拉取（原顺序 await）
-  const [etf, snapshot, decision, fundamental, riskEvents, pos] = await Promise.all([
+  // ===== V3.6.5 Reader Migration =====
+  // ① authoritative 轴：decision 来自 active run（一次 pointer 读取 + pinning）
+  // ② 输入/可变轴：indicator_snapshot / fundamental / position 沿用原语义
+  const [etf, snapshot, authOne, fundamental, riskEvents, pos] = await Promise.all([
     db.getEtf(code),
     db.getLatestSnapshot(code),
-    db.getLatestDecision(code),
+    resolveAuthoritativeDecision(code),
     db.getLatestFundamentalState(code),
     db.getActiveRiskEvents(code),
     db.getPosition(code)
   ]);
+  const decision = authOne.available ? authOne.decision : null;
   if (!etf) return null;
 
   // 基本面雷达明细：模板指标 + 每个指标最新 series
@@ -410,7 +586,7 @@ async function getEtfDetail(code) {
   const fundamentalConfig = fundamentalConfigAll.filter((c) => (Number(c.weight) || 0) > 0);
   const seriesRows = await Promise.all(fundamentalConfig.map((cfg) =>
     db.query(COLLECTIONS.FUNDAMENTAL_SERIES, { code, indicator: cfg.indicator }, {
-      orderBy: [{ field: 'data_date', direction: 'desc' }], limit: 40
+      orderBy: [{ field: 'data_date', direction: 'desc' }], limit: 40 // v365-reader-allow:input-data (基本面序列，非决策产物)
     })
   ));
   const fundamentalSeries = {};
@@ -468,25 +644,35 @@ async function getEtfDetail(code) {
     fundamental_config: fundamentalConfig,
     fundamental_series: fundamentalSeries,
     holdings,
-    holdings_date: reportDate || null
+    holdings_date: reportDate || null,
+    // V3.6.5 Reader Migration：additive 双轴 provenance（⛔ 不改上面任何字段语义）
+    authority: activeRead.buildAuthoritativeProvenance({
+      status: authOne.status, available: authOne.available, reason: authOne.reason,
+      active_run_id: authOne.active_run_id, active_revision: authOne.active_revision,
+      expected_trade_date: authOne.expected_trade_date, run_status: null
+    }),
+    mutable_axis: await mutableStateProvenance(pos ? [pos] : [])
   };
 }
 
 /** K 线 */
 async function getKline(code, period) {
+  // Select the latest bounded window in storage, then restore chart order.
+  // Ascending LIMIT selects the oldest bars once history exceeds the limit.
   if (period === 'weekly') {
     const rows = await db.query(COLLECTIONS.ETF_WEEKLY, { code }, {
-      orderBy: [{ field: 'week_end_date', direction: 'asc' }], limit: 260
+      orderBy: [{ field: 'week_end_date', direction: 'desc' }], limit: 260
     });
-    return rows.map((r) => ({
+    return rows.reverse().map((r) => ({
       date: r.week_end_date, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume
     }));
   }
   const rows = await db.query(COLLECTIONS.ETF_DAILY, { code }, {
-    orderBy: [{ field: 'trade_date', direction: 'asc' }], limit: 320
+    orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 320
   });
   return rows
     .filter((r) => r.close != null)
+    .reverse()
     .map((r) => ({
       date: r.trade_date, open: r.open, high: r.high, low: r.low, close: r.close,
       volume: r.volume, amount: r.amount, premium_rate: r.premium_rate
@@ -494,31 +680,26 @@ async function getKline(code, period) {
 }
 
 /** 历史信号（与 getReview 同一套日期命令，避免只 from 或只 to 时内存过滤漏网） */
-async function getDecisions(code, from, to) {
-  const _ = db.getCommand();
-  const where = { code };
-  if (from && to) {
-    where.decision_date = _.and(_.gte(from), _.lte(to));
-  } else if (from) {
-    where.decision_date = _.gte(from);
-  } else if (to) {
-    where.decision_date = _.lte(to);
-  }
-  const rows = await db.query(COLLECTIONS.DECISION_RESULT, where, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }],
-    limit: (from || to) ? 500 : 60
-  });
-  return (rows || []).map(withChineseActionLabel);
+async function getDecisions(code, from, to, includeProvenance) {
+  const result = await readProductionHistory(db,{code,from,to,limit:(from || to) ? 500 : 60});
+  const rows = result.decisions.map(withChineseActionLabel);
+  // Keep the legacy array contract. New clients request coverage metadata,
+  // including failures and empty ranges; every returned row also carries its axis.
+  return includeProvenance ? {rows,history:result.history} : rows;
 }
 
 /** 组合仓位 */
 async function getPortfolio() {
   const etfs = await db.getEtfList();
   const positions = await db.query(COLLECTIONS.PORTFOLIO_POSITION, {});
-  const snapshots = await db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
-    orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 1
-  });
-  const snapshot = snapshots[0] || null;
+  // ===== V3.6.5 Reader Migration：双轴 =====
+  // ① authoritative 轴：run 产出的组合快照（market_regime / strategic_cash / deployable_cash / semi_position …）
+  const auth = await resolveAuthoritative(etfs.map((e) => e.code));
+  // ② mutable 轴：用户维护的资产字段（total_asset / cash_balance / total_pnl / asset_source）
+  const mutableSnapshots = await db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
+    orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 1 // v365-reader-allow:mutable-axis (仅取用户维护资产字段)
+  }).catch(() => []);
+  const snapshot = projectCompatSnapshot(auth.available ? auth.portfolio : null, mutableSnapshots[0] || null);
 
   const techSectors = ['storage', 'ai_network', 'semi_equip'];
   const semiSectors = ['storage', 'semi_equip'];
@@ -586,7 +767,11 @@ async function getPortfolio() {
       strategic_cash: null, deployable_cash: null, market_regime: null
     },
     rows,
-    tech_sector_max: techSectorMax
+    tech_sector_max: techSectorMax,
+    // V3.6.5 Reader Migration：additive 双轴 provenance
+    authority: activeRead.buildAuthoritativeProvenance(auth),
+    version_identity: auth.version_identity || null,
+    mutable_axis: await mutableStateProvenance(positions)
   };
 }
 
@@ -594,28 +779,23 @@ async function getPortfolio() {
 async function getReview(from, to) {
   // S-001 修复（2026-08-22）：加 where 范围过滤 + limit，防公网全表扫描刷慢整库（GLM 深审）
   const _ = db.getCommand();
-  const decisionWhere = {};
   const tradeWhere = {};
   if (from && to) {
-    decisionWhere.decision_date = _.and(_.gte(from), _.lte(to));
     tradeWhere.trade_date = _.and(_.gte(from), _.lte(to));
   } else if (from) {
-    decisionWhere.decision_date = _.gte(from);
     tradeWhere.trade_date = _.gte(from);
   } else if (to) {
-    decisionWhere.decision_date = _.lte(to);
     tradeWhere.trade_date = _.lte(to);
   }
-  const decisions = await db.query(COLLECTIONS.DECISION_RESULT, decisionWhere, {
-    orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 500
-  });
+  const historical = await readProductionHistory(db,{from,to,limit:500});
+  const decisions = historical.decisions;
   const trades = await db.query(COLLECTIONS.TRADE_LOG, tradeWhere, {
     orderBy: [{ field: 'trade_date', direction: 'desc' }], limit: 500
   });
   // 持仓要能看到筛选日前的快照/成交，不能跟复盘日期带绑死
   const [snapshots, heldTrades] = await Promise.all([
     db.query(COLLECTIONS.PORTFOLIO_SNAPSHOT, {}, {
-      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200
+      orderBy: [{ field: 'snapshot_date', direction: 'desc' }], limit: 200 // v365-reader-allow:mutable-axis (actual holding evidence; run portfolio targets must never substitute for actual holdings)
     }),
     (from || to)
       ? db.query(COLLECTIONS.TRADE_LOG, {}, {
@@ -648,6 +828,8 @@ async function getReview(from, to) {
       suggested_position: d.suggested_position,
       current_position: held,
       engine: eng.engine,
+      run_id: d.run_id || null,
+      history_provenance: d.history_provenance,
       // 生产（该条决策真实的产生者）唯一决策口径
       production: {
         engine: eng.engine,
@@ -677,8 +859,10 @@ async function getReview(from, to) {
 
   return {
     decisions: decisionsSafe,
+    history: historical.history,
     deviations: review.deviations,
-    stats: review.stats,
+    stats: historical.history.status === 'OK' ? review.stats : null,
+    stats_status: historical.history.status === 'OK' ? 'AVAILABLE' : 'INCOMPLETE_HISTORY',
     trades: tradesSafe
   };
 }
@@ -950,6 +1134,7 @@ async function getConstants() {
     const rows = await db.query(COLLECTIONS.RUNTIME_STATUS, { key: 'runtime-status' }, { limit: 1 });
     runtime = rows[0] || null;
   } catch (e) { /* runtime_status 未建时兜底 */ }
+  const authority=await resolvePointerProvenance(runtime);
   return {
     w_state_labels: W_STATE_LABELS,
     d_state_labels: D_STATE_LABELS,
@@ -962,7 +1147,12 @@ async function getConstants() {
     sectors: SECTORS,
     etf_names: ETF_NAMES,
     engine_version: (runtime && runtime.production_engine) || ENGINE_VERSION,
-    runtime_status: runtime || null
+    runtime_status: runtime || null,
+    // V3.6.5 Reader Migration：additive provenance。
+    // ⚠️ `runtime_status` 是按 key 取的单文档 ⇒ **不可能**读到 candidate/partial；
+    //    此处只是把「当前 authoritative run 是谁」显式回显，供前端/审计对齐。
+    authority,
+    version_identity: authority.version_identity || null
   };
 }
 
@@ -988,7 +1178,7 @@ exports.main = async (event = {}, context = {}) => {
 
     // GET /api/etf/:code/decisions
     const decMatch = path.match(/^\/api\/etf\/([^/]+)\/decisions$/);
-    if (decMatch) return ok(await getDecisions(decMatch[1], query.from, query.to));
+    if (decMatch) return ok(await getDecisions(decMatch[1], query.from, query.to, query.include_provenance === '1'));
 
     // GET /api/etf/:code
     const detailMatch = path.match(/^\/api\/etf\/([^/]+)$/);

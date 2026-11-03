@@ -1,0 +1,104 @@
+# 长期回执与完整入口接线：离线 V2 候选
+
+当前状态（2026-10-30）：**D-023隔离账本验证及D-024共同快照冲突/回滚补测通过；生产写链尚未迁移**。下文保留首次OFFLINE_CONTRACT_ONLY及后续准备过程。实际创建/更新和调用见文末与部署台账；各批证明范围独立保留。
+
+## 本次实现
+
+`release/writer-admission-journal.js` 沿用 V1 的 owner/epoch、排空、未知结果保留执行槽规则。控制记录仅保留当前未完成回执，历史回执进入永久账本；请求 ID 和 token 在环境/作用域内分别唯一。完成回执不删除、不设 TTL，业务正常返回 `ok:false` 仍是执行终结，不代表发布成功。
+
+关键存储契约是 `transaction(binding, callback)`：同一可串行化事务必须同时读取控制记录和两个回执唯一索引，原子提交控制变更及回执。完成回执提交与释放执行槽属于同一次提交。控制变化或唯一索引竞争必须冲突或串行化，不能只依赖读快照。调用方只接受明确 true 确认；提交确认丢失不执行/重执行业务。禁止用两笔独立写、进程锁或 TTL 模拟此契约。事务回调不得执行业务或外部副作用。
+
+V1 数据不能直接作为 V2 使用：发现控制记录带 COMPLETE 回执时拒绝。未来迁移需关闭入口并排空，将全部历史回执与 token 唯一性核对、永久写入账本后，再原子完成版本切换；此流程尚未实现或授权。
+
+`createEntry` 把整个原始 main 包在准入之后，身份解析失败即拒绝，早于配置同步等第一笔业务写。身份解析器必须来自可信入口，不能直接信任事件里的 owner、epoch、token。当前仅注入测试身份；定时事件、管理入口、函数间调用的稳定请求身份及重试规则尚待具体实现。
+
+## 已验证与边界
+
+新增自动发现测试 `tests/writer-admission-journal.test.js`：
+
+- 连续 300 次正常终结后，控制记录无历史堆积，账本完整保留 300 条；最早请求及旧 token 仍拒绝复用。
+- 新入口实例及 owner/epoch 切换后，历史请求仍去重。这里的新实例模拟无本地缓存，未启动真实云冷实例。
+- 20 路同快照竞争仅一个准入；错作用域拒绝；异常留下 UNKNOWN/HOLD 和执行槽。
+- 准入和完成阶段分别模拟提交前失败、提交后确认丢失，检查控制和账本一致性，重复请求不进入业务。
+- 完整未修改 RDE 在合成行情/持仓与固定时钟下回放，54 次写入的顺序、各集合内容、完整返回值与基线相同；缺失身份、错 owner、重复请求无新增业务写。
+
+测试存储是单进程内存事务参考。300 条测试验证协议不再受 128 条控制记录上限限制，不能据此宣称数据库容量、吞吐、多实例隔离、永久存储或网络故障资格已经通过。无生产 import、无云端事务适配器，也未形成发布包或上线申请。原 V1 和 D-022 探针实现保持原样。
+
+## 下一步顺序
+
+1. 用生产锁定 SDK 2.11.0 核对平台事务、条件冲突、双唯一索引及失败确认语义；若不能满足契约，先改设计，禁止用顺序写降级。
+2. 实现独立隔离事务适配器与精确范围验证候选，覆盖真实多实例竞争、事务中断、重复请求与回读；形成源码/包/集合/调用绑定申请后才操作云端。
+3. 明确所有真实调用源的请求身份、门面时限、业务错误包装、延迟重试与入口封闭方式；制作旧/新共同准入接线候选并对独立实际包回放。
+4. 排空及迁移方案、回滚边界和自然运行验收条件齐备后，另行申请生产切换。当前生产写链仍维持 D-018。
+
+本批验证收据：Node24 完整 Stage A 90/90；新增测试在 Node22.22.2 同样通过。legacy surface 自检、31 文件候选清单、23 项冻结件、显式文件敏感信息扫描和 diff whitespace 检查通过。现有候选 content 9969ae7472e6690af962cb6a2fb3e7d5c75a2a1a00d6934b82c440911d845aa1 不变，本离线 V2 不在该 31 文件资格面内。
+
+## 后续：锁定 SDK 核对和隔离适配器
+
+2026-10-29 新增 `release/writer-journal-cloudbase.js`，状态 **ISOLATED_TRANSACTION_CANDIDATE_NOT_DEPLOYED**。它拒绝生产集合名，只允许 `runtime24_journal_probe_*`；当前准备唯一集合 `runtime24_journal_probe_20261029`。
+
+已核对独立 RDE 下载的 SDK 2.11.0 / database 1.4.1 实际源码：执行入口使用 `transaction/index.js` 的手动 `startTransaction/commit/rollback`。`runTransaction` 默认冲突重试，故不用。事务内 doc.get 返回对象/null，事务外返回数组，适配器分别严格检查；不使用文档中较新 SDK 的 `{data: ...}` 写法。SDK HTTP 层在 keepalive=true 时还可能重发 ECONNRESET 请求，故强制显式环境、retries=0、keepalive=false。
+
+[官方事务文档](https://docs.cloudbase.net/database/transaction) 说明支持服务端跨文档原子提交，采用快照隔离，写冲突会终止事务；事务限 30 秒、100 操作，使用 doc 而非 where。旧路线中“无跨文档事务”的历史判断不能作为当前 SDK 能力结论。此处对协议串行性的推导依赖**每个变更事务都写同一个控制主键**，使准入/完成/排空/切换互相产生写冲突；不是声称平台隔离级别本身为可串行化。实际环境的冲突、持久性和错误返回仍须隔离验证。
+
+两个回执唯一索引用请求 ID、token 及环境/作用域的规范编码 SHA256 生成固定主键，均存完整身份，读取时交叉核对；无需在生产或隔离集合新建二级唯一索引。控制记录采用 V2 外层标记，拒绝旧控制形状；完成时控制更新与两个账本主键的 COMPLETE 更新一并提交。所有读取均限定 doc；已有回执只更新原身份且禁止改 COMPLETE，无 set/upsert/remove。事务回调接收显式预取身份提示，保持同步纯函数。业务 handler 在准入提交明确确认后才运行，且在事务之外。
+
+新增自动发现测试 `tests/writer-journal-cloudbase.test.js`：140 条完成回执/280 个索引文档；20 路竞争；准入/完成四种提交确认故障；第二索引写失败回滚；零更新/错误确认、环境/配置错误、控制缺失及索引损坏拒绝。锁定 1799 文件独立包在执行前后复核不变，Node22.22.2 和 Node24.20.0 均通过真实 SDK 数据库类、EJSON 序列化和内存传输回放。无认证、网络或云写；完整 Stage A 91/91。
+
+## 下一批精确隔离验证范围
+
+`release/runtime24-journal-probe-plan.json` 与 `release/runtime24-journal-probe.js` 仅拟新增：
+
+- 函数 `writerJournalRuntime24`：Event / Nodejs24.11 / index.main / 30s / 256MB，沿用已存在的环境函数角色；零 timer、路由、自定义环境变量，不安装/升级依赖。
+- 集合 `runtime24_journal_probe_20261029`：先创建空集合；唯一固定初始化步骤创建三个控制主键，不允许重置、删除、覆盖已存在 fixture。
+- 最多 29 次固定调用：初始化 1；8 个并发竞争者各 1；完成/切换/跨 epoch 去重 1；17 个有序批次各 8 个终结请求；UNKNOWN 1；最终审计 1。任一步失败或确认不明立即停，不重试、不补偿。
+- 共 136 条 durable 完成回执、1 个 race 完成回执、1 个 UNKNOWN；每条两份主键索引加三个控制记录，最终恰好 279 个文档。允许的 race 请求只有 race:0..7，且只保留一个胜者；其他请求只有 durable:0..135 和 unknown，全部绑定固定作用域。
+- 竞争结果必须恰好一个准入，且观察到至少两个独立加载实例标记才计多实例覆盖；同一实例内的并发不算。UNKNOWN 来自模拟 handler 异常，不能计真实网络故障验证。
+- 调用后必须由独立只读通道逐个验证 279 个主键、两索引一致性、控制 revision/owner/epoch/槽状态，核对现有函数、集合清单、路由、托管和生产 pointer/runtime 边界。保留全部 fixture 和失败证据。
+
+本地已用上述固定调用序列回放；最终 137 COMPLETE + 1 UNKNOWN、279 文档全部双索引核对，内存线格式共 2478 请求。该请求数是本地模型计数，不是云端测量。本候选尚未创建资源或调用云函数，具体完整源码和 ZIP hash 由 `release/prepare-journal-probe.js` 在干净提交上封包后绑定；原 D-022 探针和生产链均不在更新范围。
+
+整体目标还包括 RDE 后续的物化、日线抓取等分批迁移及各自自然验收，不能用此隔离回执验证代替生产写链完成。每批须保持实际下载包依赖/common 边界并独立验收。
+
+## D-023 实际执行结果
+
+owner 在精确源码/包/资源/29次固定调用申请后连续回复“继续”。执行源码 `7380081f5fdcaa92190bda01d19c6f2306f6b586`；ZIP SHA256 `382e23ba6f0580b1be6e47dc9b7704926049694b3912490fc973c18e931823dc`。北京时间23:35:21仅新建 `writerJournalRuntime24`（CodeSize4062080），仅另建上述隔离集合，初始回读为空。函数配置与计划完全一致，沿用已有角色、零timer/路由/自定义变量；独立下载 EXACT_MATCH1713/1713，1703依赖未变。
+
+29次固定调用全部PASS，实际Node v24.11.1、SDK2.11.0、database1.4.1。8次客户端时间区间重叠调用有8个独立requestId和8个独立加载实例标记，仅1个获准。随后完成、owner/epoch切换和跨epoch去重、17批136个durable请求、UNKNOWN保留及审计均通过。独立只读回查279个精确主键：137 COMPLETE+1 UNKNOWN，两个索引全部一致，最早 durable:0 在136次终结后仍拒绝；control分别为race revision5/new/epoch2/空槽，durable revision273/空槽，unknown revision3/HOLD/保留槽。
+
+边界PASS：其他14既有函数（包含D-022探针）的完整受控配置与列表代码/配置字段不变；函数14→15仅增加本探针，集合33→34仅增加隔离集合；全部域路由、ETF67及本次观察的全部托管对象元数据、正式pointer/runtime不变。无生产写函数调用、权限/timer/策略/ML改动、删除/重置或回退。仓外 `runtime24-journal-probe-v2/execution/` 封存授权、创建、独立下载、29调用、并发、fixture和边界报告；279文档保留。准备请求的待批准标签为历史封存内容，以执行报告和台账D-023为准。
+
+**尚缺证据：**7个竞争失败者均为 `STALE_REVISION`，不是数据库 `DATABASE_TRANSACTION_CONFLICT`。本批不能证明“两个事务先读到同一revision后，后写者被平台冲突拒绝”。UNKNOWN仅模拟handler异常，不是网络故障注入。生产入口身份、门面、真实排空及Node24自然验收依然未完成。
+
+## 强制共同快照冲突与回滚补测候选
+
+新增 `release/runtime24-journal-conflict-probe.js` 和明确计划JSON，默认尚未部署/调用。拟仅更新既有隔离函数，保留原配置、集合及全部279文档，不新增云资源：
+
+1. 一次固定事件 `verify-journal-conflict-v1`，仅新作用域 `isolated-journal-conflict`；创建一个新控制主键，已有fixture即拒绝。
+2. 两个原生手动事务均预读control revision1和两份不存在的forced索引；先提交事务A的control+双索引，再要求事务B更新原快照时明确返回 `DATABASE_TRANSACTION_CONFLICT`。若未观察到该码，回滚B并报失败，禁止冒充通过。
+3. 完成forced回执，control变revision3/空槽；另一个事务暂存rolled-back请求的control+双索引后显式rollback，要求原control保持revision3、两份rolled-back索引均不存在，forced两索引保持COMPLETE。
+4. 最终仅增加3文档（共282）；独立通道核对新三主键、缺失两主键、旧279文档逐字节内容及全部生产边界。无调用重试、TTL接管、回退或清理。
+
+本地模型通过上述共同快照/回滚序列，也验证旧279行完全不变、重复补测不重置fixture。真实SDK内存传输与实际封包入口还须按最终源码重验；此处的模型配置冲突不算平台实证。`prepare-journal-probe.js --conflict` 只选择明确六个补测源码文件，依赖仍来自绑定1799文件独立下载，不能借此扩到生产函数。后续需完整40位新源码/ZIP/仅更新既有函数与一次固定调用的独立批准。
+
+## D-024 共同快照冲突与回滚实际结果
+
+owner对封存申请明确回复“批准”。执行源码 `85bc24e7762105fb44db9250b653252314c1a2e3`，ZIP SHA256 `42957f01544b5da8af28c318c828c739a40a86a9218146b2438a62815328c646`。北京时间2026-10-30 07:35:14仅更新既有隔离探针代码，CodeSize4062434；更新前后分别独立下载1713文件全部匹配，原运行配置不变。相对D-023仅probe.js、SOURCE_IDENTITY.json及计划JSON换名/内容变化，1703依赖与四个协议/适配模块原字节不变。
+
+07:35:56取得唯一固定调用PASS，实际Node v24.11.1/SDK2.11.0/database1.4.1。两个原生事务均先读revision1和空索引，A提交control+双RUNNING回执后，B原快照写明确返回 **DATABASE_TRANSACTION_CONFLICT**，未提交B；forced回执随后正常完成。另一个事务暂存control+rolled-back双索引后真实显式rollback，control保持revision3/空槽，forced两索引均COMPLETE，rolled-back两索引不存在。
+
+独立只读回查282精确主键，仅增加新scope的control和两份forced索引；原279主键原始内容全部未变。边界PASS：其他14函数的完整受控配置及列表代码/配置不变，目标运行配置保持，仅代码更新；15函数/34集合名称清单不变，全部路由、ETF67和本次全部观察托管元数据、正式pointer/runtime不变。无生产写函数调用、IAM/timer/策略/ML变更、资源创建/删除/重置或回退。三份新fixture与原279份均保留。仓外 `runtime24-journal-conflict-v1/execution/` 保存授权、前后下载、一次调用、独立fixture/边界与DEPLOYMENT_REPORT；台账D-024。
+
+本批补齐原生共同快照冲突和显式三文档回滚实证，仍不计真实网络故障注入、生产排空或Node24生产自然验收。源码本地完整Stage A91/91，Node22/24实际封包main及真实SDK内存传输通过，Actions #207六组成功；候选31和冻结23指纹不变。准备申请/计划中待批准、未部署的标签是历史封存内容，实际结果以本节和执行报告为准。
+
+## 生产接线的下一项具体工作
+
+生产调用入口仍须单独实现和验收，不能直接解除隔离适配器的命名空间限制上线。下一候选必须解决以下已从真实入口代码确认的问题：
+
+- `materializeIndicators/index.js:170`使用交易日、TIMER、固定source_detail和attempt1构造pipeline身份；`pipeline-correlation.js:109`明确不含wall-clock。同一交易日的夜间链和次日盘前可能得到同一pipeline ID，不能直接当作业务去重键而吞掉合法盘前重算。
+- `adminGateway/index.js:582/613/696`目前仅传riskResolve/riskTrigger/paramChange，没有稳定操作ID；`fetchDailyData/index.js:424`只传from。需在真实调用源定义重试稳定、不同合法操作互异的身份，不能在RDE入口每次随机生成后宣称能跨重试去重。
+- owner/epoch和worker身份必须来自受控配置/记录；不能信任调用事件中的from/force/owner声明。直接调用新worker的旁路也必须在任何业务写前拒绝。
+- 稳定门面需显式核对SDK callFunction的result封装，只对正常终结返回原业务payload；拒绝/UNKNOWN须清晰反馈，禁止自动重试或回落旧实现。调用方未显式设置转发时限，必须验证整条嵌套调用的时间预算；caller超时不等于worker终止。
+- 激活前还需关闭真实入口、核对外部SDK/IAM调用、延迟重试与旧热实例，封存可核验的排空证据。现有proof三个布尔值仍只是接口，不是排空事实。
+
+这些工作先形成离线可审核候选，再按生产源码/包/控制记录与精确资源范围另行申请部署；本次D-024没有覆盖它们。

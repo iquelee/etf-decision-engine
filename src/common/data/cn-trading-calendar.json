@@ -1,0 +1,33 @@
+{
+  "artifact_type": "cn_trading_calendar",
+  "calendar_version": "cn-sse-szse-UNSEEDED",
+  "coverage": {
+    "end": null,
+    "seeded": false,
+    "start": null
+  },
+  "exchange": [
+    "SSE",
+    "SZSE"
+  ],
+  "holidays": [],
+  "notes": [
+    "本文件是 V3.6.5 的『CN 交易日历权威源』artifact，除该 artifact 本身与生成脚本外，不依赖任何运行时外部网络调用。",
+    "当前 coverage.seeded=false ⇒ 未注入权威节假日来源。按 fail-closed 设计，resolveExpectedTradeDate 在此状态下必须返回 BLOCKED / CALENDAR_COVERAGE_MISSING，不得回退为『工作日即交易日』或『当前自然日』。",
+    "严禁手工猜节假日：必须由 scripts/gen-cn-trading-calendar.js 从权威来源文件（--source-file）生成，并同时产出 cn-trading-calendar.manifest.json 记录 source / method / calendar_version / coverage / artifact SHA。",
+    "weekend 规则（周六周日非交易日）属交易所会期规则，不属『猜测』；holidays 必须来自权威来源。"
+  ],
+  "provenance": {
+    "method": null,
+    "source": null,
+    "source_file": null,
+    "source_file_sha256": null
+  },
+  "schema_version": "1.0",
+  "session_rule": {
+    "session_close_local": "15:00",
+    "timezone": "Asia/Shanghai",
+    "weekend": "sat_sun_non_trading"
+  },
+  "special_trading_days": []
+}

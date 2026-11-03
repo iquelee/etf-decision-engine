@@ -1,0 +1,100 @@
+{
+ "_doc": "云只读实测快照（`tcb fn detail <fn> -e <env> --json`）。⛔ 本文件是**观测**，不是契约；⛔ 不得把观测值回填进 registry 冒充登记。",
+ "as_of": "2026-10-02T15:53:39+0800",
+ "env": "tradingview-etf-d0fa42yy57cbc11b",
+ "method": "tcb fn detail <function> -e <env> --json（只读；未调用任何函数）",
+ "reproduce": "NODE=C:/Users/iquel/.workbuddy/binaries/node/versions/22.22.2-3/node.exe; CLI=C:/Users/iquel/.workbuddy/binaries/node/cli-connector-packages/node_modules/@cloudbase/cli/dist/standalone/cli.js; \"$NODE\" \"$CLI\" fn detail <fn> -e tradingview-etf-d0fa42yy57cbc11b --json",
+ "functions": {
+  "fetchDailyData": {
+   "ok": true,
+   "FunctionName": "fetchDailyData",
+   "n_triggers": 1,
+   "triggers": [
+    "dailyFetch-2200"
+   ]
+  },
+  "materializeIndicators": {
+   "ok": true,
+   "FunctionName": "materializeIndicators",
+   "n_triggers": 1,
+   "triggers": [
+    "dailyPipeline-0800"
+   ]
+  },
+  "runDecisionEngine": {
+   "ok": true,
+   "FunctionName": "runDecisionEngine",
+   "n_triggers": 0,
+   "triggers": []
+  },
+  "runGen1ShadowEod": {
+   "ok": true,
+   "FunctionName": "runGen1ShadowEod",
+   "n_triggers": 1,
+   "triggers": [
+    "gen1-eod-weekdays-2220"
+   ]
+  },
+  "runGen2ShadowEod": {
+   "ok": true,
+   "FunctionName": "runGen2ShadowEod",
+   "n_triggers": 1,
+   "triggers": [
+    "gen2-eod-weekdays-2230"
+   ]
+  },
+  "fetchFundamentalNews": {
+   "ok": true,
+   "FunctionName": "fetchFundamentalNews",
+   "n_triggers": 2,
+   "triggers": [
+    "newsFetch-1630",
+    "intelFetch-30min"
+   ]
+  },
+  "extractFundamental": {
+   "ok": true,
+   "FunctionName": "extractFundamental",
+   "n_triggers": 2,
+   "triggers": [
+    "newsExtract-1640",
+    "intelExtract-30min"
+   ]
+  },
+  "fetchRealtimeData": {
+   "ok": true,
+   "FunctionName": "fetchRealtimeData",
+   "n_triggers": 1,
+   "triggers": [
+    "realtime-5min"
+   ]
+  },
+  "runIntegratedShadowEod": {
+   "ok": false,
+   "error": "{'code': 'RESOURCE_NOT_FOUND', 'message': '[runIntegratedShadowEod] Function does not exist', 'exit_code': 4, 'solution': ['Run tcb fn list to view deployed cloud functions']}"
+  },
+  "adminGateway": {
+   "ok": true,
+   "FunctionName": "adminGateway",
+   "n_triggers": 0,
+   "triggers": []
+  },
+  "apiGateway": {
+   "ok": true,
+   "FunctionName": "apiGateway",
+   "n_triggers": 0,
+   "triggers": []
+  }
+ },
+ "observed_triggers": [
+  "dailyFetch-2200",
+  "dailyPipeline-0800",
+  "gen1-eod-weekdays-2220",
+  "gen2-eod-weekdays-2230",
+  "intelExtract-30min",
+  "intelFetch-30min",
+  "newsExtract-1640",
+  "newsFetch-1630",
+  "realtime-5min"
+ ]
+}

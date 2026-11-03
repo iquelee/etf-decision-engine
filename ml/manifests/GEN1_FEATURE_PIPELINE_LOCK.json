@@ -23,6 +23,11 @@
       "role": "feature_schema_and_thresholds",
       "path": "cloudfunctions/runGen1ShadowEod/frozen-manifest.json",
       "sha256": "30f5fe1c92e2e7be25e3c1b77f5c5dabd4ce3402ff6f4b712c2ae25cc2b0a5f0"
+    },
+    {
+      "role": "data_health",
+      "path": "src/common/utils/gen1-data-health.js",
+      "sha256": "3f2ff5e4f28851bbf8de79a1d24ea92455a2f8dbdecee8d026069529dba91288"
     }
   ],
   "derived": {

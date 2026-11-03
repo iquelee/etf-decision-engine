@@ -1,0 +1,20 @@
+{
+  "artifact": "src/common/data/cn-trading-calendar.json",
+  "artifact_sha256": "1c336cc9f45cdb21d9116c0290c879e1b368474fc8e2cf47aad78cdcea63ba38",
+  "artifact_sha256_basis": "sha256(artifact 文件的 UTF-8 字节，含末尾换行；稳定键序序列化)",
+  "calendar_version": "cn-sse-szse-UNSEEDED",
+  "coverage": {
+    "end": null,
+    "seeded": false,
+    "start": null
+  },
+  "generated_at": "2026-09-23T14:53:26.295Z",
+  "generated_by": "scripts/gen-cn-trading-calendar.js",
+  "manifest_sha256": "864a12372f015f79d32818dad4a17843806ca281e56766934c05c869a49364ee",
+  "manifest_type": "cn_trading_calendar_manifest",
+  "method": null,
+  "schema_version": "1.0",
+  "source": null,
+  "source_file": null,
+  "source_file_sha256": null
+}

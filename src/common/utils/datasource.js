@@ -16,6 +16,10 @@ const axios = require('axios');
 const { parseHoldingRow } = require('./holdings-parse');
 const overseas = require('./overseas-filings');
 const biotech = require('./biotech-intel');
+// V3.6.5 P-2：海外行情日期 provenance（additive，不改 legacy trade_date 语义）
+const { buildGlobalQuoteProvenance } = require('./global-signal-provenance');
+// O-2 修复（2026-10-06）：交易日判定唯一权威源（canonical calendar）。纯函数模块，无网络依赖。
+const cnTradingCalendar = require('./cn-trading-calendar.js');
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -79,18 +83,36 @@ async function fetchWithRetry(fn, retries = 3, backoff = [1000, 5000, 30000]) {
 }
 
 /**
- * 判断是否交易日（近似：周末非交易日，节假日经 HOLIDAYS 环境变量补充）。
+ * 判断是否交易日 —— **canonical 唯一语义入口**（O-2 修复 2026-10-06）。
+ *
+ * 语义链（显式合取，任一不满足 ⇒ false）：
+ *   ① canonical calendar 可加载且有效（artifact_type / coverage / 日期全部合法）
+ *   ② 日期落在 coverage 内（未播种 / 越界 ⇒ false）
+ *   ③ canonical `isTradingDay()`（special > holiday > weekend 的日期语义）
+ *   ④ 过渡期 `HOLIDAYS` 环境变量 —— **只能收窄**（列出的日期强制判为非交易日），
+ *      ⛔ 不得扩大判定：calendar 说非交易日时，`HOLIDAYS` 缺失**不会**让它变回交易日。
+ *
+ * 修复前的实现是 `weekend && !HOLIDAYS` 的独立近似判定（fail-open）：
+ *   - 不知道任何节假日（HOLIDAYS 未设置时）⇒ 所有工作日都被判为交易日；
+ *   - 不读 canonical calendar ⇒ 与 P-1 权威源长期分叉。
+ * 生产污染链（非交易日写入 etf_daily / indicator_snapshot）即由此产生。
+ *
+ * ⛔ 本函数不得回退为 fail-open。⛔ 不得再引入第二套节假日清单。
+ *
  * @param {string} dateStr YYYY-MM-DD
- * @returns {boolean}
+ * @returns {boolean} true 仅当 canonical calendar 判定为交易日
  */
 function isTradingDay(dateStr) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
-  const day = d.getDay();
-  if (day === 0 || day === 6) return false;
-  const holidays = process.env.HOLIDAYS ? process.env.HOLIDAYS.split(',') : [];
-  const key = String(dateStr).slice(0, 10);
-  return holidays.indexOf(key) < 0;
+  let cal = null;
+  try { cal = cnTradingCalendar.loadRepoCalendar(); } catch (e) { cal = null; }
+  if (!cal || cal.valid !== true) return false;                     // ① 失败即非交易日
+  if (!cnTradingCalendar.inCoverage(dateStr, cal)) return false;    // ② coverage 合取
+  if (!cnTradingCalendar.isTradingDay(dateStr, cal)) return false;  // ③ canonical 日期语义
+  const key = String(dateStr).slice(0, 10);                         // ④ 过渡期只收窄
+  const extra = process.env.HOLIDAYS
+    ? process.env.HOLIDAYS.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  return extra.indexOf(key) < 0;
 }
 
 /**
@@ -340,7 +362,16 @@ async function fetchGlobalDaily(ticker, limit = 320) {
   const m = text.match(/="([^"]*)"/);
   if (!m) throw new Error(`腾讯实时解析失败 symbol=${symbol}`);
   const f = m[1].split('~');
+  // ⚠️ legacy：`trade_date` 是**抓取时刻的北京自然日**（artifact 日），**不是**市场交易日。
+  //    V3.6.5 P-2 明确**暂不改写**该字段（不改写、不迁移、不批量改历史数据），
+  //    只**追加** provider 原始时间戳 provenance。
+  //    RunContext 的 freshness 判定应改用 `source_market_date`（经调用侧 adapter）。
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const provenance = buildGlobalQuoteProvenance({
+    fields: f,
+    legacy_trade_date: today,
+    provider: 'tencent_qt'
+  });
   return [{
     trade_date: today,
     open: num(f[5]),
@@ -348,7 +379,15 @@ async function fetchGlobalDaily(ticker, limit = 320) {
     high: num(f[33]),
     low: num(f[34]),
     volume: null,
-    pct_change: num(f[32])
+    pct_change: num(f[32]),
+    // ---- V3.6.5 P-2: additive provenance（不改变上面任何既有字段的取值）----
+    // date_origin = 'provider_timestamp' 时 source_market_date 才是真实市场日；
+    // 解析不到时一律 null / UNKNOWN —— 绝不 fallback 为北京今天。
+    source_timestamp: provenance.source_timestamp,
+    source_market_date: provenance.source_market_date,
+    date_origin: provenance.date_origin,
+    source_timezone: provenance.source_timezone,
+    provenance_status: provenance.provenance_status
   }];
 }
 

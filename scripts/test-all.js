@@ -21,8 +21,21 @@ const REPO = path.join(__dirname, '..');
 
 // Python 解释器：优先 TCB_PYTHON，其次本地 venv（含 numpy/pandas），CI 上回退 python3
 const _WIN_PY = 'C:/Users/iquel/.workbuddy/binaries/python/envs/default/Scripts/python.exe';
-const PYTHON = process.env.TCB_PYTHON || (fs.existsSync(_WIN_PY) ? _WIN_PY : 'python3');
+const _WIN_PY_WORKS = fs.existsSync(_WIN_PY) && spawnSync(_WIN_PY,['-c','import sys'],{encoding:'utf8',timeout:10000}).status === 0;
+const PYTHON = process.env.TCB_PYTHON || (_WIN_PY_WORKS ? _WIN_PY : (process.platform === 'win32' ? 'python' : 'python3'));
+// Keep Python subprocesses consistent on Windows and bounded on shared runners.
+process.env.TCB_PYTHON = PYTHON;
+process.env.PYTHONIOENCODING = 'utf-8';
+process.env.PYTHONDONTWRITEBYTECODE = '1';
+for (const key of ['OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS']) {
+  if (!process.env[key]) process.env[key] = '1';
+}
 const NODE = process.execPath;
+const portable = process.argv.includes('--portable');
+// Explicit CI mode; the default and release-preflight still require all real
+// historical evidence. Missing private archives never become a passing replay.
+process.env.ETF_TEST_EVIDENCE_MODE = portable ? 'portable' : 'full';
+const historicalOnly = new Set(['v365-rpg-f2a.test.js', 'v365-rpg-f2b.test.js']);
 
 const results = [];
 function report(stage, name, ok, detail) {
@@ -55,7 +68,12 @@ function outText(r) {
 function stageA() {
   console.log('\n== Stage A: Node 单元测试 ==');
   const dir = path.join(REPO, 'tests');
-  const tests = fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort();
+  const allTests = fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort();
+  const tests = allTests.filter(f => !portable || !historicalOnly.has(f));
+  if (portable) {
+    for (const name of historicalOnly) console.log(`  [NOT_RUN] ${name}: requires private governed history; full release gate remains mandatory`);
+    console.log('  [SCOPE] prospective mechanism checks run; archived historical receipts NOT_RUN');
+  }
   let failed = 0;
   for (const t of tests) {
     const r = spawnSync(NODE, [path.join(dir, t)], { cwd: REPO, encoding: 'utf8' });
@@ -78,7 +96,7 @@ function stageA() {
           picked = [raw[idx].trim()];
           if (raw[idx + 1] && raw[idx + 1].trim()) picked.push(raw[idx + 1].trim());
         } else {
-          picked = raw.filter((l) => /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
+        picked = raw.filter((l) => !/\[PASS\]/.test(l) && /AssertionError|Error:|FAIL/.test(l)).slice(0, 2).map((l) => l.trim());
         }
         if (!picked.length) picked = raw.filter(Boolean).slice(-2).map((l) => l.trim());
       }

@@ -216,11 +216,13 @@ async function loadInputs(event) {
   anchors.push({ source: 'gen2', trade_date: anchor, count: gen2Ranking.length });
 
   // 2) V3.6.1：decision_result 对齐 anchor（生产历史基线）
+  //    v365-reader-allow:history-deferred (CLASS C runIntegratedShadowEod.baselineLatest：V3.6.1 基线**落后度判定**（gate 语义）；
+  //    ⚠️ 用 latest 是**原语义**（判断"基线停在哪天"），⛔ 不是"猜权威结果"；run 轴索引 PENDING ⇒ 当前 legacy 段)
   const decisionByCode = {};
   const decRows = await db.query(COLLECTIONS.DECISION_RESULT, { decision_date: anchor });
   if (!decRows.length) {
     const latestDec = await db.query(COLLECTIONS.DECISION_RESULT, {}, {
-      orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 1
+      orderBy: [{ field: 'decision_date', direction: 'desc' }], limit: 1 // v365-reader-allow:history-deferred (CLASS C runIntegratedShadowEod.baselineLatest)
     });
     if (latestDec.length) {
       return { gate: 'TRADE_DATE_MISMATCH', detail: `V3.6.1 基线停在 ${dateKey(latestDec[0].decision_date)}，落后于 Gen-2 锚定日 ${anchor}` };

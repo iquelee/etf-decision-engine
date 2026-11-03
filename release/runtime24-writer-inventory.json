@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "status": "DESIGN_ONLY_NOT_DEPLOYABLE",
+  "observed_at": "2026-10-29T05:15:23.881804+00:00",
+  "inspection_source_commit": "0c956121385c5e129254d61e9f75950dc776fd6d",
+  "environment": "tradingview-etf-d0fa42yy57cbc11b",
+  "cloud_mutations": 0,
+  "producer_invocations": 0,
+  "functions": [
+    {
+      "FunctionName": "fetchDailyData",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 120,
+      "MemorySize": 256,
+      "ModTime": "2026-09-10 14:27:12",
+      "CodeSize": 3936596,
+      "Status": "Active",
+      "triggers": [
+        {
+          "name": "dailyFetch-2200",
+          "type": "timer",
+          "description": "{\"cron\":\"0 0 22 * * 1-5 *\"}"
+        }
+      ],
+      "download": {
+        "files": 1767,
+        "raw_file_map_sha256": "95d9e2115bb51c4cea08dbb3c7669c75589c8e1ede3514aba65d8c55a33842bb",
+        "entry": {
+          "index.js": {
+            "live_sha256": "6a45adb02fc9cbc8f9a2c852737716dd696041d1c285d5d301d5444aa36f3bf2",
+            "repo_sha256": "6a45adb02fc9cbc8f9a2c852737716dd696041d1c285d5d301d5444aa36f3bf2",
+            "lf_equal": true
+          },
+          "package.json": {
+            "live_sha256": "5a7b42425371958b4aace501feacada7b2fe6239b2f807bcb66d6741cffbc69e",
+            "repo_sha256": "5a7b42425371958b4aace501feacada7b2fe6239b2f807bcb66d6741cffbc69e",
+            "lf_equal": true
+          }
+        },
+        "canonical_common_lf_differences": [
+          "constants.js",
+          "schema.js",
+          "data/cn-trading-calendar.json",
+          "data/cn-trading-calendar.manifest.json",
+          "data/cn-trading-calendar.v1.json",
+          "data/cn-trading-calendar.v1.manifest.json",
+          "data/sources/cn-trading-calendar.source.v1.json",
+          "utils/cn-trading-calendar.js",
+          "utils/correlation.js",
+          "utils/datasource.js",
+          "utils/defense.js",
+          "utils/fundamental-provenance.js",
+          "utils/gen1-authority.js",
+          "utils/gen1-data-health.js",
+          "utils/gen1-guarded-seal.js",
+          "utils/gen1-guarded-selector.js",
+          "utils/gen1-overlay.js",
+          "utils/gen1-safety-permission.js",
+          "utils/gen1-shadow-eligibility.js",
+          "utils/gen1-ui-view-model.js",
+          "utils/global-signal-provenance.js",
+          "utils/market-env-diagnostics.js",
+          "utils/market-env-provenance.js",
+          "utils/market-regime.js",
+          "utils/pipeline-correlation.js",
+          "utils/portfolio-cash.js",
+          "utils/portfolio-mode.js",
+          "utils/production-history.js",
+          "utils/release-identity.js",
+          "utils/swing-structure.js",
+          "utils/trade-date-idempotence.js",
+          "utils/trade-date-progress.js",
+          "utils/v3-6-stage-persistence.js",
+          "utils/v361-run-context.js",
+          "utils/v361-run-finality.js",
+          "utils/v365-active-read.js",
+          "utils/v365-atomic-publish.js",
+          "utils/v365-contracts.js",
+          "utils/v365-publish-store.js",
+          "utils/v365-run-integrity.js"
+        ]
+      }
+    },
+    {
+      "FunctionName": "fetchRealtimeData",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 60,
+      "MemorySize": 256,
+      "ModTime": "2026-10-08 16:49:02",
+      "CodeSize": 4387988,
+      "Status": "Active",
+      "triggers": [
+        {
+          "name": "realtime-5min",
+          "type": "timer",
+          "description": "{\"cron\":\"0 */5 9-15 * * 1-5 *\"}"
+        }
+      ]
+    },
+    {
+      "FunctionName": "materializeIndicators",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 120,
+      "MemorySize": 256,
+      "ModTime": "2026-10-08 16:50:28",
+      "CodeSize": 4391387,
+      "Status": "Active",
+      "triggers": [
+        {
+          "name": "dailyPipeline-0800",
+          "type": "timer",
+          "description": "{\"cron\":\"0 0 8 * * 1-5 *\"}"
+        }
+      ],
+      "download": {
+        "files": 1791,
+        "raw_file_map_sha256": "cffcfcf9cf94d7675a26dfe23d3ae6bb8c075edc92f755d237c8a0cecf9d096a",
+        "entry": {
+          "index.js": {
+            "live_sha256": "159e09eda290f13507e05a1875e7f4ca2b92ed3f284f2470148ee954ae5504f0",
+            "repo_sha256": "159e09eda290f13507e05a1875e7f4ca2b92ed3f284f2470148ee954ae5504f0",
+            "lf_equal": true
+          },
+          "package.json": {
+            "live_sha256": "5f90b99b36a80661b1943b9131621837cd6b5052e42ecd5f5bd4cee3d52218af",
+            "repo_sha256": "5f90b99b36a80661b1943b9131621837cd6b5052e42ecd5f5bd4cee3d52218af",
+            "lf_equal": true
+          }
+        },
+        "canonical_common_lf_differences": [
+          "schema.js",
+          "utils/production-history.js",
+          "utils/release-identity.js",
+          "utils/v365-contracts.js"
+        ]
+      }
+    },
+    {
+      "FunctionName": "runDecisionEngine",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 120,
+      "MemorySize": 256,
+      "ModTime": "2026-10-28 09:44:24",
+      "CodeSize": 4475917,
+      "Status": "Active",
+      "triggers": [],
+      "download": {
+        "files": 1799,
+        "raw_file_map_sha256": "42850ff5c0566162cbbff51c414549e337223b0df1f5dcddd163ab491194f08f",
+        "entry": {
+          "index.js": {
+            "live_sha256": "848014aba325851100d136f1443baaf760439769fea39493ada86a32dfd9034c",
+            "repo_sha256": "848014aba325851100d136f1443baaf760439769fea39493ada86a32dfd9034c",
+            "lf_equal": true
+          },
+          "package.json": {
+            "live_sha256": "19f9eb42efbd0c88dee56179cfadd03227dc55760133ff709b6588e891f9d77c",
+            "repo_sha256": "19f9eb42efbd0c88dee56179cfadd03227dc55760133ff709b6588e891f9d77c",
+            "lf_equal": true
+          }
+        },
+        "canonical_common_lf_differences": []
+      }
+    },
+    {
+      "FunctionName": "adminGateway",
+      "Runtime": "Nodejs16.13",
+      "Handler": "index.main",
+      "Timeout": 60,
+      "MemorySize": 256,
+      "ModTime": "2026-10-08 11:40:48",
+      "CodeSize": 4453461,
+      "Status": "Active",
+      "triggers": [],
+      "download": {
+        "files": 1793,
+        "raw_file_map_sha256": "6719846f59b2b86a9bd8e6e1536077de132dc0d525a39f89c7ad215c2269e1a4",
+        "entry": {
+          "index.js": {
+            "live_sha256": "692893fa4dfb9adc730a6881053ea462635ad627d73e30858eaf6a78a7fe3b72",
+            "repo_sha256": "692893fa4dfb9adc730a6881053ea462635ad627d73e30858eaf6a78a7fe3b72",
+            "lf_equal": true
+          },
+          "package.json": {
+            "live_sha256": "d3265628f6221eddd2000384ddf4eedbff738a002bc01890b84458f010c869bb",
+            "repo_sha256": "d3265628f6221eddd2000384ddf4eedbff738a002bc01890b84458f010c869bb",
+            "lf_equal": true
+          }
+        },
+        "canonical_common_lf_differences": [
+          "schema.js",
+          "utils/production-history.js",
+          "utils/release-identity.js",
+          "utils/v365-contracts.js"
+        ]
+      }
+    },
+    {
+      "FunctionName": "apiGatewayNode24",
+      "Runtime": "Nodejs24.11",
+      "Handler": "index.main",
+      "Timeout": 30,
+      "MemorySize": 256,
+      "ModTime": "2026-10-29 09:21:49",
+      "CodeSize": 4455567,
+      "Status": "Active",
+      "triggers": []
+    }
+  ],
+  "observed_edges": [
+    {
+      "from": "fetchDailyData",
+      "to": "materializeIndicators",
+      "event": {
+        "from": "fetchDailyData"
+      }
+    },
+    {
+      "from": "materializeIndicators",
+      "to": "runDecisionEngine",
+      "event": "pipelineCorrelation.buildForwardPayload; preserve identity/from"
+    },
+    {
+      "from": "adminGateway",
+      "to": "runDecisionEngine",
+      "event_from": [
+        "riskResolve",
+        "riskTrigger",
+        "paramChange"
+      ]
+    },
+    {
+      "from": "adminGateway",
+      "to": "fetchDailyData",
+      "event": {
+        "force": true,
+        "task_name": "task"
+      }
+    }
+  ],
+  "discovery_scope": "Fresh function metadata and four independent code downloads plus repository call-site search. Not an exhaustive identity/IAM/external-caller inventory.",
+  "recommended_order": [
+    "offline admission/drain protocol and actual-package replay",
+    "guarded old-name RDE facade and disabled Node24 RDE candidate",
+    "source-bound RDE admission-owner cutover after verified drain",
+    "materializeIndicators separately with reviewed common delta",
+    "fetchDailyData separately with reviewed common delta",
+    "fetchRealtimeData and remaining functions separately"
+  ],
+  "pending_release_blockers": [
+    "shared admission control before earliest write on every old/new RDE execution path",
+    "Node24 conditional-CAS and SDK-write evidence in isolated nonproduction collections",
+    "external caller/permission/queued retry and in-flight drain evidence",
+    "independent exact dependencies and reviewed package deltas",
+    "source/package/control-record fingerprints and exact approval",
+    "natural night and morning acceptance with rollback retaining authoritative data"
+  ]
+}

@@ -7,6 +7,12 @@
  * 业务职责      展示 V3.6.5 生产生命周期矩阵：6 个维度分开建模，无 API 的部分显示「数据未提供 · 待后端契约」
  * 数据来源      /api/constants → runtime_status（部分）· 其余维度无接口（SPEC §7.1）
  *
+ * ★ 6 个生命周期维度（SPEC §7.1 —— 契约清单，保留供门禁/后续实现引用，⛔ 当前 UI 不渲染）：
+ *     deployment_state · activation_authorization · first_controlled_run
+ *     prospective_epoch · run_history_index · general_production
+ *   ⚠️ 2026-10-02：原以「约定区块」列表形式渲染在页面上（含 milestone 编号与开发指令），
+ *      属开发期痕迹，已从 UI 移除；清单改存本注释，⛔ 不暴露给最终用户。
+ *
  * ⛔ 实现约束（SPEC §2.2）：
  *    本文件 ⛔ 不得 import api/ 或 adapters/；数据经 compose/ 注入；
  *    ⛔ 不得在模板里解释后端原始字段；⛔ 不得自行实现 action/risk/regime 文案或数字格式化。
@@ -20,31 +26,13 @@
 
     <header class="page-head">
       <h2>V3.6.5 生产状态</h2>
-      <p class="page-sub">展示 V3.6.5 生产生命周期矩阵：6 个维度分开建模，无 API 的部分显示「数据未提供 · 待后端契约」</p>
+      <p class="page-sub">展示 V3.6.5 生产生命周期矩阵：6 个维度分开建模，无 API 的部分显示「数据未提供」</p>
     </header>
 
     <div class="pending">
-      <div class="pending-title">待实现（M8）</div>
-      <div class="pending-sub">数据来源：/api/constants → runtime_status（部分）· 其余维度无接口（SPEC §7.1）</div>
-      <p class="pending-sub">SPEC §1.3：⛔ 不得把「部署完成」写成「正式生产运行」；⛔ 不得在无 run evidence 时显示「最近生产运行」；⛔ 不得硬编码生命周期状态。</p>
+      <div class="pending-title">当前版本暂未提供</div>
+      <div class="pending-sub">本页功能将在后续版本开放。</div>
     </div>
 
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">约定区块</div>
-          <div class="section-sub">以下区块按 SPEC §1.2 · §7 落实，实现后删除本占位块</div>
-        </div>
-      </div>
-      <ul class="block-list">
-        <li>deployment_state</li>
-        <li>activation_authorization</li>
-        <li>first_controlled_run</li>
-        <li>prospective_epoch</li>
-        <li>run_history_index</li>
-        <li>general_production</li>
-        <li>runtime_status 边界字段组（SPEC §7.2）</li>
-      </ul>
-    </div>
   </section>
 </template>

@@ -125,8 +125,11 @@ onMounted(load);
     <div v-if="loading" class="empty">加载中…</div>
 
     <template v-else-if="data">
+      <div v-if="data.history && data.history.status !== 'OK'" class="empty" role="status">
+        历史记录覆盖不完整，以下仅展示可验证的记录；汇总统计暂不可用。
+      </div>
       <!-- 统计卡 -->
-      <div class="card">
+      <div v-if="data.stats" class="card">
         <div class="card-title">复盘统计 <span v-if="filterNote" class="sub">{{ filterNote }}</span></div>
         <div class="overview-grid">
           <div class="ov-item"><span class="ov-label">决策快照数</span><span class="ov-value">{{ data.stats.decision_snapshot_count }}</span></div>

@@ -10,6 +10,15 @@
  */
 'use strict';
 
+// Historical fixtures describe 2026-09-30. Freeze only the test process clock;
+// otherwise their freshness expectations expire as the real calendar advances.
+const SystemDate = globalThis.Date;
+const FIXTURE_NOW = SystemDate.parse('2026-09-30T20:00:00.000Z');
+globalThis.Date = class FixtureDate extends SystemDate {
+  constructor(...args) { super(...(args.length ? args : [FIXTURE_NOW])); }
+  static now() { return FIXTURE_NOW; }
+};
+
 const SUITES = [
   /* --- domain --- */
   './rewrite/format.test.js',

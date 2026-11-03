@@ -24,27 +24,9 @@
     </header>
 
     <div class="pending">
-      <div class="pending-title">待实现（M6）</div>
-      <div class="pending-sub">数据来源：/api/fundamentals · /api/intel?limit=</div>
+      <div class="pending-title">当前版本暂未提供</div>
+      <div class="pending-sub">本页功能将在后续版本开放。</div>
     </div>
 
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">约定区块</div>
-          <div class="section-sub">以下区块按 SPEC §4.1 前台 C · §4.2 · §8 落实，实现后删除本占位块</div>
-        </div>
-      </div>
-      <ul class="block-list">
-        <li>当前结论</li>
-        <li>硬数据</li>
-        <li>景气 / 财报</li>
-        <li>事件</li>
-        <li>AI 研究证据</li>
-        <li>来源和时间</li>
-        <li>数据完整性</li>
-        <li>5 分钟轮询 + 可见性暂停（手动刷新在后台，SPEC §8.2）</li>
-      </ul>
-    </div>
   </section>
 </template>

@@ -20,27 +20,13 @@
 
     <header class="page-head">
       <h2>数据源与抓取</h2>
-      <p class="page-sub">数据源状态 + 抓取任务（手动触发） + 抓取日志 + 情报刷新（迁移自旧前台）</p>
+      <p class="page-sub">数据源状态 + 抓取任务（手动触发） + 抓取日志 + 情报刷新</p>
     </header>
 
     <div class="pending">
-      <div class="pending-title">待实现（M8）</div>
-      <div class="pending-sub">数据来源：GET /api/admin/fetchlog · POST /api/admin/fetch · POST /api/admin/intel/refresh</div>
+      <div class="pending-title">当前版本暂未提供</div>
+      <div class="pending-sub">本页功能将在后续版本开放。</div>
     </div>
 
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">约定区块</div>
-          <div class="section-sub">以下区块按 SPEC §5 数据管理 落实，实现后删除本占位块</div>
-        </div>
-      </div>
-      <ul class="block-list">
-        <li>数据源状态</li>
-        <li>抓取任务（手动触发）</li>
-        <li>抓取日志</li>
-        <li>情报刷新</li>
-      </ul>
-    </div>
   </section>
 </template>
