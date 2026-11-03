@@ -15,13 +15,14 @@ async function fixture(producer = 'runDecisionEngine', seed = true) {
     b.seed(adapter.id(binding, 'control'), adapter.encodeControl(journal.initial(binding), binding));
     assert((await journal.apply(store, binding, {type: 'activate', owner: 'new', revision: 0, proof})).ok);
   }
-  const state = {inits: [], loads: 0, contextArguments: [], cloudEnvironment: ns.environment, node: 24, secret: key.toString('hex')};
+  const state = {inits: [], loads: 0, contextArguments: [], cloudEnvironment: ns.environment, node: 24,
+    secret: key.toString('hex'), secrets: {}};
   const sdk = {SYMBOL_CURRENT_ENV: Symbol('current'), getCloudbaseContext(...args) {
     state.contextArguments.push(args);return {TCB_ENV: state.cloudEnvironment, TRIGGER_SRC: state.triggerSource};
   }, init(config) {state.inits.push(config);return {config, database: () => database,
     callFunction: async (request, options) => {assert(state.call, 'NO_NETWORK');return state.call(request, options);}};}};
   const bootstrap = createBootstrap({producer, sdk, sdkVersion: '2.11.0', databaseVersion: '1.4.1',
-    readEnvironment: () => state.secret, nodeMajor: () => state.node,
+    readEnvironment: name => Object.hasOwn(state.secrets, name) ? state.secrets[name] : state.secret, nodeMajor: () => state.node,
     loadMain: async wrapped => {state.loads++;assert(wrapped !== sdk);return async data => state.handler ?
       state.handler(wrapped, data) : {ok: false, echoed: data};}});
   const context = {function_name: plans[producer].target};
@@ -94,21 +95,90 @@ async function main() {
   const matResult = await materializer.bootstrap.main(await materializer.wire('fixture:materializer'), materializer.context);
   assert.strictEqual(matResult.outcome, 'COMPLETE');assert.deepStrictEqual(matResult.result, {child: {force: true}});
   assert.strictEqual(childCalls, 1);assert.strictEqual(materializer.b.rows().length, 6);
-  for (const producer of ['materializeIndicators', 'adminGateway']) {
+  for (const [producer, childProducer] of [['materializeIndicators', 'runDecisionEngine'],
+    ['adminGateway', 'runDecisionEngine'], ['fetchDailyData', 'materializeIndicators']]) {
     const blocked = await fixture(producer);
-    blocked.b.seed(adapter.id(childBinding, 'control'), adapter.encodeControl(journal.initial(childBinding), childBinding));
-    const legacyStore = adapter.createProductionStore({database: blocked.database, binding: childBinding});
-    assert((await journal.apply(legacyStore, childBinding, {type: 'activate', owner: 'old', revision: 0, proof})).ok);
-    const priorControl = await legacyStore.read(childBinding);let dispatched = 0;
+    const blockedBinding = {environment: ns.environment, scope: 'production/' + childProducer};
+    blocked.b.seed(adapter.id(blockedBinding, 'control'), adapter.encodeControl(journal.initial(blockedBinding), blockedBinding));
+    const legacyStore = adapter.createProductionStore({database: blocked.database, binding: blockedBinding});
+    assert((await journal.apply(legacyStore, blockedBinding, {type: 'activate', owner: 'old', revision: 0, proof})).ok);
+    const priorControl = await legacyStore.read(blockedBinding);let dispatched = 0;
     blocked.state.call = async () => {dispatched++;throw Error('unwrapped legacy entry must never receive signed wire');};
-    blocked.state.handler = async (wrapped, data) => (await wrapped.init({}).callFunction({name: 'runDecisionEngine', data})).result;
+    blocked.state.handler = async (wrapped, data) => {
+      try {return (await wrapped.init({}).callFunction({name: childProducer, data})).result;}
+      catch (_) {return {ok: true, chained: {error: 'caught by original business'}};}
+    };
     const denied = await blocked.bootstrap.main(await blocked.wire('fixture:unqualified-child'), blocked.context);
     assert.strictEqual(denied.outcome, 'UNKNOWN');assert.strictEqual(dispatched, 0);
-    assert.deepStrictEqual(await legacyStore.read(childBinding), priorControl);
+    assert.deepStrictEqual(await legacyStore.read(blockedBinding), priorControl);
     const parent = await blocked.store.read(blocked.binding);
     assert.strictEqual(parent.state, 'HOLD');assert.strictEqual(parent.active.request_id, 'fixture:unqualified-child');
   }
-  assert.throws(() => createBootstrap({producer: 'fetchDailyData'}), /producer/);
+  assert.deepStrictEqual(Object.keys(plans).map(name => 'production/' + name).sort(), [...ns.scopes].sort());
+  assert.strictEqual(new Set(Object.values(plans).map(plan => plan.key)).size, 9);
+  assert.strictEqual(new Set(Object.values(plans).map(plan => plan.target)).size, 9);
+  for (const producer of ['fetchDailyData', 'fetchRealtimeData', 'fetchFundamentalNews', 'extractFundamental',
+    'runGen1ShadowEod', 'runGen2ShadowEod']) {
+    const added = await fixture(producer), request = await added.wire('fixture:new-producer');
+    const prior = added.b.calls.length;
+    added.state.secrets[plans[producer].key] = undefined;
+    assert.strictEqual((await added.bootstrap.main(request, added.context)).executed, false);
+    delete added.state.secrets[plans[producer].key];
+    if (producer === 'fetchDailyData') {
+      added.state.secrets[plans.materializeIndicators.key] = undefined;
+      assert.strictEqual((await added.bootstrap.main(request, added.context)).executed, false);
+      delete added.state.secrets[plans.materializeIndicators.key];
+    }
+    assert.strictEqual(added.b.calls.length, prior);assert.strictEqual(added.state.loads, 0);
+    assert.strictEqual(added.state.inits.length, 0);
+    assert.strictEqual((await added.bootstrap.main(request, added.context)).outcome, 'COMPLETE');
+    assert.strictEqual((await added.bootstrap.main(request, added.context)).admission, 'ALREADY_COMPLETE');
+    assert.strictEqual(added.state.loads, 1);
+  }
+  // Daily -> materializer -> RDE uses three real bootstraps, separate keys and
+  // journal scopes, but one in-memory SDK backend. This is not cloud evidence.
+  const chain = await fixture('fetchDailyData'), producers = ['fetchDailyData', 'materializeIndicators', 'runDecisionEngine'];
+  const chainKeys = Object.fromEntries(producers.map((name, i) => [name, Buffer.alloc(32, 20 + i)]));
+  const chainWorkers = {}, chainStores = {}, chainBindings = {}, loads = {}, transports = [];
+  for (const producer of producers) {
+    const binding = {environment: ns.environment, scope: 'production/' + producer};chainBindings[producer] = binding;
+    const store = adapter.createProductionStore({database: chain.database, binding});chainStores[producer] = store;
+    if (producer !== 'fetchDailyData') {
+      chain.b.seed(adapter.id(binding, 'control'), adapter.encodeControl(journal.initial(binding), binding));
+      assert((await journal.apply(store, binding, {type: 'activate', owner: 'new', revision: 0, proof})).ok);
+    }
+    const ownKey = plans[producer].key, childProducer = producer === 'fetchDailyData' ? 'materializeIndicators' :
+      producer === 'materializeIndicators' ? 'runDecisionEngine' : null;
+    const allowedKeys = new Map([[ownKey, chainKeys[producer].toString('hex')]]);
+    if (childProducer) allowedKeys.set(plans[childProducer].key, chainKeys[childProducer].toString('hex'));
+    chainWorkers[producer] = createBootstrap({producer, sdk: chain.sdk, sdkVersion: '2.11.0', databaseVersion: '1.4.1',
+      readEnvironment: name => allowedKeys.get(name), nodeMajor: () => 24, loadMain: async wrapped => {
+        loads[producer] = (loads[producer] || 0) + 1;
+        return async data => childProducer ? (await wrapped.init({}).callFunction({name: childProducer, data})).result : {leaf: data};
+      }});
+  }
+  chain.state.call = async (request, options) => {
+    const producer = producers.find(name => plans[name].target === request.name);assert(producer);
+    assert.strictEqual(request.data.scope, chainBindings[producer].scope);
+    assert.deepStrictEqual(options, {timeout: 15000, retryOptions: {retries: 0}});transports.push(request);
+    return {requestId: 'fixture:chain:' + transports.length,
+      result: await chainWorkers[producer].main(request.data, {function_name: request.name})};
+  };
+  const rootWire = entry.seal({binding: chain.binding, control: await chain.store.read(chain.binding),
+    target: plans.fetchDailyData.target, request_id: 'fixture:three-hop', business: {from: 'daily'}, key: chainKeys.fetchDailyData});
+  const chainResult = await chainWorkers.fetchDailyData.main(rootWire, chain.context);
+  assert.strictEqual(chainResult.outcome, 'COMPLETE');assert.deepStrictEqual(chainResult.result, {leaf: {from: 'daily'}});
+  assert.deepStrictEqual(transports.map(request => request.name), ['materializeIndicatorsNode24', 'runDecisionEngineNode24']);
+  assert.strictEqual(new Set([rootWire.request_id, ...transports.map(request => request.data.request_id)]).size, 3);
+  assert.deepStrictEqual(loads, {fetchDailyData: 1, materializeIndicators: 1, runDecisionEngine: 1});
+  for (const producer of producers) {
+    const control = await chainStores[producer].read(chainBindings[producer]);
+    assert.strictEqual(control.state, 'ACTIVE');assert.strictEqual(control.active, null);
+  }
+  assert.strictEqual(chain.b.rows().length, 9);
+  assert.strictEqual((await chainWorkers.fetchDailyData.main(rootWire, chain.context)).admission, 'ALREADY_COMPLETE');
+  assert.strictEqual(transports.length, 2);
+  assert.throws(() => createBootstrap({producer: 'unknownProducer'}), /producer/);
   assert.throws(() => createBootstrap({producer: 'runDecisionEngine', sdkVersion: '3.0.0'}), /versions/);
   console.log('writer bootstrap: fixed nine scopes, no auto-init, signed-only entry, lazy imports, SDK policy and warm key checks PASS (MODEL_ONLY)');
 }

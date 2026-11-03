@@ -11,7 +11,20 @@ const {createProductionStore, productionNamespace} = require('./writer-journal-c
 const plans = Object.freeze({
   runDecisionEngine: Object.freeze({target: 'runDecisionEngineNode24', key: 'WRITER_RDE_SIGNING_KEY_HEX'}),
   materializeIndicators: Object.freeze({target: 'materializeIndicatorsNode24', key: 'WRITER_MATERIALIZER_SIGNING_KEY_HEX'}),
-  adminGateway: Object.freeze({target: 'adminGatewayNode24', key: 'WRITER_ADMIN_SIGNING_KEY_HEX'})
+  adminGateway: Object.freeze({target: 'adminGatewayNode24', key: 'WRITER_ADMIN_SIGNING_KEY_HEX'}),
+  fetchDailyData: Object.freeze({target: 'fetchDailyDataNode24', key: 'WRITER_DAILY_SIGNING_KEY_HEX'}),
+  fetchRealtimeData: Object.freeze({target: 'fetchRealtimeDataNode24', key: 'WRITER_REALTIME_SIGNING_KEY_HEX'}),
+  fetchFundamentalNews: Object.freeze({target: 'fetchFundamentalNewsNode24', key: 'WRITER_NEWS_SIGNING_KEY_HEX'}),
+  extractFundamental: Object.freeze({target: 'extractFundamentalNode24', key: 'WRITER_EXTRACT_SIGNING_KEY_HEX'}),
+  runGen1ShadowEod: Object.freeze({target: 'runGen1ShadowEodNode24', key: 'WRITER_GEN1_SIGNING_KEY_HEX'}),
+  runGen2ShadowEod: Object.freeze({target: 'runGen2ShadowEodNode24', key: 'WRITER_GEN2_SIGNING_KEY_HEX'})
+});
+// Only awaited business edges are declared here. Detached refresh work still
+// requires a durable enqueue design before the production candidates can run.
+const children = Object.freeze({
+  fetchDailyData: Object.freeze({producer: 'materializeIndicators', action: 'materialize'}),
+  materializeIndicators: Object.freeze({producer: 'runDecisionEngine', action: 'decision'}),
+  adminGateway: Object.freeze({producer: 'runDecisionEngine', action: 'decision'})
 });
 const denied = () => ({protocol: 'writer-result-v1', executed: false, admission: 'ENTRY_AUTHENTICATION_FAILED'});
 function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
@@ -25,7 +38,7 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
   let service, timerRoot, httpRoot, sealedKeys;
   function keys() {
     const names = [plan.key];
-    if (producer === 'materializeIndicators' || producer === 'adminGateway') names.push(plans.runDecisionEngine.key);
+    if (Object.hasOwn(children, producer)) names.push(plans[children[producer].producer].key);
     return names.map(name => {
       const raw = readEnvironment(name);
       assert(typeof raw === 'string' && /^[0-9a-fA-F]{64}$/.test(raw), 'explicit 32-byte signing key required');
@@ -60,11 +73,11 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
     const database = configuredSdk.init({timeout: 15000}).database();
     const store = createProductionStore({database, binding});
     const childRoutes = {};
-    if (producer === 'materializeIndicators' || producer === 'adminGateway') {
-      const childBinding = {environment, scope: 'production/runDecisionEngine'};
-      childRoutes.runDecisionEngine = {binding: childBinding, store: createProductionStore({database, binding: childBinding}),
-        key: currentKeys[1], action: 'decision', transportTimeoutMs: 15000,
-          targets: {old: 'runDecisionEngine', new: plans.runDecisionEngine.target}, allowedOwners: ['new']};
+    if (Object.hasOwn(children, producer)) {
+      const child = children[producer], childBinding = {environment, scope: 'production/' + child.producer};
+      childRoutes[child.producer] = {binding: childBinding, store: createProductionStore({database, binding: childBinding}),
+        key: currentKeys[1], action: child.action, transportTimeoutMs: 15000,
+        targets: {old: child.producer, new: plans[child.producer].target}, allowedOwners: ['new']};
     }
     let beforeAdmission;
     const rolloutBinding = {environment, scope: 'production/writer-rollout'};

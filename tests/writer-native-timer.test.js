@@ -32,6 +32,16 @@ async function main() {
         {...input, Time: input.Time.replace(':00Z', ':01Z')}, {...input, Time: '2026-02-30T00:00:00Z'},
         {...input, Time: input.Time.replace('Z', '+00:00')}, {...input, tcbContext: {TRIGGER_SRC: 'timer'}}])
         await assert.rejects(identify(bad, {}));
+      // Exercise every fixed policy through its actual bootstrap, including
+      // source rejection before SDK initialization and in-process retry dedup.
+      const wired = await fixture(producer), callsBefore = wired.b.calls.length;
+      assert.strictEqual((await wired.bootstrap.main(input, wired.context)).executed, false);
+      assert.strictEqual(wired.b.calls.length, callsBefore);assert.strictEqual(wired.state.inits.length, 0);
+      wired.state.triggerSource = 'timer';
+      assert.deepStrictEqual(await wired.bootstrap.main(input, wired.context), {ok: false, echoed: input});
+      assert.strictEqual((await wired.bootstrap.main({...input, Time: input.Time.replace('Z', '.000Z')},
+        {...wired.context, request_id: 'fixture:another-native-attempt'})).reason, 'ALREADY_COMPLETE');
+      assert.strictEqual(wired.state.loads, 1);assert.strictEqual(wired.b.rows().length, 3);
     }
   }
   assert.strictEqual(timerCases, 9);assert.strictEqual(ids.size, 9);
