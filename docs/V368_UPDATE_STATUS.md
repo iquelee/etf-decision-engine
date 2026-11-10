@@ -4,6 +4,8 @@
 
 11-10 Core进展：已从b91e791完整源码离线生成四个Core候选并独立核验ZIP边界；实时行情候选的真实入口/SDK/common/db/datasource六组业务对照全部返回、23写与集合一致，另两组准入/完成commit丢ACK均HOLD且重投零业务。证据仍为实际SDK内存wire，未改线上；见[Core实时SDK回放](V368_CORE_REALTIME_SDK_REPLAY.md)。Gen1/Gen2排除，其他Core闭包/持久派发/平台和自然验收仍待完成。
 
+11-10 日线进展：九组实际SDK业务对照每侧900写、完整返回和集合一致，另子调用响应丢失令父/子HOLD且重投零业务。下游返回是明确的协议fixture，尚未执行物化/RDE；不能计为整链闭包。已记录日线HOLIDAYS环境配置与实时包common的差异，未改业务。见[Core日线SDK回放](V368_CORE_DAILY_SDK_REPLAY.md)。
+
 最近更新：2026-11-03（北京时间）。分支：`codex/v3-core-convergence`。
 
 11-03 当前线上补充：完整配置复核发现Gen1于11:02:41已有本聊天以外的代码变化，仍为Node16/SDK2.11；已下载1632文件，记录物理指纹和部分F3源码对应，四个common差异及无嵌入源码身份的限制单独保留，见[实际基线观察](V368_GEN1_RUNTIME_BASELINE_OBSERVATION.md)。本轮未写云资源，新隔离申请采用重新读取的当前17函数基线，不能把D-026旧快照称为当前代码。旧5/282/6条fixture逐文档保持。

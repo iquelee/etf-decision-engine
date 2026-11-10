@@ -101,7 +101,16 @@
       "commit_ack_loss_cases": 2,
       "ambiguous_execution_policy": "HOLD_NO_AUTOMATIC_RETRY"
     },
-    "fetchDailyData": "NOT_RUN",
+    "fetchDailyData": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 9,
+      "business_writes": 900,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "child_response_loss_cases": 1,
+      "child_execution": "NOT_RUN_CHILD_TRANSPORT_FIXTURE_ONLY",
+      "ambiguous_execution_policy": "PARENT_AND_CHILD_HOLD_NO_AUTOMATIC_RETRY"
+    },
     "fetchFundamentalNews": "NOT_RUN",
     "extractFundamental": "NOT_RUN"
   },
