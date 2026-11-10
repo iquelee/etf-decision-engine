@@ -86,7 +86,8 @@ function settle(current, response) {
   validate(current);assert.strictEqual(current.state, 'CLAIMED', 'terminal/unknown jobs cannot be reset or re-submitted');
   let complete = false;
   try {
-    assert(response && !response.code && response.result);const r = response.result, w = current.wire;
+    assert(response && !response.code && typeof response.requestId === 'string' && response.requestId.length && response.result);
+    const r = response.result, w = current.wire;
     assert.strictEqual(r.protocol, 'writer-result-v1');
     for (const key of ['request_id', 'token', 'owner', 'epoch']) assert.strictEqual(r[key], w[key]);
     assert(r.executed === true && r.outcome === 'COMPLETE' && Object.hasOwn(r, 'result'));

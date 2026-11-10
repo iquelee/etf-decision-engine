@@ -2,6 +2,8 @@
 
 2026-11-10。本轮没有修改业务源码、Gen1/Gen2代码、模型或功能，没有云端操作。后台及RDE实际SDK对照使用上一批749e05c候选，ZIP和输入map不变。本轮新派发模块是**离线事务计划，还未接入存储、运行时或调度器**，后台异步派发缺口仍然开放。
 
+11-11后续进展：[存储适配器与单次执行器](V368_CORE_DISPATCH_STORE_EXECUTOR.md)已实现并完成实际SDK内存边界验证，后台运行时和调度器仍未接线。本文保留11-10事务计划及实际后台包的历史证据范围。
+
 ## 后台实际 SDK 对照
 
 `release/replay-core-admin-sdk.js`加载原后台/RDE和各自候选的真实入口、各自common、SDK2.11.0/database1.4.1，在Node24.20.0执行。数据库只替换DBRequest.send；函数调用只替换SDK的HTTP传输并实际执行RDE下游。没有替换database()/collection()、会话查询、业务main或发布逻辑。

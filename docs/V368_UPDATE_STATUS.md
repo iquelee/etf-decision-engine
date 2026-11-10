@@ -10,6 +10,8 @@
 
 11-10 后台进展：实际SDK后台→RDE六组对照每侧167写一致，四组拒绝零业务/准入写；triggerFetch/intel-refresh两条实际观察仍是UNKNOWN/HOLD、零下游派发。新增四Core目标的持久派发事务计划与负向测试，要求父双COMPLETE、父/子/维护三fence和job原子提交、确定ACK后单次发送；尚无持久适配器/调度器/运行时接线。见[后台SDK与派发计划](V368_CORE_ADMIN_SDK_DISPATCH.md)。Gen1/Gen2和线上保持。
 
+11-11 派发进展：存储适配器和单次执行器已实现，30组模型/实际SDK内存wire场景通过，涵盖原子认领、ACK丢失零误发送、并发、崩溃重启不重发、UNKNOWN/HOLD及epoch保护。固定journal新增dispatch文档类型，未建任何资源；尚未接后台拦截、Timer/队列扫描、排空或前端语义，不能称为线上持久派发完成。见[适配器与执行器](V368_CORE_DISPATCH_STORE_EXECUTOR.md)。Gen1/Gen2代码和功能不调整。
+
 最近更新：2026-11-03（北京时间）。分支：`codex/v3-core-convergence`。
 
 11-03 当前线上补充：完整配置复核发现Gen1于11:02:41已有本聊天以外的代码变化，仍为Node16/SDK2.11；已下载1632文件，记录物理指纹和部分F3源码对应，四个common差异及无嵌入源码身份的限制单独保留，见[实际基线观察](V368_GEN1_RUNTIME_BASELINE_OBSERVATION.md)。本轮未写云资源，新隔离申请采用重新读取的当前17函数基线，不能把D-026旧快照称为当前代码。旧5/282/6条fixture逐文档保持。

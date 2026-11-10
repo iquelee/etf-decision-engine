@@ -28,7 +28,7 @@ function main() {
       owner: w.owner, epoch: w.epoch, executed: true, outcome: 'COMPLETE', result: {ok: false}}};
     const finished = plan.settle(claimed.next, response);assert.strictEqual(finished.state, 'COMPLETE');
     assert.throws(() => plan.settle(finished, response));assert.strictEqual(plan.claim(finished, v, key).ok, false);
-    for (const bad of [null, {code: 'timeout'}, {result: {...response.result, token: 'wrong'}},
+    for (const bad of [null, {code: 'timeout'}, {result: response.result}, {requestId: 'fixture', result: {...response.result, token: 'wrong'}},
       {result: {...response.result, executed: false, admission: 'ALREADY_COMPLETE'}}]) {
       const held = plan.settle(claimed.next, bad);assert.strictEqual(held.state, 'HOLD');
       assert.strictEqual(plan.claim(held, v, key).ok, false);assert.throws(() => plan.settle(held, response));
