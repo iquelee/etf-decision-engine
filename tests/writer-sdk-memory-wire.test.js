@@ -10,6 +10,18 @@ async function main() {
   value = await wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'a'}),
     data: JSON.stringify({$set: {day: 4}}), multi: false, upsert: false});
   assert.strictEqual(value.data.updated, 1);assert.strictEqual(wire.rows('daily').find(row => row._id === 'a').day, 4);
+  await wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'a'}),
+    data: JSON.stringify({$set: {'realtime.price': 10, 'realtime.metadata': 'keep'}}), multi: false, upsert: false});
+  await wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'a'}),
+    data: JSON.stringify({$set: {'realtime.price': 11}}), multi: false, upsert: false});
+  assert.deepStrictEqual(wire.rows('daily')[0].realtime, {price: 11, metadata: 'keep'});
+  const stable = wire.snapshot();
+  for (const patch of [{'realtime.price': 12, realtime: {}}, {'realtime.__proto__.bad': true}, {'realtime.constructor.bad': true},
+    {'day.child': 1}, {$inc: 1}]) {
+    await assert.rejects(wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'a'}),
+      data: JSON.stringify({$set: patch}), multi: false, upsert: false}));
+    assert.deepStrictEqual(wire.snapshot(), stable, 'invalid patch cannot partially mutate stored rows');
+  }
   const inserted = await wire.send('database.insertDocument', {collectionName: 'shadow', data: [JSON.stringify({kind: 'run'})]});
   assert.strictEqual(inserted.data.insertedIds[0], 'business:shadow:1');
   const snapshot = wire.snapshot();snapshot.daily[0].day = 99;
@@ -19,6 +31,10 @@ async function main() {
     {order: JSON.stringify({day: 'asc'})}, {projection: '{}'}]) await assert.rejects(get(params));
   await assert.rejects(wire.send('database.removeDocument', {collectionName: 'daily'}));
   await assert.rejects(wire.send('database.insertDocument', {collectionName: 'daily', data: [JSON.stringify({_id: 'a'})]}));
+  assert(wire.violations.length >= 8, 'caught model rejections remain visible to the replay');
+  await assert.rejects(wire.send('database.insertDocument', {collectionName: 'shadow', data: ['{}', '{}']}));
+  await assert.rejects(wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'missing'}),
+    data: JSON.stringify({$set: {'constructor.bad': true}}), multi: false, upsert: false}));
   console.log('business SDK wire: scalar filters, sorting/pagination, updates, snapshots and unreviewed operations denied PASS (MODEL_ONLY)');
 }
 if (require.main === module) main().catch(error => {console.error(error);process.exitCode = 1;});

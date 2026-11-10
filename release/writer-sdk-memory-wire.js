@@ -7,7 +7,7 @@ function createBusinessWire({EJSON, collections}) {
   assert(EJSON && typeof EJSON.parse === 'function' && typeof EJSON.stringify === 'function');
   assert(Array.isArray(collections) && collections.length && new Set(collections).size === collections.length);
   const allowed = new Set(collections), tables = new Map(collections.map(name => [name, []]));
-  const writes = [], calls = [];let sequence = 0;
+  const writes = [], calls = [], violations = [];let sequence = 0;
   const copy = value => EJSON.parse(EJSON.stringify(value));
   function filter(value) {
     assert(value && typeof value === 'object' && !Array.isArray(value));
@@ -16,8 +16,29 @@ function createBusinessWire({EJSON, collections}) {
     return value;
   }
   function rows(name) {assert(allowed.has(name), 'unreviewed business collection');return tables.get(name);}
+  function setFields(row, patch) {
+    const paths = Object.keys(patch).map(key => key.split('.'));
+    for (const segments of paths) {
+      assert(segments.every(key => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['__proto__', 'constructor', 'prototype'].includes(key)),
+        'unsafe update path');
+      assert(segments[0] !== '_id', 'primary key updates forbidden');
+    }
+    const keys = Object.keys(patch);
+    assert(!keys.some((left, i) => keys.some((right, j) => i !== j && right.startsWith(left + '.'))), 'conflicting update paths');
+    const result = copy(row);
+    for (const key of keys) {
+      const parts = key.split('.');let target = result;
+      for (const part of parts.slice(0, -1)) {
+        if (!Object.hasOwn(target, part)) target[part] = {};
+        assert(target[part] && Object.prototype.toString.call(target[part]) === '[object Object]', 'cannot set nested path in scalar/array');
+        target = target[part];
+      }
+      target[parts[parts.length - 1]] = copy(patch[key]);
+    }
+    return result;
+  }
   const model = {
-    calls, writes,
+    calls, writes, violations,
     seed(name, data) {rows(name);assert(Array.isArray(data));tables.set(name, copy(data));},
     rows(name) {return copy(rows(name));},
     snapshot() {return Object.fromEntries(collections.map(name => [name, model.rows(name)]));},
@@ -26,7 +47,7 @@ function createBusinessWire({EJSON, collections}) {
       const table = rows(params.collectionName), requestId = 'memory-business:' + (calls.length + 1);
       calls.push({action, params: copy(params)});
       if (action === 'database.insertDocument') {
-        assert(Array.isArray(params.data));const insertedIds = [];
+        assert(Array.isArray(params.data) && params.data.length === 1, 'only single-document inserts reviewed');const insertedIds = [];
         for (const raw of params.data) {
           const row = EJSON.parse(raw);assert(row && typeof row === 'object' && !Array.isArray(row));
           if (!Object.hasOwn(row, '_id')) row._id = 'business:' + params.collectionName + ':' + (++sequence);
@@ -61,10 +82,21 @@ function createBusinessWire({EJSON, collections}) {
       assert.deepStrictEqual(Object.keys(where), ['_id'], 'only doc updates reviewed');
       const update = EJSON.parse(params.data);assert.deepStrictEqual(Object.keys(update), ['$set']);
       assert(update.$set && typeof update.$set === 'object' && !Object.hasOwn(update.$set, '_id'));
-      assert(Object.keys(update.$set).every(key => !key.startsWith('$') && !key.includes('.')), 'nested update operators require a reviewed model');
-      for (const row of selected) Object.assign(row, copy(update.$set));
+      setFields({}, update.$set); // Validate even when no document matches.
+      const replacements = selected.map(row => [row, setFields(row, update.$set)]);
+      for (const [row, replacement] of replacements) Object.assign(row, replacement);
       writes.push({collection: params.collectionName, operation: 'update', id: where._id, patch: copy(update.$set), updated: selected.length});
       return {requestId, data: {updated: selected.length}};
+    }
+  };
+  const send = model.send.bind(model);
+  model.send = async (...args) => {
+    try {return await send(...args);}
+    catch (error) {
+      // Business code can intentionally catch a rejected request. Keep that
+      // rejection observable so a replay cannot silently declare equivalence.
+      violations.push({action: args[0], collection: args[1] && args[1].collectionName, reason: error.message});
+      throw error;
     }
   };
   return model;

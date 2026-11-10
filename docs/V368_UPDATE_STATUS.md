@@ -2,6 +2,8 @@
 
 2026-11-10 当前范围：owner明确本次只升级V3 core，Gen1/Gen2代码和功能不调整。此前九writer/六包/Claude交接中的两个shadow目标退出当前升级，历史证据保留；已停止新启动的Gen2 SDK离线回放，当前打包入口只允许Core。详见[V3 core范围](V368_V3_CORE_SCOPE.md)。用户未转交Claude，仍由Codex继续；下文为此前历史状态。
 
+11-10 Core进展：已从b91e791完整源码离线生成四个Core候选并独立核验ZIP边界；实时行情候选的真实入口/SDK/common/db/datasource六组业务对照全部返回、23写与集合一致，另两组准入/完成commit丢ACK均HOLD且重投零业务。证据仍为实际SDK内存wire，未改线上；见[Core实时SDK回放](V368_CORE_REALTIME_SDK_REPLAY.md)。Gen1/Gen2排除，其他Core闭包/持久派发/平台和自然验收仍待完成。
+
 最近更新：2026-11-03（北京时间）。分支：`codex/v3-core-convergence`。
 
 11-03 当前线上补充：完整配置复核发现Gen1于11:02:41已有本聊天以外的代码变化，仍为Node16/SDK2.11；已下载1632文件，记录物理指纹和部分F3源码对应，四个common差异及无嵌入源码身份的限制单独保留，见[实际基线观察](V368_GEN1_RUNTIME_BASELINE_OBSERVATION.md)。本轮未写云资源，新隔离申请采用重新读取的当前17函数基线，不能把D-026旧快照称为当前代码。旧5/282/6条fixture逐文档保持。
