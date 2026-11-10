@@ -1,0 +1,75 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "source_commit": "749e05ca4ce445121446123cc72ecd59ac1394b7",
+  "cloud_mutations": 0,
+  "cloud_invocations": 0,
+  "packages": [
+    {
+      "producer": "runDecisionEngine",
+      "target": "runDecisionEngineNode24",
+      "input_files": 1799,
+      "output_files": 1814,
+      "unchanged_input_files": 1796,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "zip_sha256": "b9ecce59785d660569abaa575ef69893bcbe92537fee79e7c0e38d5783e37964",
+      "map_sha256": "c02788cd9299a122da6c01cfd226ed5b03ab361bdfaced937ce77b37ee492558"
+    },
+    {
+      "producer": "materializeIndicators",
+      "target": "materializeIndicatorsNode24",
+      "input_files": 1791,
+      "output_files": 1806,
+      "unchanged_input_files": 1787,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "zip_sha256": "8b7a163703cdf28c3d78743c71fa7c8f939fb613a34e07c5354d7056e2da1672",
+      "map_sha256": "9ec8a121187865f209e5615cac2c72b798b1766548cad24aec848eef64829794"
+    },
+    {
+      "producer": "adminGateway",
+      "target": "adminGatewayNode24",
+      "input_files": 1793,
+      "output_files": 1808,
+      "unchanged_input_files": 1789,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "zip_sha256": "01a889ab0facbed9030a83a85b65c3bcfb2f5d92354a92a140763311d47e9929",
+      "map_sha256": "7c8442f2fd3ec8b7deb037172be4fecbc0585e514a19be1aa8f3fd0cf56c996c"
+    }
+  ],
+  "release_scope": "V3_CORE_ONLY",
+  "input_capture": "HISTORICAL_RAW_MAPS_NOT_A_FRESH_LIVE_BASELINE",
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_ENGINE_ZIP_BOUNDARY",
+  "positive_sdk_replays": {
+    "materializeIndicators": "PASS_ACTUAL_ENTRY_AND_SDK_MEMORY_WIRE",
+    "runDecisionEngine": "PASS_ACTUAL_ENTRY_AND_SDK_MEMORY_WIRE",
+    "adminGateway": "NOT_RUN"
+  },
+  "engine_chain_replay": {
+    "status": "PASS_CORE_ENGINE_ACTUAL_SDK_MEMORY_WIRE",
+    "normal_cases": 7,
+    "business_writes_each_side": 2284,
+    "full_chain_business_writes_each_side": 684,
+    "real_child_response_loss_cases": 1,
+    "duplicate_business_calls": 0,
+    "network_attempts": 0,
+    "daily_package_source": "b91e7913096c0a04782a1571f6f826ed5e306de3",
+    "production_and_natural_qualification": "NOT_PROVEN",
+    "distinct_per_producer_fixture_keys": true
+  }
+}

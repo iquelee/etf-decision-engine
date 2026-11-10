@@ -35,6 +35,20 @@ async function main() {
   await assert.rejects(wire.send('database.insertDocument', {collectionName: 'shadow', data: ['{}', '{}']}));
   await assert.rejects(wire.send('database.modifyDocument', {collectionName: 'daily', query: JSON.stringify({_id: 'missing'}),
     data: JSON.stringify({$set: {'constructor.bad': true}}), multi: false, upsert: false}));
+  const cas = createBusinessWire({EJSON: JSON, collections: ['active_run_pointer'], conditionalPointerUpdates: true});
+  cas.seed('active_run_pointer', [{_id: 'active_run_pointer::production', scope: 'production', run_id: 'old', revision: 7}]);
+  const change = where => cas.send('database.modifyDocument', {collectionName: 'active_run_pointer', query: JSON.stringify(where),
+    data: JSON.stringify({$set: {run_id: 'new', revision: 8}}), multi: true, upsert: false});
+  const where = {_id: 'active_run_pointer::production', scope: 'production', run_id: 'old', revision: 7};
+  assert.strictEqual((await change({...where, revision: 6})).data.updated, 0);
+  assert.strictEqual(cas.rows('active_run_pointer')[0].run_id, 'old', 'stale CAS leaves pointer unchanged');
+  assert.strictEqual((await change(where)).data.updated, 1);
+  assert.strictEqual((await change(where)).data.updated, 0, 'stale expected identity cannot overwrite the promoted pointer');
+  for (const invalid of [{_id: where._id}, {...where, scope: 'other'}, {...where, revision: '7'}, {...where, _id: 'another'}])
+    await assert.rejects(change(invalid));
+  const defaultCas = createBusinessWire({EJSON: JSON, collections: ['active_run_pointer']});
+  await assert.rejects(defaultCas.send('database.modifyDocument', {collectionName: 'active_run_pointer', query: JSON.stringify(where),
+    data: JSON.stringify({$set: {run_id: 'new'}}), multi: true, upsert: false}), 'conditional query updates remain denied by default');
   console.log('business SDK wire: scalar filters, sorting/pagination, updates, snapshots and unreviewed operations denied PASS (MODEL_ONLY)');
 }
 if (require.main === module) main().catch(error => {console.error(error);process.exitCode = 1;});

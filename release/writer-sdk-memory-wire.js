@@ -3,9 +3,10 @@
 // No SDK shim, query-function replacement, sockets or cloud calls live here.
 const assert = require('assert');
 const {isDeepStrictEqual} = require('util');
-function createBusinessWire({EJSON, collections}) {
+function createBusinessWire({EJSON, collections, conditionalPointerUpdates = false}) {
   assert(EJSON && typeof EJSON.parse === 'function' && typeof EJSON.stringify === 'function');
   assert(Array.isArray(collections) && collections.length && new Set(collections).size === collections.length);
+  assert.strictEqual(typeof conditionalPointerUpdates, 'boolean');
   const allowed = new Set(collections), tables = new Map(collections.map(name => [name, []]));
   const writes = [], calls = [], violations = [];let sequence = 0;
   const copy = value => EJSON.parse(EJSON.stringify(value));
@@ -78,14 +79,21 @@ function createBusinessWire({EJSON, collections}) {
         return {requestId, data: {list: selected.slice(offset, offset + limit).map(row => EJSON.stringify(row)), offset, limit}};
       }
       assert.strictEqual(action, 'database.modifyDocument', 'unreviewed business wire action');
-      assert.strictEqual(params.upsert, false);assert.strictEqual(params.multi, false);
-      assert.deepStrictEqual(Object.keys(where), ['_id'], 'only doc updates reviewed');
+      assert.strictEqual(params.upsert, false);
+      const pointerCas = conditionalPointerUpdates && params.collectionName === 'active_run_pointer' && params.multi === true;
+      if (pointerCas) {
+        assert.deepStrictEqual(Object.keys(where).sort(), ['_id', 'revision', 'run_id', 'scope']);
+        assert.strictEqual(where._id, 'active_run_pointer::production');assert.strictEqual(where.scope, 'production');
+        assert(typeof where.run_id === 'string' && where.run_id.length && Number.isSafeInteger(where.revision) && where.revision >= 0);
+        assert(selected.length <= 1, 'single primary-key CAS only');
+      } else {assert.strictEqual(params.multi, false);assert.deepStrictEqual(Object.keys(where), ['_id'], 'only doc updates reviewed');}
       const update = EJSON.parse(params.data);assert.deepStrictEqual(Object.keys(update), ['$set']);
       assert(update.$set && typeof update.$set === 'object' && !Object.hasOwn(update.$set, '_id'));
       setFields({}, update.$set); // Validate even when no document matches.
       const replacements = selected.map(row => [row, setFields(row, update.$set)]);
       for (const [row, replacement] of replacements) Object.assign(row, replacement);
-      writes.push({collection: params.collectionName, operation: 'update', id: where._id, patch: copy(update.$set), updated: selected.length});
+      writes.push({collection: params.collectionName, operation: 'update', id: where._id, patch: copy(update.$set), updated: selected.length,
+        ...(pointerCas ? {condition: copy(where)} : {})});
       return {requestId, data: {updated: selected.length}};
     }
   };

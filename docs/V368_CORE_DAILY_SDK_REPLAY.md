@@ -2,6 +2,8 @@
 
 2026-11-10。本轮只增加Core日线的离线回放工具与证据，没有调整业务代码、Gen1/Gen2代码或功能，没有云端操作。使用已封存的四Core候选之一；包源码仍是 `b91e7913096c0a04782a1571f6f826ed5e306de3`，不是本轮工具提交。输入仍是11-03捕获包，不能当作当前线上基线。
 
+后续同日进展：实际物化/RDE已接入[整链SDK回放](V368_CORE_ENGINE_SDK_REPLAY.md)。本文仍保留原单节点验证范围和子响应fixture的历史说明。
+
 ## 执行边界
 
 `release/replay-core-daily-sdk.js`分别加载原包和候选的完整index，以及各自的真实SDK2.11.0、database1.4.1、common/db/datasource。候选同时运行实际bootstrap、Timer/签名入口、准入和journal。Node为24.20.0。
