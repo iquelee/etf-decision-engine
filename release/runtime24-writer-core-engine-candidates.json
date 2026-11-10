@@ -58,7 +58,7 @@
   "positive_sdk_replays": {
     "materializeIndicators": "PASS_ACTUAL_ENTRY_AND_SDK_MEMORY_WIRE",
     "runDecisionEngine": "PASS_ACTUAL_ENTRY_AND_SDK_MEMORY_WIRE",
-    "adminGateway": "NOT_RUN"
+    "adminGateway": "PASS_SYNCHRONOUS_PATHS_ACTUAL_SDK_DISPATCH_NOT_WIRED"
   },
   "engine_chain_replay": {
     "status": "PASS_CORE_ENGINE_ACTUAL_SDK_MEMORY_WIRE",
@@ -71,5 +71,15 @@
     "daily_package_source": "b91e7913096c0a04782a1571f6f826ed5e306de3",
     "production_and_natural_qualification": "NOT_PROVEN",
     "distinct_per_producer_fixture_keys": true
+  },
+  "admin_sdk_replay": {
+    "status": "PASS_CORE_ADMIN_ACTUAL_SDK_MEMORY_WIRE_WITH_OPEN_DISPATCH_GAP",
+    "comparison_cases": 6,
+    "business_writes_each_side": 167,
+    "denial_cases": 4,
+    "dispatch_gap_cases": 2,
+    "durable_dispatch": "NOT_WIRED",
+    "network_attempts": 0,
+    "production_and_natural_qualification": "NOT_PROVEN"
   }
 }
