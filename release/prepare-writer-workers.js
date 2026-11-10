@@ -3,6 +3,7 @@
 // Offline archive builder. Never installs dependencies or calls a cloud API.
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), assert = require('assert');
 const {execFileSync} = require('child_process');
+const {assertCoreWriters} = require('./runtime24-v3-core-scope');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const repo = path.resolve(__dirname, '..');
 const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1024 * 1024});
@@ -23,6 +24,7 @@ function verifyInput(root, mapFile, expected) {
   const files = JSON.parse(raw);assert.deepStrictEqual(fileMap(root), files, 'independent package drift');return files;
 }
 function build({source, inventoryRoot, out}) {
+  assertCoreWriters(['runDecisionEngine', 'materializeIndicators', 'adminGateway']);
   assert(/^[a-f0-9]{40}$/.test(source));assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
   assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'clean source required');
   out = path.resolve(out);inventoryRoot = fs.realpathSync(inventoryRoot);

@@ -5,6 +5,7 @@
 const assert = require('assert'), crypto = require('crypto'), fs = require('fs'), path = require('path');
 const {execFileSync} = require('child_process');
 const {fileMap, verifyInput} = require('./prepare-writer-workers');
+const {writers: coreWriters, excluded, assertCoreWriters} = require('./runtime24-v3-core-scope');
 const repo = path.resolve(__dirname, '..');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1024 * 1024});
@@ -12,7 +13,12 @@ const modules = ['writer-admission', 'writer-admission-cloudbase', 'writer-admis
   'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root',
   'writer-timer-identity', 'writer-admin-http', 'writer-admin-maintenance'];
 const names = ['fetchDailyData', 'fetchRealtimeData', 'fetchFundamentalNews', 'extractFundamental', 'runGen1ShadowEod', 'runGen2ShadowEod'];
-function build({source, inventoryRoot, out}) {
+const coreProducers = Object.freeze(names.filter(name => coreWriters.includes(name)));
+function build({source, inventoryRoot, out, producers = names}) {
+  // Owner scope narrowed on 2026-11-10. The historical six-producer default
+  // fails before any Git, input read, directory creation or packaging action.
+  assertCoreWriters(producers);
+  assert(producers.every(name => names.includes(name)), 'captured Core producer required');
   assert(/^[a-f0-9]{40}$/.test(source));assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
   assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'clean source required');
   inventoryRoot = fs.realpathSync(inventoryRoot);out = path.resolve(out);
@@ -23,7 +29,7 @@ function build({source, inventoryRoot, out}) {
   assert.deepStrictEqual(inventory.functions.map(f => f.FunctionName), names);
   const sourceModules = Object.fromEntries(modules.map(name => [name + '.js', git('show', source + ':release/' + name + '.js')]));
   const helper = git('show', source + ':release/writer-preserve-zip.py').toString('utf8');
-  const inputs = inventory.functions.map(f => {
+  const inputs = inventory.functions.filter(f => producers.includes(f.FunctionName)).map(f => {
     const name = f.FunctionName, root = fs.realpathSync(path.join(inventoryRoot, name + '-download'));
     const map = path.join(inventoryRoot, name + '.files.json'), archive = path.join(inventoryRoot, name + '.zip');
     const files = verifyInput(root, map, f.download.raw_file_map_sha256);
@@ -73,7 +79,7 @@ function build({source, inventoryRoot, out}) {
     fs.writeFileSync(path.join(candidate, 'config.json'), JSON.stringify({...config, timeout: f.Timeout,
       envVariables: publicEnvironment, triggers: []}, null, 2) + '\n');
     json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED', source_commit: source,
-      producer: name, target, runtime: 'Nodejs24.11', timeout_seconds: f.Timeout, memory_mb: f.MemorySize,
+      producer: name, target, release_scope: 'V3_CORE_ONLY', runtime: 'Nodejs24.11', timeout_seconds: f.Timeout, memory_mb: f.MemorySize,
       input_archive_sha256: f.download.archive_sha256, input_map_sha256: f.download.raw_file_map_sha256,
       original_entry_sha256: files['index.js'], sdk_import_replacements: sdkImports,
       wrapper_source_sha256: Object.fromEntries(Object.entries(sourceModules).map(([file, bytes]) => [file, sha(bytes)])),
@@ -104,6 +110,7 @@ function build({source, inventoryRoot, out}) {
   assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
   assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'source changed during build');
   const receipt = {status: 'OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED', source_commit: source,
+    release_scope: 'V3_CORE_ONLY', excluded_producers: excluded,
     archive_helper_sha256: sha(Buffer.from(helper)), cloud_mutations: 0, cloud_invocations: 0, packages: receipts};
   json(path.join(out, 'build-receipt.json'), receipt);return receipt;
 }
@@ -112,4 +119,4 @@ if (require.main === module) {
   assert(args.length === 6 && args[0] === '--source' && args[2] === '--inventory-root' && args[4] === '--out');
   console.log(JSON.stringify(build({source: args[1], inventoryRoot: args[3], out: args[5]}), null, 2));
 }
-module.exports = {build};
+module.exports = {build, coreProducers, buildCore: options => build({...options, producers: coreProducers})};
