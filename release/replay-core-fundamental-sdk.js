@@ -9,7 +9,7 @@ const {createBusinessWire}=require('./writer-sdk-memory-wire');
 const {backend}=require('../tests/writer-journal-cloudbase.test');
 const {assertCoreWriters}=require('./runtime24-v3-core-scope');
 const producers=['fetchFundamentalNews','extractFundamental'];assertCoreWriters(producers);
-const manifest=require('./runtime24-writer-core-candidates.json');
+let manifest=require('./runtime24-writer-core-candidates.json');
 const inventory=require('./runtime24-writer-six-inventory.json');
 const ENV='tradingview-etf-d0fa42yy57cbc11b',JOURNAL='writer_admission_journal_v1';
 const copy=x=>JSON.parse(JSON.stringify(x)),sha=x=>crypto.createHash('sha256').update(x).digest('hex');
@@ -161,6 +161,12 @@ async function execute(inputs,candidates){
     for(const producer of producers){
       const pack=manifest.packages.find(p=>p.producer===producer),captured=inventory.functions.find(f=>f.FunctionName===producer);
       const input=path.resolve(inputs,producer+'-download'),candidate=path.resolve(candidates,pack.target);
+      const packageIdentity=JSON.parse(fs.readFileSync(path.join(candidate,'SOURCE_IDENTITY.json')));
+      const durableCompletion=packageIdentity.durable_completion==='ATOMIC_WITH_DUAL_RECEIPTS_CORE_ONLY';
+      const storedEvidence=(state,wire)=>{
+        const c=require(path.join(candidate,'writer-completion')),id=c.id(binding,wire);
+        return c.decode(state.journal.rows().find(r=>r._id===id)||null,binding,wire);
+      };
       const check=()=>{
         verify(input,path.resolve(inputs,producer+'.files.json'),captured.download.raw_file_map_sha256);
         verify(candidate,path.resolve(candidates,pack.target+'.files.json'),pack.map_sha256);
@@ -205,6 +211,7 @@ async function execute(inputs,candidates){
           assert.deepStrictEqual(actual.state.business.violations,[]);assert.deepStrictEqual(actual.state.forbidden,[]);
           const receipts=actual.state.journal.rows().filter(r=>['request','token'].includes(r.kind));assert.strictEqual(receipts.length,2);
           assert(receipts.every(r=>JSON.parse(r.payload_json).status===(d.fault==='admit'?'RUNNING':'COMPLETE')));
+          if(durableCompletion)assert.strictEqual(Boolean(storedEvidence(actual.state,request)),d.fault==='finish');
           if(d.fault==='admit')assert.deepStrictEqual(before,[0,0,0]);else {
             assert(before[1]>0);assert.deepStrictEqual(copy(actual.state.business.writes),copy(original.state.business.writes));
             assert.deepStrictEqual(copy(actual.state.business.snapshot()),copy(original.state.business.snapshot()));
@@ -244,9 +251,10 @@ async function execute(inputs,candidates){
         assert.deepStrictEqual([left.business.calls.length,left.business.writes.length,left.provider.length],before);
         const control=await store.read(binding);assert.strictEqual(control.state,'ACTIVE');assert.strictEqual(control.active,null);
         const receipts=left.journal.rows().filter(r=>['request','token'].includes(r.kind));assert.strictEqual(receipts.length,2);assert(receipts.every(r=>JSON.parse(r.payload_json).status==='COMPLETE'));
+        if(durableCompletion){const evidence=storedEvidence(left,request);assert(evidence);assert.strictEqual(evidence.business_status,result.ok===true?'REPORTED_OK':result.ok===false?'REPORTED_FAILURE':'UNCLASSIFIED');}
         cases.push({case:d.name,business_writes:left.business.writes.length,provider_fixture_requests:left.provider.length,result:copy(result),duplicate_business_calls:0});
       }
-      check();reports.push({producer,cases,fault_cases:faults});
+      check();reports.push({producer,durable_completion:durableCompletion,cases,fault_cases:faults});
     }
     assert.strictEqual(attempts(),0);
     return {status:'PASS_CORE_FUNDAMENTAL_ACTUAL_SDK_MEMORY_WIRE',scope:'V3_CORE_ONLY',runtime:process.version,package_source:manifest.source_commit,sdk:'2.11.0',database:'1.4.1',reports,
@@ -254,7 +262,8 @@ async function execute(inputs,candidates){
   }finally{restorers.reverse().forEach(fn=>fn());global.Date=NativeDate;global.setTimeout=nativeTimeout;}
 }
 function main(){let args=process.argv.slice(2);const child=args[0]==='--child';if(child)args=args.slice(1);
-  assert(args.length===4&&args[0]==='--inputs'&&args[2]==='--candidates');
+  assert([4,6].includes(args.length)&&args[0]==='--inputs'&&args[2]==='--candidates');
+  if(args.length===6){assert.strictEqual(args[4],'--manifest');manifest=JSON.parse(fs.readFileSync(path.resolve(args[5])));}
   if(child)return execute(args[1],args[3]).then(r=>console.log(JSON.stringify(r)));
   const env={V3_CORE_FUNDAMENTAL_CHILD:'yes'};for(const key of ['PATH','SystemRoot','WINDIR','TEMP','TMP'])if(process.env[key])env[key]=process.env[key];
   const result=spawnSync(process.execPath,[__filename,'--child',...args],{env,encoding:'utf8',timeout:300000,maxBuffer:4*1024*1024});

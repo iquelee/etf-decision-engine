@@ -11,6 +11,11 @@ const copy = value => JSON.parse(JSON.stringify(value));
 // contract with separate document writes, TTL, or a process-local mutex in cloud.
 async function apply(store, binding, action) {
   try {
+    if (action && action.completion !== undefined) {
+      if (action.type !== 'finish' || store.completionProtocol !== 'core-completion-v1') throw Error('completion store required');
+      const c = require('./writer-completion');c.validate(action.completion, binding);
+      const expected = c.identity(binding, action);for (const [k, v] of Object.entries(expected)) if (action.completion[k] !== v) throw Error('completion identity mismatch');
+    }
     let answer;
     const acknowledged = await store.transaction(binding, view => {
       const snapshot = copy(view.control);
@@ -42,22 +47,25 @@ async function apply(store, binding, action) {
         owner: snapshot.owner, epoch: snapshot.epoch} : null;
       next.receipts = next.receipts.filter(r => r.status !== 'COMPLETE');
       v1.validate(next, binding);
-      return {control: next, receipt};
-    }, {request_id: action && action.request_id, token: action && action.token});
+      return {control: next, receipt, ...(action.completion !== undefined ? {completion: copy(action.completion)} : {})};
+    }, {request_id: action && action.request_id, token: action && action.token,
+      ...(action && action.completion !== undefined ? {completion: copy(action.completion)} : {})});
     if (acknowledged !== true) return {ok: false, reason: 'TRANSACTION_UNAVAILABLE_OR_AMBIGUOUS'};
     return answer || {ok: false, reason: 'INVALID_TRANSACTION_RESULT'};
   } catch (_) { return {ok: false, reason: 'TRANSACTION_UNAVAILABLE_OR_AMBIGUOUS'}; }
 }
 
-async function execute(store, binding, identity, handler) {
+async function execute(store, binding, identity, handler, recordCompletion = false) {
+  if (typeof recordCompletion !== 'boolean' || (recordCompletion && store.completionProtocol !== 'core-completion-v1')) throw Error('explicit completion capability required');
   const admission = await apply(store, binding, {...identity, type: 'admit'});
   if (!admission.ok) return {executed: false, admission: admission.reason};
-  let result, terminal = true;
-  try { result = await handler(); } catch (_) { terminal = false; }
+  let result, evidence, terminal = true;
+  try { result = await handler();if (recordCompletion) evidence = require('./writer-completion').create(binding, identity, result); } catch (_) { terminal = false; }
   let completion;
   try {
     const snapshot = await store.read(binding);
-    completion = await apply(store, binding, {...identity, revision: snapshot.revision, type: terminal ? 'finish' : 'unknown'});
+    completion = await apply(store, binding, {...identity, revision: snapshot.revision, type: terminal ? 'finish' : 'unknown',
+      ...(terminal && evidence ? {completion: evidence} : {})});
   } catch (_) { /* occupied slot remains; no retry or unconditional release */ }
   return {executed: true, outcome: terminal && completion && completion.ok ? 'COMPLETE' : 'UNKNOWN', ...(terminal ? {result} : {})};
 }

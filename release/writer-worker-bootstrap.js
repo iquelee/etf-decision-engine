@@ -71,7 +71,8 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
       return;
     }
     const database = configuredSdk.init({timeout: 15000}).database();
-    const store = createProductionStore({database, binding});
+    const recordCompletion = ['fetchFundamentalNews', 'extractFundamental'].includes(producer);
+    const store = recordCompletion ? require('./writer-journal-cloudbase').createCoreCompletionStore({database, binding}) : createProductionStore({database, binding});
     const childRoutes = {};
     if (Object.hasOwn(children, producer)) {
       const child = children[producer], childBinding = {environment, scope: 'production/' + child.producer};
@@ -91,7 +92,7 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
     }});
     const dispatchStore = producer === 'adminGateway' ? require('./writer-dispatch-cloudbase').createStore({database}) : undefined;
     const candidate = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
-      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission,
+      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission, recordCompletion,
       ...(dispatchStore ? {dispatchStore} : {})});
     const candidateRoot = timerIdentity ? createLocalRoot({store, binding, target: plan.target, owner: 'new', key: currentKeys[0],
       identify: timerIdentity, runtimeIdentity: runtime, worker: candidate.main}) : null;

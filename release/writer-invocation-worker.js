@@ -7,7 +7,7 @@ const entry = require('./writer-entry');
 const {createDirectCaller, WriterCallError} = require('./writer-direct-caller');
 const text = x => typeof x === 'string' && /^[A-Za-z0-9_:./|#@+-]{1,200}$/.test(x);
 function createInvocationWorker({sdk, store, binding, key, target, owner, producer, runtimeIdentity,
-  loadMain, childRoutes, beforeAdmission, unmanagedNames = [], dispatchStore}) {
+  loadMain, childRoutes, beforeAdmission, unmanagedNames = [], dispatchStore, recordCompletion = false}) {
   assert(sdk && typeof sdk.init === 'function' && typeof loadMain === 'function' && typeof runtimeIdentity === 'function');
   assert(text(producer) && text(target) && ['old', 'new'].includes(owner));
   assert(beforeAdmission === undefined || typeof beforeAdmission === 'function');
@@ -129,7 +129,7 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
   const wrappedSdk = new Proxy(sdk, {get(original, property) {
     return property === 'init' ? init : Reflect.get(original, property, original);
   }});
-  const worker = entry.createWorker({store, binding, key, target, owner,
+  const worker = entry.createWorker({store, binding, key, target, owner, recordCompletion,
     runtimeIdentity: () => {
       const invocation = context.getStore();assert(invocation && invocation.active);return invocation.runtime;
     }, loadMain: async () => {

@@ -134,6 +134,9 @@ async function main() {
     assert.strictEqual((await added.bootstrap.main(request, added.context)).outcome, 'COMPLETE');
     assert.strictEqual((await added.bootstrap.main(request, added.context)).admission, 'ALREADY_COMPLETE');
     assert.strictEqual(added.state.loads, 1);
+    const completionRows = added.b.rows().filter(row => row.kind === 'completion');
+    assert.strictEqual(completionRows.length, ['fetchFundamentalNews', 'extractFundamental'].includes(producer) ? 1 : 0);
+    if (completionRows.length) assert.strictEqual(JSON.parse(completionRows[0].payload_json).business_status, 'REPORTED_FAILURE');
   }
   // Daily -> materializer -> RDE uses three real bootstraps, separate keys and
   // journal scopes, but one in-memory SDK backend. This is not cloud evidence.

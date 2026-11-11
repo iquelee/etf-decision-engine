@@ -66,6 +66,10 @@ function build({source, inventoryRoot, out, producers = names}) {
         "require('" + (file === 'index.js' ? './writer-sdk' : '../../writer-sdk') + "')"));
     }
     for (const [file, bytes] of Object.entries(sourceModules)) fs.writeFileSync(path.join(candidate, file), bytes);
+    if (['fetchFundamentalNews', 'extractFundamental'].includes(name)) {
+      assert(!Object.hasOwn(files, 'writer-completion.js'), 'completion module collision');
+      fs.writeFileSync(path.join(candidate, 'writer-completion.js'), git('show', source + ':release/writer-completion.js'));
+    }
     fs.writeFileSync(path.join(candidate, 'index.js'), "'use strict';\nconst sdk = require('@cloudbase/node-sdk');\n" +
       "const bootstrap = require('./writer-worker-bootstrap').createBootstrap({producer: '" + name + "', sdk,\n" +
       "  sdkVersion: require('@cloudbase/node-sdk/package.json').version, databaseVersion: require('@cloudbase/database/package.json').version,\n" +
@@ -82,7 +86,9 @@ function build({source, inventoryRoot, out, producers = names}) {
       producer: name, target, release_scope: 'V3_CORE_ONLY', runtime: 'Nodejs24.11', timeout_seconds: f.Timeout, memory_mb: f.MemorySize,
       input_archive_sha256: f.download.archive_sha256, input_map_sha256: f.download.raw_file_map_sha256,
       original_entry_sha256: files['index.js'], sdk_import_replacements: sdkImports,
-      wrapper_source_sha256: Object.fromEntries(Object.entries(sourceModules).map(([file, bytes]) => [file, sha(bytes)])),
+      wrapper_source_sha256: {...Object.fromEntries(Object.entries(sourceModules).map(([file, bytes]) => [file, sha(bytes)])),
+        ...(['fetchFundamentalNews', 'extractFundamental'].includes(name) ? {'writer-completion.js': sha(git('show', source + ':release/writer-completion.js'))} : {})},
+      ...(['fetchFundamentalNews', 'extractFundamental'].includes(name) ? {durable_completion: 'ATOMIC_WITH_DUAL_RECEIPTS_CORE_ONLY'} : {}),
       existing_environment_names_requiring_separate_supply: f.live_environment_names.filter(key => !Object.hasOwn(publicEnvironment, key)),
       archive_environment_names: Object.keys(config.envVariables || {}).sort(),
       live_environment_names: f.live_environment_names,

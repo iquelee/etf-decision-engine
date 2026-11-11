@@ -45,7 +45,8 @@ async function main() {
       assert.deepStrictEqual(await wired.bootstrap.main(input, wired.context), {ok: false, echoed: input});
       assert.strictEqual((await wired.bootstrap.main({...input, Time: input.Time.replace('Z', '.000Z')},
         {...wired.context, request_id: 'fixture:another-native-attempt'})).reason, 'ALREADY_COMPLETE');
-      assert.strictEqual(wired.state.loads, 1);assert.strictEqual(wired.b.rows().length, 3);
+      assert.strictEqual(wired.state.loads, 1);
+      assert.strictEqual(wired.b.rows().length, ['fetchFundamentalNews', 'extractFundamental'].includes(producer) ? 4 : 3);
     }
   }
   assert.strictEqual(timerCases, 9);assert.strictEqual(ids.size, 9);
