@@ -3,12 +3,14 @@
 // Offline archive builder. Never installs dependencies or calls a cloud API.
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), assert = require('assert');
 const {execFileSync} = require('child_process');
+const {assertCoreWriters} = require('./runtime24-v3-core-scope');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const repo = path.resolve(__dirname, '..');
 const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1024 * 1024});
 const modules = ['writer-admission', 'writer-admission-cloudbase', 'writer-admission-journal', 'writer-journal-cloudbase',
   'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root', 'writer-timer-identity',
   'writer-admin-http', 'writer-admin-maintenance'];
+const dispatchFiles = ['writer-dispatch-plan.js', 'writer-dispatch-cloudbase.js', 'writer-dispatch-status.js', 'runtime24-v3-core-scope.js', 'runtime24-v3-core-scope.json'];
 function fileMap(root) {
   const files = {};
   function walk(dir) {for (const item of fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -23,6 +25,7 @@ function verifyInput(root, mapFile, expected) {
   const files = JSON.parse(raw);assert.deepStrictEqual(fileMap(root), files, 'independent package drift');return files;
 }
 function build({source, inventoryRoot, out}) {
+  assertCoreWriters(['runDecisionEngine', 'materializeIndicators', 'adminGateway']);
   assert(/^[a-f0-9]{40}$/.test(source));assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
   assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'clean source required');
   out = path.resolve(out);inventoryRoot = fs.realpathSync(inventoryRoot);
@@ -64,6 +67,12 @@ function build({source, inventoryRoot, out}) {
       assert(!Object.hasOwn(files, name + '.js'), 'bootstrap module collision');
       fs.writeFileSync(path.join(candidate, name + '.js'), git('show', source + ':release/' + name + '.js'));
     }
+    const dispatchHashes = {};
+    if (producer === 'adminGateway') for (const file of dispatchFiles) {
+      assert(!Object.hasOwn(files, file), 'dispatch module collision');
+      const bytes = git('show', source + ':release/' + file);fs.writeFileSync(path.join(candidate, file), bytes);
+      dispatchHashes['release/' + file] = sha(bytes);
+    }
     for (const file of ['writer-sdk.js', 'SOURCE_IDENTITY.json']) assert(!Object.hasOwn(files, file), 'generated file collision');
     fs.writeFileSync(path.join(candidate, 'index.js'), "'use strict';\nconst sdk = require('@cloudbase/node-sdk');\n" +
       "const bootstrap = require('./writer-worker-bootstrap').createBootstrap({producer: '" + producer + "', sdk,\n" +
@@ -75,7 +84,7 @@ function build({source, inventoryRoot, out}) {
     assert.strictEqual(config.timeout, timeout);assert.deepStrictEqual(config.envVariables, {DECISION_ENV: 'prod'});
     config.triggers = [];json(path.join(candidate, 'config.json'), config);
     json(path.join(candidate, 'SOURCE_IDENTITY.json'), {status: 'OFFLINE_WORKER_CANDIDATE_NOT_QUALIFIED', source_commit: source,
-      producer, target, runtime: 'Nodejs24.11', timeout_seconds: timeout, memory_mb: 256, source_files_sha256: sourceHashes,
+      producer, target, release_scope: 'V3_CORE_ONLY', runtime: 'Nodejs24.11', timeout_seconds: timeout, memory_mb: 256, source_files_sha256: {...sourceHashes, ...dispatchHashes},
       accepted_entries: ['signed-rpc', ...(producer === 'materializeIndicators' ? ['native-timer-local'] :
         producer === 'adminGateway' ? ['admin-http-local'] : [])],
       native_timer_source_and_retry_qualification: 'NOT_PROVEN',
@@ -99,7 +108,7 @@ function build({source, inventoryRoot, out}) {
   }
   assert.strictEqual(git('rev-parse', 'HEAD').toString().trim(), source);
   assert.strictEqual(git('status', '--porcelain').toString().trim(), '', 'source changed during build');
-  const receipt = {status: 'OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED', source_commit: source, cloud_mutations: 0, cloud_invocations: 0, packages: receipts};
+  const receipt = {status: 'OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED', release_scope: 'V3_CORE_ONLY', source_commit: source, cloud_mutations: 0, cloud_invocations: 0, packages: receipts};
   json(path.join(out, 'build-receipt.json'), receipt);return receipt;
 }
 if (require.main === module) {

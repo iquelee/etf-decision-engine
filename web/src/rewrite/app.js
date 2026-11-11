@@ -40,7 +40,7 @@ createApp({
   setup() {
     const notice = useAdminOperationNotice();
     return () => h(AdminOperationNotice, {state: notice.state.value,
-      reviewed: notice.reviewed.value, feedback: notice.feedback.value, 'onUpdate:reviewed': value => {notice.reviewed.value = value;},
+      reviewed: notice.reviewed.value, feedback: notice.feedback.value, queueVerified: notice.queueVerified.value, 'onUpdate:reviewed': value => {notice.reviewed.value = value;},
       onReview: notice.review, onAcknowledge: notice.acknowledge});
   }
 }).mount(noticeHost);

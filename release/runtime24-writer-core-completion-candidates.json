@@ -1,0 +1,78 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "source_commit": "87aab3487b81d7f8ebc60423c3435a0e5b0a0855",
+  "release_scope": "V3_CORE_ONLY",
+  "excluded_producers": [
+    "runGen1ShadowEod",
+    "runGen2ShadowEod"
+  ],
+  "archive_helper_sha256": "cc3e6c01887ae439490eb221b44466e261e1ab22c34bf79fe418ee8efb03e7f1",
+  "cloud_mutations": 0,
+  "cloud_invocations": 0,
+  "packages": [
+    {
+      "producer": "fetchFundamentalNews",
+      "target": "fetchFundamentalNewsNode24",
+      "input_files": 1725,
+      "output_files": 1741,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 540,
+      "memory_mb": 256,
+      "zip_sha256": "14b57aa28024e083acddfe6acbbf71ecbf35f6d97ea893484163140ed9264151",
+      "map_sha256": "892e68da8f0fcc10dfdd0e632b30e868322e79ff1ae9dc78ca1b0487bdacac0e",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "extractFundamental",
+      "target": "extractFundamentalNode24",
+      "input_files": 1725,
+      "output_files": 1741,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 180,
+      "memory_mb": 256,
+      "zip_sha256": "f417871b476bd3bdb10508aafffb0245f951b4fc2024b7a84300d90b4c95f100",
+      "map_sha256": "2c4d8301bfc7c54b3e42a983dc41ad00d60ec6ea09b154e103d049049c95fc80",
+      "preserved_symlinks": []
+    }
+  ],
+  "qualification": "OFFLINE_ONLY_NOT_DEPLOYED_OR_NATURALLY_ACCEPTED",
+  "input_capture": "HISTORICAL_RAW_MAPS_NOT_FRESH_LIVE_BASELINE",
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_COMPLETION_ZIP_BOUNDARY",
+  "actual_sdk_business": {
+    "fetchFundamentalNews": {
+      "comparison_cases": 9,
+      "business_writes_each_side": 320,
+      "commit_ack_loss_cases": 2,
+      "durable_completion": true
+    },
+    "extractFundamental": {
+      "comparison_cases": 8,
+      "business_writes_each_side": 265,
+      "commit_ack_loss_cases": 2,
+      "durable_completion": true
+    }
+  },
+  "completion_protocol": {
+    "cases": 20,
+    "evidence": "ACTUAL_SDK_MEMORY_WIRE",
+    "atomic_finish": "CONTROL_DUAL_RECEIPTS_COMPLETION",
+    "late_finish_preserves_hold": true,
+    "inspector": "SNAPSHOT_READ_ONLY_NO_COMMIT_OR_RELEASE",
+    "can_release": false,
+    "can_retry": false
+  },
+  "dispatch_host_to_long_children": "NOT_QUALIFIED",
+  "long_duration_and_platform_qualification": "NOT_PROVEN"
+}

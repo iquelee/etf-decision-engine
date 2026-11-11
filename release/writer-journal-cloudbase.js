@@ -61,7 +61,12 @@ function createProductionStore(options) {
   assert(productionNamespace.scopes.includes(binding.scope), 'production scope not declared');
   return createStoreInNamespace(database, productionNamespace.collection, binding);
 }
-function createStoreInNamespace(database, collection, supplied) {
+function createCoreCompletionStore(options) {
+  assert(options && typeof options === 'object');assert.deepStrictEqual(Object.keys(options).sort(), ['binding', 'database']);
+  require('./writer-completion').target(options.binding);
+  return createStoreInNamespace(options.database, productionNamespace.collection, options.binding, true);
+}
+function createStoreInNamespace(database, collection, supplied, completionEnabled = false) {
   assert(database && typeof database.startTransaction === 'function' && typeof database.collection === 'function');
   const binding = Object.freeze(clone(supplied));
   assert.deepStrictEqual(Object.keys(binding).sort(), ['environment', 'scope']);
@@ -79,6 +84,7 @@ function createStoreInNamespace(database, collection, supplied) {
     return decode(row, docId, binding, kind);
   }
   return {
+    ...(completionEnabled ? {completionProtocol: 'core-completion-v1'} : {}),
     async read(b) {
       checkBinding(b);
       return get(database.collection(collection).doc(controlId), controlId, 'control', false);
@@ -114,10 +120,22 @@ function createStoreInNamespace(database, collection, supplied) {
         for (const r of [...requests.values(), ...tokens.values()]) if (r) {
           assert(isDeepStrictEqual(await load('request', r.request_id), await load('token', r.token)), 'receipt index divergence');
         }
+        let completionId;
+        if (lookup.completion !== undefined) {
+          assert(completionEnabled, 'completion not enabled');const c = require('./writer-completion');c.validate(lookup.completion, binding);
+          completionId = c.id(binding, lookup.completion);const raw = await col.doc(completionId).get();okay(raw);
+          assert.strictEqual(raw.data, null, 'completion evidence is immutable and cannot be replaced');
+        }
         const find = (cache, value) => { assert(cache.has(value), 'lookup not declared'); return clone(cache.get(value)); };
         const change = callback({control: clone(control), findRequest: value => find(requests, value), findToken: value => find(tokens, value)});
         assert(!change || typeof change.then !== 'function', 'synchronous pure callback required');
         if (!change) { okay(await tx.rollback()); return true; }
+        assert(Object.hasOwn(change, 'control') && Object.keys(change).every(k => ['control', 'receipt', 'completion'].includes(k)));
+        if (lookup.completion !== undefined || change.completion !== undefined) {
+          assert(completionEnabled && completionId && isDeepStrictEqual(change.completion, lookup.completion));
+          const c = require('./writer-completion'), r = change.receipt;
+          assert(r && r.status === 'COMPLETE');for (const [k, v] of Object.entries(c.identity(binding, r))) assert.strictEqual(change.completion[k], v);
+        }
         assert.strictEqual(change.control.revision, control.revision + 1);
         const encoded = encodeControl(change.control, binding);
         // Every mutation writes this SAME document in the snapshot transaction.
@@ -144,6 +162,10 @@ function createStoreInNamespace(database, collection, supplied) {
             }
           }
         }
+        if (change.completion !== undefined) {
+          const ack = await col.doc(completionId).create(require('./writer-completion').encode(change.completion, binding));okay(ack);
+          assert(ack.inserted === 1 && ack.ok === 1 && ack.id === completionId, 'completion insert acknowledgement');
+        }
         commitAttempted = true;
         okay(await tx.commit());
         return true;
@@ -156,4 +178,4 @@ function createStoreInNamespace(database, collection, supplied) {
     }
   };
 }
-module.exports = {id, encodeControl, encodeReceipt, decode, createStore, createProductionStore, productionNamespace};
+module.exports = {id, encodeControl, encodeReceipt, decode, createStore, createProductionStore, createCoreCompletionStore, productionNamespace};

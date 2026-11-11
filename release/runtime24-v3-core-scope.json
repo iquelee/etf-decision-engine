@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "scope": "V3_CORE_ONLY",
+  "owner_instruction_date": "2026-11-10",
+  "owner_instruction": "这次的升级只涉及V3 core，关于Gen-1和Gen-2的代码和功能不要进行调整。",
+  "writers": [
+    "runDecisionEngine",
+    "materializeIndicators",
+    "adminGateway",
+    "fetchDailyData",
+    "fetchRealtimeData",
+    "fetchFundamentalNews",
+    "extractFundamental"
+  ],
+  "reader_already_migrated": "apiGatewayNode24",
+  "excluded_writers": ["runGen1ShadowEod", "runGen2ShadowEod"],
+  "excluded_actions": ["code_or_function_change", "candidate_packaging", "deployment", "timer_or_configuration_change", "model_or_strategy_change"],
+  "historical_gen1_gen2_material": "PRESERVE_AS_HISTORICAL_EVIDENCE_ONLY_NOT_CURRENT_RELEASE_TARGETS",
+  "shared_dependency_rule": "Preserve each captured Core package; do not deploy shared common changes into Gen1/Gen2 packages.",
+  "deployment_authorization": "SEPARATE_EXACT_SOURCE_SHA_APPROVAL_STILL_REQUIRED"
+}

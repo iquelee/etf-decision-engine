@@ -12,6 +12,14 @@ const policies = Object.freeze({
   extractFundamental: Object.freeze({'newsExtract-1640': '0 40 16 * * 1-5 *', 'intelExtract-30min': '0 5,35 8-22 * * * *'})
 });
 const message = 'writer-root-timer-v1';
+// Observed SCF ListTriggers on 2026-11-03: Gen2 runs in explicit REPLAY mode.
+// Its actual entry parses Message as JSON. Preserve that business contract;
+// never replace it with a generic marker or silently change REPLAY to LIVE.
+const gen2Message = '{"mode":"REPLAY"}';
+function messageFor(producer) {
+  assert(Object.hasOwn(policies, producer), 'native timer producer required');
+  return producer === 'runGen2ShadowEod' ? gen2Message : message;
+}
 function matches(cron, time) {
   // Only the reviewed numeric subset used by the fixed policies above.
   // No generic user-supplied cron parser or ambiguous day/week OR inference.
@@ -35,7 +43,7 @@ function createTimerIdentity({environment, producer, target, owner = 'new', runt
     assert(event && typeof event === 'object' && !Array.isArray(event));const e = {...event};
     for (const key of ['tcbContext', 'userInfo']) if (Object.hasOwn(e, key)) {assert.deepStrictEqual(e[key], {});delete e[key];}
     assert.deepStrictEqual(Object.keys(e).sort(), ['Message', 'Time', 'TriggerName', 'Type']);
-    assert(e.Type === 'Timer' && e.Message === message && Object.hasOwn(policies[producer], e.TriggerName));
+    assert(e.Type === 'Timer' && e.Message === messageFor(producer) && Object.hasOwn(policies[producer], e.TriggerName));
     assert(typeof e.Time === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.000)?Z$/.test(e.Time));
     const time = new Date(e.Time), scheduled = time.toISOString();
     assert.strictEqual(scheduled.replace('.000Z', 'Z'), e.Time.replace('.000Z', 'Z'), 'invalid timer date');
@@ -43,4 +51,4 @@ function createTimerIdentity({environment, producer, target, owner = 'new', runt
     return {request_id: scheduledRequest({environment, producer, trigger_name: e.TriggerName, scheduled_for: scheduled}), business: e};
   };
 }
-module.exports = {createTimerIdentity, policies, message};
+module.exports = {createTimerIdentity, policies, message, messageFor};

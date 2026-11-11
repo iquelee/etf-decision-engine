@@ -59,11 +59,13 @@ function authenticate(event, {binding, target, owner, key}) {
   assert(Number.isSafeInteger(body.epoch) && body.epoch >= 0 && Number.isSafeInteger(body.revision) && body.revision >= 0);
   json(body.business); return body;
 }
-function createWorker({store, binding, target, owner, key, runtimeIdentity, loadMain}) {
+function createWorker({store, binding, target, owner, key, runtimeIdentity, loadMain, recordCompletion = false}) {
   bindingCheck(binding); keyCheck(key); key = Buffer.from(key);
   binding = {...binding};
   assert(text(target) && ['old', 'new'].includes(owner));
   assert(typeof runtimeIdentity === 'function' && typeof loadMain === 'function');
+  assert.strictEqual(typeof recordCompletion, 'boolean');
+  if (recordCompletion) {assert.strictEqual(target, require('./writer-completion').target(binding) + 'Node24');assert(owner === 'new' && store.completionProtocol === 'core-completion-v1');}
   return async (event, context) => {
     let wire;
     try {
@@ -74,7 +76,7 @@ function createWorker({store, binding, target, owner, key, runtimeIdentity, load
     } catch (_) { return {protocol: 'writer-result-v1', executed: false, admission: 'ENTRY_AUTHENTICATION_FAILED'}; }
     const identity = {owner: wire.owner, epoch: wire.epoch, revision: wire.revision, request_id: wire.request_id, token: wire.token};
     let definiteConflict = false;
-    const observedStore = {read: b => store.read(b), async transaction(...args) {
+    const observedStore = {...(recordCompletion ? {completionProtocol: store.completionProtocol} : {}), read: b => store.read(b), async transaction(...args) {
       try { return await store.transaction(...args); }
       catch (error) {
         // D-024 qualified this specific platform abort code. Never infer an
@@ -87,7 +89,7 @@ function createWorker({store, binding, target, owner, key, runtimeIdentity, load
       // Import the entire original business entry only AFTER admission commit.
       const main = await loadMain(); assert.strictEqual(typeof main, 'function');
       return main(wire.business, context);
-    });
+    }, recordCompletion);
     if (result.executed === false && definiteConflict) result.admission = 'TRANSACTION_CONFLICT';
     return {protocol: 'writer-result-v1', request_id: wire.request_id, token: wire.token, owner, epoch: wire.epoch, ...result};
   };

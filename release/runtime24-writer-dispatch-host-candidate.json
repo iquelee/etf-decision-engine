@@ -1,0 +1,24 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "release_scope": "V3_CORE_ONLY",
+  "source_commit": "85584b95671eefdd20e5441f9f86752507e8a08d",
+  "target": "writerDispatchNode24",
+  "output_files": 1719,
+  "unchanged_dependencies": 1703,
+  "zip_sha256": "00daeb2a94949fb0bac48891c2bed69e8fed454b67f551d06551043895bd8ee6",
+  "map_sha256": "62706d3741d1723b40203634fd0dc75c231106ed63c505f8125ea05b2d0d2cce",
+  "sdk_input_map_sha256": "6719846f59b2b86a9bd8e6e1536077de132dc0d525a39f89c7ad215c2269e1a4",
+  "cloud_calls": 0,
+  "cloud_mutations": 0,
+  "qualification": "OFFLINE_ONLY_NOT_DEPLOYED_OR_NATURALLY_ACCEPTED",
+  "input_capture": "HISTORICAL_RAW_MAPS_NOT_FRESH_LIVE_BASELINE",
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_STATUS_HOST_ZIP_BOUNDARY",
+  "actual_sdk": {
+    "cases": 10,
+    "sealed_host_entry": true,
+    "boundary": "ACTUAL_SDK_MEMORY_WIRE",
+    "network_attempts": 0,
+    "platform_timer_source": "NOT_PROVEN",
+    "long_task_qualification": "NOT_PROVEN"
+  }
+}

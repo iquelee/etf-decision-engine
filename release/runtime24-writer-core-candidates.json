@@ -1,0 +1,140 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "source_commit": "b91e7913096c0a04782a1571f6f826ed5e306de3",
+  "release_scope": "V3_CORE_ONLY",
+  "excluded_producers": [
+    "runGen1ShadowEod",
+    "runGen2ShadowEod"
+  ],
+  "archive_helper_sha256": "cc3e6c01887ae439490eb221b44466e261e1ab22c34bf79fe418ee8efb03e7f1",
+  "cloud_mutations": 0,
+  "cloud_invocations": 0,
+  "packages": [
+    {
+      "producer": "fetchDailyData",
+      "target": "fetchDailyDataNode24",
+      "input_files": 1767,
+      "output_files": 1782,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "timeout_seconds": 120,
+      "memory_mb": 256,
+      "zip_sha256": "cc5681c06fe4cc87edacb5447c52c1dfa99dddcfe2ffa4008ca122d6aa88bb15",
+      "map_sha256": "2ccf0bd0a823bc408418edf3bdd7913fe76d8f113b3593a40b402ef8aa253b9f",
+      "preserved_symlinks": [
+        "node_modules/.bin/semver",
+        "node_modules/.bin/sshpk-conv",
+        "node_modules/.bin/sshpk-sign",
+        "node_modules/.bin/sshpk-verify",
+        "node_modules/.bin/uuid"
+      ]
+    },
+    {
+      "producer": "fetchRealtimeData",
+      "target": "fetchRealtimeDataNode24",
+      "input_files": 1791,
+      "output_files": 1806,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 60,
+      "memory_mb": 256,
+      "zip_sha256": "ae8ad5a232143ee9b91ef260d7a4ddc620af944f27b7b9129137b23adfd7f2ba",
+      "map_sha256": "2ddd237fd5ab60abcb1d772cfbb9381d6e48632cdc21763b13355ed1d910b6c9",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "fetchFundamentalNews",
+      "target": "fetchFundamentalNewsNode24",
+      "input_files": 1725,
+      "output_files": 1740,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 540,
+      "memory_mb": 256,
+      "zip_sha256": "b63834c09f4c08ec252d240b0b405bed37b4a959b5e8986f5ccc3508189bd80b",
+      "map_sha256": "e0b2c3698537f6f2ece605a9f14a576d29d910fdf2ab49a091fa296207222518",
+      "preserved_symlinks": []
+    },
+    {
+      "producer": "extractFundamental",
+      "target": "extractFundamentalNode24",
+      "input_files": 1725,
+      "output_files": 1740,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "timeout_seconds": 180,
+      "memory_mb": 256,
+      "zip_sha256": "afc39c42643ec7a7360bdee1fe3a5e4f0c16da90499a2cb437ffb901c87aa14d",
+      "map_sha256": "3817501190d7d50c23bcdba34c5fa0b82092b49eae3b6630364f3aeacf7d15a6",
+      "preserved_symlinks": []
+    }
+  ],
+  "qualification": "OFFLINE_ONLY_NOT_DEPLOYED_OR_NATURALLY_ACCEPTED",
+  "input_capture_date": "2026-11-03_NOT_A_FRESH_LIVE_BASELINE",
+  "positive_sdk_replays": {
+    "fetchRealtimeData": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 6,
+      "business_writes": 23,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "commit_ack_loss_cases": 2,
+      "ambiguous_execution_policy": "HOLD_NO_AUTOMATIC_RETRY"
+    },
+    "fetchDailyData": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 9,
+      "business_writes": 900,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "child_response_loss_cases": 1,
+      "child_execution": "NOT_RUN_CHILD_TRANSPORT_FIXTURE_ONLY",
+      "ambiguous_execution_policy": "PARENT_AND_CHILD_HOLD_NO_AUTOMATIC_RETRY"
+    },
+    "fetchFundamentalNews": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 9,
+      "business_writes_each_side": 320,
+      "provider_fixture_requests_each_side": 299,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN",
+      "evidence_receipt": "release/runtime24-writer-core-fundamental-sdk.json"
+    },
+    "extractFundamental": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 8,
+      "business_writes_each_side": 265,
+      "provider_fixture_requests_each_side": 37,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN",
+      "evidence_receipt": "release/runtime24-writer-core-fundamental-sdk.json"
+    }
+  },
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_ZIP_BOUNDARY"
+}

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert'), path = require('path');
-const {createTimerIdentity, policies, message} = require('../release/writer-timer-identity');
+const {createTimerIdentity, policies, message, messageFor} = require('../release/writer-timer-identity');
 const {createLocalRoot} = require('../release/writer-local-root');
 const adapter = require('../release/writer-journal-cloudbase'), journal = require('../release/writer-admission-journal');
 const entry = require('../release/writer-entry');
@@ -9,7 +9,7 @@ const {createHarness} = require('../scripts/lib/rde-offline-harness');
 const env = adapter.productionNamespace.environment, key = Buffer.alloc(32, 11);
 const proof = {reference: 'fixture:terminal', entries_closed: true, executions_terminal: true, retries_accounted_for: true};
 const copy = value => JSON.parse(JSON.stringify(value));
-const event = (TriggerName = 'dailyPipeline-0800', Time = '2026-10-29T00:00:00Z') => ({Type: 'Timer', TriggerName, Time, Message: message});
+const event = (TriggerName = 'dailyPipeline-0800', Time = '2026-10-29T00:00:00Z', Message = message) => ({Type: 'Timer', TriggerName, Time, Message});
 async function main() {
   const dates = {'dailyFetch-2200': '2026-10-29T14:00:00Z', 'dailyPipeline-0800': '2026-10-29T00:00:00Z',
     'realtime-5min': '2026-10-29T01:05:00Z', 'gen1-eod-weekdays-2220': '2026-10-29T14:20:00Z',
@@ -22,7 +22,7 @@ async function main() {
     let runtime = {environment: env, function_name: target, node_major: 24, trigger_source: 'timer'};
     const identify = createTimerIdentity({environment: env, producer, target, runtimeIdentity: () => runtime});
     for (const name of Object.keys(triggers)) {
-      const input = event(name, dates[name]);const identity = await identify(input, {});timerCases++;
+      const input = event(name, dates[name], messageFor(producer));const identity = await identify(input, {});timerCases++;
       assert.deepStrictEqual(identity.business, input);assert(!ids.has(identity.request_id));ids.add(identity.request_id);
       assert.strictEqual((await identify({...input, Time: input.Time.replace('Z', '.000Z')}, {request_id: 'different-attempt'})).request_id, identity.request_id);
       assert.notStrictEqual((await identify({...input, Time: input.Time.replace('2026-10-29', '2026-10-30')}, {})).request_id, identity.request_id);
@@ -32,6 +32,21 @@ async function main() {
         {...input, Time: input.Time.replace(':00Z', ':01Z')}, {...input, Time: '2026-02-30T00:00:00Z'},
         {...input, Time: input.Time.replace('Z', '+00:00')}, {...input, tcbContext: {TRIGGER_SRC: 'timer'}}])
         await assert.rejects(identify(bad, {}));
+      if (producer === 'runGen2ShadowEod') {
+        for (const Message of [message, '{"mode":"LIVE"}', '{"mode":"REPLAY","force":true}', '{ "mode": "REPLAY" }'])
+          await assert.rejects(identify({...input, Message}, {}));
+      }
+      // Exercise every fixed policy through its actual bootstrap, including
+      // source rejection before SDK initialization and in-process retry dedup.
+      const wired = await fixture(producer), callsBefore = wired.b.calls.length;
+      assert.strictEqual((await wired.bootstrap.main(input, wired.context)).executed, false);
+      assert.strictEqual(wired.b.calls.length, callsBefore);assert.strictEqual(wired.state.inits.length, 0);
+      wired.state.triggerSource = 'timer';
+      assert.deepStrictEqual(await wired.bootstrap.main(input, wired.context), {ok: false, echoed: input});
+      assert.strictEqual((await wired.bootstrap.main({...input, Time: input.Time.replace('Z', '.000Z')},
+        {...wired.context, request_id: 'fixture:another-native-attempt'})).reason, 'ALREADY_COMPLETE');
+      assert.strictEqual(wired.state.loads, 1);
+      assert.strictEqual(wired.b.rows().length, ['fetchFundamentalNews', 'extractFundamental'].includes(producer) ? 4 : 3);
     }
   }
   assert.strictEqual(timerCases, 9);assert.strictEqual(ids.size, 9);

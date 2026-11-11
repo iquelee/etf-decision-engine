@@ -15,6 +15,7 @@
 // ⚠️ `import.meta.env` 由 Vite 注入；裸 Node（跑测试）下为 undefined ⇒ 用空对象兜底，
 //    使本模块可在无打包器环境下被 import（api-client 测试需要）。
 import {fetchAdminOperation} from '../utils/admin-operations.js';
+import {isDispatchEndpoint, unwrapCoreDispatch} from '../utils/core-dispatch.js';
 const ENV = import.meta.env || {};
 const API_BASE = ENV.VITE_API_BASE || '';
 const ADMIN_BASE = ENV.VITE_ADMIN_BASE || '';
@@ -138,7 +139,7 @@ async function call(base, path, { method = 'GET', body, auth = false, signal, ti
   if (json && json.code != null && json.code !== 0) {
     throw new ApiError(API_ERROR_KIND.ENVELOPE, json.message || '请求失败', { code: json.code, httpStatus: res.status });
   }
-  return json && 'data' in json ? json.data : json;
+  return isDispatchEndpoint(path) ? unwrapCoreDispatch(json,path) : json && 'data' in json ? json.data : json;
 }
 
 const q = (obj = {}) => {

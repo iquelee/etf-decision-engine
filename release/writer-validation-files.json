@@ -8,6 +8,7 @@
     "scripts/lib/verified-writer-package.js": "ab20ccf7d032df055d12e3f9b64af5d9477e20d6b69fa20f52ffc176a4cbe132",
     "scripts/lib/writer-admission-memory-store.js": "37ef9e0ad1aa6eaf4ef94d5b2cd7f9a3d7a7b3f3cfece0bde2948cba9d7f95df",
     "scripts/prepare-admission-probe.js": "d07815179a83908ba5253c3983fcffbafb6214d31ffd37a560163e844dc6ce07",
+    "scripts/writer-gen2-timer-compatibility.js": "b55e2c7e26c88bbdbec6aee210016c29c5241659dd0fb6ac0a1d6b6148ecea08",
     "scripts/writer-package-replay.js": "b8e3d730964578f5966a27c3b0f1e350cf6613277818c11b47eba5f421c2b1ab"
   }
 }

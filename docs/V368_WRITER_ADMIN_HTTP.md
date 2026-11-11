@@ -2,6 +2,8 @@
 
 状态：**OFFLINE_ADMIN_HTTP_NOT_QUALIFIED**。本批没有云端部署、调用、建表、路由或生产写入。最后云端实证仍为 D-026 的隔离长转发失败。本文件不构成上线授权。
 
+2026-11-10后续进展：仅限Core的[后台实际SDK对照及派发事务计划](V368_CORE_ADMIN_SDK_DISPATCH.md)已补充；异步派发仍未接线。下文保留旧批次的模型和包证据，不作为当前完整后台资格。
+
 `writer-admin-http.js` 已接到 `writer-worker-bootstrap.js` 的第三个静态目标 `adminGatewayNode24`，原后台业务预算保持 60 秒。包仍不附 HTTP 路由或 trigger，也没有签名密钥。新密钥来自 `WRITER_ADMIN_SIGNING_KEY_HEX`；RDE 子调用还需 RDE 密钥。当前候选所有入口（包括读请求）都要求相关密钥配置及正确 Node24/环境/函数身份，否则拒绝；生产切换前必须验证密钥供应与读可用性。
 
 ## 人工身份和鉴权
