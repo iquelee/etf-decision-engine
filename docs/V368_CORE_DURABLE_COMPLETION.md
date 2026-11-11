@@ -27,3 +27,20 @@ Core四包构建器给新闻/抽取额外加入封存`writer-completion.js`和�
 ## 资格限制
 
 这一步让“worker已经结束”的事实不再只依赖转发返回，但没有解决长任务异步投递、原生Timer来源/重试、真实事务隔离和完整排空。现有15秒/最多135秒的同步派发宿主仍未获得承接新闻540秒/抽取180秒的资格，不能扩大本地超时或缩短业务预算冒充修复。后续需要接精确对账查询、冻结可审查的人工处置流程，再完成投递机制与平台隔离验证；任何云端执行继续绑定实际源码/ZIP/配置与资源范围。
+
+## 封存结果
+
+源码及两包均绑定`87aab3487b81d7f8ebc60423c3435a0e5b0a0855`。公开收据`release/runtime24-writer-core-completion-candidates.json`；仓外证据`_v3-core-review-20261027/core-completion-87aab34-20261111`保留ZIP/map、构建收据、独立Python核验器、实际业务/协议SDK报告、完整回归日志与工具字节。历史b91e791包保持，不用本收据替换其来源。
+
+| 候选 | 文件数 / 原依赖数 | 原预算 | ZIP SHA256 |
+| --- | --- | --- | --- |
+| fetchFundamentalNewsNode24 | 1741 / 1701 | 540秒 | `14b57aa28024e083acddfe6acbbf71ecbf35f6d97ea893484163140ed9264151` |
+| extractFundamentalNode24 | 1741 / 1701 | 180秒 | `f417871b476bd3bdb10508aafffb0245f951b4fc2024b7a84300d90b4c95f100` |
+
+本步只构建上述两包。13个封存模块（含completion）、原始依赖、SDK import的单次替换、目录/文件模式及ZIP/map均独立核验；候选环境和triggers为空。输入仍为历史下载的原始map，不是最新线上基线。
+
+20组持久完成/对账场景在Node22/24模型及实际SDK内存wire通过；完整Stage A为113/113。首次完整回归的旧Timer断言仍要求所有producer只有3文档，已限定仅新闻/抽取为4文档，其余保持3，再完整复跑通过。敏感扫描、冻结23项、候选31文件和当前legacy扩展/负向自测通过。没有前端改动或新的前端构建结论。
+
+新包实际业务入口复跑17组对照及4组提交丢ACK：每侧新闻320写、抽取265写，完整业务返回、写入及所有最终表保持；正常完成均有精确身份绑定的脱敏摘要（含ok:false对应REPORTED_FAILURE）。准入丢ACK没有摘要，finish实际提交后丢ACK保留摘要和双COMPLETE，调用方仍HOLD且重投零业务。报告`durable_completion=true`来自包内实际摘要读取，不是仅验证源码工厂。
+
+本步没有部署、原生Timer调用或长时云端验证。只读对账器仍为离线候选，尚未接后台API/前端，也没有改变现有dispatch job schema或HOLD状态机。
