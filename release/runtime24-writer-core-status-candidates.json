@@ -1,0 +1,69 @@
+{
+  "status": "OFFLINE_ONLY_NOT_DEPLOYED_OR_QUALIFIED",
+  "release_scope": "V3_CORE_ONLY",
+  "source_commit": "85584b95671eefdd20e5441f9f86752507e8a08d",
+  "cloud_mutations": 0,
+  "cloud_invocations": 0,
+  "packages": [
+    {
+      "producer": "runDecisionEngine",
+      "target": "runDecisionEngineNode24",
+      "input_files": 1799,
+      "output_files": 1814,
+      "unchanged_input_files": 1796,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "zip_sha256": "39fbefbac48719191a1e0d3b5429d7e0f38a3f4ed263391385ed21ac2e6eeaf8",
+      "map_sha256": "d3ca9b73e5575b6afb3efbceab16b2d7964fe7d5ebabd541a37ed40429448430"
+    },
+    {
+      "producer": "materializeIndicators",
+      "target": "materializeIndicatorsNode24",
+      "input_files": 1791,
+      "output_files": 1806,
+      "unchanged_input_files": 1787,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1701,
+      "zip_sha256": "14e57ac3c6d76a7537947aa0f32ca9c9c4a6d98460a312445793af44c5953e16",
+      "map_sha256": "ee74fa1affe8ee7c83aee2b65d5567a80e1d908ae5fe7bb2b7a46b012518ea8b"
+    },
+    {
+      "producer": "adminGateway",
+      "target": "adminGatewayNode24",
+      "input_files": 1793,
+      "output_files": 1813,
+      "unchanged_input_files": 1789,
+      "changed_input_files": [
+        "common/utils/db.js",
+        "common/utils/intel-refresh.js",
+        "config.json",
+        "index.js"
+      ],
+      "dependency_files_unchanged": 1703,
+      "zip_sha256": "a9d12e9b7b97e5af2d646a82d81b18fb17e16444abe9cc5f978a427a60a59529",
+      "map_sha256": "bb5dea4a0115a28944e40c799e1523b1d1b3f9e76f5299acaaa30ea033bc9d3c"
+    }
+  ],
+  "qualification": "OFFLINE_ONLY_NOT_DEPLOYED_OR_NATURALLY_ACCEPTED",
+  "input_capture": "HISTORICAL_RAW_MAPS_NOT_FRESH_LIVE_BASELINE",
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_STATUS_HOST_ZIP_BOUNDARY",
+  "admin_actual_sdk": {
+    "comparison_cases": 6,
+    "business_writes_each_side": 167,
+    "denial_cases": 4,
+    "queued_cases": 6,
+    "readonly_exact_status_cases": 6,
+    "enqueue_ack_fault_cases": 2,
+    "dispatch_execution": "NOT_WIRED_TO_REAL_CHILD_BUSINESS",
+    "cloud_calls": 0
+  }
+}

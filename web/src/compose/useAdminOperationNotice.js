@@ -21,6 +21,7 @@ export function useAdminOperationNotice() {
         if(state.value.record?.id!==id || JSON.stringify(state.value.record.dispatch)!==receipt) throw Error('操作记录已变化，请重新核验');
         feedback.value=statuses.map(dispatchStatusMessage).join('；');
         if(statuses.every(s=>s.state==='COMPLETE')) {await adminOperations.requestReview(id);
+          if(generation!==reviewGeneration) return;
           if(state.value.record?.id!==id || JSON.stringify(state.value.record.dispatch)!==receipt) throw Error('操作记录已变化，请重新核验');queueVerified.value=true;}
         return;
       }

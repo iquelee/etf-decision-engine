@@ -35,3 +35,22 @@ node tests/writer-dispatch-host.test.js --host-package <新目录/writerDispatch
 新增状态单测覆盖四状态、会话/方法/参数拒绝、公开字段白名单、零准入/业务写、损坏记录和前端精确身份绑定。实际网关缓存、CORS、鉴权转发和原生元数据仍需平台实证，尤其不能假定客户端no-store已经替代网关缓存配置。
 
 后续仍需新闻/抽取实际SDK闭包、长任务完成协议、队列/实例排空及最新线上漂移检查，再形成全部源码/包/配置与资源初始化的精确授权申请。没有部署或自然验收通过的结论。
+
+## 封存结果
+
+四包源码均为`85584b95671eefdd20e5441f9f86752507e8a08d`，不是后续补充文档的提交。公开收据为`release/runtime24-writer-core-status-candidates.json`和`release/runtime24-writer-dispatch-host-candidate.json`。本机证据目录为仓外`_v3-core-review-20261027/dispatch-status-host-85584b9-20261111`，保存ZIP、逐文件map、构建收据、独立Python核验器及原始测试日志。原始输入绑定历史下载map；不是11-11新采集的线上基线。
+
+| 候选 | 文件数 | 保持原字节的依赖文件数 | ZIP SHA256 |
+| --- | ---: | ---: | --- |
+| runDecisionEngineNode24 | 1814 | 1703 | `39fbefbac48719191a1e0d3b5429d7e0f38a3f4ed263391385ed21ac2e6eeaf8` |
+| materializeIndicatorsNode24 | 1806 | 1701 | `14e57ac3c6d76a7537947aa0f32ca9c9c4a6d98460a312445793af44c5953e16` |
+| adminGatewayNode24 | 1813 | 1703 | `a9d12e9b7b97e5af2d646a82d81b18fb17e16444abe9cc5f978a427a60a59529` |
+| writerDispatchNode24 | 1719 | 1703 | `00daeb2a94949fb0bac48891c2bed69e8fed454b67f551d06551043895bd8ee6` |
+
+独立核验直接读取ZIP，检查无重复/越界路径、固定时间/文件模式、全部map摘要、Git源码模块及原始依赖字节。后台三包原始SDK引用只做一次替换，其他业务/common保持；宿主只包含12个封存源文件、4个生成文件及1703依赖，没有原后台业务或ML模块。四包均无签名key或触发器。
+
+实际封存宿主index的10组验证通过，`sealed_host_entry=true`，外部数据库/HTTP仍为fixture，网络尝试为0。后台实际包六组普通业务对照保持每侧167写和最终集合；四类拒绝、六组接单及两类提交丢ACK通过。六组接单均额外通过精确GET查回PREPARED公开摘要，确认查询不增加journal写或执行子业务；不将它计作四个下游真实业务闭包。
+
+本地完整Stage A为112/112，状态查询在Node22/24通过，前端23组及Vite构建通过；敏感扫描、冻结23项、候选31文件和当前候选legacy扩展及负向自测通过。历史V364原始门禁仍拒绝13项早已记录的分歧，未修改其白名单；发布候选使用已有`release/verify-legacy-divergence.js`逐字节验证这些显式分歧。前端最后补充并发代次复核，属于后续源码提交，不改变以上封存包字节。
+
+本步没有创建或调用任何云资源。新闻/抽取业务、长任务协议、异常人工对账/排空、原生Timer及HTTP网关鉴权/CORS/缓存仍须继续验证，禁止以本节离线结果宣布生产写链迁移或自然运行完成。
