@@ -1,0 +1,73 @@
+{
+  "status": "PASS_CORE_FUNDAMENTAL_ACTUAL_SDK_MEMORY_WIRE",
+  "release_scope": "V3_CORE_ONLY",
+  "package_source": "b91e7913096c0a04782a1571f6f826ed5e306de3",
+  "validation_source": "3b1b90994d7437447a9b40575290db9dd625b659",
+  "input_capture": "HISTORICAL_RAW_MAPS_NOT_FRESH_LIVE_BASELINE",
+  "packages": [
+    {
+      "producer": "fetchFundamentalNews",
+      "target": "fetchFundamentalNewsNode24",
+      "files": 1740,
+      "preserved_dependencies": 1701,
+      "zip_sha256": "b63834c09f4c08ec252d240b0b405bed37b4a959b5e8986f5ccc3508189bd80b",
+      "map_sha256": "e0b2c3698537f6f2ece605a9f14a576d29d910fdf2ab49a091fa296207222518",
+      "timeout_seconds": 540
+    },
+    {
+      "producer": "extractFundamental",
+      "target": "extractFundamentalNode24",
+      "files": 1740,
+      "preserved_dependencies": 1701,
+      "zip_sha256": "afc39c42643ec7a7360bdee1fe3a5e4f0c16da90499a2cb437ffb901c87aa14d",
+      "map_sha256": "3817501190d7d50c23bcdba34c5fa0b82092b49eae3b6630364f3aeacf7d15a6",
+      "timeout_seconds": 180
+    }
+  ],
+  "results": {
+    "fetchFundamentalNews": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 9,
+      "business_writes_each_side": 320,
+      "provider_fixture_requests_each_side": 299,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN"
+    },
+    "extractFundamental": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 8,
+      "business_writes_each_side": 265,
+      "provider_fixture_requests_each_side": 37,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN"
+    }
+  },
+  "tool_bytes": {
+    "release/replay-core-fundamental-sdk.js": {
+      "executed_file_sha256": "c2ed3fc8a505013db51f975b8edb91019af360a64136f69b00d15219e4034525",
+      "git_blob_sha256": "c2ed3fc8a505013db51f975b8edb91019af360a64136f69b00d15219e4034525"
+    },
+    "release/writer-sdk-memory-wire.js": {
+      "executed_file_sha256": "516cf365e2b849082f019ebe6e355d3f1e20592c0d2d9d39462783e522b109bd",
+      "git_blob_sha256": "516cf365e2b849082f019ebe6e355d3f1e20592c0d2d9d39462783e522b109bd"
+    },
+    "tests/writer-sdk-memory-wire.test.js": {
+      "executed_file_sha256": "ec236908dd547028e366922c8721278a2ceb3cc421a3de3c52bac07636cf7846",
+      "git_blob_sha256": "ec236908dd547028e366922c8721278a2ceb3cc421a3de3c52bac07636cf7846"
+    }
+  },
+  "independent_zip_verification": "PASS_INDEPENDENT_CORE_FUNDAMENTAL_ZIP_BOUNDARY",
+  "wire_boundary": "ACTUAL_SDK_MEMORY_WIRE",
+  "clock_and_sleeps": "SYNTHETIC_NO_LONG_DURATION_PROOF",
+  "signed_fault_caller": "SEALED_CREATE_FACADE_WITH_MEMORY_TRANSPORT",
+  "dispatch_host_to_real_children": "NOT_RUN",
+  "cloud_calls": 0,
+  "cloud_mutations": 0,
+  "production_and_natural_qualification": "NOT_PROVEN"
+}

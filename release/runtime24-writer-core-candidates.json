@@ -111,8 +111,30 @@
       "child_execution": "NOT_RUN_CHILD_TRANSPORT_FIXTURE_ONLY",
       "ambiguous_execution_policy": "PARENT_AND_CHILD_HOLD_NO_AUTOMATIC_RETRY"
     },
-    "fetchFundamentalNews": "NOT_RUN",
-    "extractFundamental": "NOT_RUN"
+    "fetchFundamentalNews": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 9,
+      "business_writes_each_side": 320,
+      "provider_fixture_requests_each_side": 299,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN",
+      "evidence_receipt": "release/runtime24-writer-core-fundamental-sdk.json"
+    },
+    "extractFundamental": {
+      "status": "PASS_ACTUAL_SDK_MEMORY_WIRE",
+      "scenarios": 8,
+      "business_writes_each_side": 265,
+      "provider_fixture_requests_each_side": 37,
+      "commit_ack_loss_cases": 2,
+      "duplicate_business_calls": 0,
+      "network_attempts": 0,
+      "shared_tables_news_to_extract": "SEQUENTIAL_REAL_ENTRIES_NOT_HOST_DISPATCH",
+      "long_duration_and_platform_qualification": "NOT_PROVEN",
+      "evidence_receipt": "release/runtime24-writer-core-fundamental-sdk.json"
+    }
   },
   "independent_zip_verification": "PASS_INDEPENDENT_CORE_ZIP_BOUNDARY"
 }
