@@ -89,9 +89,10 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
       assert(rows.length <= 1);if (!rows.length) return null;
       const {_id, ...record} = rows[0];assert.strictEqual(_id, 'rollout:adminGateway');return record;
     }});
+    const dispatchStore = producer === 'adminGateway' ? require('./writer-dispatch-cloudbase').createStore({database}) : undefined;
     const candidate = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
       owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission,
-      ...(producer === 'adminGateway' ? {dispatchStore: require('./writer-dispatch-cloudbase').createStore({database})} : {})});
+      ...(dispatchStore ? {dispatchStore} : {})});
     const candidateRoot = timerIdentity ? createLocalRoot({store, binding, target: plan.target, owner: 'new', key: currentKeys[0],
       identify: timerIdentity, runtimeIdentity: runtime, worker: candidate.main}) : null;
     const candidateHttp = producer === 'adminGateway' ? createAdminHttpRoot({binding, target: plan.target, owner: 'new',
@@ -99,7 +100,7 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
       readToken: async () => {
         const rows = checkedRows(await database.collection('param_config').where({key: 'admin_token'}).limit(2).get());
         return rows.length === 1 && rows[0].value ? rows[0].value : null;
-      }, loadReadMain: () => loadMain(candidate.sdk)}) : null;
+      }, readDispatch: id => dispatchStore.read(id), loadReadMain: () => loadMain(candidate.sdk)}) : null;
     service = candidate;timerRoot = candidateRoot;httpRoot = candidateHttp;
     sealedKeys = currentKeys.map(key => Buffer.from(key));
   }

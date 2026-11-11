@@ -10,7 +10,7 @@ const git = (...args) => execFileSync('git', args, {cwd: repo, maxBuffer: 16 * 1
 const modules = ['writer-admission', 'writer-admission-cloudbase', 'writer-admission-journal', 'writer-journal-cloudbase',
   'writer-entry', 'writer-direct-caller', 'writer-invocation-worker', 'writer-worker-bootstrap', 'writer-local-root', 'writer-timer-identity',
   'writer-admin-http', 'writer-admin-maintenance'];
-const dispatchFiles = ['writer-dispatch-plan.js', 'writer-dispatch-cloudbase.js', 'runtime24-v3-core-scope.js', 'runtime24-v3-core-scope.json'];
+const dispatchFiles = ['writer-dispatch-plan.js', 'writer-dispatch-cloudbase.js', 'writer-dispatch-status.js', 'runtime24-v3-core-scope.js', 'runtime24-v3-core-scope.json'];
 function fileMap(root) {
   const files = {};
   function walk(dir) {for (const item of fs.readdirSync(dir, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {

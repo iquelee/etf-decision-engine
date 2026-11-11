@@ -56,16 +56,18 @@ async function setup(count=4, initialize=true) {
     const result=await worker(request.data,{});if(f.lost) throw Error('fixture response lost');return {requestId:'fixture:transport',result};
   };
   f.inits=0;f.source='timer';
+  if (sdk) sdk.getCloudbaseContext=()=>({TCB_ENV:plan.environment,TRIGGER_SRC:f.source});
+  if (hostPackage) for(const name of ['WRITER_DAILY_SIGNING_KEY_HEX','WRITER_REALTIME_SIGNING_KEY_HEX','WRITER_NEWS_SIGNING_KEY_HEX','WRITER_EXTRACT_SIGNING_KEY_HEX']) process.env[name]=key.toString('hex');
   const fakeSdk={getCloudbaseContext:()=>({TCB_ENV:plan.environment,TRIGGER_SRC:f.source}),init:config=>{
     f.inits++;assert(config.retries===0 && config.keepalive===false && config.env===plan.environment);
     const actual=sdk && sdk.init(config);return {database:()=>database,callFunction:actual?actual.callFunction.bind(actual):(...args)=>f.transport(...args)};
   }};
-  f.makeHost=()=>createHost({sdk:fakeSdk,sdkVersion:'2.11.0',databaseVersion:'1.4.1',batchSize:2,transportTimeoutMs:15000,nodeMajor:()=>24,readEnvironment:()=>key.toString('hex')});
+  f.makeHost=()=>hostPackage ? {main:require(path.join(sdkRoot,'index.js')).main} : createHost({sdk:fakeSdk,sdkVersion:'2.11.0',databaseVersion:'1.4.1',batchSize:2,transportTimeoutMs:15000,nodeMajor:()=>24,readEnvironment:()=>key.toString('hex')});
   const host=f.makeHost();f.run=(minute=0)=>host.main(event(minute),{function_name:'writerDispatchNode24',request_id:'native:'+minute});
   f.queueState=()=>queue.decode(f.b.rows().find(row=>row._id===queue.controlId));f.databaseWithQuery=database;
   return f;
 }
-let sdkRoot;
+let sdkRoot,hostPackage=false;
 async function main() {
   let cases=0;
   const f=await setup();assert((await f.run(0)).ok);assert.strictEqual(f.business,2);assert((await f.run(1)).ok);assert.strictEqual(f.business,4);
@@ -111,14 +113,14 @@ async function main() {
   assert.strictEqual(finalUnknown.hold_confirmed,false);assert.strictEqual(finishLost.queueState().state,'OPEN');assert.strictEqual(finishLost.business,1);
   assert.strictEqual((await finishLost.run(0)).reason,'CYCLE_ALREADY_SEEN');assert((await finishLost.run(1)).ok);assert.strictEqual(finishLost.attempts,1);cases++;
   assert.strictEqual(fixtures.networkAttempts(),0);
-  console.log(JSON.stringify({status:'PASS_CORE_DISPATCH_HOST',evidence:fixtures.getSdk()?'ACTUAL_SDK_MEMORY_WIRE':'MODEL_ONLY',cases,cloud_calls:0,network_attempts:fixtures.networkAttempts(),
+  console.log(JSON.stringify({status:'PASS_CORE_DISPATCH_HOST',evidence:fixtures.getSdk()?'ACTUAL_SDK_MEMORY_WIRE':'MODEL_ONLY',sealed_host_entry:hostPackage,cases,cloud_calls:0,network_attempts:fixtures.networkAttempts(),
     queue_bootstrap:'EXPLICIT_FIXTURE_ONLY',platform_timer_source:'NOT_PROVEN',production_and_natural_qualification:'NOT_PROVEN'}));
 }
 if(require.main===module) {
   const args=process.argv.slice(2);
-  if(args.length && args[0]!=='--child') {
-    assert(args.length===2 && args[0]==='--sdk-root');const env={};for(const k of ['PATH','SystemRoot','WINDIR','TEMP','TMP']) if(process.env[k]) env[k]=process.env[k];
-    const r=require('child_process').spawnSync(process.execPath,[__filename,'--child',args[1]],{env,encoding:'utf8',timeout:300000});
+  if(args.length && !['--child','--package-child'].includes(args[0])) {
+    assert(args.length===2 && ['--sdk-root','--host-package'].includes(args[0]));const env={};for(const k of ['PATH','SystemRoot','WINDIR','TEMP','TMP']) if(process.env[k]) env[k]=process.env[k];
+    const r=require('child_process').spawnSync(process.execPath,[__filename,args[0]==='--host-package'?'--package-child':'--child',args[1]],{env,encoding:'utf8',timeout:300000});
     if(r.stdout)process.stdout.write(r.stdout);if(r.stderr)process.stderr.write(r.stderr);assert.strictEqual(r.status,0);
-  } else {if(args.length){sdkRoot=path.resolve(args[1]);fixtures.initSdk(sdkRoot);}main().catch(error=>{console.error(error);process.exitCode=1;});}
+  } else {if(args.length){sdkRoot=path.resolve(args[1]);hostPackage=args[0]==='--package-child';fixtures.initSdk(sdkRoot);}main().catch(error=>{console.error(error);process.exitCode=1;});}
 }

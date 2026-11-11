@@ -232,6 +232,10 @@ async function execute(inputs, candidates) {
           assert(receipts.every(row => JSON.parse(row.payload_json).status === 'COMPLETE'));
           assert.strictEqual((await store.read(b)).active, null);assert.strictEqual(actual.business.writes.length, 0);
           assert.strictEqual(result.data.triggered, true);
+          const beforeLookup=copy(actual.journal.rows());
+          const status=await service.index.main({httpMethod:'GET',path:'/api/admin/dispatch/status',headers:{'x-admin-token':'fixture-session'},queryStringParameters:{job_id:job.spec.id}},context);
+          assert.strictEqual(status.code,0);assert.deepStrictEqual(status.data,require(path.join(service.root,'writer-dispatch-status')).publicStatus(job));
+          assert.deepStrictEqual(actual.journal.rows(),beforeLookup,'status lookup cannot mutate the journal');
           const expected = await original.services.get('adminGateway').index.main(copy(event), {});
           await new Promise(resolve => setImmediate(resolve));
           const {operation_id, writer_outcome, writer_dispatch, ...business} = result;
@@ -239,7 +243,7 @@ async function execute(inputs, candidates) {
           assert.deepStrictEqual(original.legacyDispatches, [logical]);assert.deepStrictEqual(original.rejected, []);
           assert.strictEqual(original.business.writes.length, 0);
           queued.push({case: definition.name, target: logical, parent:'COMPLETE', job:'PREPARED', child_calls:0, business_writes:0,
-            original_response_equal: true, legacy_comparison_transport: 'ACCEPT_FIXTURE_NO_CHILD_BUSINESS'});
+            original_response_equal: true, readonly_status_lookup: 'PREPARED_PUBLIC_FIELDS_ONLY', legacy_comparison_transport: 'ACCEPT_FIXTURE_NO_CHILD_BUSINESS'});
         }
         const before = [actual.business.calls.length, actual.business.writes.length, actual.children.length];
         const priorRows = copy(actual.journal.rows());

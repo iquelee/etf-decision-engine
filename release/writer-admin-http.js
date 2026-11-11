@@ -19,7 +19,7 @@ function inspect(event) {
     assert(typeof value === 'string');const lower = name.toLowerCase();
     assert(!Object.hasOwn(headers, lower), 'duplicate header spelling');headers[lower] = value;
   }
-  const mutation = potentialMutation(business), operationId = headers[operationHeader] && headers[operationHeader].toLowerCase();
+  const mutation = route === '/api/admin/dispatch/status' ? false : potentialMutation(business), operationId = headers[operationHeader] && headers[operationHeader].toLowerCase();
   if (mutation) assert(typeof operationId === 'string' && operationPattern.test(operationId), 'stable UUIDv4 operation ID required');
   // The gateway ordinarily lowercases HTTP headers; normalize the SDK path too.
   business.headers = headers;
@@ -28,7 +28,7 @@ function inspect(event) {
 const failure = (code, message, extra = {}) => ({code, data: null, message, ...extra});
 const acknowledge = (result, request, outcome) => ({...result, operation_id: request.operationId, writer_outcome: outcome});
 function createAdminHttpRoot({binding, target, owner, key, store, runtimeIdentity, beforeAdmission, readToken,
-  worker, loadReadMain, now = () => Date.now()}) {
+  worker, loadReadMain, readDispatch, now = () => Date.now()}) {
   assert([runtimeIdentity, beforeAdmission, readToken, worker, loadReadMain, now].every(fn => typeof fn === 'function'));
   const local = createLocalRoot({store, binding, target, owner, key, runtimeIdentity, worker,
     identify: request => ({request_id: manualRequest({environment: binding.environment, producer: 'adminGateway',
@@ -57,6 +57,21 @@ function createAdminHttpRoot({binding, target, owner, key, store, runtimeIdentit
       assert(r.environment === binding.environment && r.function_name === target && r.node_major === (owner === 'new' ? 24 : 16));
       request = inspect(event);
     } catch (_) {return failure(400, '请求或操作标识无效');}
+    if (request.route === '/api/admin/dispatch/status') {
+      if (request.method !== 'GET') return failure(405,'任务状态查询仅支持 GET');
+      if (!(await authorized(request))) return failure(401,'未登录或登录已过期');
+      const query = request.business.queryStringParameters || request.business.query || {};
+      const body = request.business.body;
+      const emptyBody = body === undefined || body === null || body === '' || (typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 0);
+      if (!query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).join(',') !== 'job_id' ||
+          typeof query.job_id !== 'string' || !/^dispatch:[a-f0-9]{64}$/.test(query.job_id) ||
+          !emptyBody) return failure(400,'任务标识无效');
+      try {
+        assert.strictEqual(typeof readDispatch,'function');const job=await readDispatch(query.job_id);
+        if (!job) return failure(404,'未找到该任务');
+        return {code:0,data:require('./writer-dispatch-status').publicStatus(job),message:'ok'};
+      } catch (_) {return failure(503,'任务状态暂不可核验');}
+    }
     let allowed = false;try {allowed = await beforeAdmission(request.business, context) === true;} catch (_) { /* closed */ }
     if (!allowed) return request.mutation ? acknowledge(failure(503, '写入维护中，请稍后重试'), request, 'DENIED') : failure(503, '写入维护中，请稍后重试');
     if (!request.mutation) {

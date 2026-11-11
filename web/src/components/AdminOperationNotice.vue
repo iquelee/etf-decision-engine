@@ -1,6 +1,6 @@
 <script setup>
 import {computed} from 'vue';
-const props = defineProps({state: {type: Object, required: true}, reviewed: Boolean, feedback: String});
+const props = defineProps({state: {type: Object, required: true}, reviewed: Boolean, feedback: String, queueVerified: Boolean});
 const emit = defineEmits(['review', 'acknowledge', 'update:reviewed']);
 const labels = {login: '登录', logout: '退出登录', changePassword: '修改密码', risk: '风险事件', param: '参数更新',
   trade: '交易记录', portfolio: '账户快照', fetch: '数据抓取', intel: '情报刷新', fundamental: '基本面更新', gen1: '健康复核'};
@@ -12,13 +12,13 @@ const visible = computed(() => props.state.error || (props.state.record &&
 <template>
   <section v-if="visible" class="operation-notice" role="status" aria-live="polite" aria-label="操作结果核对">
     <template v-if="state.record">
-      <h2>{{ state.record.state === 'QUEUED' ? label + '已接单，等待执行' : label + '结果待核对' }}</h2>
-      <p v-if="state.record.state === 'QUEUED'">接单不代表执行完成。请查看抓取日志核对结果，未核对前勿重复提交。</p>
+      <h2>{{ state.record.state === 'QUEUED' ? label + (queueVerified ? '调用已完成，待核对业务结果' : '已接单，待核验执行状态') : label + '结果待核对' }}</h2>
+      <p v-if="state.record.state === 'QUEUED'">{{ queueVerified ? '调用完成不代表业务成功，请核对抓取日志后确认。' : '接单不代表执行完成，请先核验任务状态，未确认前勿重复提交。' }}</p>
       <p v-else>请刷新页面，核对这次操作是否已生效。未核对前请勿作为新操作重复提交。</p>
       <div class="operation-id">操作标识 {{ state.record.id }}</div>
       <div class="notice-actions">
-        <button type="button" :disabled="state.busy" @click="emit('review')">刷新查看结果</button>
-        <template v-if="state.record.review_requested">
+        <button type="button" :disabled="state.busy" @click="emit('review')">{{ state.record.state === 'QUEUED' ? '核验任务状态' : '刷新查看结果' }}</button>
+        <template v-if="state.record.review_requested && (state.record.state !== 'QUEUED' || queueVerified)">
           <label class="review-check"><input type="checkbox" :checked="reviewed"
             @change="emit('update:reviewed', $event.target.checked)" />我已核对这次操作的结果</label>
           <button type="button" :disabled="state.busy || !reviewed" @click="emit('acknowledge')">确认核对并结束</button>
