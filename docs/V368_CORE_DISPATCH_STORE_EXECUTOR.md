@@ -2,6 +2,8 @@
 
 2026-11-11。本轮实现上一轮[事务计划](V368_CORE_ADMIN_SDK_DISPATCH.md)所需的存储适配器及单次执行器，并通过模型和实际SDK内存wire验证。没有修改业务目录、Gen1/Gen2代码、模型或功能，没有云端调用、资源创建或发布。**尚未接入后台bootstrap、SDK异步调用拦截、队列扫描或实际Timer。**
 
+同日后续：[后台接单运行时](V368_CORE_ADMIN_ENQUEUE.md)已接入并通过重建候选的实际SDK验证，队列执行宿主/扫描和前端核对仍未接线。本文保留适配器批次的历史范围。
+
 ## 存储边界
 
 `release/writer-dispatch-cloudbase.js`只接受显式database对象，核对固定环境、SDK retries=0/keepalive=false；没有SDK init、建表、seed、删除、自动重试或任意collection参数。使用已规划的 `writer_admission_journal_v1`，增加独立 `dispatch:<hash>` 主键和严格dispatch envelope。该新增文档类型和权限仍需纳入未来资源申请，不被旧隔离授权覆盖。

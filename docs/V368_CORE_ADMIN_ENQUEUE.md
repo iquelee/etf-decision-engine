@@ -32,4 +32,21 @@ HTTP人工提交协议的writer_outcome=COMPLETE只表示本次后台请求完�
 
 源码封存前全量Stage A 109/109通过；`release/replay-core-admin-enqueue-sdk.js`用于源码封存并重建后的实际后台/RDE包验证，必须显式绑定构建收据。实际SDK结果和包身份在后续证据段记录，不能用未封存源码覆盖旧ZIP。
 
+## 封存包及实际 SDK 结果
+
+源码 `39e032a3b37ae4daf4bb306274c6bb31b47101bd` 从已核验的历史原始输入重建三Core包。RDE/物化/后台分别1814/1806/1812文件；1703/1701/1703依赖文件保持。后台新增四个专用文件，保留60秒预算及DECISION_ENV=prod，无Timer、无签名密钥。三包收据见 `release/runtime24-writer-core-admin-enqueue-candidates.json`；输入是历史raw map，不是最新线上抓取。
+
+独立Python直接核验ZIP/map、全部原依赖、业务SDK import单点替换、源码Git blob、精确新增文件集合、index/shim和配置预算，均通过。持久ZIP/map及验证收据在 `A/writer-core-admin-enqueue-39e032a`，C盘松散树指针见LOCAL_TREES_PRIVATE.json。包源码身份保持39e032a，后续回放工具/文档提交不会写回旧ZIP。
+
+Node24.20.0 / SDK2.11.0 / database1.4.1下：
+
+- 六组正常业务对照仍每侧167写，风险/参数链实际执行原/新RDE；返回、SDK写载荷顺序和最终业务集合一致。
+- 四组维护/鉴权/输入拒绝仍零业务和准入修改。
+- 六组接单（日线、实时、新闻、抽取、默认日线别名、intel刷新）均生成一个PREPARED/attempt=0/wire=null任务，父双COMPLETE、零原生下游调用、零业务集合写；重复不增加job或写。HTTP根入口的只读token鉴权可以重读。
+- 接单提交前/后ACK丢失两组分别无job/有PREPARED job，父双UNKNOWN、HOLD及占槽；原失败日志回调一次写入在返回前结算，零下游调用。
+
+接单场景的旧业务返回用明确的legacy接收端fixture对照，旧端只确认接收，不运行抓取/抽取业务。code/data/message逐位相同，候选新增writer_dispatch和人工提交字段单独核验。不能据此声称四个下游业务已经执行、派发执行器已接通、事务具备平台隔离资格或自然运行通过。
+
+最终实际SDK日志actual-sdk-final.log、工具字节绑定evidence.json、独立包收据independent-verification.json均在上述A目录。全量Stage A 109/109、敏感扫描、冻结23项、候选31文件、legacy门禁与负向自测通过；新增运行时单测在Node22/24通过。业务目录相对4487d36无改动，Gen1/Gen2业务及模型目录相对保留主工作树无差异，主工作树保持干净的5a44853。
+
 尚待：前端接单/完成语义、任务查询、队列发现和执行器宿主、排空协调、实际抓取/抽取闭包、最新线上漂移、长调用及原生来源资格、精确审批后的切换和自然验收。当前没有部署或自然运行通过的结论。

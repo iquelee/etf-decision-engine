@@ -101,6 +101,14 @@ async function execute(inputs, candidates) {
     const previousHttp = transport.default;
     transport.default = async request => {
       try {
+        if (!side.wrapped && side.definition.enqueue && pack.producer === 'adminGateway' &&
+            ['fetchDailyData','fetchRealtimeData','fetchFundamentalNews','extractFundamental'].includes(request.params.function_name)) {
+          assert.strictEqual(request.params.action, 'functions.invokeFunction');assert.strictEqual(request.method, 'post');
+          assert.strictEqual(request.opts, undefined);const data = JSON.parse(request.params.request_data);
+          const task = side.definition.route === 'intel/refresh' ? 'news' : side.definition.body.task;
+          assert.deepStrictEqual(data, {force: true, task_name: task});side.legacyDispatches.push(request.params.function_name);
+          return {requestId: 'fixture:legacy-dispatch', data: {response_data: JSON.stringify({fixture: 'LEGACY_ACCEPT_ONLY_NO_CHILD_BUSINESS'})}};
+        }
         const childName = pack.producer === 'fetchDailyData' ? 'materializeIndicators' : 'runDecisionEngine';
         assert(pack.producer === 'adminGateway');assert.strictEqual(request.method, 'post');
         assert.strictEqual(request.params.action, 'functions.invokeFunction');
@@ -130,7 +138,7 @@ async function execute(inputs, candidates) {
     const collections = [...new Set([...Object.values(constants.COLLECTIONS), 'run_manifest', 'run_candidate_decision',
       'run_candidate_portfolio', 'active_run_pointer', 'run_history'])];
     side.business = createBusinessWire({EJSON, collections, conditionalPointerUpdates: true});side.journal = backend(EJSON, JOURNAL);
-    side.children = [];side.rejected = [];side.provider = [];side.enqueueFaultArmed = false;side.definition = definition;side.source = 'timer';side.date = date;
+    side.children = [];side.rejected = [];side.provider = [];side.legacyDispatches = [];side.enqueueFaultArmed = false;side.definition = definition;side.source = 'timer';side.date = date;
     const c = constants.COLLECTIONS;
     side.business.seed(c.PARAM_CONFIG, Object.entries({...constants.DEFAULT_PARAMS, trend_stage_enabled: true,
       v365_integrity_mode: 'ENFORCE'}).map(([key, value]) => ({_id: 'param:' + key, key, value, version: 1})));
@@ -224,7 +232,14 @@ async function execute(inputs, candidates) {
           assert(receipts.every(row => JSON.parse(row.payload_json).status === 'COMPLETE'));
           assert.strictEqual((await store.read(b)).active, null);assert.strictEqual(actual.business.writes.length, 0);
           assert.strictEqual(result.data.triggered, true);
-          queued.push({case: definition.name, target: logical, parent:'COMPLETE', job:'PREPARED', child_calls:0, business_writes:0});
+          const expected = await original.services.get('adminGateway').index.main(copy(event), {});
+          await new Promise(resolve => setImmediate(resolve));
+          const {operation_id, writer_outcome, writer_dispatch, ...business} = result;
+          assert.deepStrictEqual(copy(business), copy(expected), 'original enqueue response fields changed');
+          assert.deepStrictEqual(original.legacyDispatches, [logical]);assert.deepStrictEqual(original.rejected, []);
+          assert.strictEqual(original.business.writes.length, 0);
+          queued.push({case: definition.name, target: logical, parent:'COMPLETE', job:'PREPARED', child_calls:0, business_writes:0,
+            original_response_equal: true, legacy_comparison_transport: 'ACCEPT_FIXTURE_NO_CHILD_BUSINESS'});
         }
         const before = [actual.business.calls.length, actual.business.writes.length, actual.children.length];
         const priorRows = copy(actual.journal.rows());
