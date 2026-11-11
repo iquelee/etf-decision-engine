@@ -51,7 +51,11 @@ function createBusinessWire({EJSON, collections, conditionalPointerUpdates = fal
         assert(Array.isArray(params.data) && params.data.length === 1, 'only single-document inserts reviewed');const insertedIds = [];
         for (const raw of params.data) {
           const row = EJSON.parse(raw);assert(row && typeof row === 'object' && !Array.isArray(row));
-          if (!Object.hasOwn(row, '_id')) row._id = 'business:' + params.collectionName + ':' + (++sequence);
+          if (!Object.hasOwn(row, '_id')) {
+            // Seeded prior snapshots may already contain this model's IDs.
+            do {row._id = 'business:' + params.collectionName + ':' + (++sequence);}
+            while (table.some(item => item._id === row._id));
+          }
           assert(!table.some(item => item._id === row._id), 'duplicate business primary key');
           table.push(copy(row));insertedIds.push(row._id);
           writes.push({collection: params.collectionName, operation: 'insert', row: copy(row)});

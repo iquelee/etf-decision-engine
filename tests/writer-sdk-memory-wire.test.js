@@ -24,6 +24,12 @@ async function main() {
   }
   const inserted = await wire.send('database.insertDocument', {collectionName: 'shadow', data: [JSON.stringify({kind: 'run'})]});
   assert.strictEqual(inserted.data.insertedIds[0], 'business:shadow:1');
+  const resumed = createBusinessWire({EJSON: JSON, collections: ['shadow']});
+  resumed.seed('shadow', wire.rows('shadow'));
+  const next = await resumed.send('database.insertDocument', {collectionName: 'shadow', data: [JSON.stringify({kind: 'next-run'})]});
+  assert.strictEqual(next.data.insertedIds[0], 'business:shadow:2');
+  assert.strictEqual(resumed.rows('shadow').length, 2, 'replaying a saved snapshot preserves existing rows and allocates a fresh ID');
+  assert.deepStrictEqual(resumed.violations, []);
   const snapshot = wire.snapshot();snapshot.daily[0].day = 99;
   assert.strictEqual(wire.rows('daily')[0].day, 4, 'snapshot must not mutate stored data');
   for (const params of [{collectionName: 'production-other'}, {transactionId: 'tx'},
