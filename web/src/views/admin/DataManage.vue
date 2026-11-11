@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { adminApi } from '../../api/request.js';
 import { formatDateTime } from '../../utils/format.js';
+import {dispatchMessage} from '../../utils/core-dispatch.js';
 
 const loading = ref(true);
 const error = ref('');
@@ -41,10 +42,10 @@ async function trigger(task) {
   triggerMsg.value = '';
   try {
     const res = await adminApi.triggerFetch(task);
-    triggerMsg.value = `已触发 ${task}：${JSON.stringify(res)}`;
+    triggerMsg.value = dispatchMessage(res);
     setTimeout(load, 1500);
   } catch (e) {
-    triggerMsg.value = `触发失败：${e.message || e}`;
+    triggerMsg.value = e.pendingOperation ? e.message : `触发失败：${e.message || e}`;
   } finally {
     triggering.value = '';
   }

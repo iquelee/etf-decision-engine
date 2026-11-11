@@ -10,6 +10,7 @@
  */
 
 import {fetchAdminOperation} from '../utils/admin-operations.js';
+import {unwrapCoreDispatch} from '../utils/core-dispatch.js';
 const ENV = import.meta.env || {};
 const API_BASE = ENV.VITE_API_BASE || '';
 const ADMIN_BASE = ENV.VITE_ADMIN_BASE || '';
@@ -46,7 +47,7 @@ async function request(base, path, options = {}) {
     window.location.hash = '#/login';
   }
   if (json.code !== 0) throw new Error(json.message || '请求失败');
-  return json.data;
+  return unwrapCoreDispatch(json, path);
 }
 
 /** 后台请求：自动带 token 头；401 时清 token 跳登录 */
@@ -73,7 +74,7 @@ async function adminRequest(path, options = {}) {
     throw new Error(json.message || '未登录或登录已过期');
   }
   if (json.code !== 0) throw new Error(json.message || '请求失败');
-  return json.data;
+  return unwrapCoreDispatch(json, path);
 }
 
 /** 前台只读接口 */

@@ -86,13 +86,18 @@ function createStore(options) {
         return {changed: true, value: {created: true, job: clone(fresh)}};
       });
     },
-    async claim(id, key) {
+    async claim(id, key, reservation) {
       validId(id);assert(Buffer.isBuffer(key) && key.length === 32);
       key = Buffer.from(key);
       return transaction('claim', async col => {
         const current = decode(await row(col, id, true), id);
         if (!current) return {changed: false, value: {claimed: false, reason: 'JOB_NOT_FOUND'}};
         if (current.state !== 'PREPARED') return {changed: false, value: {claimed: false, reason: 'NO_AUTOMATIC_RETRY'}};
+        let queueFence;
+        if (reservation !== undefined) {
+          const queue = require('./writer-dispatch-queue');
+          queueFence = queue.fence(queue.decode(await row(col, queue.controlId, true)), reservation);
+        }
         const childBinding = {environment: plan.environment, scope: 'production/' + current.spec.target};
         const parentControl = await loadControl(col, plan.parentBinding), childControl = await loadControl(col, childBinding);
         const indexes = await receipts(col, current.spec.parent), rawRollout = await row(col, 'rollout:adminGateway', true);
@@ -106,7 +111,9 @@ function createStore(options) {
         await update(col, journal.id(childBinding, 'control'), journal.encodeControl(change.childFence, childBinding));
         await update(col, 'rollout:adminGateway', change.rolloutFence);
         await update(col, id, encode(change.next));
-        return {changed: true, value: {claimed: true, job: clone(change.next)}};
+        if (queueFence) {const queue = require('./writer-dispatch-queue');await update(col, queue.controlId, queue.encode(queueFence));}
+        return {changed: true, value: {claimed: true, job: clone(change.next),
+          ...(queueFence ? {reservation: require('./writer-dispatch-queue').permit(queueFence)} : {})}};
       });
     },
     async settle(claimed, response, key) {

@@ -207,3 +207,4 @@ if (require.main === module) {
     if (r.stdout) process.stdout.write(r.stdout);if (r.stderr) process.stderr.write(r.stderr);assert.strictEqual(r.status, 0);
   } else {if (args.length) {assert.strictEqual(args.length, 2);initSdk(path.resolve(args[1]));}main().catch(error => {console.error(error);process.exitCode = 1;});}
 }
+module.exports = {fixture, initSdk, getSdk: () => sdk, networkAttempts: () => network};

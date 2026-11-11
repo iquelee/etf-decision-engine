@@ -12,8 +12,9 @@ const visible = computed(() => props.state.error || (props.state.record &&
 <template>
   <section v-if="visible" class="operation-notice" role="status" aria-live="polite" aria-label="操作结果核对">
     <template v-if="state.record">
-      <h2>{{ label }}结果待核对</h2>
-      <p>请刷新页面，核对这次操作是否已生效。未核对前请勿作为新操作重复提交。</p>
+      <h2>{{ state.record.state === 'QUEUED' ? label + '已接单，等待执行' : label + '结果待核对' }}</h2>
+      <p v-if="state.record.state === 'QUEUED'">接单不代表执行完成。请查看抓取日志核对结果，未核对前勿重复提交。</p>
+      <p v-else>请刷新页面，核对这次操作是否已生效。未核对前请勿作为新操作重复提交。</p>
       <div class="operation-id">操作标识 {{ state.record.id }}</div>
       <div class="notice-actions">
         <button type="button" :disabled="state.busy" @click="emit('review')">刷新查看结果</button>

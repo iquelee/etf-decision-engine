@@ -1,3 +1,4 @@
+import {dispatchAcknowledgment, validateDispatch, isDispatchEndpoint} from './core-dispatch.js';
 // One durable pending operation per origin. Never persists payloads or tokens.
 export const OPERATION_KEY = 'etf.writer.admin-operation.v1';
 export function reviewDestination(endpoint, currentUrl) {
@@ -19,10 +20,11 @@ export function createOperationTracker({storage = () => globalThis.localStorage,
     const raw = storage().getItem(OPERATION_KEY);if (!raw) return null;
     const record = JSON.parse(raw);
     if (!record || record.schema !== 1 || !uuid.test(record.id) || typeof record.endpoint !== 'string' ||
-      !Number.isFinite(record.started_at) || !['SUBMITTING', 'UNCERTAIN'].includes(record.state) ||
+      !Number.isFinite(record.started_at) || !['SUBMITTING', 'UNCERTAIN', 'QUEUED'].includes(record.state) ||
       typeof record.uncertain !== 'boolean' || typeof record.review_requested !== 'boolean' ||
-      Object.keys(record).sort().join(',') !== 'endpoint,id,review_requested,schema,started_at,state,uncertain')
+      Object.keys(record).sort().join(',') !== (record.state === 'QUEUED' ? 'dispatch,endpoint,id,review_requested,schema,started_at,state,uncertain' : 'endpoint,id,review_requested,schema,started_at,state,uncertain'))
       throw new PendingOperationError('操作标识记录异常，暂不能提交，请先核对已有结果');
+    if (record.state === 'QUEUED') {validateDispatch(record.dispatch);if (record.uncertain || !isDispatchEndpoint(record.endpoint)) throw new PendingOperationError();}
     return record;
     } catch (_) {throw new PendingOperationError('操作标识记录不可用，暂不能提交，请先核对已有结果');}
   }
@@ -61,6 +63,7 @@ export function createOperationTracker({storage = () => globalThis.localStorage,
     const previousSnapshot = snapshot;active = {endpoint, serialized, promise};notify();
     Promise.resolve().then(() => withLock(async () => {
       let record = read();
+      if (record?.state === 'QUEUED') throw new PendingOperationError('任务已接单，请先核对执行结果，勿重复提交');
       if (record) {
         if (rememberedId !== record.id || previousSnapshot !== serialized || record.endpoint !== endpoint)
           throw new PendingOperationError();
@@ -76,6 +79,10 @@ export function createOperationTracker({storage = () => globalThis.localStorage,
       const bound = response && response.ok && json && json.operation_id === record.id && Number.isSafeInteger(json.code) &&
         Object.prototype.hasOwnProperty.call(json, 'data') && typeof json.message === 'string';
       if (bound && (json.writer_outcome === 'COMPLETE' || (json.writer_outcome === 'DENIED' && json.code >= 400 && !record.uncertain))) {
+        try {
+          const dispatch = json.writer_outcome === 'COMPLETE' ? dispatchAcknowledgment(json, endpoint) : null;
+          if (dispatch) {write({...record,state:'QUEUED',uncertain:false,review_requested:false,dispatch});snapshot=rememberedId=undefined;return response;}
+        } catch (error) {write({...record,state:'UNCERTAIN',uncertain:true});throw new PendingOperationError(error.message);}
         clear(record.id);return response;
       }
       write({...record, state: 'UNCERTAIN', uncertain: true});

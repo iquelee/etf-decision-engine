@@ -3,7 +3,8 @@ import {adminOperations, reviewDestination} from '../utils/admin-operations.js';
 export function useAdminOperationNotice() {
   const state = shallowRef(adminOperations.state()), reviewed = ref(false), feedback = ref('');let unsubscribe;
   const update = () => {
-    const next = adminOperations.state();if (next.record?.id !== state.value.record?.id) reviewed.value = false;
+    const next = adminOperations.state();if (next.record?.id !== state.value.record?.id || (next.record?.state === 'QUEUED' &&
+      (state.value.record?.state !== 'QUEUED' || next.record.review_requested !== state.value.record?.review_requested))) reviewed.value = false;
     state.value = next;
   };
   onMounted(() => {unsubscribe = adminOperations.subscribe(update);update();});
