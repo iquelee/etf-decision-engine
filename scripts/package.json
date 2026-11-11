@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@cloudbase/manager-node": "^5.8.1",
-    "@cloudbase/node-sdk": "^2.9.0"
+    "@cloudbase/node-sdk": "^3.0.0"
   },
   "devDependencies": {
     "@cloudbase/cli": "^2.4.0"
