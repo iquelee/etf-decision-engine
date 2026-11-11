@@ -90,7 +90,8 @@ function createBootstrap({producer, sdk, sdkVersion, databaseVersion, loadMain,
       const {_id, ...record} = rows[0];assert.strictEqual(_id, 'rollout:adminGateway');return record;
     }});
     const candidate = createInvocationWorker({sdk: configuredSdk, store, binding, key: currentKeys[0], target: plan.target,
-      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission});
+      owner: 'new', producer, runtimeIdentity: runtime, loadMain, childRoutes, beforeAdmission,
+      ...(producer === 'adminGateway' ? {dispatchStore: require('./writer-dispatch-cloudbase').createStore({database})} : {})});
     const candidateRoot = timerIdentity ? createLocalRoot({store, binding, target: plan.target, owner: 'new', key: currentKeys[0],
       identify: timerIdentity, runtimeIdentity: runtime, worker: candidate.main}) : null;
     const candidateHttp = producer === 'adminGateway' ? createAdminHttpRoot({binding, target: plan.target, owner: 'new',

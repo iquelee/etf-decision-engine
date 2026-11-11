@@ -7,7 +7,7 @@ const entry = require('./writer-entry');
 const {createDirectCaller, WriterCallError} = require('./writer-direct-caller');
 const text = x => typeof x === 'string' && /^[A-Za-z0-9_:./|#@+-]{1,200}$/.test(x);
 function createInvocationWorker({sdk, store, binding, key, target, owner, producer, runtimeIdentity,
-  loadMain, childRoutes, beforeAdmission, unmanagedNames = []}) {
+  loadMain, childRoutes, beforeAdmission, unmanagedNames = [], dispatchStore}) {
   assert(sdk && typeof sdk.init === 'function' && typeof loadMain === 'function' && typeof runtimeIdentity === 'function');
   assert(text(producer) && text(target) && ['old', 'new'].includes(owner));
   assert(beforeAdmission === undefined || typeof beforeAdmission === 'function');
@@ -15,6 +15,12 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
   assert(binding && text(binding.environment) && text(binding.scope)); binding = {...binding};
   assert(Buffer.isBuffer(key) && key.length >= 32); key = Buffer.from(key);
   assert(childRoutes && typeof childRoutes === 'object' && !Array.isArray(childRoutes));
+  let dispatchPlan;
+  if (dispatchStore !== undefined) {
+    dispatchPlan = require('./writer-dispatch-plan');
+    assert(producer === 'adminGateway' && owner === 'new' && typeof dispatchStore.prepare === 'function');
+    assert.deepStrictEqual(binding, dispatchPlan.parentBinding);
+  }
   assert(Array.isArray(unmanagedNames) && unmanagedNames.every(text) && new Set(unmanagedNames).size === unmanagedNames.length);
   const routes = new Map();
   for (const [name, route] of Object.entries(childRoutes)) {
@@ -32,13 +38,59 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
       allowedOwners: Object.freeze([...allowedOwners])});
   }
   const unmanaged = new Set(unmanagedNames);assert([...unmanaged].every(name => !routes.has(name)));
+  if (dispatchPlan) {
+    assert(unmanaged.size === 0 && [...routes.keys()].every(name => name === 'runDecisionEngine'), 'Core admin has no unmanaged/Gen dispatch edges');
+    assert(Object.keys(dispatchPlan.routes).every(name => !routes.has(name)));
+  }
   const context = new AsyncLocalStorage(), apps = new WeakMap();
+  function track(promise, invocation) {
+    if (invocation.enqueues.has(promise)) return promise;
+    invocation.enqueues.add(promise);
+    // Handle rejections immediately, including ignored chains, without changing
+    // what the original caller's catch/then/finally observes.
+    Promise.prototype.then.call(promise, undefined, () => {invocation.failed = true;});
+    Object.defineProperties(promise, {
+      then: {value: (yes, no) => track(Promise.prototype.then.call(promise, yes, no), invocation)},
+      catch: {value: no => track(Promise.prototype.then.call(promise, undefined, no), invocation)},
+      finally: {value: done => track(Promise.prototype.finally.call(promise, done), invocation)}
+    });
+    return promise;
+  }
+  async function settleEnqueues(invocation) {
+    const seen = new Set();
+    while (true) {
+      const batch = [...invocation.enqueues].filter(p => !seen.has(p));if (!batch.length) return;
+      batch.forEach(p => seen.add(p));
+      // Bypass the observed .then so this bookkeeping does not register itself.
+      await Promise.all(batch.map(p => new Promise(resolve => Promise.prototype.then.call(p, () => resolve(), () => resolve()))));
+    }
+  }
   function wrapApp(app) {
     assert(app && typeof app.callFunction === 'function');if (apps.has(app)) return apps.get(app);
     const nativeCall = app.callFunction.bind(app), boundMethods = new Map();
-    async function callFunction(request, options) {
+    function callFunction(request, options) {
       const invocation = context.getStore();
-      if (!invocation || !invocation.active) throw new WriterCallError('WRITER_INVOCATION_UNAVAILABLE', 'writer invocation unavailable');
+      if (!invocation || !invocation.active) return Promise.reject(new WriterCallError('WRITER_INVOCATION_UNAVAILABLE', 'writer invocation unavailable'));
+      if (dispatchPlan && request && Object.hasOwn(dispatchPlan.routes, request.name)) {
+        return track((async () => {
+          try {
+            assert(options === undefined, 'queued routes do not accept transport overrides');
+            assert(!invocation.seen.has(request.name), 'one dispatch per target per parent invocation');
+            invocation.seen.add(request.name);
+            const spec = dispatchPlan.specification(invocation.parent, request);
+            const ack = await dispatchStore.prepare(spec);
+            assert(ack && ack.acknowledged === true && ack.job);
+            dispatchPlan.validate(ack.job);assert.deepStrictEqual(ack.job.spec, spec);
+            assert.strictEqual(ack.job.state, 'PREPARED', 'new parent cannot accept an already consumed task');
+            const receipt = {job_id: spec.id, target: spec.target, state: 'PREPARED'};
+            invocation.queued.push(receipt);
+            return {requestId: spec.id, result: {queued: true, ...receipt}};
+          } catch (error) {invocation.failed = true;throw error;}
+        })(), invocation);
+      }
+      return directCall(invocation, request, options);
+    }
+    async function directCall(invocation, request, options) {
       const route = request && routes.get(request.name);
       if (!route && !(request && unmanaged.has(request.name))) {
         invocation.failed = true;
@@ -83,13 +135,22 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
     }, loadMain: async () => {
       const original = await loadMain(wrappedSdk);assert.strictEqual(typeof original, 'function');
       return async (business, nativeContext) => {
-        const result = await original(business, nativeContext);
         const invocation = context.getStore();assert(invocation && invocation.active);
+        let result, failure;
+        try {result = await original(business, nativeContext);} catch (error) {failure = error;}
+        // Join durable prepares AND the original caller's registered rejection
+        // callbacks before the parent journal may complete or become UNKNOWN.
+        if (invocation.enqueues.size) await settleEnqueues(invocation);
         // Original fire-and-forget / caught child failures must not create a
         // falsely COMPLETE parent while callbacks may still perform writes.
         // The parent journal stays UNKNOWN/occupied, requiring reconciliation.
-        // Durable enqueue integration is needed before such routes can deploy.
+        // Unmanaged detached transports remain forbidden.
+        if (failure) throw failure;
         if (invocation.pending.size || invocation.failed) throw Error('WRITER_CHILD_OUTCOME_UNSETTLED');
+        if (invocation.queued.length) {
+          assert(result && typeof result === 'object' && result.code === 0 && !Object.hasOwn(result, 'writer_dispatch'));
+          return {...result, writer_dispatch: {schema: 1, state: 'QUEUED', jobs: invocation.queued.map(row => ({...row}))}};
+        }
         return result;
       };
     }});
@@ -111,7 +172,8 @@ function createInvocationWorker({sdk, store, binding, key, target, owner, produc
         owner: wire.owner, epoch: wire.epoch, executed: false, admission: 'ENTRY_GATE_CLOSED'};
     }
     const invocation = {request_id: wire.request_id, runtime: Object.freeze({...runtime}), active: true,
-      seen: new Set(), pending: new Set(), failed: false};
+      parent: {environment: binding.environment, scope: binding.scope, request_id: wire.request_id, token: wire.token, owner: wire.owner, epoch: wire.epoch},
+      seen: new Set(), pending: new Set(), enqueues: new Set(), queued: [], failed: false};
     return context.run(invocation, async () => {
       try { return await worker(event, nativeContext); }
       finally { invocation.active = false; }

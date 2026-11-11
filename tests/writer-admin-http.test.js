@@ -114,11 +114,13 @@ async function test() {
   const loginWrites = login.h.writes.length;
   assert.strictEqual((await login.bootstrap.main(failedLogin, login.context)).code, 409);assert.strictEqual(login.h.writes.length, loginWrites);
   const detached = await setup();
-  assert.strictEqual((await detached.bootstrap.main(post('fetch', {task: 'daily'}), detached.context)).code, 409);
-  const unsettled = await detached.store.read(binding);assert.strictEqual(unsettled.state, 'HOLD');assert(unsettled.active);
+  const queued = await detached.bootstrap.main(post('fetch', {task: 'daily'}), detached.context);
+  assert.strictEqual(queued.code, 0);assert.strictEqual(queued.writer_dispatch.state, 'QUEUED');
+  assert.strictEqual(queued.writer_dispatch.jobs.length, 1);assert.strictEqual(detached.state.calls, 0);
+  const unsettled = await detached.store.read(binding);assert.strictEqual(unsettled.state, 'ACTIVE');assert.strictEqual(unsettled.active, null);
   console.log(JSON.stringify({transport: 'MODEL_ONLY', actual_admin_http_bootstrap: true, closed_mutation_forms: forms.length,
     auth_failure_no_admission: true, login_rate_limit_writes_deduplicated: true, readonly_auth_preserved: true,
-    complete_admin_rde_writes: counts, full_results_and_rows_equal: true, async_dispatch_still_not_qualified: true}));
+    complete_admin_rde_writes: counts, full_results_and_rows_equal: true, durable_enqueue_model_only: true, dispatch_execution_still_not_qualified: true}));
 }
 if (require.main === module) test().catch(error => {console.error(error);process.exitCode = 1;});
 module.exports = {setup};
